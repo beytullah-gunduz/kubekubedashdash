@@ -29,12 +29,23 @@ All resource lists are presented in sortable tables with auto-refresh (every 5 s
 ### Resource details
 
 - Side panel with Overview and YAML tabs for inspected resources
-- Full-screen YAML view with syntax highlighting and line numbers
+- YAML view with syntax highlighting and line numbers
 - Labels and annotations displayed as chips
 
-### Pod-specific
+### Node details
 
-- Dedicated detail panel with Overview, YAML, and Logs tabs
+- Detail panel with Overview, Pods, Events, and YAML tabs
+- Lists pods scheduled on the selected node with click-to-navigate to the Pods screen
+- Node events tab for warnings and errors
+- Cluster-wide CPU/memory stats panel with usage history sparklines
+
+### Deployment details
+
+- Resource graph tab that visualizes the ownership chain (Deployment → ReplicaSet → Pods) along with related Services, Ingresses, ConfigMaps, Secrets, and HPAs
+
+### Pod details
+
+- Detail panel with Overview, YAML, and Logs tabs
 - Container picker for multi-container pods
 - CPU and memory usage gauges when a Metrics Server is installed
 - Log viewer with text filtering, follow mode, line wrapping, and copy to clipboard
@@ -45,8 +56,9 @@ Deletion is supported for Pods, Deployments, Services, ConfigMaps, Secrets, Jobs
 
 ### UI
 
-- Dark theme color scheme (Material 3)
-- Resizable detail panels
+- Dark theme (Material 3)
+- Resizable detail panels that auto-adapt to available space
+- Cross-resource navigation (e.g. node → pod)
 - Status badges with color coding (Running, Pending, Failed, etc.)
 
 ## Prerequisites
@@ -88,6 +100,10 @@ The application opens a 1440×900 window and connects to the current kubeconfig 
 | Date/time | kotlinx-datetime 0.7.0 |
 | Logging | slf4j-simple 2.0.16 |
 | Build tool | Gradle 8.12 |
+
+## CI
+
+A GitHub Actions workflow builds distributable packages (DMG, DEB, MSI) on every push and PR to `main`. Pushing a `v*` tag creates a GitHub Release with the built artifacts.
 
 ## Limitations
 
