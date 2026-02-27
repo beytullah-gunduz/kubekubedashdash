@@ -6,7 +6,7 @@ sealed class Screen(val title: String) {
     data object Namespaces : Screen("Namespaces")
     data object Events : Screen("Events")
 
-    data object Pods : Screen("Pods")
+    data class Pods(val selectPodUid: String? = null) : Screen("Pods")
     data object Deployments : Screen("Deployments")
     data object StatefulSets : Screen("StatefulSets")
     data object DaemonSets : Screen("DaemonSets")

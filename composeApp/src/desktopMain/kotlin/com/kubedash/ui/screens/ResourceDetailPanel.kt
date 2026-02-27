@@ -23,7 +23,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,6 +77,8 @@ data class DetailField(
 class ExtraTab(
     val label: String,
     val icon: ImageVector,
+    val badgeCount: Int? = null,
+    val isLoading: Boolean = false,
     val content: @Composable () -> Unit,
 )
 
@@ -94,10 +98,10 @@ fun ResourceDetailPanel(
     var activeTab by remember { mutableIntStateOf(0) }
     LaunchedEffect(name, namespace) { activeTab = 0 }
 
-    data class TabDef(val label: String, val icon: ImageVector)
+    data class TabDef(val label: String, val icon: ImageVector, val badgeCount: Int? = null, val isLoading: Boolean = false)
     val tabs = buildList {
         add(TabDef("Overview", Icons.Default.Info))
-        extraTabs.forEach { add(TabDef(it.label, it.icon)) }
+        extraTabs.forEach { add(TabDef(it.label, it.icon, it.badgeCount, it.isLoading)) }
         add(TabDef("YAML", Icons.Default.Code))
     }
     val yamlIndex = tabs.lastIndex
@@ -161,6 +165,22 @@ fun ResourceDetailPanel(
                             Icon(tab.icon, null, Modifier.size(14.dp))
                             Spacer(Modifier.width(5.dp))
                             Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                            if (tab.isLoading) {
+                                Spacer(Modifier.width(6.dp))
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(10.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = KdTextSecondary,
+                                )
+                            } else if (tab.badgeCount != null && tab.badgeCount > 0) {
+                                Spacer(Modifier.width(4.dp))
+                                Badge {
+                                    Text(
+                                        tab.badgeCount.toString(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -227,7 +247,7 @@ private fun GenericOverviewTab(fields: List<DetailField>, labels: Map<String, St
 // ── YAML Tab ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun GenericYamlTab(kind: String, name: String, namespace: String?, kubeClient: KubeClient) {
+internal fun GenericYamlTab(kind: String, name: String, namespace: String?, kubeClient: KubeClient) {
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
     val clipboardManager = LocalClipboardManager.current

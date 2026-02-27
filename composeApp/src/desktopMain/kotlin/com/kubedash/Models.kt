@@ -119,3 +119,20 @@ sealed class ResourceState<out T> {
         val data: T,
     ) : ResourceState<T>()
 }
+
+data class ResourceGraphNode(
+    val id: String,
+    val name: String,
+    val kind: String,
+    val status: String? = null,
+)
+
+data class ResourceGraphEdge(
+    val sourceId: String,
+    val targetId: String,
+)
+
+data class ResourceGraph(
+    val nodes: List<ResourceGraphNode>,
+    val edges: List<ResourceGraphEdge>,
+)

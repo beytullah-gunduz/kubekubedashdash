@@ -123,7 +123,7 @@ fun Sidebar(
             }
 
             SidebarSection("Workloads") {
-                SidebarItem(Icons.Default.ViewInAr, "Pods", currentScreen is Screen.Pods) { onNavigate(Screen.Pods) }
+                SidebarItem(Icons.Default.ViewInAr, "Pods", currentScreen is Screen.Pods) { onNavigate(Screen.Pods()) }
                 SidebarItem(Icons.Default.Layers, "Deployments", currentScreen is Screen.Deployments) { onNavigate(Screen.Deployments) }
                 SidebarItem(Icons.Default.Storage, "StatefulSets", currentScreen is Screen.StatefulSets) { onNavigate(Screen.StatefulSets) }
                 SidebarItem(Icons.Default.DynamicFeed, "DaemonSets", currentScreen is Screen.DaemonSets) { onNavigate(Screen.DaemonSets) }

@@ -28,12 +28,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,10 +49,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -70,16 +80,21 @@ import com.kubedash.parseMemoryToBytes
 import com.kubedash.ui.CellData
 import com.kubedash.ui.CircularUsageIndicator
 import com.kubedash.ui.ColumnDef
+import com.kubedash.ui.LabelChip
 import com.kubedash.ui.ResizeHandle
 import com.kubedash.ui.ResourceCountHeader
 import com.kubedash.ui.ResourceErrorMessage
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.ResourceTable
+import com.kubedash.ui.StatusBadge
 import com.kubedash.ui.TableRow
+import com.kubedash.ui.UsageHistoryBar
 import com.kubedash.ui.statusColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private const val MAX_HISTORY_SIZE = 20
 
 @Composable
 fun NodesScreen(
@@ -89,10 +104,11 @@ fun NodesScreen(
 ) {
     var state by remember { mutableStateOf<ResourceState<List<NodeInfo>>>(ResourceState.Loading) }
     var selected by remember { mutableStateOf<NodeInfo?>(null) }
-    var panelWidthDp by remember { mutableFloatStateOf(480f) }
+    var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statsExpanded by remember { mutableStateOf(true) }
     var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
-
+    var cpuHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var memHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
     LaunchedEffect(Unit) {
         state = ResourceState.Loading
         selected = null
@@ -113,10 +129,25 @@ fun NodesScreen(
 
     LaunchedEffect(Unit) {
         while (true) {
-            resourceUsage = try {
+            val usage = try {
                 withContext(Dispatchers.IO) { kubeClient.getResourceUsage(null) }
             } catch (e: Exception) {
                 null
+            }
+            resourceUsage = usage
+            if (usage != null && usage.metricsAvailable) {
+                val cpuF = if (usage.cpuCapacityMillis > 0) {
+                    usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
+                } else {
+                    0f
+                }
+                val memF = if (usage.memoryCapacityBytes > 0) {
+                    usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
+                } else {
+                    0f
+                }
+                cpuHistory = (cpuHistory + cpuF).takeLast(MAX_HISTORY_SIZE)
+                memHistory = (memHistory + memF).takeLast(MAX_HISTORY_SIZE)
             }
             delay(10_000)
         }
@@ -141,20 +172,28 @@ fun NodesScreen(
             }
 
             Row(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    NodeStatsPanel(
-                        nodes = s.data,
-                        usage = resourceUsage,
-                        kubeClient = kubeClient,
-                        expanded = statsExpanded,
-                        onToggle = { statsExpanded = !statsExpanded },
-                    )
-                    ResourceCountHeader(filtered.size, "Nodes")
-                    NodeTable(
-                        nodes = filtered,
-                        selectedUid = selected?.uid,
-                        onClick = { node -> selected = if (selected?.uid == node.uid) null else node },
-                    )
+                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    val showStats = maxWidth >= 900.dp
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Hide stats panel when left view is too small (< 900dp)
+                        if (showStats) {
+                            NodeStatsPanel(
+                                nodes = s.data,
+                                usage = resourceUsage,
+                                cpuHistory = cpuHistory,
+                                memHistory = memHistory,
+                                kubeClient = kubeClient,
+                                expanded = statsExpanded,
+                                onToggle = { statsExpanded = !statsExpanded },
+                            )
+                        }
+                        ResourceCountHeader(filtered.size, "Nodes")
+                        NodeTable(
+                            nodes = filtered,
+                            selectedUid = selected?.uid,
+                            onClick = { node -> selected = if (selected?.uid == node.uid) null else node },
+                        )
+                    }
                 }
 
                 AnimatedVisibility(
@@ -163,37 +202,14 @@ fun NodesScreen(
                     exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
-                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceIn(280f, 900f) }
+                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceAtLeast(280f) }
                         selected?.let { node ->
-                            ResourceDetailPanel(
-                                kind = "Node",
-                                name = node.name,
-                                namespace = null,
-                                status = node.status,
-                                fields = listOf(
-                                    DetailField("Status", node.status, statusColor(node.status)),
-                                    DetailField("Roles", node.roles),
-                                    DetailField("Version", node.version),
-                                    DetailField("OS", node.os),
-                                    DetailField("Architecture", node.arch),
-                                    DetailField("Container Runtime", node.containerRuntime),
-                                    DetailField("CPU", node.cpu),
-                                    DetailField("Memory", node.memory),
-                                    DetailField("Pods Capacity", node.pods),
-                                    DetailField("Age", node.age),
-                                ),
-                                labels = node.labels,
+                            NodeDetailPanel(
+                                node = node,
                                 kubeClient = kubeClient,
                                 onClose = { selected = null },
+                                onPodClick = { pod -> onNavigate(Screen.Pods(selectPodUid = pod.uid)) },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
-                                extraTabs = listOf(
-                                    ExtraTab("Pods", Icons.AutoMirrored.Filled.ViewList) {
-                                        NodePodsTab(node.name, kubeClient)
-                                    },
-                                    ExtraTab("Events", Icons.AutoMirrored.Filled.EventNote) {
-                                        NodeEventsTab(node.name, kubeClient)
-                                    },
-                                ),
                             )
                         }
                     }
@@ -203,27 +219,337 @@ fun NodesScreen(
     }
 }
 
-// ── Node Pods Tab ───────────────────────────────────────────────────────────────
+// ── Node Detail Panel ───────────────────────────────────────────────────────────
+
+private enum class NodeDetailTab(val label: String, val icon: ImageVector) {
+    Overview("Overview", Icons.Default.Info),
+    Pods("Pods", Icons.AutoMirrored.Filled.ViewList),
+    Events("Events", Icons.AutoMirrored.Filled.EventNote),
+    Yaml("YAML", Icons.Default.Code),
+}
+
+private val nodeTallTabs = listOf(NodeDetailTab.Overview, NodeDetailTab.Yaml)
+private val nodeCompactTabs = NodeDetailTab.entries.toList()
 
 @Composable
-private fun NodePodsTab(nodeName: String, kubeClient: KubeClient) {
-    var pods by remember(nodeName) { mutableStateOf<List<PodInfo>>(emptyList()) }
-    var loading by remember(nodeName) { mutableStateOf(true) }
+private fun NodeDetailPanel(
+    node: NodeInfo,
+    kubeClient: KubeClient,
+    onClose: () -> Unit,
+    onPodClick: (PodInfo) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var activeTab by remember { mutableStateOf(NodeDetailTab.Overview) }
+    LaunchedEffect(node.uid) { activeTab = NodeDetailTab.Overview }
 
-    LaunchedEffect(nodeName) {
-        loading = true
+    var pods by remember(node.name) { mutableStateOf<List<PodInfo>>(emptyList()) }
+    var podsLoading by remember(node.name) { mutableStateOf(true) }
+    var events by remember(node.name) { mutableStateOf<List<EventInfo>>(emptyList()) }
+    var eventsLoading by remember(node.name) { mutableStateOf(true) }
+
+    LaunchedEffect(node.name) {
+        podsLoading = true
         pods = withContext(Dispatchers.IO) {
             try {
-                kubeClient.getPodsByNode(nodeName)
+                kubeClient.getPodsByNode(node.name)
             } catch (_: Exception) {
                 emptyList()
             }
         }
-        loading = false
+        podsLoading = false
     }
 
-    if (loading) {
-        ResourceLoadingIndicator()
+    LaunchedEffect(node.name) {
+        eventsLoading = true
+        events = withContext(Dispatchers.IO) {
+            try {
+                kubeClient.getEventsForNode(node.name)
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        eventsLoading = false
+    }
+
+    Surface(modifier = modifier, color = KdSurface) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isTall = maxHeight >= 1000.dp
+            val tabs = if (isTall) nodeTallTabs else nodeCompactTabs
+
+            LaunchedEffect(isTall) {
+                if (isTall && activeTab != NodeDetailTab.Overview && activeTab != NodeDetailTab.Yaml) {
+                    activeTab = NodeDetailTab.Overview
+                }
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(KdSurfaceVariant)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            node.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = KdTextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            StatusBadge(node.status)
+                            Text("Node", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                        }
+                    }
+                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                    }
+                }
+
+                SecondaryTabRow(
+                    selectedTabIndex = tabs.indexOf(activeTab).coerceAtLeast(0),
+                    containerColor = KdSurfaceVariant.copy(alpha = 0.5f),
+                    contentColor = KdPrimary,
+                    divider = { HorizontalDivider(color = KdBorder) },
+                ) {
+                    tabs.forEach { tab ->
+                        Tab(
+                            selected = tab == activeTab,
+                            onClick = { activeTab = tab },
+                            selectedContentColor = KdPrimary,
+                            unselectedContentColor = KdTextSecondary,
+                        ) {
+                            Row(modifier = Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(tab.icon, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                }
+
+                when (activeTab) {
+                    NodeDetailTab.Overview -> {
+                        if (isTall) {
+                            NodeOverviewCombinedTab(node, pods, podsLoading, events, eventsLoading, onPodClick)
+                        } else {
+                            NodeDetailsOnlyTab(node)
+                        }
+                    }
+
+                    NodeDetailTab.Pods -> NodePodsTab(pods, podsLoading, onPodClick)
+
+                    NodeDetailTab.Events -> NodeEventsTab(events, eventsLoading)
+
+                    NodeDetailTab.Yaml -> GenericYamlTab("Node", node.name, null, kubeClient)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NodeOverviewCombinedTab(
+    node: NodeInfo,
+    pods: List<PodInfo>,
+    podsLoading: Boolean,
+    events: List<EventInfo>,
+    eventsLoading: Boolean,
+    onPodClick: (PodInfo) -> Unit,
+) {
+    val fields = listOf(
+        DetailField("Status", node.status, statusColor(node.status)),
+        DetailField("Roles", node.roles),
+        DetailField("Version", node.version),
+        DetailField("OS", node.os),
+        DetailField("Architecture", node.arch),
+        DetailField("Container Runtime", node.containerRuntime),
+        DetailField("CPU", node.cpu),
+        DetailField("Memory", node.memory),
+        DetailField("Pods Capacity", node.pods),
+        DetailField("Age", node.age),
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        // ── Details ─────────────────────────────────────────────────────────
+        item {
+            Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                    fields.forEach { f ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                            if (f.valueColor != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(f.valueColor))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
+                                }
+                            } else {
+                                Text(f.value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Labels ──────────────────────────────────────────────────────────
+        if (node.labels.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    node.labels.entries.toList().chunked(2).forEach { chunk ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Pods ────────────────────────────────────────────────────────────
+        item {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Pods", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                if (!podsLoading) {
+                    Text("${pods.size}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+                }
+            }
+        }
+        if (podsLoading) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                }
+            }
+        } else if (pods.isEmpty()) {
+            item { Text("No pods on this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary) }
+        } else {
+            items(pods.size) { i -> NodePodItem(pods[i]) { onPodClick(pods[i]) } }
+        }
+
+        // ── Events ──────────────────────────────────────────────────────────
+        item {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Events", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                if (!eventsLoading) {
+                    Text("${events.size}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+                }
+            }
+        }
+        if (eventsLoading) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                }
+            }
+        } else if (events.isEmpty()) {
+            item { Text("No events for this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary) }
+        } else {
+            items(events.size) { i -> NodeEventItem(events[i]) }
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+// ── Compact-mode tabs ───────────────────────────────────────────────────────────
+
+@Composable
+private fun NodeDetailsOnlyTab(node: NodeInfo) {
+    val fields = listOf(
+        DetailField("Status", node.status, statusColor(node.status)),
+        DetailField("Roles", node.roles),
+        DetailField("Version", node.version),
+        DetailField("OS", node.os),
+        DetailField("Architecture", node.arch),
+        DetailField("Container Runtime", node.containerRuntime),
+        DetailField("CPU", node.cpu),
+        DetailField("Memory", node.memory),
+        DetailField("Pods Capacity", node.pods),
+        DetailField("Age", node.age),
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        item {
+            Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                    fields.forEach { f ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                            if (f.valueColor != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(f.valueColor))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
+                                }
+                            } else {
+                                Text(f.value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (node.labels.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    node.labels.entries.toList().chunked(2).forEach { chunk ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        }
+                    }
+                }
+            }
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (PodInfo) -> Unit) {
+    if (podsLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+        }
+    } else if (pods.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
+            Text("No pods on this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+        }
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(14.dp),
@@ -231,21 +557,49 @@ private fun NodePodsTab(nodeName: String, kubeClient: KubeClient) {
         ) {
             item {
                 Text(
-                    "${pods.size} pods on this node",
+                    "${pods.size} Pods",
                     style = MaterialTheme.typography.labelLarge,
                     color = KdTextPrimary,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Spacer(Modifier.height(4.dp))
             }
-            items(pods.size) { i -> NodePodItem(pods[i]) }
+            items(pods.size) { i -> NodePodItem(pods[i]) { onPodClick(pods[i]) } }
         }
     }
 }
 
 @Composable
-private fun NodePodItem(pod: PodInfo) {
+private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
+    if (eventsLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+        }
+    } else if (events.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
+            Text("No events for this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item {
+                Text(
+                    "${events.size} Events",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = KdTextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            items(events.size) { i -> NodeEventItem(events[i]) }
+        }
+    }
+}
+
+@Composable
+private fun NodePodItem(pod: PodInfo, onClick: () -> Unit) {
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(6.dp),
         color = KdSurfaceVariant,
     ) {
@@ -290,55 +644,6 @@ private fun NodePodItem(pod: PodInfo) {
                     )
                 }
             }
-        }
-    }
-}
-
-// ── Node Events Tab ─────────────────────────────────────────────────────────────
-
-@Composable
-private fun NodeEventsTab(nodeName: String, kubeClient: KubeClient) {
-    var events by remember(nodeName) { mutableStateOf<List<EventInfo>>(emptyList()) }
-    var loading by remember(nodeName) { mutableStateOf(true) }
-
-    LaunchedEffect(nodeName) {
-        loading = true
-        events = withContext(Dispatchers.IO) {
-            try {
-                kubeClient.getEventsForNode(nodeName)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-        loading = false
-    }
-
-    if (loading) {
-        ResourceLoadingIndicator()
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            item {
-                Text(
-                    "${events.size} events",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = KdTextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-            if (events.isEmpty()) {
-                item {
-                    Text(
-                        "No events for this node",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdTextSecondary,
-                    )
-                }
-            }
-            items(events.size) { i -> NodeEventItem(events[i]) }
         }
     }
 }
@@ -418,6 +723,8 @@ private fun NodeEventItem(event: EventInfo) {
 private fun NodeStatsPanel(
     nodes: List<NodeInfo>,
     usage: ResourceUsageSummary?,
+    cpuHistory: List<Float>,
+    memHistory: List<Float>,
     kubeClient: KubeClient,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -466,32 +773,48 @@ private fun NodeStatsPanel(
                     // Pods count indicator
                     NodePodsSummary(nodes, kubeClient)
 
-                    // Memory usage indicator
                     if (usage != null && usage.metricsAvailable) {
                         val memFraction = if (usage.memoryCapacityBytes > 0) {
                             usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
                         } else {
                             0f
                         }
-                        CircularUsageIndicator(
-                            fraction = memFraction,
-                            label = "Memory",
-                            usedText = formatMemorySize(usage.memoryUsedBytes),
-                            totalText = formatMemorySize(usage.memoryCapacityBytes),
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularUsageIndicator(
+                                fraction = memFraction,
+                                label = "Memory",
+                                usedText = formatMemorySize(usage.memoryUsedBytes),
+                                totalText = formatMemorySize(usage.memoryCapacityBytes),
+                            )
+                            if (memHistory.size > 1) {
+                                Spacer(Modifier.height(6.dp))
+                                UsageHistoryBar(
+                                    history = memHistory,
+                                    modifier = Modifier.width(100.dp).height(36.dp),
+                                )
+                            }
+                        }
 
-                        // CPU usage indicator
                         val cpuFraction = if (usage.cpuCapacityMillis > 0) {
                             usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
                         } else {
                             0f
                         }
-                        CircularUsageIndicator(
-                            fraction = cpuFraction,
-                            label = "CPU",
-                            usedText = formatCpuCores(usage.cpuUsedMillis),
-                            totalText = formatCpuCores(usage.cpuCapacityMillis),
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularUsageIndicator(
+                                fraction = cpuFraction,
+                                label = "CPU",
+                                usedText = formatCpuCores(usage.cpuUsedMillis),
+                                totalText = formatCpuCores(usage.cpuCapacityMillis),
+                            )
+                            if (cpuHistory.size > 1) {
+                                Spacer(Modifier.height(6.dp))
+                                UsageHistoryBar(
+                                    history = cpuHistory,
+                                    modifier = Modifier.width(100.dp).height(36.dp),
+                                )
+                            }
+                        }
                     } else if (usage == null) {
                         Box(
                             modifier = Modifier.weight(1f),
@@ -528,39 +851,33 @@ private fun NodePodsSummary(
 ) {
     var podsCount by remember { mutableStateOf(0) }
     var podsCapacity by remember { mutableStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
+    var initialLoaded by remember { mutableStateOf(false) }
+    var podsHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
+    val currentNodes by rememberUpdatedState(nodes)
 
-    LaunchedEffect(nodes) {
-        loading = true
-        withContext(Dispatchers.IO) {
-            try {
-                var totalPods = 0
-                var totalCapacity = 0
-
-                nodes.forEach { node ->
-                    // Get pods count for this node
-                    try {
-                        val pods = kubeClient.getPodsByNode(node.name)
-                        totalPods += pods.size
-                    } catch (_: Exception) {
-                        // Ignore errors for individual nodes
+    LaunchedEffect(Unit) {
+        while (true) {
+            withContext(Dispatchers.IO) {
+                try {
+                    var totalPods = 0
+                    var totalCapacity = 0
+                    currentNodes.forEach { node ->
+                        try {
+                            totalPods += kubeClient.getPodsByNode(node.name).size
+                        } catch (_: Exception) {
+                        }
+                        totalCapacity += node.pods.toIntOrNull() ?: 0
                     }
-
-                    // Parse pods capacity
-                    val capacityStr = node.pods
-                    if (capacityStr.isNotBlank()) {
-                        val capacity = capacityStr.toIntOrNull() ?: 0
-                        totalCapacity += capacity
-                    }
+                    podsCount = totalPods
+                    podsCapacity = totalCapacity
+                } catch (_: Exception) {
+                } finally {
+                    initialLoaded = true
                 }
-
-                podsCount = totalPods
-                podsCapacity = totalCapacity
-            } catch (_: Exception) {
-                // Handle error
-            } finally {
-                loading = false
             }
+            val frac = if (podsCapacity > 0) podsCount.toFloat() / podsCapacity.toFloat() else 0f
+            podsHistory = (podsHistory + frac).takeLast(MAX_HISTORY_SIZE)
+            delay(10_000)
         }
     }
 
@@ -570,7 +887,7 @@ private fun NodePodsSummary(
         0f
     }
 
-    if (loading) {
+    if (!initialLoaded) {
         Box(
             modifier = Modifier.padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
@@ -582,13 +899,24 @@ private fun NodePodsSummary(
             )
         }
     } else {
-        CircularUsageIndicator(
-            fraction = podsFraction,
-            label = "Pods",
-            usedText = "$podsCount",
-            totalText = "$podsCapacity",
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = 16.dp),
-        )
+        ) {
+            CircularUsageIndicator(
+                fraction = podsFraction,
+                label = "Pods",
+                usedText = "$podsCount",
+                totalText = "$podsCapacity",
+            )
+            if (podsHistory.size > 1) {
+                Spacer(Modifier.height(6.dp))
+                UsageHistoryBar(
+                    history = podsHistory,
+                    modifier = Modifier.width(100.dp).height(36.dp),
+                )
+            }
+        }
     }
 }
 

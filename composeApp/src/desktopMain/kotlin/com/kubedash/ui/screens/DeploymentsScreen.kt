@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,7 +52,7 @@ fun DeploymentsScreen(
 ) {
     var state by remember { mutableStateOf<ResourceState<List<DeploymentInfo>>>(ResourceState.Loading) }
     var selected by remember { mutableStateOf<DeploymentInfo?>(null) }
-    var panelWidthDp by remember { mutableFloatStateOf(480f) }
+    var panelWidthDp by remember { mutableFloatStateOf(650f) }
 
     LaunchedEffect(namespace) {
         state = ResourceState.Loading
@@ -103,7 +105,7 @@ fun DeploymentsScreen(
                     exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
-                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceIn(280f, 900f) }
+                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceAtLeast(280f) }
                         selected?.let { dep ->
                             val readyParts = dep.ready.split("/")
                             val isReady = readyParts.size == 2 && readyParts[0] == readyParts[1] && readyParts[0] != "0"
@@ -125,6 +127,18 @@ fun DeploymentsScreen(
                                 kubeClient = kubeClient,
                                 onClose = { selected = null },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
+                                extraTabs = listOf(
+                                    ExtraTab(
+                                        label = "Graph",
+                                        icon = Icons.Default.AccountTree,
+                                    ) {
+                                        DeploymentResourceGraphTab(
+                                            deploymentName = dep.name,
+                                            namespace = dep.namespace,
+                                            kubeClient = kubeClient,
+                                        )
+                                    },
+                                ),
                             )
                         }
                     }

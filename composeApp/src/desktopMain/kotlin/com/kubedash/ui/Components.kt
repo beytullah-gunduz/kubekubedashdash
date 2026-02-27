@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -281,6 +283,56 @@ fun CircularUsageIndicator(
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
         )
+    }
+}
+
+@Composable
+fun UsageHistoryBar(
+    history: List<Float>,
+    modifier: Modifier = Modifier,
+    maxEntries: Int = 20,
+) {
+    if (history.size < 2) return
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(KdSurfaceVariant.copy(alpha = 0.4f))
+            .padding(horizontal = 4.dp, vertical = 3.dp),
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val entries = history.takeLast(maxEntries)
+            val barCount = entries.size
+            if (barCount == 0) return@Canvas
+
+            val gapPx = 1.5.dp.toPx()
+            val barMaxPx = 4.dp.toPx()
+            val naturalBarWidth = ((size.width - (barCount - 1) * gapPx) / barCount).coerceAtLeast(1f)
+            val barWidth = naturalBarWidth.coerceAtMost(barMaxPx)
+            val totalBarsWidth = barCount * barWidth + (barCount - 1) * gapPx
+            val startX = size.width - totalBarsWidth
+
+            entries.forEachIndexed { index, fraction ->
+                val clamped = fraction.coerceIn(0f, 1f)
+                val barHeight = (clamped * size.height).coerceAtLeast(1.dp.toPx())
+                val x = startX + index * (barWidth + gapPx)
+                val y = size.height - barHeight
+
+                val fade = 0.4f + 0.6f * (index.toFloat() / (barCount - 1).coerceAtLeast(1))
+                val barColor = when {
+                    clamped > 0.85f -> KdError
+                    clamped > 0.70f -> KdWarning
+                    else -> KdSuccess
+                }
+
+                drawRoundRect(
+                    color = barColor.copy(alpha = fade),
+                    topLeft = Offset(x, y),
+                    size = Size(barWidth, barHeight),
+                    cornerRadius = CornerRadius(1.dp.toPx()),
+                )
+            }
+        }
     }
 }
 

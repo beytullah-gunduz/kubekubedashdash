@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -92,6 +93,9 @@ private enum class DetailTab(val label: String, val icon: ImageVector) {
     Logs("Logs", Icons.Default.Terminal),
 }
 
+private val tallTabs = listOf(DetailTab.Overview, DetailTab.Yaml)
+private val compactTabs = DetailTab.entries.toList()
+
 @Composable
 fun PodDetailPanel(
     pod: PodInfo,
@@ -104,13 +108,26 @@ fun PodDetailPanel(
     LaunchedEffect(pod.uid) { activeTab = DetailTab.Overview }
 
     Surface(modifier = modifier, color = KdSurface) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            PanelHeader(pod, onClose)
-            PanelTabs(activeTab) { activeTab = it }
-            when (activeTab) {
-                DetailTab.Overview -> OverviewTab(pod)
-                DetailTab.Yaml -> YamlTab(pod, kubeClient)
-                DetailTab.Logs -> LogsTab(pod, kubeClient)
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isTall = maxHeight >= 1000.dp
+            val tabs = if (isTall) tallTabs else compactTabs
+
+            LaunchedEffect(isTall) {
+                if (isTall && activeTab == DetailTab.Logs) activeTab = DetailTab.Overview
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                PanelHeader(pod, onClose)
+                PanelTabs(activeTab, tabs) { activeTab = it }
+                when (activeTab) {
+                    DetailTab.Overview -> {
+                        if (isTall) OverviewAndLogsTab(pod, kubeClient) else OverviewTab(pod)
+                    }
+
+                    DetailTab.Yaml -> YamlTab(pod, kubeClient)
+
+                    DetailTab.Logs -> LogsTab(pod, kubeClient)
+                }
             }
         }
     }
@@ -152,14 +169,14 @@ private fun PanelHeader(pod: PodInfo, onClose: () -> Unit) {
 // ── Tab Bar ─────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PanelTabs(activeTab: DetailTab, onTabChange: (DetailTab) -> Unit) {
+private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, onTabChange: (DetailTab) -> Unit) {
     SecondaryTabRow(
-        selectedTabIndex = DetailTab.entries.indexOf(activeTab),
+        selectedTabIndex = tabs.indexOf(activeTab).coerceAtLeast(0),
         containerColor = KdSurfaceVariant.copy(alpha = 0.5f),
         contentColor = KdPrimary,
         divider = { HorizontalDivider(color = KdBorder) },
     ) {
-        DetailTab.entries.forEach { tab ->
+        tabs.forEach { tab ->
             Tab(
                 selected = tab == activeTab,
                 onClick = { onTabChange(tab) },
@@ -175,6 +192,21 @@ private fun PanelTabs(activeTab: DetailTab, onTabChange: (DetailTab) -> Unit) {
                     Text(tab.label, style = MaterialTheme.typography.labelMedium)
                 }
             }
+        }
+    }
+}
+
+// ── Overview + Logs combined Tab ─────────────────────────────────────────────────
+
+@Composable
+private fun OverviewAndLogsTab(pod: PodInfo, kubeClient: KubeClient) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(2f).fillMaxWidth()) {
+            OverviewTab(pod)
+        }
+        HorizontalDivider(color = KdBorder)
+        Box(modifier = Modifier.weight(3f).fillMaxWidth()) {
+            LogsTab(pod, kubeClient)
         }
     }
 }

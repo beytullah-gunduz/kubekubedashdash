@@ -57,6 +57,9 @@ fun App() {
         val scope = rememberCoroutineScope()
 
         fun navigate(screen: Screen) {
+            if (screen is Screen.Pods && screen.selectPodUid != null) {
+                selectedNamespace = "All Namespaces"
+            }
             if (screen is Screen.ResourceDetail || screen is Screen.PodLogs) {
                 previousScreen = currentScreen
             }
@@ -214,7 +217,7 @@ fun ContentRouter(
 
     when (screen) {
         is Screen.ClusterOverview -> ClusterOverviewScreen(kubeClient, ns, onNavigate)
-        is Screen.Pods -> PodsScreen(kubeClient, ns, searchQuery, onNavigate)
+        is Screen.Pods -> PodsScreen(kubeClient, ns, searchQuery, onNavigate, screen.selectPodUid)
         is Screen.Deployments -> DeploymentsScreen(kubeClient, ns, searchQuery, onNavigate)
         is Screen.Services -> ServicesScreen(kubeClient, ns, searchQuery, onNavigate)
         is Screen.Nodes -> NodesScreen(kubeClient, searchQuery, onNavigate)

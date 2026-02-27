@@ -50,7 +50,7 @@ fun ServicesScreen(
 ) {
     var state by remember { mutableStateOf<ResourceState<List<ServiceInfo>>>(ResourceState.Loading) }
     var selected by remember { mutableStateOf<ServiceInfo?>(null) }
-    var panelWidthDp by remember { mutableFloatStateOf(480f) }
+    var panelWidthDp by remember { mutableFloatStateOf(650f) }
 
     LaunchedEffect(namespace) {
         state = ResourceState.Loading
@@ -104,7 +104,7 @@ fun ServicesScreen(
                     exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
-                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceIn(280f, 900f) }
+                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceAtLeast(280f) }
                         selected?.let { svc ->
                             val selectorFields = svc.selector.map { (k, v) -> DetailField("Selector", "$k=$v") }
                             ResourceDetailPanel(

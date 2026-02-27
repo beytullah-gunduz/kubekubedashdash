@@ -82,10 +82,12 @@ fun PodsScreen(
     namespace: String?,
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
+    selectPodUid: String? = null,
 ) {
     var state by remember { mutableStateOf<ResourceState<List<PodInfo>>>(ResourceState.Loading) }
     var selectedPod by remember { mutableStateOf<PodInfo?>(null) }
-    var panelWidthDp by remember { mutableFloatStateOf(480f) }
+    var pendingSelectUid by remember { mutableStateOf(selectPodUid) }
+    var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statsExpanded by remember { mutableStateOf(true) }
     var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
 
@@ -120,7 +122,13 @@ fun PodsScreen(
 
     LaunchedEffect(state) {
         val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        selectedPod = selectedPod?.let { sel -> current.find { it.uid == sel.uid } }
+        val uid = pendingSelectUid
+        if (uid != null) {
+            selectedPod = current.find { it.uid == uid }
+            pendingSelectUid = null
+        } else {
+            selectedPod = selectedPod?.let { sel -> current.find { it.uid == sel.uid } }
+        }
     }
 
     when (val s = state) {
@@ -138,21 +146,27 @@ fun PodsScreen(
             }
 
             Row(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    PodStatsPanel(
-                        pods = s.data,
-                        usage = resourceUsage,
-                        expanded = statsExpanded,
-                        onToggle = { statsExpanded = !statsExpanded },
-                    )
-                    ResourceCountHeader(filtered.size, "Pods")
-                    PodTable(
-                        pods = filtered,
-                        selectedUid = selectedPod?.uid,
-                        onPodClick = { pod ->
-                            selectedPod = if (selectedPod?.uid == pod.uid) null else pod
-                        },
-                    )
+                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    val showStats = maxWidth >= 900.dp
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Hide stats panel when left view is too small (< 900dp)
+                        if (showStats) {
+                            PodStatsPanel(
+                                pods = s.data,
+                                usage = resourceUsage,
+                                expanded = statsExpanded,
+                                onToggle = { statsExpanded = !statsExpanded },
+                            )
+                        }
+                        ResourceCountHeader(filtered.size, "Pods")
+                        PodTable(
+                            pods = filtered,
+                            selectedUid = selectedPod?.uid,
+                            onPodClick = { pod ->
+                                selectedPod = if (selectedPod?.uid == pod.uid) null else pod
+                            },
+                        )
+                    }
                 }
 
                 AnimatedVisibility(
@@ -161,7 +175,7 @@ fun PodsScreen(
                     exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
-                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceIn(280f, 900f) }
+                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceAtLeast(280f) }
                         selectedPod?.let { pod ->
                             PodDetailPanel(
                                 pod = pod,

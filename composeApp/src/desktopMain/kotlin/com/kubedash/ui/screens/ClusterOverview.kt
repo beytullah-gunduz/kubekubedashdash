@@ -180,7 +180,7 @@ private fun OverviewContent(info: ClusterInfo, onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    QuickNavButton("Pods", Icons.Default.ViewInAr, Modifier.weight(1f)) { onNavigate(Screen.Pods) }
+                    QuickNavButton("Pods", Icons.Default.ViewInAr, Modifier.weight(1f)) { onNavigate(Screen.Pods()) }
                     QuickNavButton("Deployments", Icons.Default.Layers, Modifier.weight(1f)) { onNavigate(Screen.Deployments) }
                     QuickNavButton("Services", Icons.Default.Cloud, Modifier.weight(1f)) { onNavigate(Screen.Services) }
                     QuickNavButton("Nodes", Icons.Default.Dns, Modifier.weight(1f)) { onNavigate(Screen.Nodes) }
