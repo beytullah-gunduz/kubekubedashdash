@@ -108,6 +108,12 @@ data class ResourceUsageSummary(
     val metricsAvailable: Boolean,
 )
 
+data class PodMetricsSnapshot(
+    val timestampMs: Long,
+    val cpuMillis: Long,
+    val memoryBytes: Long,
+)
+
 sealed class ResourceState<out T> {
     data object Loading : ResourceState<Nothing>()
 
