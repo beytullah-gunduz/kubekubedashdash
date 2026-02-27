@@ -2,10 +2,13 @@ package com.kubedash.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,6 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,8 +49,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubedash.EventInfo
+import com.kubedash.KdBorder
 import com.kubedash.KdError
 import com.kubedash.KdPrimary
+import com.kubedash.KdSurface
 import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
@@ -52,8 +61,14 @@ import com.kubedash.KubeClient
 import com.kubedash.NodeInfo
 import com.kubedash.PodInfo
 import com.kubedash.ResourceState
+import com.kubedash.ResourceUsageSummary
 import com.kubedash.Screen
+import com.kubedash.formatCpuCores
+import com.kubedash.formatMemorySize
+import com.kubedash.parseCpuToMillis
+import com.kubedash.parseMemoryToBytes
 import com.kubedash.ui.CellData
+import com.kubedash.ui.CircularUsageIndicator
 import com.kubedash.ui.ColumnDef
 import com.kubedash.ui.ResizeHandle
 import com.kubedash.ui.ResourceCountHeader
@@ -75,6 +90,8 @@ fun NodesScreen(
     var state by remember { mutableStateOf<ResourceState<List<NodeInfo>>>(ResourceState.Loading) }
     var selected by remember { mutableStateOf<NodeInfo?>(null) }
     var panelWidthDp by remember { mutableFloatStateOf(480f) }
+    var statsExpanded by remember { mutableStateOf(true) }
+    var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
 
     LaunchedEffect(Unit) {
         state = ResourceState.Loading
@@ -89,6 +106,17 @@ fun NodesScreen(
                 } else {
                     state
                 }
+            }
+            delay(10_000)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            resourceUsage = try {
+                withContext(Dispatchers.IO) { kubeClient.getResourceUsage(null) }
+            } catch (e: Exception) {
+                null
             }
             delay(10_000)
         }
@@ -114,6 +142,13 @@ fun NodesScreen(
 
             Row(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    NodeStatsPanel(
+                        nodes = s.data,
+                        usage = resourceUsage,
+                        kubeClient = kubeClient,
+                        expanded = statsExpanded,
+                        onToggle = { statsExpanded = !statsExpanded },
+                    )
                     ResourceCountHeader(filtered.size, "Nodes")
                     NodeTable(
                         nodes = filtered,
@@ -374,6 +409,186 @@ private fun NodeEventItem(event: EventInfo) {
                 }
             }
         }
+    }
+}
+
+// ── Stats Panel ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun NodeStatsPanel(
+    nodes: List<NodeInfo>,
+    usage: ResourceUsageSummary?,
+    kubeClient: KubeClient,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = KdSurface,
+        border = ButtonDefaults.outlinedButtonBorder(true).copy(
+            brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
+        ),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Node Usage Statistics",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = KdTextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = KdTextSecondary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Pods count indicator
+                    NodePodsSummary(nodes, kubeClient)
+
+                    // Memory usage indicator
+                    if (usage != null && usage.metricsAvailable) {
+                        val memFraction = if (usage.memoryCapacityBytes > 0) {
+                            usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
+                        } else {
+                            0f
+                        }
+                        CircularUsageIndicator(
+                            fraction = memFraction,
+                            label = "Memory",
+                            usedText = formatMemorySize(usage.memoryUsedBytes),
+                            totalText = formatMemorySize(usage.memoryCapacityBytes),
+                        )
+
+                        // CPU usage indicator
+                        val cpuFraction = if (usage.cpuCapacityMillis > 0) {
+                            usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
+                        } else {
+                            0f
+                        }
+                        CircularUsageIndicator(
+                            fraction = cpuFraction,
+                            label = "CPU",
+                            usedText = formatCpuCores(usage.cpuUsedMillis),
+                            totalText = formatCpuCores(usage.cpuCapacityMillis),
+                        )
+                    } else if (usage == null) {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = KdPrimary,
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "Metrics server unavailable",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KdTextSecondary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NodePodsSummary(
+    nodes: List<NodeInfo>,
+    kubeClient: KubeClient,
+) {
+    var podsCount by remember { mutableStateOf(0) }
+    var podsCapacity by remember { mutableStateOf(0) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(nodes) {
+        loading = true
+        withContext(Dispatchers.IO) {
+            try {
+                var totalPods = 0
+                var totalCapacity = 0
+
+                nodes.forEach { node ->
+                    // Get pods count for this node
+                    try {
+                        val pods = kubeClient.getPodsByNode(node.name)
+                        totalPods += pods.size
+                    } catch (_: Exception) {
+                        // Ignore errors for individual nodes
+                    }
+
+                    // Parse pods capacity
+                    val capacityStr = node.pods
+                    if (capacityStr.isNotBlank()) {
+                        val capacity = capacityStr.toIntOrNull() ?: 0
+                        totalCapacity += capacity
+                    }
+                }
+
+                podsCount = totalPods
+                podsCapacity = totalCapacity
+            } catch (_: Exception) {
+                // Handle error
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    val podsFraction = if (podsCapacity > 0) {
+        podsCount.toFloat() / podsCapacity.toFloat()
+    } else {
+        0f
+    }
+
+    if (loading) {
+        Box(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = KdPrimary,
+            )
+        }
+    } else {
+        CircularUsageIndicator(
+            fraction = podsFraction,
+            label = "Pods",
+            usedText = "$podsCount",
+            totalText = "$podsCapacity",
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
     }
 }
 
