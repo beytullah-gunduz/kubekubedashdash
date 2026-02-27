@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubedash.ClusterInfo
-import com.kubedash.KubeClient
 import com.kubedash.KdBorder
 import com.kubedash.KdError
 import com.kubedash.KdInfo
@@ -50,6 +49,7 @@ import com.kubedash.KdSurface
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
+import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import com.kubedash.Screen
 import com.kubedash.ui.PodStatusBar

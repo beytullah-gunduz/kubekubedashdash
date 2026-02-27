@@ -42,13 +42,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubedash.EventInfo
-import com.kubedash.KubeClient
 import com.kubedash.KdError
 import com.kubedash.KdPrimary
 import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
+import com.kubedash.KubeClient
 import com.kubedash.NodeInfo
 import com.kubedash.PodInfo
 import com.kubedash.ResourceState

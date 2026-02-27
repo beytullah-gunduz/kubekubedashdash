@@ -23,8 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubedash.GenericResourceInfo
-import com.kubedash.KubeClient
 import com.kubedash.KdPrimary
+import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import com.kubedash.ui.CellData
 import com.kubedash.ui.ColumnDef

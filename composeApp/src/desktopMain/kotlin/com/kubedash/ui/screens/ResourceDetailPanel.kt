@@ -51,13 +51,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kubedash.KubeClient
 import com.kubedash.KdBorder
 import com.kubedash.KdPrimary
 import com.kubedash.KdSurface
 import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
+import com.kubedash.KubeClient
 import com.kubedash.ui.LabelChip
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.StatusBadge

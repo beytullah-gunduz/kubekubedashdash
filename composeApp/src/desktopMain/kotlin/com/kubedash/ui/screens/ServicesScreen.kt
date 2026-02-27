@@ -22,10 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.kubedash.KubeClient
 import com.kubedash.KdPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
+import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import com.kubedash.Screen
 import com.kubedash.ServiceInfo

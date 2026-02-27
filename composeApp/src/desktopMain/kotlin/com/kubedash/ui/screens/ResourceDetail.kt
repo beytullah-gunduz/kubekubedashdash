@@ -40,15 +40,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kubedash.KubeClient
-import com.kubedash.KdBorder
 import com.kubedash.KdBackground
+import com.kubedash.KdBorder
 import com.kubedash.KdPrimary
 import com.kubedash.KdSuccess
 import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
+import com.kubedash.KubeClient
 import com.kubedash.Screen
 import com.kubedash.ui.ResourceLoadingIndicator
 import kotlinx.coroutines.Dispatchers

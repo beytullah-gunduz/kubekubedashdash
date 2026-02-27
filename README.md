@@ -2,6 +2,8 @@
 
 A desktop Kubernetes cluster dashboard built with Jetpack Compose Multiplatform. It connects to clusters through your local kubeconfig and provides a read-oriented interface for browsing resources, viewing YAML, and streaming pod logs.
 
+![KubeKubeDashDash overview](screenshots/overview.png)
+
 ## Features
 
 ### Cluster management

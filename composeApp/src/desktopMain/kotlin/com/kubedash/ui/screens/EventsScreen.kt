@@ -10,11 +10,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.kubedash.EventInfo
-import com.kubedash.KubeClient
 import com.kubedash.KdPrimary
 import com.kubedash.KdSuccess
 import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
+import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import com.kubedash.ui.CellData
 import com.kubedash.ui.ColumnDef
