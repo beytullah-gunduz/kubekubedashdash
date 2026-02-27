@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,11 +36,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -335,132 +331,6 @@ fun UsageHistoryBar(
                     size = Size(barWidth, barHeight),
                     cornerRadius = CornerRadius(1.dp.toPx()),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun MetricsLineChart(
-    values: List<Long>,
-    label: String,
-    currentText: String,
-    formatValue: (Long) -> String,
-    lineColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        color = KdSurfaceVariant,
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(label, style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
-                Text(
-                    currentText,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = lineColor,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            if (values.size >= 2) {
-                Canvas(modifier = Modifier.fillMaxWidth().height(80.dp)) {
-                    val maxVal = values.max()
-                    val yMax = (maxVal * 1.15).toLong().coerceAtLeast(1)
-
-                    val n = values.size
-                    val stepX = size.width / (n - 1).coerceAtLeast(1)
-
-                    for (i in 1..3) {
-                        val y = size.height * i / 4f
-                        drawLine(
-                            KdBorder.copy(alpha = 0.4f),
-                            Offset(0f, y),
-                            Offset(size.width, y),
-                            strokeWidth = 0.5f,
-                        )
-                    }
-
-                    val linePath = Path()
-                    val fillPath = Path()
-
-                    values.forEachIndexed { idx, value ->
-                        val x = idx * stepX
-                        val frac = value.toFloat() / yMax
-                        val y = size.height * (1f - frac)
-
-                        if (idx == 0) {
-                            linePath.moveTo(x, y)
-                            fillPath.moveTo(x, size.height)
-                            fillPath.lineTo(x, y)
-                        } else {
-                            linePath.lineTo(x, y)
-                            fillPath.lineTo(x, y)
-                        }
-                    }
-
-                    fillPath.lineTo((n - 1) * stepX, size.height)
-                    fillPath.close()
-
-                    drawPath(
-                        fillPath,
-                        brush = Brush.verticalGradient(
-                            listOf(lineColor.copy(alpha = 0.25f), lineColor.copy(alpha = 0.02f)),
-                        ),
-                    )
-
-                    drawPath(
-                        linePath,
-                        color = lineColor,
-                        style = Stroke(
-                            width = 2.dp.toPx(),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round,
-                        ),
-                    )
-
-                    val lastX = (n - 1) * stepX
-                    val lastFrac = values.last().toFloat() / yMax
-                    val lastY = size.height * (1f - lastFrac)
-                    drawCircle(lineColor, 3.dp.toPx(), Offset(lastX, lastY))
-                    drawCircle(KdSurfaceVariant, 1.5.dp.toPx(), Offset(lastX, lastY))
-                }
-
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        "Min: ${formatValue(values.min())}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary.copy(alpha = 0.7f),
-                    )
-                    Text(
-                        "Max: ${formatValue(values.max())}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary.copy(alpha = 0.7f),
-                    )
-                }
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(80.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "Collecting data\u2026",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary,
-                    )
-                }
             }
         }
     }

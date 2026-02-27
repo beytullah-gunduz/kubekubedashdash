@@ -79,11 +79,7 @@ import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
 import com.kubedash.KubeClient
 import com.kubedash.PodInfo
-import com.kubedash.PodMetricsSnapshot
-import com.kubedash.formatCpuCores
-import com.kubedash.formatMemorySize
 import com.kubedash.ui.LabelChip
-import com.kubedash.ui.MetricsLineChart
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.StatusBadge
 import com.kubedash.ui.statusColor
@@ -108,21 +104,8 @@ fun PodDetailPanel(
     modifier: Modifier = Modifier,
 ) {
     var activeTab by remember { mutableStateOf(DetailTab.Overview) }
-    var metricsHistory by remember(pod.uid) { mutableStateOf(listOf<PodMetricsSnapshot>()) }
 
     LaunchedEffect(pod.uid) { activeTab = DetailTab.Overview }
-
-    LaunchedEffect(pod.uid) {
-        while (true) {
-            val snapshot = withContext(Dispatchers.IO) {
-                kubeClient.getPodMetrics(pod.name, pod.namespace)
-            }
-            if (snapshot != null) {
-                metricsHistory = (metricsHistory + snapshot).takeLast(60)
-            }
-            delay(5_000)
-        }
-    }
 
     Surface(modifier = modifier, color = KdSurface) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -138,11 +121,7 @@ fun PodDetailPanel(
                 PanelTabs(activeTab, tabs) { activeTab = it }
                 when (activeTab) {
                     DetailTab.Overview -> {
-                        if (isTall) {
-                            OverviewAndLogsTab(pod, kubeClient, metricsHistory)
-                        } else {
-                            OverviewTab(pod, metricsHistory)
-                        }
+                        if (isTall) OverviewAndLogsTab(pod, kubeClient) else OverviewTab(pod)
                     }
 
                     DetailTab.Yaml -> YamlTab(pod, kubeClient)
@@ -220,14 +199,10 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, onTabChange: 
 // ── Overview + Logs combined Tab ─────────────────────────────────────────────────
 
 @Composable
-private fun OverviewAndLogsTab(
-    pod: PodInfo,
-    kubeClient: KubeClient,
-    metricsHistory: List<PodMetricsSnapshot>,
-) {
+private fun OverviewAndLogsTab(pod: PodInfo, kubeClient: KubeClient) {
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(2f).fillMaxWidth()) {
-            OverviewTab(pod, metricsHistory)
+            OverviewTab(pod)
         }
         HorizontalDivider(color = KdBorder)
         Box(modifier = Modifier.weight(3f).fillMaxWidth()) {
@@ -239,7 +214,7 @@ private fun OverviewAndLogsTab(
 // ── Overview Tab ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>) {
+private fun OverviewTab(pod: PodInfo) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -247,10 +222,6 @@ private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>) 
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        if (metricsHistory.isNotEmpty()) {
-            PodMetricsSection(metricsHistory)
-        }
-
         SectionCard("Pod Info") {
             InfoRow("Status", pod.status, statusColor(pod.status))
             InfoRow("Namespace", pod.namespace)
@@ -283,39 +254,6 @@ private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>) 
                     }
                 }
             }
-        }
-    }
-}
-
-private val KdMemoryColor = Color(0xFF8B5CF6)
-
-@Composable
-private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        SectionLabel("Resource Usage")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val cpuValues = metricsHistory.map { it.cpuMillis }
-            MetricsLineChart(
-                values = cpuValues,
-                label = "CPU",
-                currentText = if (cpuValues.isNotEmpty()) formatCpuCores(cpuValues.last()) else "\u2014",
-                formatValue = ::formatCpuCores,
-                lineColor = KdPrimary,
-                modifier = Modifier.weight(1f),
-            )
-
-            val memValues = metricsHistory.map { it.memoryBytes }
-            MetricsLineChart(
-                values = memValues,
-                label = "Memory",
-                currentText = if (memValues.isNotEmpty()) formatMemorySize(memValues.last()) else "\u2014",
-                formatValue = ::formatMemorySize,
-                lineColor = KdMemoryColor,
-                modifier = Modifier.weight(1f),
-            )
         }
     }
 }
