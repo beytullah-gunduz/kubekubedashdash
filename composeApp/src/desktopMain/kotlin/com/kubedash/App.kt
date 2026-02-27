@@ -6,12 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,8 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.WindowScope
+import androidx.compose.ui.window.WindowState
 import com.kubedash.ui.Sidebar
-import com.kubedash.ui.TopBar
+import com.kubedash.ui.TitleBar
 import com.kubedash.ui.screens.ClusterOverviewScreen
 import com.kubedash.ui.screens.DeploymentsScreen
 import com.kubedash.ui.screens.EventsScreen
@@ -40,7 +42,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun App() {
+fun App(
+    windowScope: WindowScope,
+    windowState: WindowState,
+    onClose: () -> Unit,
+) {
     KubeDashTheme {
         val kubeClient = remember { KubeClient() }
         var currentScreen by remember { mutableStateOf<Screen>(Screen.ClusterOverview) }
@@ -86,11 +92,23 @@ fun App() {
             }
         }
 
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
+        Column(
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         ) {
-            Row(modifier = Modifier.fillMaxSize()) {
+            with(windowScope) {
+                TitleBar(
+                    title = "KubeKubeDashDash",
+                    windowState = windowState,
+                    onClose = onClose,
+                    searchQuery = searchQuery,
+                    onSearchChange = { searchQuery = it },
+                    selectedNamespace = selectedNamespace,
+                    namespaces = namespaces,
+                    onNamespaceChange = { selectedNamespace = it },
+                )
+            }
+
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Sidebar(
                     currentScreen = currentScreen,
                     selectedContext = selectedContext,
@@ -125,23 +143,6 @@ fun App() {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                 ) {
-                    TopBar(
-                        currentScreen = currentScreen,
-                        selectedNamespace = selectedNamespace,
-                        namespaces = namespaces,
-                        searchQuery = searchQuery,
-                        onNamespaceChange = { selectedNamespace = it },
-                        onSearchChange = { searchQuery = it },
-                        onBack = if (previousScreen != null && (currentScreen is Screen.ResourceDetail || currentScreen is Screen.PodLogs)) {
-                            {
-                                currentScreen = previousScreen!!
-                                previousScreen = null
-                            }
-                        } else {
-                            null
-                        },
-                    )
-
                     if (isConnecting) {
                         ConnectingScreen()
                     } else if (!isConnected) {
