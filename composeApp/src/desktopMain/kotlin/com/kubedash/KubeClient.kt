@@ -761,6 +761,26 @@ class KubeClient : Closeable {
         Result.failure(e)
     }
 
+    // ── Pod Metrics (single pod) ────────────────────────────────────────────────
+
+    fun getPodMetrics(name: String, namespace: String): PodMetricsSnapshot? = try {
+        val podMetricItems = client.top().pods().inNamespace(namespace).metrics().items
+        val pm = podMetricItems?.find { it.metadata?.name == name }
+        if (pm != null) {
+            var cpu = 0L
+            var mem = 0L
+            for (c in pm.containers ?: emptyList()) {
+                cpu += parseCpuToMillis(c.usage?.get("cpu")?.toString() ?: "0")
+                mem += parseMemoryToBytes(c.usage?.get("memory")?.toString() ?: "0")
+            }
+            PodMetricsSnapshot(System.currentTimeMillis(), cpu, mem)
+        } else {
+            null
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     // ── Resource Usage (Metrics Server) ─────────────────────────────────────────
 
     fun getResourceUsage(namespace: String?): ResourceUsageSummary {
