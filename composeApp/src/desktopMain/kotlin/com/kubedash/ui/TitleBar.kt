@@ -51,6 +51,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,12 +88,37 @@ fun WindowScope.TitleBar(
     namespaces: List<String>,
     onNamespaceChange: (String) -> Unit,
 ) {
+    val toggleMaximize = {
+        windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
+            WindowPlacement.Floating
+        } else {
+            WindowPlacement.Maximized
+        }
+    }
+
     WindowDraggableArea {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(38.dp)
                 .background(KdSurface)
+                .pointerInput(Unit) {
+                    var lastPressTime = 0L
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastPressTime in 1..400) {
+                                    toggleMaximize()
+                                    lastPressTime = 0L
+                                } else {
+                                    lastPressTime = now
+                                }
+                            }
+                        }
+                    }
+                }
                 .drawBehind {
                     drawLine(
                         color = KdBorder,
@@ -102,13 +130,7 @@ fun WindowScope.TitleBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val onMinimize = { windowState.isMinimized = true }
-            val onMaximize = {
-                windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
-                    WindowPlacement.Floating
-                } else {
-                    WindowPlacement.Maximized
-                }
-            }
+            val onMaximize = toggleMaximize
 
             if (isMacOS) {
                 Spacer(Modifier.width(8.dp))
