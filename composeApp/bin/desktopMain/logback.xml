@@ -1,0 +1,7 @@
+<!--
+    Logback is configured programmatically in Main.kt (configureLogging()).
+    This XML file is a minimal fallback to suppress Logback status warnings.
+-->
+<configuration>
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+</configuration>

@@ -36,6 +36,7 @@ import com.kubedash.ui.screens.ClusterOverviewScreen
 import com.kubedash.ui.screens.EventsScreen
 import com.kubedash.ui.screens.GenericResourceScreen
 import com.kubedash.ui.screens.LogViewerScreen
+import com.kubedash.ui.screens.LogsScreen
 import com.kubedash.ui.screens.NamespacesScreen
 import com.kubedash.ui.screens.NodesScreen
 import com.kubedash.ui.screens.PodsScreen
@@ -145,6 +146,8 @@ fun App(
                     ) {
                         when {
                             currentScreen is Screen.Settings -> SettingsScreen()
+
+                            currentScreen is Screen.Logs -> LogsScreen()
 
                             isConnecting -> ConnectingScreen()
 
@@ -304,6 +307,7 @@ fun ContentRouter(
         is Screen.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, kubeClient, namespacedKind = false) { kubeClient.getStorageClasses() }
         is Screen.ResourceDetail -> ResourceDetailScreen(screen.kind, screen.name, screen.namespace, kubeClient, onNavigate)
         is Screen.PodLogs -> LogViewerScreen(screen.podName, screen.namespace, screen.containerName, kubeClient)
+        is Screen.Logs -> LogsScreen()
         is Screen.Settings -> SettingsScreen()
     }
 }

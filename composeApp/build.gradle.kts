@@ -49,7 +49,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
-            implementation(libs.slf4j.simple)
+            implementation(libs.logback.classic)
         }
     }
 }
@@ -63,6 +63,16 @@ compose.desktop {
             packageName = "KubeKubeDashDash"
             packageVersion = "1.0.0"
             modules("java.instrument", "java.net.http", "java.prefs", "jdk.unsupported")
+
+            macOS {
+                iconFile.set(project.file("icons/icon.icns"))
+            }
+            windows {
+                iconFile.set(project.file("icons/icon.ico"))
+            }
+            linux {
+                iconFile.set(project.file("icons/icon_512.png"))
+            }
         }
     }
 }

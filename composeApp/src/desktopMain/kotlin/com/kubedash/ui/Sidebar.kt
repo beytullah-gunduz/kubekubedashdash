@@ -150,6 +150,9 @@ fun Sidebar(
         HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            SidebarItem(Icons.AutoMirrored.Filled.List, "Logs", currentScreen is Screen.Logs) {
+                onNavigate(Screen.Logs)
+            }
             SidebarItem(Icons.Default.Settings, "Settings", currentScreen is Screen.Settings) {
                 onNavigate(Screen.Settings)
             }

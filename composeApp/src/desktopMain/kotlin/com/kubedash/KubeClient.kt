@@ -10,11 +10,14 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.time.Duration
 import java.time.Instant
 
 class KubeClient : Closeable {
+
+    private val log = LoggerFactory.getLogger(KubeClient::class.java)
 
     private var _client: KubernetesClient? = null
     val isConnected: Boolean get() = _client != null
@@ -23,24 +26,31 @@ class KubeClient : Closeable {
         get() = _client ?: throw IllegalStateException("Not connected to a cluster")
 
     fun connect(context: String? = null): Result<String> = try {
+        log.info("Connecting to cluster context={}", context ?: "<default>")
         close()
         val config = Config.autoConfigure(context)
         _client = KubernetesClientBuilder().withConfig(config).build()
         val v = _client!!.kubernetesVersion
+        log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, config.masterUrl)
         Result.success("${v.major}.${v.minor}")
     } catch (e: Exception) {
+        log.error("Failed to connect to cluster context={}: {}", context, e.message)
         Result.failure(e)
     }
 
     fun getContexts(): List<String> = try {
-        Config.autoConfigure(null).contexts?.map { it.name } ?: emptyList()
-    } catch (_: Exception) {
+        val ctxs = Config.autoConfigure(null).contexts?.map { it.name } ?: emptyList()
+        log.debug("Loaded {} kube contexts", ctxs.size)
+        ctxs
+    } catch (e: Exception) {
+        log.warn("Failed to load kube contexts: {}", e.message)
         emptyList()
     }
 
     fun getCurrentContext(): String = try {
         Config.autoConfigure(null).currentContext?.name ?: ""
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        log.warn("Failed to get current context: {}", e.message)
         ""
     }
 
@@ -64,6 +74,7 @@ class KubeClient : Closeable {
     // ── Pods ────────────────────────────────────────────────────────────────────
 
     fun getPods(namespace: String?): List<PodInfo> {
+        log.debug("Fetching pods namespace={}", namespace ?: "all")
         val pods = namespacedList(namespace) { ns ->
             if (ns != null) {
                 pods().inNamespace(ns).list().items
@@ -71,6 +82,7 @@ class KubeClient : Closeable {
                 pods().inAnyNamespace().list().items
             }
         }
+        log.debug("Fetched {} pods", pods.size)
         return pods.map(::mapPod)
     }
 
@@ -121,6 +133,7 @@ class KubeClient : Closeable {
     // ── Deployments ─────────────────────────────────────────────────────────────
 
     fun getDeployments(namespace: String?): List<DeploymentInfo> {
+        log.debug("Fetching deployments namespace={}", namespace ?: "all")
         val items = namespacedList(namespace) { ns ->
             if (ns != null) {
                 apps().deployments().inNamespace(ns).list().items
@@ -128,6 +141,7 @@ class KubeClient : Closeable {
                 apps().deployments().inAnyNamespace().list().items
             }
         }
+        log.debug("Fetched {} deployments", items.size)
         return items.map { dep ->
             val ready = dep.status?.readyReplicas ?: 0
             val desired = dep.spec?.replicas ?: 0
@@ -149,8 +163,12 @@ class KubeClient : Closeable {
     // ── Deployment Resource Graph ────────────────────────────────────────────────
 
     fun getDeploymentResourceGraph(name: String, namespace: String): ResourceGraph {
+        log.debug("Building resource graph for deployment={} namespace={}", name, namespace)
         val deployment = client.apps().deployments().inNamespace(namespace).withName(name).get()
-            ?: return ResourceGraph(emptyList(), emptyList())
+            ?: run {
+                log.warn("Deployment not found name={} namespace={}", name, namespace)
+                return ResourceGraph(emptyList(), emptyList())
+            }
 
         val nodes = mutableListOf<ResourceGraphNode>()
         val edges = mutableListOf<ResourceGraphEdge>()
@@ -201,7 +219,9 @@ class KubeClient : Closeable {
                     edges.add(ResourceGraphEdge(rsId, podId))
                 }
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch ReplicaSets/Pods for deployment graph: {}", e.message)
+        }
 
         try {
             val allSvcs = client.services().inNamespace(namespace).list().items ?: emptyList()
@@ -230,9 +250,13 @@ class KubeClient : Closeable {
                             edges.add(ResourceGraphEdge(ingId, svcId))
                         }
                     }
-                } catch (_: Exception) { }
+                } catch (e: Exception) {
+                    log.warn("Failed to fetch Ingresses for service graph: {}", e.message)
+                }
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch Services for deployment graph: {}", e.message)
+        }
 
         val podSpec = deployment.spec?.template?.spec
         val cmNames = mutableSetOf<String>()
@@ -297,14 +321,18 @@ class KubeClient : Closeable {
                     edges.add(ResourceGraphEdge(hpaId, depId))
                 }
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch HPAs for deployment graph: {}", e.message)
+        }
 
+        log.debug("Resource graph built: {} nodes, {} edges", nodes.size, edges.size)
         return ResourceGraph(nodes, edges)
     }
 
     // ── Services ────────────────────────────────────────────────────────────────
 
     fun getServices(namespace: String?): List<ServiceInfo> {
+        log.debug("Fetching services namespace={}", namespace ?: "all")
         val items = namespacedList(namespace) { ns ->
             if (ns != null) {
                 services().inNamespace(ns).list().items
@@ -312,6 +340,7 @@ class KubeClient : Closeable {
                 services().inAnyNamespace().list().items
             }
         }
+        log.debug("Fetched {} services", items.size)
         return items.map { svc ->
             val ports = svc.spec?.ports?.joinToString(", ") { p ->
                 val np = if (p.nodePort != null && p.nodePort > 0) ":${p.nodePort}" else ""
@@ -333,33 +362,39 @@ class KubeClient : Closeable {
 
     // ── Nodes ───────────────────────────────────────────────────────────────────
 
-    fun getNodes(): List<NodeInfo> = client.nodes().list().items.map { node ->
-        val readyCond = node.status?.conditions?.find { it.type == "Ready" }
-        val roles = node.metadata.labels
-            ?.filterKeys { it.startsWith("node-role.kubernetes.io/") }
-            ?.keys?.map { it.removePrefix("node-role.kubernetes.io/") }
-            ?.joinToString(", ")?.ifEmpty { "<none>" } ?: "<none>"
-        val alloc = node.status?.allocatable
-        NodeInfo(
-            uid = node.metadata.uid ?: "",
-            name = node.metadata.name,
-            status = if (readyCond?.status == "True") "Ready" else "NotReady",
-            roles = roles,
-            version = node.status?.nodeInfo?.kubeletVersion ?: "",
-            os = node.status?.nodeInfo?.osImage ?: "",
-            arch = node.status?.nodeInfo?.architecture ?: "",
-            containerRuntime = node.status?.nodeInfo?.containerRuntimeVersion ?: "",
-            cpu = alloc?.get("cpu")?.toString() ?: "",
-            memory = alloc?.get("memory")?.toString() ?: "",
-            pods = alloc?.get("pods")?.toString() ?: "",
-            age = formatAge(node.metadata.creationTimestamp),
-            labels = node.metadata.labels ?: emptyMap(),
-        )
+    fun getNodes(): List<NodeInfo> {
+        log.debug("Fetching nodes")
+        val nodeItems = client.nodes().list().items
+        log.debug("Fetched {} nodes", nodeItems.size)
+        return nodeItems.map { node ->
+            val readyCond = node.status?.conditions?.find { it.type == "Ready" }
+            val roles = node.metadata.labels
+                ?.filterKeys { it.startsWith("node-role.kubernetes.io/") }
+                ?.keys?.map { it.removePrefix("node-role.kubernetes.io/") }
+                ?.joinToString(", ")?.ifEmpty { "<none>" } ?: "<none>"
+            val alloc = node.status?.allocatable
+            NodeInfo(
+                uid = node.metadata.uid ?: "",
+                name = node.metadata.name,
+                status = if (readyCond?.status == "True") "Ready" else "NotReady",
+                roles = roles,
+                version = node.status?.nodeInfo?.kubeletVersion ?: "",
+                os = node.status?.nodeInfo?.osImage ?: "",
+                arch = node.status?.nodeInfo?.architecture ?: "",
+                containerRuntime = node.status?.nodeInfo?.containerRuntimeVersion ?: "",
+                cpu = alloc?.get("cpu")?.toString() ?: "",
+                memory = alloc?.get("memory")?.toString() ?: "",
+                pods = alloc?.get("pods")?.toString() ?: "",
+                age = formatAge(node.metadata.creationTimestamp),
+                labels = node.metadata.labels ?: emptyMap(),
+            )
+        }
     }
 
     // ── Events ──────────────────────────────────────────────────────────────────
 
     fun getEvents(namespace: String?): List<EventInfo> {
+        log.debug("Fetching events namespace={}", namespace ?: "all")
         val items = namespacedList(namespace) { ns ->
             if (ns != null) {
                 v1().events().inNamespace(ns).list().items
@@ -367,6 +402,7 @@ class KubeClient : Closeable {
                 v1().events().inAnyNamespace().list().items
             }
         }
+        log.debug("Fetched {} events", items.size)
         return items.sortedByDescending { it.metadata?.creationTimestamp }.map { ev ->
             EventInfo(
                 uid = ev.metadata?.uid ?: "",
@@ -696,6 +732,7 @@ class KubeClient : Closeable {
     // ── YAML / Detail ───────────────────────────────────────────────────────────
 
     fun getResourceYaml(kind: String, name: String, namespace: String?): String = try {
+        log.debug("Fetching YAML kind={} name={} namespace={}", kind, name, namespace)
         val res: Any? = when (kind.lowercase()) {
             "pod" -> namespace?.let { client.pods().inNamespace(it).withName(name).get() }
             "deployment" -> namespace?.let { client.apps().deployments().inNamespace(it).withName(name).get() }
@@ -715,27 +752,37 @@ class KubeClient : Closeable {
             "storageclass" -> client.storage().v1().storageClasses().withName(name).get()
             else -> null
         }
-        if (res != null) Serialization.asYaml(res) else "# Resource not found"
+        if (res != null) {
+            Serialization.asYaml(res)
+        } else {
+            log.warn("Resource not found kind={} name={} namespace={}", kind, name, namespace)
+            "# Resource not found"
+        }
     } catch (e: Exception) {
+        log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         "# Error: ${e.message}"
     }
 
     // ── Pod Logs ────────────────────────────────────────────────────────────────
 
     fun getPodLogs(name: String, namespace: String, container: String?, tailLines: Int = 1000): String = try {
+        log.debug("Fetching pod logs pod={} namespace={} container={} tailLines={}", name, namespace, container, tailLines)
         val op = client.pods().inNamespace(namespace).withName(name)
         val withC = if (container != null) op.inContainer(container) else op
         withC.tailingLines(tailLines).log ?: ""
     } catch (e: Exception) {
+        log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
         "Error fetching logs: ${e.message}"
     }
 
     fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
+        log.info("Starting log stream pod={} namespace={} container={}", name, namespace, container)
         val watch = try {
             val op = client.pods().inNamespace(namespace).withName(name)
             val withC = if (container != null) op.inContainer(container) else op
             withC.tailingLines(100).watchLog()
         } catch (e: Exception) {
+            log.error("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
             trySend("Error: ${e.message}")
             close()
             return@callbackFlow
@@ -745,14 +792,20 @@ class KubeClient : Closeable {
                 watch.output.bufferedReader().use { reader ->
                     reader.lineSequence().forEach { trySend(it) }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                log.debug("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
+            }
         }
-        awaitClose { watch.close() }
+        awaitClose {
+            log.debug("Closing log stream pod={} namespace={}", name, namespace)
+            watch.close()
+        }
     }
 
     // ── Delete ──────────────────────────────────────────────────────────────────
 
     fun deleteResource(kind: String, name: String, namespace: String?): Result<Unit> = try {
+        log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
         when (kind.lowercase()) {
             "pod" -> namespace?.let { client.pods().inNamespace(it).withName(name).delete() }
             "deployment" -> namespace?.let { client.apps().deployments().inNamespace(it).withName(name).delete() }
@@ -763,8 +816,10 @@ class KubeClient : Closeable {
             "cronjob" -> namespace?.let { client.batch().v1().cronjobs().inNamespace(it).withName(name).delete() }
             else -> throw IllegalArgumentException("Delete not supported for $kind")
         }
+        log.info("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
         Result.success(Unit)
     } catch (e: Exception) {
+        log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         Result.failure(e)
     }
 
@@ -782,15 +837,18 @@ class KubeClient : Closeable {
             }
             PodMetricsSnapshot(System.currentTimeMillis(), cpu, mem)
         } else {
+            log.debug("No metrics found for pod={} namespace={}", name, namespace)
             null
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        log.debug("Metrics server unavailable for pod={}: {}", name, e.message)
         null
     }
 
     // ── Resource Usage (Metrics Server) ─────────────────────────────────────────
 
     fun getResourceUsage(namespace: String?): ResourceUsageSummary {
+        log.debug("Fetching resource usage namespace={}", namespace ?: "all")
         try {
             val podMetricItems = try {
                 if (namespace != null) {
@@ -798,7 +856,8 @@ class KubeClient : Closeable {
                 } else {
                     client.top().pods().metrics().items ?: emptyList()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                log.warn("Metrics server unavailable: {}", e.message)
                 return ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
             }
 
@@ -824,8 +883,10 @@ class KubeClient : Closeable {
                 memCap += parseMemoryToBytes(alloc["memory"]?.toString() ?: "0")
             }
 
+            log.debug("Resource usage: cpu={}m/{}m mem={}/{}", cpuUsed, cpuCap, memUsed, memCap)
             return ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log.warn("Failed to compute resource usage: {}", e.message)
             return ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
         }
     }
@@ -833,6 +894,7 @@ class KubeClient : Closeable {
     // ── Cluster Overview ────────────────────────────────────────────────────────
 
     fun getClusterInfo(namespace: String?): ClusterInfo {
+        log.debug("Fetching cluster info namespace={}", namespace ?: "all")
         val v = client.kubernetesVersion
         val nodes = client.nodes().list().items
         val namespaces = client.namespaces().list().items
@@ -868,6 +930,9 @@ class KubeClient : Closeable {
     private fun <T> namespacedList(namespace: String?, fetch: KubernetesClient.(String?) -> List<T>): List<T> = client.fetch(namespace)
 
     override fun close() {
+        if (_client != null) {
+            log.info("Closing Kubernetes client connection")
+        }
         _client?.close()
         _client = null
     }
