@@ -1,5 +1,6 @@
 package com.kubedash
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,8 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +44,6 @@ import com.kubedash.ui.screens.ServicesScreen
 import com.kubedash.ui.screens.SettingsScreen
 import com.kubedash.ui.screens.deployments.DeploymentsScreen
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -60,10 +62,10 @@ fun App(
         var contexts by remember { mutableStateOf(listOf<String>()) }
         var namespaces by remember { mutableStateOf(listOf<String>()) }
         var connectionError by remember { mutableStateOf<String?>(null) }
-        var isConnecting by remember { mutableStateOf(true) }
+        var isConnecting by remember { mutableStateOf(false) }
         var isConnected by remember { mutableStateOf(false) }
         var searchQuery by remember { mutableStateOf("") }
-        var showClusterSelector by remember { mutableStateOf(false) }
+        var showClusterSelector by remember { mutableStateOf(true) }
         var retryCountdown by remember { mutableStateOf(0) }
 
         val scope = rememberCoroutineScope()
@@ -78,39 +80,36 @@ fun App(
             currentScreen = screen
         }
 
+        fun connectToCluster(ctx: String) {
+            selectedContext = ctx
+            isConnecting = true
+            connectionError = null
+            scope.launch(Dispatchers.IO) {
+                kubeClient.connect(ctx).fold(
+                    onSuccess = {
+                        isConnected = true
+                        connectionError = null
+                        namespaces = try {
+                            kubeClient.getNamespaceNames()
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                        selectedNamespace = "All Namespaces"
+                    },
+                    onFailure = { e ->
+                        isConnected = false
+                        connectionError = e.message
+                    },
+                )
+                isConnecting = false
+            }
+        }
+
         LaunchedEffect(Unit) {
             withContext(Dispatchers.IO) {
                 contexts = kubeClient.getContexts()
-                val current = kubeClient.getCurrentContext()
-                selectedContext = current
             }
-
-            while (!isConnected) {
-                isConnecting = true
-                connectionError = null
-                withContext(Dispatchers.IO) {
-                    kubeClient.connect(selectedContext.ifEmpty { null }).fold(
-                        onSuccess = {
-                            isConnected = true
-                            namespaces = try {
-                                kubeClient.getNamespaceNames()
-                            } catch (_: Exception) {
-                                emptyList()
-                            }
-                        },
-                        onFailure = { e -> connectionError = e.message },
-                    )
-                }
-                isConnecting = false
-
-                if (isConnected) break
-
-                for (i in 10 downTo 1) {
-                    retryCountdown = i
-                    delay(1000)
-                }
-                retryCountdown = 0
-            }
+            showClusterSelector = true
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -149,7 +148,9 @@ fun App(
 
                             isConnecting -> ConnectingScreen()
 
-                            !isConnected -> ConnectionErrorScreen(connectionError, retryCountdown)
+                            !isConnected && connectionError != null -> ConnectionErrorScreen(connectionError, retryCountdown)
+
+                            !isConnected -> NoClusterScreen { showClusterSelector = true }
 
                             else -> ContentRouter(
                                 screen = currentScreen,
@@ -168,28 +169,43 @@ fun App(
                     contexts = contexts,
                     selectedContext = selectedContext,
                     onContextSwitch = { ctx ->
-                        selectedContext = ctx
-                        scope.launch(Dispatchers.IO) {
-                            kubeClient.connect(ctx).fold(
-                                onSuccess = {
-                                    isConnected = true
-                                    connectionError = null
-                                    namespaces = try {
-                                        kubeClient.getNamespaceNames()
-                                    } catch (_: Exception) {
-                                        emptyList()
-                                    }
-                                    selectedNamespace = "All Namespaces"
-                                },
-                                onFailure = { e ->
-                                    isConnected = false
-                                    connectionError = e.message
-                                },
-                            )
-                        }
+                        showClusterSelector = false
+                        connectToCluster(ctx)
                     },
-                    onDismiss = { showClusterSelector = false },
+                    onDismiss = {
+                        showClusterSelector = false
+                    },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoClusterScreen(onSelectCluster: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "No cluster selected",
+                style = MaterialTheme.typography.headlineMedium,
+                color = KdTextPrimary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Select a cluster to get started",
+                style = MaterialTheme.typography.bodyLarge,
+                color = KdTextSecondary,
+            )
+            Spacer(Modifier.height(24.dp))
+            OutlinedButton(
+                onClick = onSelectCluster,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, KdPrimary),
+            ) {
+                Text("Select a cluster", color = KdPrimary)
             }
         }
     }

@@ -239,6 +239,37 @@ private fun ClusterHeader(
     }
 }
 
+private val EksOrange = Color(0xFFFF9900)
+
+private val eksPattern = Regex("""arn:aws:eks:([^:]+):(\d+):cluster/(.+)""")
+
+private data class ParsedContext(
+    val rawName: String,
+    val isEks: Boolean,
+    val clusterName: String,
+    val awsAccount: String? = null,
+    val awsRegion: String? = null,
+)
+
+private fun parseContext(ctx: String): ParsedContext {
+    val match = eksPattern.matchEntire(ctx)
+    return if (match != null) {
+        ParsedContext(
+            rawName = ctx,
+            isEks = true,
+            clusterName = match.groupValues[3],
+            awsRegion = match.groupValues[1],
+            awsAccount = match.groupValues[2],
+        )
+    } else {
+        ParsedContext(
+            rawName = ctx,
+            isEks = false,
+            clusterName = ctx,
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ClusterSelectorModal(
@@ -328,6 +359,7 @@ fun ClusterSelectorModal(
                 ) {
                     contexts.forEach { ctx ->
                         val isSelected = ctx == selectedContext
+                        val parsed = remember(ctx) { parseContext(ctx) }
                         var hovered by remember { mutableStateOf(false) }
                         val bg = when {
                             isSelected -> KdSelected
@@ -350,36 +382,64 @@ fun ClusterSelectorModal(
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (isSelected) {
-                                            KdPrimary.copy(alpha = 0.15f)
-                                        } else {
-                                            KdSurfaceVariant
-                                        },
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Default.Dns,
-                                    contentDescription = null,
-                                    tint = if (isSelected) KdPrimary else KdTextSecondary,
-                                    modifier = Modifier.size(16.dp),
-                                )
+                            if (parsed.isEks) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(EksOrange),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        "EKS",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.5.sp,
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(
+                                            if (isSelected) {
+                                                KdPrimary.copy(alpha = 0.15f)
+                                            } else {
+                                                KdSurfaceVariant
+                                            },
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Default.Dns,
+                                        contentDescription = null,
+                                        tint = if (isSelected) KdPrimary else KdTextSecondary,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                             Spacer(Modifier.width(12.dp))
-                            Text(
-                                ctx,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isSelected) KdPrimary else KdTextPrimary,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    parsed.clusterName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isSelected) KdPrimary else KdTextPrimary,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (parsed.isEks) {
+                                    Text(
+                                        "${parsed.awsAccount} · ${parsed.awsRegion}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = KdTextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                             if (isSelected) {
                                 Spacer(Modifier.width(8.dp))
                                 Icon(
