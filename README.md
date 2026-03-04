@@ -49,10 +49,21 @@ All resource lists are presented in sortable tables with auto-refresh (every 5 s
 - Container picker for multi-container pods
 - CPU and memory usage gauges when a Metrics Server is installed
 - Log viewer with text filtering, follow mode, line wrapping, and copy to clipboard
+- Selectable text in both pod logs and application logs (click-drag to select, Cmd/Ctrl+C to copy)
 
 ### Delete operations
 
 Deletion is supported for Pods, Deployments, Services, ConfigMaps, Secrets, Jobs, and CronJobs. There is no create or update functionality.
+
+### Startup prerequisites check
+
+On launch the application verifies that the required tools are available before presenting the cluster selector:
+
+- **Kubeconfig** — checks that `~/.kube/config` (or `$KUBECONFIG`) exists and is readable
+- **Cluster contexts** — ensures at least one context is defined
+- **Cloud CLI tools** — checks for `aws`, `gcloud`, or `kubelogin`/`az` only when the kubeconfig contains EKS, GKE, or AKS contexts respectively
+
+If all checks pass the modal is dismissed automatically. If any required check fails, the user can choose to quit or ignore the warning and continue.
 
 ### UI
 
@@ -63,9 +74,14 @@ Deletion is supported for Pods, Deployments, Services, ConfigMaps, Secrets, Jobs
 
 ## Prerequisites
 
-- **JDK 21** or later
+- **JDK 21** or later (only for building from source; the packaged DMG/MSI/DEB bundles its own JVM)
 - A valid `~/.kube/config` with at least one accessible cluster
+- **AWS CLI** — required when connecting to EKS clusters (`aws eks get-token`)
+- **Google Cloud SDK** — required when connecting to GKE clusters
+- **Azure kubelogin** or **Azure CLI** — required when connecting to AKS clusters
 - **Metrics Server** (optional) — required for CPU/memory usage data on the Pods screen
+
+The application checks for these at startup and reports any missing prerequisites.
 
 ## Running
 
@@ -73,7 +89,7 @@ Deletion is supported for Pods, Deployments, Services, ConfigMaps, Secrets, Jobs
 ./gradlew :composeApp:run
 ```
 
-The application opens a 1440×900 window and connects to the current kubeconfig context.
+The application opens a 1440×900 window, runs a prerequisites check, and presents the cluster selector.
 
 ## Building distributable packages
 
@@ -98,12 +114,16 @@ The application opens a 1440×900 window and connects to the current kubeconfig 
 | Coroutines | kotlinx-coroutines 1.10.1 |
 | Serialization | kotlinx-serialization 1.8.0 |
 | Date/time | kotlinx-datetime 0.7.0 |
-| Logging | slf4j-simple 2.0.16 |
+| Logging | Logback Classic 1.5.x (via SLF4J) |
 | Build tool | Gradle 8.12 |
 
 ## CI
 
 A GitHub Actions workflow builds distributable packages (DMG, DEB, MSI) on every push and PR to `main`. Pushing a `v*` tag creates a GitHub Release with the built artifacts.
+
+## macOS packaged app notes
+
+When launched from a DMG-installed `.app` bundle, macOS GUI apps inherit a minimal `PATH` that does not include user-installed tools. KubeKubeDashDash automatically resolves the full `PATH` from the user's login shell at startup so that kubeconfig exec plugins (e.g. `aws eks get-token`) work correctly.
 
 ## Limitations
 
