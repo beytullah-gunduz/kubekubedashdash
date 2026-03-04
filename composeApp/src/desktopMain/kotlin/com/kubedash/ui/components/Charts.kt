@@ -1,12 +1,9 @@
-package com.kubedash.ui
+package com.kubedash.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,19 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,98 +33,16 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubedash.KdBorder
 import com.kubedash.KdError
 import com.kubedash.KdInfo
-import com.kubedash.KdPrimary
 import com.kubedash.KdSuccess
-import com.kubedash.KdSurface
 import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
-import java.awt.Cursor
-
-@Composable
-fun StatusBadge(status: String, color: Color = statusColor(status)) {
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = color.copy(alpha = 0.12f),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(color),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                status,
-                style = MaterialTheme.typography.labelSmall,
-                color = color,
-            )
-        }
-    }
-}
-
-@Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    icon: ImageVector,
-    color: Color = KdPrimary,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = KdSurface,
-        border = ButtonDefaults.outlinedButtonBorder(true).copy(
-            brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(color.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text(
-                    value,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = KdTextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = KdTextSecondary,
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun PodStatusBar(running: Int, pending: Int, failed: Int, succeeded: Int) {
@@ -180,38 +88,6 @@ fun PodStatusBar(running: Int, pending: Int, failed: Int, succeeded: Int) {
             )
         }
     }
-}
-
-@Composable
-fun LabelChip(key: String, value: String) {
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = KdSurfaceVariant,
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
-            Text(key, style = MaterialTheme.typography.labelSmall, color = KdPrimary)
-            Text("=", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-            Text(value, style = MaterialTheme.typography.labelSmall, color = KdTextPrimary)
-        }
-    }
-}
-
-fun statusColor(status: String): Color = when (status.lowercase()) {
-    "running", "active", "ready", "bound", "available", "true" -> KdSuccess
-
-    "pending", "waiting", "containercreating" -> KdWarning
-
-    "failed", "error", "crashloopbackoff", "imagepullbackoff",
-    "errimagepull", "oomkilled", "notready", "terminated",
-    -> KdError
-
-    "succeeded", "completed", "complete" -> KdInfo
-
-    "terminating" -> KdWarning
-
-    "unknown" -> KdTextSecondary
-
-    else -> KdTextSecondary
 }
 
 @Composable
@@ -463,50 +339,5 @@ fun MetricsLineChart(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun ResizeHandle(onResize: (Float) -> Unit) {
-    val density = LocalDensity.current
-    var dragging by remember { mutableStateOf(false) }
-    var hovered by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(5.dp)
-            .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)))
-            .onPointerEvent(PointerEventType.Enter) { hovered = true }
-            .onPointerEvent(PointerEventType.Exit) { if (!dragging) hovered = false }
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { deltaPx ->
-                    val deltaDp = with(density) { deltaPx.toDp().value }
-                    onResize(deltaDp)
-                },
-                onDragStarted = {
-                    dragging = true
-                    hovered = true
-                },
-                onDragStopped = {
-                    dragging = false
-                    hovered = false
-                },
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(5.dp)
-                .background(if (hovered || dragging) KdPrimary.copy(alpha = 0.4f) else KdBorder),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(1.dp)
-                .background(if (hovered || dragging) KdPrimary else Color.Transparent),
-        )
     }
 }

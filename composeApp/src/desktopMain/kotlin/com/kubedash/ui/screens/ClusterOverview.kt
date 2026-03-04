@@ -52,10 +52,10 @@ import com.kubedash.KdWarning
 import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import com.kubedash.Screen
-import com.kubedash.ui.PodStatusBar
 import com.kubedash.ui.ResourceErrorMessage
 import com.kubedash.ui.ResourceLoadingIndicator
-import com.kubedash.ui.SummaryCard
+import com.kubedash.ui.components.PodStatusBar
+import com.kubedash.ui.components.SummaryCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext

@@ -31,12 +31,12 @@ import com.kubedash.Screen
 import com.kubedash.ServiceInfo
 import com.kubedash.ui.CellData
 import com.kubedash.ui.ColumnDef
-import com.kubedash.ui.ResizeHandle
 import com.kubedash.ui.ResourceCountHeader
 import com.kubedash.ui.ResourceErrorMessage
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.ResourceTable
 import com.kubedash.ui.TableRow
+import com.kubedash.ui.components.ResizeHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext

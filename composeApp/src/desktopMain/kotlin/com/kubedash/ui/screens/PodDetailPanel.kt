@@ -61,8 +61,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -82,14 +80,16 @@ import com.kubedash.PodInfo
 import com.kubedash.PodMetricsSnapshot
 import com.kubedash.formatCpuCores
 import com.kubedash.formatMemorySize
-import com.kubedash.ui.LabelChip
-import com.kubedash.ui.MetricsLineChart
 import com.kubedash.ui.ResourceLoadingIndicator
-import com.kubedash.ui.StatusBadge
-import com.kubedash.ui.statusColor
+import com.kubedash.ui.components.LabelChip
+import com.kubedash.ui.components.MetricsLineChart
+import com.kubedash.ui.components.StatusBadge
+import com.kubedash.ui.components.statusColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 private enum class DetailTab(val label: String, val icon: ImageVector) {
     Overview("Overview", Icons.Default.Info),
@@ -392,8 +392,6 @@ private fun ContainerCard(container: ContainerInfo) {
 private fun YamlTab(pod: PodInfo, kubeClient: KubeClient) {
     var yaml by remember(pod.uid) { mutableStateOf<String?>(null) }
     var loading by remember(pod.uid) { mutableStateOf(true) }
-    val clipboardManager = LocalClipboardManager.current
-
     LaunchedEffect(pod.uid) {
         loading = true
         yaml = withContext(Dispatchers.IO) { kubeClient.getResourceYaml("Pod", pod.name, pod.namespace) }
@@ -406,7 +404,7 @@ private fun YamlTab(pod: PodInfo, kubeClient: KubeClient) {
             horizontalArrangement = Arrangement.End,
         ) {
             TextButton(
-                onClick = { yaml?.let { clipboardManager.setText(AnnotatedString(it)) } },
+                onClick = { yaml?.let { text -> copyToClipboard(text) } },
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) {
@@ -611,4 +609,8 @@ private fun logLineColor(line: String): Color = when {
     line.contains("WARN", ignoreCase = true) -> KdWarning
     line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> KdTextSecondary
     else -> Color(0xFFB0BEC5)
+}
+
+private fun copyToClipboard(text: String) {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }

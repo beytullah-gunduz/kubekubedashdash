@@ -5,7 +5,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -13,23 +12,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dashboard
@@ -57,7 +51,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -82,8 +75,6 @@ import com.kubedash.KdPrimary
 import com.kubedash.KdSelected
 import com.kubedash.KdSidebarBg
 import com.kubedash.KdSuccess
-import com.kubedash.KdSurface
-import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.Screen
@@ -234,224 +225,6 @@ private fun ClusterHeader(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(Icons.Default.ExpandMore, null, Modifier.size(14.dp))
-            }
-        }
-    }
-}
-
-private val EksOrange = Color(0xFFFF9900)
-
-private val eksPattern = Regex("""arn:aws:eks:([^:]+):(\d+):cluster/(.+)""")
-
-private data class ParsedContext(
-    val rawName: String,
-    val isEks: Boolean,
-    val clusterName: String,
-    val awsAccount: String? = null,
-    val awsRegion: String? = null,
-)
-
-private fun parseContext(ctx: String): ParsedContext {
-    val match = eksPattern.matchEntire(ctx)
-    return if (match != null) {
-        ParsedContext(
-            rawName = ctx,
-            isEks = true,
-            clusterName = match.groupValues[3],
-            awsRegion = match.groupValues[1],
-            awsAccount = match.groupValues[2],
-        )
-    } else {
-        ParsedContext(
-            rawName = ctx,
-            isEks = false,
-            clusterName = ctx,
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun ClusterSelectorModal(
-    contexts: List<String>,
-    selectedContext: String,
-    onContextSwitch: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            modifier = Modifier
-                .widthIn(max = 700.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {},
-                ),
-            shape = RoundedCornerShape(12.dp),
-            color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
-            shadowElevation = 16.dp,
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(KdPrimary.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.Cloud,
-                            contentDescription = null,
-                            tint = KdPrimary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Switch Cluster",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = KdTextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "${contexts.size} context${if (contexts.size != 1) "s" else ""} available",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
-                        )
-                    }
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = KdTextSecondary,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable(onClick = onDismiss),
-                    )
-                }
-
-                HorizontalDivider(color = KdBorder, thickness = 1.dp)
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 700.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 8.dp),
-                ) {
-                    contexts.forEach { ctx ->
-                        val isSelected = ctx == selectedContext
-                        val parsed = remember(ctx) { parseContext(ctx) }
-                        var hovered by remember { mutableStateOf(false) }
-                        val bg = when {
-                            isSelected -> KdSelected
-                            hovered -> KdHover
-                            else -> Color.Transparent
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(bg)
-                                .clickable {
-                                    onContextSwitch(ctx)
-                                    onDismiss()
-                                }
-                                .onPointerEvent(PointerEventType.Enter) { hovered = true }
-                                .onPointerEvent(PointerEventType.Exit) { hovered = false }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (parsed.isEks) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(EksOrange),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        "EKS",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp,
-                                    )
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(
-                                            if (isSelected) {
-                                                KdPrimary.copy(alpha = 0.15f)
-                                            } else {
-                                                KdSurfaceVariant
-                                            },
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        Icons.Default.Dns,
-                                        contentDescription = null,
-                                        tint = if (isSelected) KdPrimary else KdTextSecondary,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    parsed.clusterName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isSelected) KdPrimary else KdTextPrimary,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (parsed.isEks) {
-                                    Text(
-                                        "${parsed.awsAccount} · ${parsed.awsRegion}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = KdTextSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            if (isSelected) {
-                                Spacer(Modifier.width(8.dp))
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = KdPrimary,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }

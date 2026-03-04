@@ -47,8 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,11 +58,13 @@ import com.kubedash.KdSurfaceVariant
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
 import com.kubedash.KubeClient
-import com.kubedash.ui.LabelChip
 import com.kubedash.ui.ResourceLoadingIndicator
-import com.kubedash.ui.StatusBadge
+import com.kubedash.ui.components.LabelChip
+import com.kubedash.ui.components.StatusBadge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 // ── Data class for key-value rows in the overview ───────────────────────────────
 
@@ -250,8 +250,6 @@ private fun GenericOverviewTab(fields: List<DetailField>, labels: Map<String, St
 internal fun GenericYamlTab(kind: String, name: String, namespace: String?, kubeClient: KubeClient) {
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
-    val clipboardManager = LocalClipboardManager.current
-
     LaunchedEffect(kind, name, namespace) {
         loading = true
         yaml = withContext(Dispatchers.IO) { kubeClient.getResourceYaml(kind, name, namespace) }
@@ -264,7 +262,7 @@ internal fun GenericYamlTab(kind: String, name: String, namespace: String?, kube
             horizontalArrangement = Arrangement.End,
         ) {
             TextButton(
-                onClick = { yaml?.let { clipboardManager.setText(AnnotatedString(it)) } },
+                onClick = { yaml?.let { text -> copyToClipboard(text) } },
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) {
@@ -304,4 +302,8 @@ internal fun GenericYamlTab(kind: String, name: String, namespace: String?, kube
             }
         }
     }
+}
+
+private fun copyToClipboard(text: String) {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }
