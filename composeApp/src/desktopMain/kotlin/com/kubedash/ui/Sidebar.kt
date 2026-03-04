@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -148,6 +149,14 @@ fun Sidebar(
                 SidebarItem(Icons.Default.Save, "Persistent Volumes", currentScreen is Screen.PersistentVolumes) { onNavigate(Screen.PersistentVolumes) }
                 SidebarItem(Icons.Default.FolderOpen, "PV Claims", currentScreen is Screen.PersistentVolumeClaims) { onNavigate(Screen.PersistentVolumeClaims) }
                 SidebarItem(Icons.AutoMirrored.Filled.List, "Storage Classes", currentScreen is Screen.StorageClasses) { onNavigate(Screen.StorageClasses) }
+            }
+        }
+
+        HorizontalDivider(color = KdBorder, thickness = 1.dp)
+
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            SidebarItem(Icons.Default.Settings, "Settings", currentScreen is Screen.Settings) {
+                onNavigate(Screen.Settings)
             }
         }
     }

@@ -43,6 +43,7 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
 
+            implementation(libs.lifecycle.viewmodel.compose)
             implementation(libs.fabric8.kubernetes.client)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.coroutines.swing)
@@ -61,7 +62,7 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "KubeKubeDashDash"
             packageVersion = "1.0.0"
-            modules("java.instrument", "java.net.http", "jdk.unsupported")
+            modules("java.instrument", "java.net.http", "java.prefs", "jdk.unsupported")
         }
     }
 }

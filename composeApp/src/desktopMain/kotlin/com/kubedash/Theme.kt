@@ -3,42 +3,94 @@ package com.kubedash
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import java.util.prefs.Preferences
 
-val KdBackground = Color(0xFF1E2124)
-val KdSidebarBg = Color(0xFF161819)
-val KdSurface = Color(0xFF252A31)
-val KdSurfaceVariant = Color(0xFF2C3038)
+object ThemeManager {
+    private val prefs = Preferences.userNodeForPackage(ThemeManager::class.java)
+    private var _isDarkTheme by mutableStateOf(prefs.getBoolean("darkTheme", true))
+
+    var isDarkTheme: Boolean
+        get() = _isDarkTheme
+        set(value) {
+            _isDarkTheme = value
+            prefs.putBoolean("darkTheme", value)
+        }
+}
+
+private val KdBackgroundDark = Color(0xFF1E2124)
+private val KdSidebarBgDark = Color(0xFF161819)
+private val KdSurfaceDark = Color(0xFF252A31)
+private val KdSurfaceVariantDark = Color(0xFF2C3038)
+private val KdTextPrimaryDark = Color(0xFFC8D1DC)
+private val KdTextSecondaryDark = Color(0xFF6B7280)
+private val KdBorderDark = Color(0xFF2E3440)
+private val KdHoverDark = Color(0xFF2A2F36)
+private val KdSelectedDark = Color(0xFF1A3A5C)
+
+private val KdBackgroundLight = Color(0xFFF8FAFC)
+private val KdSidebarBgLight = Color(0xFFFFFFFF)
+private val KdSurfaceLight = Color(0xFFFFFFFF)
+private val KdSurfaceVariantLight = Color(0xFFF1F5F9)
+private val KdTextPrimaryLight = Color(0xFF1E293B)
+private val KdTextSecondaryLight = Color(0xFF64748B)
+private val KdBorderLight = Color(0xFFE2E8F0)
+private val KdHoverLight = Color(0xFFF1F5F9)
+private val KdSelectedLight = Color(0xFFDBEAFE)
+
+val KdBackground: Color get() = if (ThemeManager.isDarkTheme) KdBackgroundDark else KdBackgroundLight
+val KdSidebarBg: Color get() = if (ThemeManager.isDarkTheme) KdSidebarBgDark else KdSidebarBgLight
+val KdSurface: Color get() = if (ThemeManager.isDarkTheme) KdSurfaceDark else KdSurfaceLight
+val KdSurfaceVariant: Color get() = if (ThemeManager.isDarkTheme) KdSurfaceVariantDark else KdSurfaceVariantLight
 val KdPrimary = Color(0xFF3D90CE)
 val KdOnPrimary = Color.White
-val KdTextPrimary = Color(0xFFC8D1DC)
-val KdTextSecondary = Color(0xFF6B7280)
+val KdTextPrimary: Color get() = if (ThemeManager.isDarkTheme) KdTextPrimaryDark else KdTextPrimaryLight
+val KdTextSecondary: Color get() = if (ThemeManager.isDarkTheme) KdTextSecondaryDark else KdTextSecondaryLight
 val KdSuccess = Color(0xFF48C744)
 val KdWarning = Color(0xFFE8A030)
 val KdError = Color(0xFFE54343)
 val KdInfo = Color(0xFF3D90CE)
-val KdBorder = Color(0xFF2E3440)
-val KdHover = Color(0xFF2A2F36)
-val KdSelected = Color(0xFF1A3A5C)
+val KdBorder: Color get() = if (ThemeManager.isDarkTheme) KdBorderDark else KdBorderLight
+val KdHover: Color get() = if (ThemeManager.isDarkTheme) KdHoverDark else KdHoverLight
+val KdSelected: Color get() = if (ThemeManager.isDarkTheme) KdSelectedDark else KdSelectedLight
 
 private val DarkColorScheme = darkColorScheme(
-    primary = KdPrimary,
-    onPrimary = KdOnPrimary,
-    secondary = KdPrimary,
-    background = KdBackground,
-    surface = KdSurface,
-    surfaceVariant = KdSurfaceVariant,
-    onBackground = KdTextPrimary,
-    onSurface = KdTextPrimary,
-    onSurfaceVariant = KdTextSecondary,
-    error = KdError,
-    outline = KdBorder,
-    outlineVariant = KdBorder,
+    primary = Color(0xFF3D90CE),
+    onPrimary = Color.White,
+    secondary = Color(0xFF3D90CE),
+    background = KdBackgroundDark,
+    surface = KdSurfaceDark,
+    surfaceVariant = KdSurfaceVariantDark,
+    onBackground = KdTextPrimaryDark,
+    onSurface = KdTextPrimaryDark,
+    onSurfaceVariant = KdTextSecondaryDark,
+    error = Color(0xFFE54343),
+    outline = KdBorderDark,
+    outlineVariant = KdBorderDark,
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = Color(0xFF3D90CE),
+    onPrimary = Color.White,
+    secondary = Color(0xFF3D90CE),
+    background = KdBackgroundLight,
+    surface = KdSurfaceLight,
+    surfaceVariant = KdSurfaceVariantLight,
+    onBackground = KdTextPrimaryLight,
+    onSurface = KdTextPrimaryLight,
+    onSurfaceVariant = KdTextSecondaryLight,
+    error = Color(0xFFE54343),
+    outline = KdBorderLight,
+    outlineVariant = KdBorderLight,
 )
 
 private val AppTypography = Typography(
@@ -112,8 +164,9 @@ private val AppTypography = Typography(
 
 @Composable
 fun KubeDashTheme(content: @Composable () -> Unit) {
+    val colorScheme = if (ThemeManager.isDarkTheme) DarkColorScheme else LightColorScheme
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = colorScheme,
         typography = AppTypography,
         content = content,
     )

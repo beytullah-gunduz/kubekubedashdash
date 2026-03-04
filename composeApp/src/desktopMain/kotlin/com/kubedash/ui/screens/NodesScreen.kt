@@ -109,6 +109,9 @@ fun NodesScreen(
     var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
     var cpuHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
     var memHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var staleNodes by remember { mutableStateOf<Map<String, NodeInfo>>(emptyMap()) }
+    var previousNodesByUid by remember { mutableStateOf<Map<String, NodeInfo>>(emptyMap()) }
+
     LaunchedEffect(Unit) {
         state = ResourceState.Loading
         selected = null
@@ -155,7 +158,22 @@ fun NodesScreen(
 
     LaunchedEffect(state) {
         val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        selected = selected?.let { sel -> current.find { it.uid == sel.uid } }
+        val currentByUid = current.associateBy { it.uid }
+
+        val updatedStale = staleNodes.toMutableMap()
+        updatedStale.keys.removeAll(currentByUid.keys)
+        for ((uid, node) in previousNodesByUid) {
+            if (uid !in currentByUid && uid !in updatedStale) {
+                updatedStale[uid] = node
+            }
+        }
+
+        previousNodesByUid = currentByUid
+        staleNodes = updatedStale
+
+        selected = selected?.let { sel ->
+            currentByUid[sel.uid] ?: updatedStale[sel.uid]
+        }
     }
 
     when (val s = state) {
@@ -164,7 +182,8 @@ fun NodesScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
-            val filtered = s.data.filter { node ->
+            val allNodes = s.data + staleNodes.values
+            val filtered = allNodes.filter { node ->
                 searchQuery.isBlank() ||
                     node.name.contains(searchQuery, ignoreCase = true) ||
                     node.roles.contains(searchQuery, ignoreCase = true) ||
@@ -175,10 +194,9 @@ fun NodesScreen(
                 BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     val showStats = maxWidth >= 900.dp
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Hide stats panel when left view is too small (< 900dp)
                         if (showStats) {
                             NodeStatsPanel(
-                                nodes = s.data,
+                                nodes = allNodes,
                                 usage = resourceUsage,
                                 cpuHistory = cpuHistory,
                                 memHistory = memHistory,

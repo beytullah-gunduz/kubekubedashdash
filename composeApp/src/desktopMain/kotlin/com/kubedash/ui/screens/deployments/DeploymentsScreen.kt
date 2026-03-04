@@ -1,4 +1,4 @@
-package com.kubedash.ui.screens
+package com.kubedash.ui.screens.deployments
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
@@ -39,6 +39,9 @@ import com.kubedash.ui.ResourceErrorMessage
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.ResourceTable
 import com.kubedash.ui.TableRow
+import com.kubedash.ui.screens.DetailField
+import com.kubedash.ui.screens.ExtraTab
+import com.kubedash.ui.screens.ResourceDetailPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext

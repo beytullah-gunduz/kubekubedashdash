@@ -37,4 +37,6 @@ sealed class Screen(val title: String) {
         val namespace: String,
         val containerName: String? = null,
     ) : Screen("Logs: $podName")
+
+    data object Settings : Screen("Settings")
 }

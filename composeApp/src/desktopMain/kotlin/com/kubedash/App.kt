@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,7 +29,6 @@ import androidx.compose.ui.window.WindowState
 import com.kubedash.ui.Sidebar
 import com.kubedash.ui.TitleBar
 import com.kubedash.ui.screens.ClusterOverviewScreen
-import com.kubedash.ui.screens.DeploymentsScreen
 import com.kubedash.ui.screens.EventsScreen
 import com.kubedash.ui.screens.GenericResourceScreen
 import com.kubedash.ui.screens.LogViewerScreen
@@ -37,7 +37,10 @@ import com.kubedash.ui.screens.NodesScreen
 import com.kubedash.ui.screens.PodsScreen
 import com.kubedash.ui.screens.ResourceDetailScreen
 import com.kubedash.ui.screens.ServicesScreen
+import com.kubedash.ui.screens.SettingsScreen
+import com.kubedash.ui.screens.deployments.DeploymentsScreen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -59,6 +62,7 @@ fun App(
         var isConnecting by remember { mutableStateOf(true) }
         var isConnected by remember { mutableStateOf(false) }
         var searchQuery by remember { mutableStateOf("") }
+        var retryCountdown by remember { mutableStateOf(0) }
 
         val scope = rememberCoroutineScope()
 
@@ -77,18 +81,33 @@ fun App(
                 contexts = kubeClient.getContexts()
                 val current = kubeClient.getCurrentContext()
                 selectedContext = current
-                kubeClient.connect(current.ifEmpty { null }).fold(
-                    onSuccess = {
-                        isConnected = true
-                        namespaces = try {
-                            kubeClient.getNamespaceNames()
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-                    },
-                    onFailure = { e -> connectionError = e.message },
-                )
+            }
+
+            while (!isConnected) {
+                isConnecting = true
+                connectionError = null
+                withContext(Dispatchers.IO) {
+                    kubeClient.connect(selectedContext.ifEmpty { null }).fold(
+                        onSuccess = {
+                            isConnected = true
+                            namespaces = try {
+                                kubeClient.getNamespaceNames()
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                        },
+                        onFailure = { e -> connectionError = e.message },
+                    )
+                }
                 isConnecting = false
+
+                if (isConnected) break
+
+                for (i in 10 downTo 1) {
+                    retryCountdown = i
+                    delay(1000)
+                }
+                retryCountdown = 0
             }
         }
 
@@ -143,12 +162,14 @@ fun App(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                 ) {
-                    if (isConnecting) {
-                        ConnectingScreen()
-                    } else if (!isConnected) {
-                        ConnectionErrorScreen(connectionError)
-                    } else {
-                        ContentRouter(
+                    when {
+                        currentScreen is Screen.Settings -> SettingsScreen()
+
+                        isConnecting -> ConnectingScreen()
+
+                        !isConnected -> ConnectionErrorScreen(connectionError, retryCountdown)
+
+                        else -> ContentRouter(
                             screen = currentScreen,
                             kubeClient = kubeClient,
                             namespace = selectedNamespace,
@@ -185,7 +206,7 @@ private fun ConnectingScreen() {
 }
 
 @Composable
-private fun ConnectionErrorScreen(error: String?) {
+private fun ConnectionErrorScreen(error: String?, retryCountdown: Int) {
     Box(
         modifier = Modifier.fillMaxSize().padding(48.dp),
         contentAlignment = Alignment.Center,
@@ -202,6 +223,22 @@ private fun ConnectionErrorScreen(error: String?) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(24.dp))
+            if (retryCountdown > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = KdPrimary,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Retrying in ${retryCountdown}s...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = KdTextSecondary,
+                    )
+                }
+            }
         }
     }
 }
@@ -239,5 +276,6 @@ fun ContentRouter(
         is Screen.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, kubeClient, namespacedKind = false) { kubeClient.getStorageClasses() }
         is Screen.ResourceDetail -> ResourceDetailScreen(screen.kind, screen.name, screen.namespace, kubeClient, onNavigate)
         is Screen.PodLogs -> LogViewerScreen(screen.podName, screen.namespace, screen.containerName, kubeClient)
+        is Screen.Settings -> SettingsScreen()
     }
 }

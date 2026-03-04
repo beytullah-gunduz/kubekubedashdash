@@ -90,10 +90,14 @@ fun PodsScreen(
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statsExpanded by remember { mutableStateOf(true) }
     var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
+    var stalePods by remember { mutableStateOf<Map<String, PodInfo>>(emptyMap()) }
+    var previousPodsByUid by remember { mutableStateOf<Map<String, PodInfo>>(emptyMap()) }
 
     LaunchedEffect(namespace) {
         state = ResourceState.Loading
         selectedPod = null
+        stalePods = emptyMap()
+        previousPodsByUid = emptyMap()
         while (true) {
             state = try {
                 val pods = withContext(Dispatchers.IO) { kubeClient.getPods(namespace) }
@@ -122,12 +126,27 @@ fun PodsScreen(
 
     LaunchedEffect(state) {
         val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
+        val currentByUid = current.associateBy { it.uid }
+
+        val updatedStale = stalePods.toMutableMap()
+        updatedStale.keys.removeAll(currentByUid.keys)
+        for ((uid, pod) in previousPodsByUid) {
+            if (uid !in currentByUid && uid !in updatedStale) {
+                updatedStale[uid] = pod
+            }
+        }
+
+        previousPodsByUid = currentByUid
+        stalePods = updatedStale
+
         val uid = pendingSelectUid
         if (uid != null) {
-            selectedPod = current.find { it.uid == uid }
+            selectedPod = currentByUid[uid] ?: updatedStale[uid]
             pendingSelectUid = null
         } else {
-            selectedPod = selectedPod?.let { sel -> current.find { it.uid == sel.uid } }
+            selectedPod = selectedPod?.let { sel ->
+                currentByUid[sel.uid] ?: updatedStale[sel.uid]
+            }
         }
     }
 
@@ -137,7 +156,8 @@ fun PodsScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
-            val filtered = s.data.filter { pod ->
+            val allPods = s.data + stalePods.values
+            val filtered = allPods.filter { pod ->
                 searchQuery.isBlank() ||
                     pod.name.contains(searchQuery, ignoreCase = true) ||
                     pod.namespace.contains(searchQuery, ignoreCase = true) ||
@@ -152,7 +172,7 @@ fun PodsScreen(
                         // Hide stats panel when left view is too small (< 900dp)
                         if (showStats) {
                             PodStatsPanel(
-                                pods = s.data,
+                                pods = allPods,
                                 usage = resourceUsage,
                                 expanded = statsExpanded,
                                 onToggle = { statsExpanded = !statsExpanded },

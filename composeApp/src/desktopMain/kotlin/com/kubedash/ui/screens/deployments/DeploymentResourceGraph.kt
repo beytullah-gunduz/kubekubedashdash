@@ -1,4 +1,4 @@
-package com.kubedash.ui.screens
+package com.kubedash.ui.screens.deployments
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -44,17 +44,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubedash.KdError
-import com.kubedash.KdInfo
-import com.kubedash.KdSuccess
 import com.kubedash.KdTextPrimary
 import com.kubedash.KdTextSecondary
-import com.kubedash.KdWarning
 import com.kubedash.KubeClient
 import com.kubedash.ResourceGraph
 import com.kubedash.ResourceGraphNode
 import com.kubedash.ui.ResourceLoadingIndicator
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.kindColor
+import com.kubedash.ui.kindStatusColor
 
 @Composable
 fun DeploymentResourceGraphTab(
@@ -62,33 +59,22 @@ fun DeploymentResourceGraphTab(
     namespace: String,
     kubeClient: KubeClient,
 ) {
-    var graph by remember(deploymentName, namespace) { mutableStateOf<ResourceGraph?>(null) }
-    var loading by remember(deploymentName, namespace) { mutableStateOf(true) }
-    var error by remember(deploymentName, namespace) { mutableStateOf<String?>(null) }
+    val viewModel = remember(kubeClient) { DeploymentResourceGraphViewModel(kubeClient) }
 
     LaunchedEffect(deploymentName, namespace) {
-        loading = true
-        error = null
-        try {
-            graph = withContext(Dispatchers.IO) {
-                kubeClient.getDeploymentResourceGraph(deploymentName, namespace)
-            }
-        } catch (e: Exception) {
-            error = e.message ?: "Failed to load resource graph"
-        }
-        loading = false
+        viewModel.load(deploymentName, namespace)
     }
 
     when {
-        loading -> ResourceLoadingIndicator()
+        viewModel.loading -> ResourceLoadingIndicator()
 
-        error != null -> {
+        viewModel.error != null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(error!!, color = KdError, style = MaterialTheme.typography.bodySmall)
+                Text(viewModel.error!!, color = KdError, style = MaterialTheme.typography.bodySmall)
             }
         }
 
-        graph != null && graph!!.nodes.isNotEmpty() -> ResourceGraphContent(graph!!)
+        viewModel.graph != null && viewModel.graph!!.nodes.isNotEmpty() -> ResourceGraphContent(viewModel.graph!!)
 
         else -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -98,67 +84,13 @@ fun DeploymentResourceGraphTab(
     }
 }
 
-private val kindLayerOrder = mapOf(
-    "Ingress" to 0,
-    "Service" to 1,
-    "HPA" to 2,
-    "Deployment" to 3,
-    "ReplicaSet" to 4,
-    "Pod" to 5,
-    "ConfigMap" to 6,
-    "Secret" to 6,
-    "PVC" to 6,
-    "ServiceAccount" to 6,
-)
-
-private fun groupIntoLayers(graph: ResourceGraph): List<List<ResourceGraphNode>> = graph.nodes
-    .groupBy { kindLayerOrder[it.kind] ?: 99 }
-    .toSortedMap()
-    .values
-    .toList()
-
-private fun kindColor(kind: String): Color = when (kind) {
-    "Deployment" -> Color(0xFF3D90CE)
-    "ReplicaSet" -> Color(0xFFAB6DCE)
-    "Pod" -> Color(0xFF48C744)
-    "Service" -> Color(0xFFE8A030)
-    "Ingress" -> Color(0xFFE06090)
-    "ConfigMap" -> Color(0xFF26A69A)
-    "Secret" -> Color(0xFFFF7043)
-    "PVC" -> Color(0xFF8D6E63)
-    "ServiceAccount" -> Color(0xFF78909C)
-    "HPA" -> Color(0xFFFFCA28)
-    else -> Color(0xFF6B7280)
-}
-
-private fun statusColor(kind: String, status: String?): Color? {
-    if (status == null) return null
-    return when (kind) {
-        "Pod" -> when (status) {
-            "Running" -> KdSuccess
-            "Pending", "ContainerCreating" -> KdWarning
-            "Failed", "CrashLoopBackOff", "Error" -> KdError
-            "Succeeded" -> KdInfo
-            else -> KdTextSecondary
-        }
-
-        "Deployment" -> when (status) {
-            "Available" -> KdSuccess
-            else -> KdWarning
-        }
-
-        else -> null
-    }
-}
-
 @Composable
 private fun ResourceGraphContent(graph: ResourceGraph) {
     val nodeRects = remember(graph) { mutableStateMapOf<String, Rect>() }
     var boxCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val layers = remember(graph) { groupIntoLayers(graph) }
+    val layers = remember(graph) { DeploymentResourceGraphViewModel.groupIntoLayers(graph) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        // Legend
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,7 +98,7 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            graph.nodes.map { it.kind }.distinct().sortedBy { kindLayerOrder[it] ?: 99 }.forEach { kind ->
+            graph.nodes.map { it.kind }.distinct().sortedBy { DeploymentResourceGraphViewModel.kindLayerOrder[it] ?: 99 }.forEach { kind ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(kindColor(kind)))
                     Spacer(Modifier.width(4.dp))
@@ -246,7 +178,8 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
                                                         bottom = pos.y + coords.size.height,
                                                     )
                                                 }
-                                            } catch (_: Exception) { }
+                                            } catch (_: Exception) {
+                                            }
                                         },
                                     )
                                 }
@@ -265,7 +198,7 @@ private fun GraphNodeCard(
     modifier: Modifier = Modifier,
 ) {
     val color = kindColor(node.kind)
-    val sColor = statusColor(node.kind, node.status)
+    val sColor = kindStatusColor(node.kind, node.status)
 
     Surface(
         modifier = modifier.widthIn(min = 120.dp, max = 180.dp),
