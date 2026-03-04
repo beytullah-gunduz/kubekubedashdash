@@ -57,12 +57,13 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.kubedash.MainKt"
+        jvmArgs += "--add-opens=java.base/java.util=ALL-UNNAMED"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "KubeKubeDashDash"
             packageVersion = "1.0.0"
-            modules("java.instrument", "java.net.http", "java.prefs", "jdk.unsupported")
+            modules("java.instrument", "java.naming", "java.net.http", "java.prefs", "jdk.unsupported")
 
             macOS {
                 iconFile.set(project.file("icons/icon.icns"))

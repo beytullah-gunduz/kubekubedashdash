@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import com.kubedash.ui.ClusterSelectorModal
+import com.kubedash.ui.PrerequisitesModal
 import com.kubedash.ui.Sidebar
 import com.kubedash.ui.TitleBar
 import com.kubedash.ui.screens.ClusterOverviewScreen
@@ -66,8 +67,10 @@ fun App(
         var isConnecting by remember { mutableStateOf(false) }
         var isConnected by remember { mutableStateOf(false) }
         var searchQuery by remember { mutableStateOf("") }
-        var showClusterSelector by remember { mutableStateOf(true) }
+        var showClusterSelector by remember { mutableStateOf(false) }
         var retryCountdown by remember { mutableStateOf(0) }
+        var prerequisiteResult by remember { mutableStateOf<PrerequisiteResult?>(null) }
+        var showPrerequisites by remember { mutableStateOf(true) }
 
         val scope = rememberCoroutineScope()
 
@@ -107,10 +110,13 @@ fun App(
         }
 
         LaunchedEffect(Unit) {
-            withContext(Dispatchers.IO) {
-                contexts = kubeClient.getContexts()
+            val result = withContext(Dispatchers.IO) { PrerequisiteChecker.runAll() }
+            prerequisiteResult = result
+            if (result.allPassed) {
+                showPrerequisites = false
+                showClusterSelector = true
+                withContext(Dispatchers.IO) { contexts = kubeClient.getContexts() }
             }
-            showClusterSelector = true
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -167,7 +173,35 @@ fun App(
                 }
             }
 
-            if (showClusterSelector) {
+            val prereq = prerequisiteResult
+            if (showPrerequisites) {
+                val dismiss: () -> Unit = {
+                    showPrerequisites = false
+                    showClusterSelector = true
+                    scope.launch(Dispatchers.IO) { contexts = kubeClient.getContexts() }
+                }
+                if (prereq == null) {
+                    PrerequisitesModal(
+                        result = PrerequisiteResult(
+                            listOf(
+                                PrerequisiteCheck(
+                                    name = "Initializing",
+                                    description = "Running system checks…",
+                                    status = CheckStatus.CHECKING,
+                                ),
+                            ),
+                        ),
+                        onQuit = onClose,
+                        onIgnore = {},
+                    )
+                } else {
+                    PrerequisitesModal(
+                        result = prereq,
+                        onQuit = onClose,
+                        onIgnore = dismiss,
+                    )
+                }
+            } else if (showClusterSelector) {
                 ClusterSelectorModal(
                     contexts = contexts,
                     selectedContext = selectedContext,

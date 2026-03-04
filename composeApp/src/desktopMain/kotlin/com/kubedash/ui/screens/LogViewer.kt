@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.WrapText
 import androidx.compose.material.icons.filled.ClearAll
@@ -221,12 +222,14 @@ fun LogViewerScreen(
                         Text("No log output", style = MaterialTheme.typography.bodyMedium, color = KdTextSecondary)
                     }
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
-                    ) {
-                        items(filteredLines) { line ->
-                            LogLine(line, filterText, wrapLines)
+                    SelectionContainer {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().padding(8.dp),
+                        ) {
+                            items(filteredLines) { line ->
+                                LogLine(line, filterText, wrapLines)
+                            }
                         }
                     }
                 }
