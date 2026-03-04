@@ -3,6 +3,7 @@ package com.kubedash.ui.screens.deployments
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,6 +90,18 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
     val nodeRects = remember(graph) { mutableStateMapOf<String, Rect>() }
     var boxCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val layers = remember(graph) { DeploymentResourceGraphViewModel.groupIntoLayers(graph) }
+    var selectedNodeId by remember(graph) { mutableStateOf<String?>(null) }
+
+    val connectedNodeIds = remember(selectedNodeId, graph) {
+        if (selectedNodeId == null) {
+            emptySet()
+        } else {
+            graph.edges
+                .filter { it.sourceId == selectedNodeId || it.targetId == selectedNodeId }
+                .flatMap { listOf(it.sourceId, it.targetId) }
+                .toSet()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(
@@ -114,12 +127,28 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
                 .fillMaxWidth()
                 .onGloballyPositioned { boxCoords = it },
         ) {
-            val edgeColor = Color(0xFF505A68)
+            val defaultEdgeColor = Color(0xFF505A68)
+            val dimmedEdgeColor = defaultEdgeColor.copy(alpha = 0.15f)
+            val hasSelection = selectedNodeId != null
+
             Canvas(modifier = Modifier.matchParentSize()) {
                 graph.edges.forEach { edge ->
                     val from = nodeRects[edge.sourceId] ?: return@forEach
                     val to = nodeRects[edge.targetId] ?: return@forEach
                     if (from.isEmpty || to.isEmpty) return@forEach
+
+                    val isHighlighted = hasSelection &&
+                        (edge.sourceId == selectedNodeId || edge.targetId == selectedNodeId)
+                    val edgeColor = when {
+                        !hasSelection -> defaultEdgeColor
+
+                        isHighlighted -> kindColor(
+                            graph.nodes.find { it.id == selectedNodeId }?.kind ?: "",
+                        )
+
+                        else -> dimmedEdgeColor
+                    }
+                    val strokeWidth = if (isHighlighted) 2.5f else 1.5f
 
                     val startX = from.center.x
                     val startY = from.bottom
@@ -134,11 +163,11 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
                     drawPath(
                         path,
                         color = edgeColor,
-                        style = Stroke(width = 1.5f, cap = StrokeCap.Round),
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
                     )
                     drawCircle(
                         color = edgeColor,
-                        radius = 3f,
+                        radius = if (isHighlighted) 4f else 3f,
                         center = Offset(endX, endY),
                     )
                 }
@@ -165,8 +194,16 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
                             ) {
                                 chunk.forEachIndexed { idx, node ->
                                     if (idx > 0) Spacer(Modifier.width(10.dp))
+                                    val dimmed = hasSelection &&
+                                        node.id != selectedNodeId &&
+                                        node.id !in connectedNodeIds
                                     GraphNodeCard(
                                         node = node,
+                                        selected = node.id == selectedNodeId,
+                                        dimmed = dimmed,
+                                        onClick = {
+                                            selectedNodeId = if (selectedNodeId == node.id) null else node.id
+                                        },
                                         modifier = Modifier.onGloballyPositioned { coords ->
                                             try {
                                                 boxCoords?.let { parent ->
@@ -195,34 +232,42 @@ private fun ResourceGraphContent(graph: ResourceGraph) {
 @Composable
 private fun GraphNodeCard(
     node: ResourceGraphNode,
+    selected: Boolean,
+    dimmed: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val color = kindColor(node.kind)
     val sColor = kindStatusColor(node.kind, node.status)
+    val alpha = if (dimmed) 0.35f else 1f
+    val borderWidth = if (selected) 2.dp else 1.dp
+    val borderAlpha = if (selected) 0.8f else 0.25f
 
     Surface(
-        modifier = modifier.widthIn(min = 120.dp, max = 180.dp),
+        modifier = modifier
+            .widthIn(min = 120.dp, max = 180.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.08f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+        color = color.copy(alpha = if (selected) 0.15f else 0.08f),
+        border = BorderStroke(borderWidth, color.copy(alpha = borderAlpha * alpha)),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(sColor ?: color))
+            Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
             Spacer(Modifier.width(8.dp))
             Column {
                 Text(
                     node.kind,
                     style = MaterialTheme.typography.labelSmall,
-                    color = color,
+                    color = color.copy(alpha = alpha),
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     node.name,
                     style = MaterialTheme.typography.bodySmall,
-                    color = KdTextPrimary,
+                    color = KdTextPrimary.copy(alpha = alpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -230,7 +275,7 @@ private fun GraphNodeCard(
                     Text(
                         node.status,
                         style = MaterialTheme.typography.labelSmall,
-                        color = sColor ?: KdTextSecondary,
+                        color = (sColor ?: KdTextSecondary).copy(alpha = alpha),
                     )
                 }
             }
