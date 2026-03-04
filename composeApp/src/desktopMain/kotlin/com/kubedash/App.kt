@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
+import com.kubedash.ui.ClusterSelectorModal
 import com.kubedash.ui.Sidebar
 import com.kubedash.ui.TitleBar
 import com.kubedash.ui.screens.ClusterOverviewScreen
@@ -62,6 +63,7 @@ fun App(
         var isConnecting by remember { mutableStateOf(true) }
         var isConnected by remember { mutableStateOf(false) }
         var searchQuery by remember { mutableStateOf("") }
+        var showClusterSelector by remember { mutableStateOf(false) }
         var retryCountdown by remember { mutableStateOf(0) }
 
         val scope = rememberCoroutineScope()
@@ -111,29 +113,60 @@ fun App(
             }
         }
 
-        Column(
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        ) {
-            with(windowScope) {
-                TitleBar(
-                    title = "KubeKubeDashDash",
-                    windowState = windowState,
-                    onClose = onClose,
-                    searchQuery = searchQuery,
-                    onSearchChange = { searchQuery = it },
-                    selectedNamespace = selectedNamespace,
-                    namespaces = namespaces,
-                    onNamespaceChange = { selectedNamespace = it },
-                )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            ) {
+                with(windowScope) {
+                    TitleBar(
+                        title = "KubeKubeDashDash",
+                        windowState = windowState,
+                        onClose = onClose,
+                        searchQuery = searchQuery,
+                        onSearchChange = { searchQuery = it },
+                        selectedNamespace = selectedNamespace,
+                        namespaces = namespaces,
+                        onNamespaceChange = { selectedNamespace = it },
+                    )
+                }
+
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    Sidebar(
+                        currentScreen = currentScreen,
+                        selectedContext = selectedContext,
+                        isConnected = isConnected,
+                        onNavigate = { navigate(it) },
+                        onClusterSelectorClick = { showClusterSelector = true },
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                    ) {
+                        when {
+                            currentScreen is Screen.Settings -> SettingsScreen()
+
+                            isConnecting -> ConnectingScreen()
+
+                            !isConnected -> ConnectionErrorScreen(connectionError, retryCountdown)
+
+                            else -> ContentRouter(
+                                screen = currentScreen,
+                                kubeClient = kubeClient,
+                                namespace = selectedNamespace,
+                                searchQuery = searchQuery,
+                                onNavigate = ::navigate,
+                            )
+                        }
+                    }
+                }
             }
 
-            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                Sidebar(
-                    currentScreen = currentScreen,
-                    selectedContext = selectedContext,
+            if (showClusterSelector) {
+                ClusterSelectorModal(
                     contexts = contexts,
-                    isConnected = isConnected,
-                    onNavigate = { navigate(it) },
+                    selectedContext = selectedContext,
                     onContextSwitch = { ctx ->
                         selectedContext = ctx
                         scope.launch(Dispatchers.IO) {
@@ -155,29 +188,8 @@ fun App(
                             )
                         }
                     },
+                    onDismiss = { showClusterSelector = false },
                 )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
-                ) {
-                    when {
-                        currentScreen is Screen.Settings -> SettingsScreen()
-
-                        isConnecting -> ConnectingScreen()
-
-                        !isConnected -> ConnectionErrorScreen(connectionError, retryCountdown)
-
-                        else -> ContentRouter(
-                            screen = currentScreen,
-                            kubeClient = kubeClient,
-                            namespace = selectedNamespace,
-                            searchQuery = searchQuery,
-                            onNavigate = ::navigate,
-                        )
-                    }
-                }
             }
         }
     }

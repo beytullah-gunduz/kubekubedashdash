@@ -256,27 +256,34 @@ class KubeClient : Closeable {
             }
         }
 
+        val podNodeIds = nodes.filter { it.kind == "Pod" }.map { it.id }
+        val podLevelParent = podNodeIds.firstOrNull() ?: depId
+
         for (cm in cmNames) {
             val cmId = "ConfigMap:$cm"
             addNode(ResourceGraphNode(cmId, cm, "ConfigMap", null))
-            edges.add(ResourceGraphEdge(depId, cmId))
+            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, cmId)) }
+            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, cmId))
         }
         for (s in secretNames) {
             val sId = "Secret:$s"
             addNode(ResourceGraphNode(sId, s, "Secret", null))
-            edges.add(ResourceGraphEdge(depId, sId))
+            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, sId)) }
+            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, sId))
         }
         for (pvc in pvcNames) {
             val pvcId = "PVC:$pvc"
             addNode(ResourceGraphNode(pvcId, pvc, "PVC", null))
-            edges.add(ResourceGraphEdge(depId, pvcId))
+            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, pvcId)) }
+            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, pvcId))
         }
 
         val saName = podSpec?.serviceAccountName ?: podSpec?.serviceAccount
         if (saName != null && saName != "default") {
             val saId = "ServiceAccount:$saName"
             addNode(ResourceGraphNode(saId, saName, "ServiceAccount", null))
-            edges.add(ResourceGraphEdge(depId, saId))
+            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, saId)) }
+            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, saId))
         }
 
         try {
