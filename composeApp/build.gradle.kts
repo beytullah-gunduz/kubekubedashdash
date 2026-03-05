@@ -62,7 +62,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "KubeKubeDashDash"
-            packageVersion = "1.1.0"
+            packageVersion = "1.2.0"
             modules("java.instrument", "java.naming", "java.net.http", "java.prefs", "jdk.unsupported")
 
             macOS {
