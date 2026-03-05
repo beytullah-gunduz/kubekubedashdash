@@ -46,6 +46,10 @@ jobs:
             patch) PATCH=$((PATCH + 1)) ;;
           esac
           NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          if [[ "$MAJOR" -lt 1 ]]; then
+            echo "::error::Compose Multiplatform native packaging requires MAJOR >= 1 (got '$NEXT')"
+            exit 1
+          fi
           echo "version=$NEXT" >> "$GITHUB_OUTPUT"
           echo "Next version: **$NEXT** (${{ inputs.bump }})" >> "$GITHUB_STEP_SUMMARY"
 
