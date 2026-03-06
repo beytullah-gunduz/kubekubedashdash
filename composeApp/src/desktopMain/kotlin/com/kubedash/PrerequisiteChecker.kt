@@ -146,18 +146,20 @@ object PrerequisiteChecker {
     }
 
     private fun isCommandAvailable(command: String): Boolean = try {
-        val p = ProcessBuilder("which", command)
+        val pb = ProcessBuilder("which", command)
             .redirectErrorStream(true)
-            .start()
+        pb.environment()
+        val p = pb.start()
         p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0
     } catch (_: Exception) {
         false
     }
 
     private fun resolveCommandPath(command: String): String? = try {
-        val p = ProcessBuilder("which", command)
+        val pb = ProcessBuilder("which", command)
             .redirectErrorStream(true)
-            .start()
+        pb.environment()
+        val p = pb.start()
         val path = p.inputStream.bufferedReader().readText().trim()
         p.waitFor(3, TimeUnit.SECONDS)
         path.ifBlank { null }
