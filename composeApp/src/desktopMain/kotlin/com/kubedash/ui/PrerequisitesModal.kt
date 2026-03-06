@@ -165,7 +165,7 @@ fun PrerequisitesModal(
                                     shape = RoundedCornerShape(8.dp),
                                     border = BorderStroke(1.dp, KdBorder),
                                 ) {
-                                    Text("Ignore", color = KdTextSecondary)
+                                    Text("Continue", color = KdTextSecondary)
                                 }
                                 Spacer(Modifier.width(8.dp))
                                 Button(
