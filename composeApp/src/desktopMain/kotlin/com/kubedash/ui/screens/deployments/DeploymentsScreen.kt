@@ -15,15 +15,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.DeploymentInfo
 import com.kubedash.KdPrimary
 import com.kubedash.KdSuccess
@@ -42,9 +43,7 @@ import com.kubedash.ui.components.ResizeHandle
 import com.kubedash.ui.screens.DetailField
 import com.kubedash.ui.screens.ExtraTab
 import com.kubedash.ui.screens.ResourceDetailPanel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.DeploymentsScreenViewModel
 
 @Composable
 fun DeploymentsScreen(
@@ -52,32 +51,14 @@ fun DeploymentsScreen(
     namespace: String?,
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
+    viewModel: DeploymentsScreenViewModel = viewModel { DeploymentsScreenViewModel(kubeClient) },
 ) {
-    var state by remember { mutableStateOf<ResourceState<List<DeploymentInfo>>>(ResourceState.Loading) }
-    var selected by remember { mutableStateOf<DeploymentInfo?>(null) }
+    val state by viewModel.state.collectAsState()
+    val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
 
     LaunchedEffect(namespace) {
-        state = ResourceState.Loading
-        selected = null
-        while (true) {
-            state = try {
-                val deps = withContext(Dispatchers.IO) { kubeClient.getDeployments(namespace) }
-                ResourceState.Success(deps)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(5_000)
-        }
-    }
-
-    LaunchedEffect(state) {
-        val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        selected = selected?.let { sel -> current.find { it.uid == sel.uid } }
+        viewModel.startPolling(namespace)
     }
 
     when (val s = state) {
@@ -98,7 +79,7 @@ fun DeploymentsScreen(
                     DeploymentTable(
                         deployments = filtered,
                         selectedUid = selected?.uid,
-                        onClick = { dep -> selected = if (selected?.uid == dep.uid) null else dep },
+                        onClick = { dep -> viewModel.selectItem(dep) },
                     )
                 }
 
@@ -128,7 +109,7 @@ fun DeploymentsScreen(
                                 ),
                                 labels = dep.labels,
                                 kubeClient = kubeClient,
-                                onClose = { selected = null },
+                                onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
                                 extraTabs = listOf(
                                     ExtraTab(

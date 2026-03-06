@@ -4,11 +4,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.EventInfo
 import com.kubedash.KdPrimary
 import com.kubedash.KdSuccess
@@ -23,33 +22,19 @@ import com.kubedash.ui.ResourceErrorMessage
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.ResourceTable
 import com.kubedash.ui.TableRow
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.EventsScreenViewModel
 
 @Composable
 fun EventsScreen(
     kubeClient: KubeClient,
     namespace: String?,
     searchQuery: String,
+    viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(kubeClient) },
 ) {
-    var state by remember { mutableStateOf<ResourceState<List<EventInfo>>>(ResourceState.Loading) }
+    val state by viewModel.state.collectAsState()
 
     LaunchedEffect(namespace) {
-        state = ResourceState.Loading
-        while (true) {
-            state = try {
-                val events = withContext(Dispatchers.IO) { kubeClient.getEvents(namespace) }
-                ResourceState.Success(events)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(5_000)
-        }
+        viewModel.startPolling(namespace)
     }
 
     when (val s = state) {

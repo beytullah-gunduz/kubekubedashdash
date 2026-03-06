@@ -38,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +73,7 @@ import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.kindColor
 import com.kubedash.ui.kindStatusColor
 import com.kubedash.ui.screens.highlightYamlLine
+import com.kubedash.ui.screens.viewmodel.DeploymentResourceGraphViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -82,21 +84,24 @@ fun DeploymentResourceGraphTab(
     kubeClient: KubeClient,
 ) {
     val viewModel = remember(kubeClient) { DeploymentResourceGraphViewModel(kubeClient) }
+    val loading by viewModel.loading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val graph by viewModel.graph.collectAsState()
 
     LaunchedEffect(deploymentName, namespace) {
         viewModel.load(deploymentName, namespace)
     }
 
     when {
-        viewModel.loading -> ResourceLoadingIndicator()
+        loading -> ResourceLoadingIndicator()
 
-        viewModel.error != null -> {
+        error != null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(viewModel.error!!, color = KdError, style = MaterialTheme.typography.bodySmall)
+                Text(error!!, color = KdError, style = MaterialTheme.typography.bodySmall)
             }
         }
 
-        viewModel.graph != null && viewModel.graph!!.nodes.isNotEmpty() -> ResourceGraphContent(viewModel.graph!!, kubeClient, namespace)
+        graph != null && graph!!.nodes.isNotEmpty() -> ResourceGraphContent(graph!!, kubeClient, namespace)
 
         else -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

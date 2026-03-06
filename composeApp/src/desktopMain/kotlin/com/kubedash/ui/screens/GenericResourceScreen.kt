@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,9 +35,7 @@ import com.kubedash.ui.ResourceTable
 import com.kubedash.ui.TableRow
 import com.kubedash.ui.components.ResizeHandle
 import com.kubedash.ui.components.statusColor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.GenericResourceScreenViewModel
 
 @Composable
 fun GenericResourceScreen(
@@ -47,31 +45,13 @@ fun GenericResourceScreen(
     namespacedKind: Boolean = true,
     fetcher: () -> List<GenericResourceInfo>,
 ) {
-    var state by remember(kind) { mutableStateOf<ResourceState<List<GenericResourceInfo>>>(ResourceState.Loading) }
-    var selected by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
+    val viewModel = remember(kind, fetcher) { GenericResourceScreenViewModel(fetcher) }
+    val state by viewModel.state.collectAsState()
+    val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
 
     LaunchedEffect(kind) {
-        state = ResourceState.Loading
-        selected = null
-        while (true) {
-            state = try {
-                val items = withContext(Dispatchers.IO) { fetcher() }
-                ResourceState.Success(items)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(5_000)
-        }
-    }
-
-    LaunchedEffect(state) {
-        val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        selected = selected?.let { sel -> current.find { it.uid == sel.uid } }
+        viewModel.startPolling()
     }
 
     when (val s = state) {
@@ -94,7 +74,7 @@ fun GenericResourceScreen(
                         resources = filtered,
                         namespacedKind = namespacedKind,
                         selectedUid = selected?.uid,
-                        onClick = { res -> selected = if (selected?.uid == res.uid) null else res },
+                        onClick = { res -> viewModel.selectItem(res) },
                     )
                 }
 
@@ -126,7 +106,7 @@ fun GenericResourceScreen(
                                 fields = fields,
                                 labels = res.labels,
                                 kubeClient = kubeClient,
-                                onClose = { selected = null },
+                                onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
                             )
                         }

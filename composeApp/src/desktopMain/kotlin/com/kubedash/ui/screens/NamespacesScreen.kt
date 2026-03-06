@@ -12,16 +12,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.GenericResourceInfo
 import com.kubedash.KdPrimary
 import com.kubedash.KubeClient
@@ -35,41 +35,17 @@ import com.kubedash.ui.ResourceTable
 import com.kubedash.ui.TableRow
 import com.kubedash.ui.components.ResizeHandle
 import com.kubedash.ui.components.statusColor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.NamespacesScreenViewModel
 
 @Composable
 fun NamespacesScreen(
     kubeClient: KubeClient,
     searchQuery: String,
+    viewModel: NamespacesScreenViewModel = viewModel { NamespacesScreenViewModel(kubeClient) },
 ) {
-    var state by remember { mutableStateOf<ResourceState<List<GenericResourceInfo>>>(ResourceState.Loading) }
-    var selected by remember { mutableStateOf<GenericResourceInfo?>(null) }
+    val state by viewModel.state.collectAsState()
+    val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
-
-    LaunchedEffect(Unit) {
-        state = ResourceState.Loading
-        selected = null
-        while (true) {
-            state = try {
-                val items = withContext(Dispatchers.IO) { kubeClient.getNamespacesGeneric() }
-                ResourceState.Success(items)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(5_000)
-        }
-    }
-
-    LaunchedEffect(state) {
-        val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        selected = selected?.let { sel -> current.find { it.uid == sel.uid } }
-    }
 
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()
@@ -89,7 +65,7 @@ fun NamespacesScreen(
                     NamespaceTable(
                         namespaces = filtered,
                         selectedUid = selected?.uid,
-                        onClick = { ns -> selected = if (selected?.uid == ns.uid) null else ns },
+                        onClick = { ns -> viewModel.selectItem(ns) },
                     )
                 }
 
@@ -112,7 +88,7 @@ fun NamespacesScreen(
                                 ),
                                 labels = ns.labels,
                                 kubeClient = kubeClient,
-                                onClose = { selected = null },
+                                onClose = { viewModel.selectItem(null) },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
                             )
                         }

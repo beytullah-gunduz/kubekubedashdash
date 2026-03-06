@@ -30,15 +30,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.ClusterInfo
 import com.kubedash.KdBorder
 import com.kubedash.KdError
@@ -56,33 +55,19 @@ import com.kubedash.ui.ResourceErrorMessage
 import com.kubedash.ui.ResourceLoadingIndicator
 import com.kubedash.ui.components.PodStatusBar
 import com.kubedash.ui.components.SummaryCard
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.ClusterOverviewViewModel
 
 @Composable
 fun ClusterOverviewScreen(
     kubeClient: KubeClient,
     namespace: String?,
     onNavigate: (Screen) -> Unit,
+    viewModel: ClusterOverviewViewModel = viewModel { ClusterOverviewViewModel(kubeClient) },
 ) {
-    var state by remember { mutableStateOf<ResourceState<ClusterInfo>>(ResourceState.Loading) }
+    val state by viewModel.state.collectAsState()
 
     LaunchedEffect(namespace) {
-        state = ResourceState.Loading
-        while (true) {
-            state = try {
-                val info = withContext(Dispatchers.IO) { kubeClient.getClusterInfo(namespace) }
-                ResourceState.Success(info)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(10_000)
-        }
+        viewModel.startPolling(namespace)
     }
 
     when (val s = state) {

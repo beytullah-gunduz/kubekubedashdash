@@ -45,6 +45,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -90,6 +91,7 @@ import com.kubedash.ui.components.ResizeHandle
 import com.kubedash.ui.components.StatusBadge
 import com.kubedash.ui.components.UsageHistoryBar
 import com.kubedash.ui.components.statusColor
+import com.kubedash.ui.screens.viewmodel.NodesScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -101,80 +103,16 @@ fun NodesScreen(
     kubeClient: KubeClient,
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
+    viewModel: NodesScreenViewModel = androidx.lifecycle.viewmodel.compose.viewModel { NodesScreenViewModel(kubeClient) },
 ) {
-    var state by remember { mutableStateOf<ResourceState<List<NodeInfo>>>(ResourceState.Loading) }
-    var selected by remember { mutableStateOf<NodeInfo?>(null) }
+    val state by viewModel.state.collectAsState()
+    val selected by viewModel.selected.collectAsState()
+    val resourceUsage by viewModel.resourceUsage.collectAsState()
+    val cpuHistory by viewModel.cpuHistory.collectAsState()
+    val memHistory by viewModel.memHistory.collectAsState()
+    val staleNodes by viewModel.staleNodes.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statsExpanded by remember { mutableStateOf(true) }
-    var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
-    var cpuHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
-    var memHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
-    var staleNodes by remember { mutableStateOf<Map<String, NodeInfo>>(emptyMap()) }
-    var previousNodesByUid by remember { mutableStateOf<Map<String, NodeInfo>>(emptyMap()) }
-
-    LaunchedEffect(Unit) {
-        state = ResourceState.Loading
-        selected = null
-        while (true) {
-            state = try {
-                val nodes = withContext(Dispatchers.IO) { kubeClient.getNodes() }
-                ResourceState.Success(nodes)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(10_000)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            val usage = try {
-                withContext(Dispatchers.IO) { kubeClient.getResourceUsage(null) }
-            } catch (e: Exception) {
-                null
-            }
-            resourceUsage = usage
-            if (usage != null && usage.metricsAvailable) {
-                val cpuF = if (usage.cpuCapacityMillis > 0) {
-                    usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
-                } else {
-                    0f
-                }
-                val memF = if (usage.memoryCapacityBytes > 0) {
-                    usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
-                } else {
-                    0f
-                }
-                cpuHistory = (cpuHistory + cpuF).takeLast(MAX_HISTORY_SIZE)
-                memHistory = (memHistory + memF).takeLast(MAX_HISTORY_SIZE)
-            }
-            delay(10_000)
-        }
-    }
-
-    LaunchedEffect(state) {
-        val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        val currentByUid = current.associateBy { it.uid }
-
-        val updatedStale = staleNodes.toMutableMap()
-        updatedStale.keys.removeAll(currentByUid.keys)
-        for ((uid, node) in previousNodesByUid) {
-            if (uid !in currentByUid && uid !in updatedStale) {
-                updatedStale[uid] = node
-            }
-        }
-
-        previousNodesByUid = currentByUid
-        staleNodes = updatedStale
-
-        selected = selected?.let { sel ->
-            currentByUid[sel.uid] ?: updatedStale[sel.uid]
-        }
-    }
 
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()
@@ -182,7 +120,7 @@ fun NodesScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
-            val allNodes = s.data + staleNodes.values
+            val allNodes = s.data + staleNodes.values.toList()
             val filtered = allNodes.filter { node ->
                 searchQuery.isBlank() ||
                     node.name.contains(searchQuery, ignoreCase = true) ||
@@ -209,7 +147,7 @@ fun NodesScreen(
                         NodeTable(
                             nodes = filtered,
                             selectedUid = selected?.uid,
-                            onClick = { node -> selected = if (selected?.uid == node.uid) null else node },
+                            onClick = { node -> viewModel.selectItem(node) },
                         )
                     }
                 }
@@ -225,7 +163,7 @@ fun NodesScreen(
                             NodeDetailPanel(
                                 node = node,
                                 kubeClient = kubeClient,
-                                onClose = { selected = null },
+                                onClose = { viewModel.clearSelection() },
                                 onPodClick = { pod -> onNavigate(Screen.Pods(selectPodUid = pod.uid)) },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
                             )
