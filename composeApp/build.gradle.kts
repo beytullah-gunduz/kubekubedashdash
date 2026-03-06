@@ -50,6 +50,8 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.logback.classic)
+            implementation(libs.androidx.datastore.core)
+            implementation(libs.androidx.datastore.preferences)
         }
     }
 }
@@ -63,7 +65,7 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "KubeKubeDashDash"
             packageVersion = "1.3.0"
-            modules("java.instrument", "java.naming", "java.net.http", "java.prefs", "jdk.unsupported")
+            modules("java.instrument", "java.naming", "java.net.http", "jdk.unsupported")
 
             macOS {
                 iconFile.set(project.file("icons/icon.icns"))

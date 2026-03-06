@@ -17,6 +17,8 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+androidx-datastore-core = { module = "androidx.datastore:datastore-core", version = "1.2.0" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences-core", version = "1.1.7" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
