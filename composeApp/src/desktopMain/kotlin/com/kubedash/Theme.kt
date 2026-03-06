@@ -13,17 +13,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import java.util.prefs.Preferences
+import com.kubedash.data.repository.PreferenceRepository
 
 object ThemeManager {
-    private val prefs = Preferences.userNodeForPackage(ThemeManager::class.java)
-    private var _isDarkTheme by mutableStateOf(prefs.getBoolean("darkTheme", true))
+    private var _isDarkTheme by mutableStateOf(PreferenceRepository.darkTheme)
 
     var isDarkTheme: Boolean
         get() = _isDarkTheme
         set(value) {
             _isDarkTheme = value
-            prefs.putBoolean("darkTheme", value)
+            PreferenceRepository.darkTheme = value
         }
 }
 
