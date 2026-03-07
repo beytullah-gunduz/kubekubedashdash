@@ -6,44 +6,55 @@ import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import com.kubedash.ServiceInfo
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ServicesScreenViewModel(
     private val kubeClient: KubeClient,
 ) : ViewModel() {
-    private val _state = MutableStateFlow<ResourceState<List<ServiceInfo>>>(ResourceState.Loading)
-    val state: StateFlow<ResourceState<List<ServiceInfo>>> = _state.asStateFlow()
+    private val namespace = MutableStateFlow<String?>(null)
 
     private val _selected = MutableStateFlow<ServiceInfo?>(null)
     val selected: StateFlow<ServiceInfo?> = _selected.asStateFlow()
 
-    private var pollingJob: Job? = null
-
-    fun startPolling(namespace: String?) {
-        pollingJob?.cancel()
-        _state.value = ResourceState.Loading
-        _selected.value = null
-        pollingJob = viewModelScope.launch {
-            while (isActive) {
-                try {
-                    val svcs = withContext(Dispatchers.IO) { kubeClient.getServices(namespace) }
-                    _state.value = ResourceState.Success(svcs)
-                    syncSelection(svcs)
-                } catch (e: Exception) {
-                    if (_state.value is ResourceState.Loading) {
-                        _state.value = ResourceState.Error(e.message ?: "Unknown error")
+    val state: StateFlow<ResourceState<List<ServiceInfo>>> = namespace
+        .flatMapLatest { ns ->
+            flow {
+                emit(ResourceState.Loading)
+                var loaded = false
+                while (true) {
+                    try {
+                        val svcs = kubeClient.getServices(ns)
+                        emit(ResourceState.Success(svcs))
+                        loaded = true
+                    } catch (e: Exception) {
+                        if (!loaded) {
+                            emit(ResourceState.Error(e.message ?: "Unknown error"))
+                        }
                     }
+                    delay(5_000)
                 }
-                delay(5_000)
             }
         }
+        .onEach { state ->
+            if (state is ResourceState.Success) syncSelection(state.data)
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+
+    fun setNamespace(namespace: String?) {
+        _selected.value = null
+        this.namespace.value = namespace
     }
 
     fun selectItem(item: ServiceInfo?) {

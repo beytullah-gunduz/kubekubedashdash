@@ -58,7 +58,7 @@ fun DeploymentsScreen(
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
 
     LaunchedEffect(namespace) {
-        viewModel.startPolling(namespace)
+        viewModel.setNamespace(namespace)
     }
 
     when (val s = state) {

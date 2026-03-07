@@ -6,38 +6,45 @@ import com.kubedash.EventInfo
 import com.kubedash.KubeClient
 import com.kubedash.ResourceState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class EventsScreenViewModel(
     private val kubeClient: KubeClient,
 ) : ViewModel() {
-    private val _state = MutableStateFlow<ResourceState<List<EventInfo>>>(ResourceState.Loading)
-    val state: StateFlow<ResourceState<List<EventInfo>>> = _state.asStateFlow()
+    private val namespace = MutableStateFlow<String?>(null)
 
-    private var pollingJob: Job? = null
-
-    fun startPolling(namespace: String?) {
-        pollingJob?.cancel()
-        _state.value = ResourceState.Loading
-        pollingJob = viewModelScope.launch {
-            while (isActive) {
-                try {
-                    val events = withContext(Dispatchers.IO) { kubeClient.getEvents(namespace) }
-                    _state.value = ResourceState.Success(events)
-                } catch (e: Exception) {
-                    if (_state.value is ResourceState.Loading) {
-                        _state.value = ResourceState.Error(e.message ?: "Unknown error")
+    val state: StateFlow<ResourceState<List<EventInfo>>> = namespace
+        .flatMapLatest { ns ->
+            flow {
+                emit(ResourceState.Loading)
+                var loaded = false
+                while (true) {
+                    try {
+                        val events = kubeClient.getEvents(ns)
+                        emit(ResourceState.Success(events))
+                        loaded = true
+                    } catch (e: Exception) {
+                        if (!loaded) {
+                            emit(ResourceState.Error(e.message ?: "Unknown error"))
+                        }
                     }
+                    delay(5_000)
                 }
-                delay(5_000)
             }
         }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+
+    fun setNamespace(namespace: String?) {
+        this.namespace.value = namespace
     }
 }

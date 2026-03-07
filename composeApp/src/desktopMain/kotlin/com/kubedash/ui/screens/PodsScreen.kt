@@ -93,7 +93,7 @@ fun PodsScreen(
     var statsExpanded by remember { mutableStateOf(true) }
 
     LaunchedEffect(namespace, selectPodUid) {
-        viewModel.startPolling(namespace, selectPodUid)
+        viewModel.setParams(namespace, selectPodUid)
     }
 
     when (val s = state) {

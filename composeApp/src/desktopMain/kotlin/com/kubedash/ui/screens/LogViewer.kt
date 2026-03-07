@@ -75,7 +75,7 @@ fun LogViewerScreen(
     val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(podName, namespace, containerName) {
-        viewModel.startPolling(podName, namespace, containerName)
+        viewModel.setStreamParams(podName, namespace, containerName)
     }
 
     LaunchedEffect(logLines.size, following) {

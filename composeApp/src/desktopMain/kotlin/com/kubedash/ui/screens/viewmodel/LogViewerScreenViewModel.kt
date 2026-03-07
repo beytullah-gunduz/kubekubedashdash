@@ -4,20 +4,27 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubedash.KubeClient
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.runningFold
+import kotlinx.coroutines.flow.stateIn
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class LogViewerScreenViewModel(
     private val kubeClient: KubeClient,
 ) : ViewModel() {
-    private val _logLines = MutableStateFlow<List<String>>(emptyList())
-    val logLines: StateFlow<List<String>> = _logLines.asStateFlow()
+    private val podName = MutableStateFlow("")
+    private val namespace = MutableStateFlow("")
+    private val containerName = MutableStateFlow<String?>(null)
+    private val resetTrigger = MutableStateFlow(0)
 
     private val _loading = MutableStateFlow(true)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
@@ -31,28 +38,29 @@ class LogViewerScreenViewModel(
     private val _wrapLines = MutableStateFlow(false)
     val wrapLines: StateFlow<Boolean> = _wrapLines.asStateFlow()
 
-    private var pollingJob: Job? = null
-
-    fun startPolling(podName: String, namespace: String, containerName: String?) {
-        pollingJob?.cancel()
-        _loading.value = true
-        _logLines.value = emptyList()
-
-        pollingJob = viewModelScope.launch {
-            val logs = withContext(Dispatchers.IO) {
-                kubeClient.getPodLogs(podName, namespace, containerName, tailLines = 2000)
-            }
-            _logLines.value = logs.lines()
-            _loading.value = false
-
-            while (isActive) {
-                delay(3_000)
-                val refreshed = withContext(Dispatchers.IO) {
-                    kubeClient.getPodLogs(podName, namespace, containerName, tailLines = 2000)
-                }
-                _logLines.value = refreshed.lines()
+    val logLines: StateFlow<List<String>> = combine(
+        podName,
+        namespace,
+        containerName,
+        resetTrigger,
+    ) { pod, ns, container, _ -> Triple(pod, ns, container) }
+        .flatMapLatest { (pod, ns, container) ->
+            if (pod.isBlank()) {
+                flowOf(emptyList())
+            } else {
+                kubeClient.streamPodLogs(pod, ns, container)
+                    .runningFold(emptyList<String>()) { acc, line -> acc + line }
+                    .onEach { if (it.isNotEmpty()) _loading.value = false }
             }
         }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun setStreamParams(podName: String, namespace: String, containerName: String?) {
+        _loading.value = true
+        this.podName.value = podName
+        this.namespace.value = namespace
+        this.containerName.value = containerName
     }
 
     fun toggleFollowing() {
@@ -68,6 +76,7 @@ class LogViewerScreenViewModel(
     }
 
     fun clearLogs() {
-        _logLines.value = emptyList()
+        _loading.value = true
+        resetTrigger.value++
     }
 }

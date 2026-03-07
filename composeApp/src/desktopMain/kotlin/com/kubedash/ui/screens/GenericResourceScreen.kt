@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -49,10 +48,6 @@ fun GenericResourceScreen(
     val state by viewModel.state.collectAsState()
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
-
-    LaunchedEffect(kind) {
-        viewModel.startPolling()
-    }
 
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()

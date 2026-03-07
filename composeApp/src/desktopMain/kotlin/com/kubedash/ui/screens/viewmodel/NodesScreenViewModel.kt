@@ -7,28 +7,23 @@ import com.kubedash.NodeInfo
 import com.kubedash.ResourceState
 import com.kubedash.ResourceUsageSummary
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 
 private const val MAX_HISTORY_SIZE = 20
 
 class NodesScreenViewModel(
     private val kubeClient: KubeClient,
 ) : ViewModel() {
-    private val _state = MutableStateFlow<ResourceState<List<NodeInfo>>>(ResourceState.Loading)
-    val state: StateFlow<ResourceState<List<NodeInfo>>> = _state.asStateFlow()
-
     private val _selected = MutableStateFlow<NodeInfo?>(null)
     val selected: StateFlow<NodeInfo?> = _selected.asStateFlow()
-
-    private val _resourceUsage = MutableStateFlow<ResourceUsageSummary?>(null)
-    val resourceUsage: StateFlow<ResourceUsageSummary?> = _resourceUsage.asStateFlow()
 
     private val _cpuHistory = MutableStateFlow<List<Float>>(emptyList())
     val cpuHistory: StateFlow<List<Float>> = _cpuHistory.asStateFlow()
@@ -40,58 +35,58 @@ class NodesScreenViewModel(
     val staleNodes: StateFlow<Map<String, NodeInfo>> = _staleNodes.asStateFlow()
 
     private var previousNodesByUid: Map<String, NodeInfo> = emptyMap()
-    private var nodePollingJob: Job? = null
-    private var usagePollingJob: Job? = null
 
-    init {
-        startPolling()
-    }
-
-    private fun startPolling() {
-        nodePollingJob?.cancel()
-        usagePollingJob?.cancel()
-
-        nodePollingJob = viewModelScope.launch {
-            while (isActive) {
-                try {
-                    val nodes = withContext(Dispatchers.IO) { kubeClient.getNodes() }
-                    _state.value = ResourceState.Success(nodes)
-                    processNodeUpdate(nodes)
-                } catch (e: Exception) {
-                    if (_state.value is ResourceState.Loading) {
-                        _state.value = ResourceState.Error(e.message ?: "Unknown error")
-                    }
+    val state: StateFlow<ResourceState<List<NodeInfo>>> = flow {
+        emit(ResourceState.Loading)
+        var loaded = false
+        while (true) {
+            try {
+                val nodes = kubeClient.getNodes()
+                emit(ResourceState.Success(nodes))
+                loaded = true
+            } catch (e: Exception) {
+                if (!loaded) {
+                    emit(ResourceState.Error(e.message ?: "Unknown error"))
                 }
-                delay(10_000)
             }
-        }
-
-        usagePollingJob = viewModelScope.launch {
-            while (isActive) {
-                val usage = try {
-                    withContext(Dispatchers.IO) { kubeClient.getResourceUsage(null) }
-                } catch (_: Exception) {
-                    null
-                }
-                _resourceUsage.value = usage
-                if (usage != null && usage.metricsAvailable) {
-                    val cpuF = if (usage.cpuCapacityMillis > 0) {
-                        usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
-                    } else {
-                        0f
-                    }
-                    val memF = if (usage.memoryCapacityBytes > 0) {
-                        usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
-                    } else {
-                        0f
-                    }
-                    _cpuHistory.value = (_cpuHistory.value + cpuF).takeLast(MAX_HISTORY_SIZE)
-                    _memHistory.value = (_memHistory.value + memF).takeLast(MAX_HISTORY_SIZE)
-                }
-                delay(10_000)
-            }
+            delay(10_000)
         }
     }
+        .onEach { state ->
+            if (state is ResourceState.Success) processNodeUpdate(state.data)
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ResourceState.Loading)
+
+    val resourceUsage: StateFlow<ResourceUsageSummary?> = flow {
+        while (true) {
+            val usage = try {
+                kubeClient.getResourceUsage(null)
+            } catch (_: Exception) {
+                null
+            }
+            emit(usage)
+            delay(10_000)
+        }
+    }
+        .onEach { usage ->
+            if (usage != null && usage.metricsAvailable) {
+                val cpuF = if (usage.cpuCapacityMillis > 0) {
+                    usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
+                } else {
+                    0f
+                }
+                val memF = if (usage.memoryCapacityBytes > 0) {
+                    usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
+                } else {
+                    0f
+                }
+                _cpuHistory.value = (_cpuHistory.value + cpuF).takeLast(MAX_HISTORY_SIZE)
+                _memHistory.value = (_memHistory.value + memF).takeLast(MAX_HISTORY_SIZE)
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun selectItem(item: NodeInfo?) {
         _selected.value = if (_selected.value?.uid == item?.uid) null else item

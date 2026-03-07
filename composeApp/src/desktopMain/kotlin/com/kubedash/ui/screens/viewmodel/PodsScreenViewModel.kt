@@ -7,26 +7,28 @@ import com.kubedash.PodInfo
 import com.kubedash.ResourceState
 import com.kubedash.ResourceUsageSummary
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PodsScreenViewModel(
     private val kubeClient: KubeClient,
 ) : ViewModel() {
-    private val _state = MutableStateFlow<ResourceState<List<PodInfo>>>(ResourceState.Loading)
-    val state: StateFlow<ResourceState<List<PodInfo>>> = _state.asStateFlow()
+    private data class PodParams(val namespace: String?, val selectPodUid: String? = null)
+
+    private val params = MutableStateFlow(PodParams(null))
 
     private val _selectedPod = MutableStateFlow<PodInfo?>(null)
     val selectedPod: StateFlow<PodInfo?> = _selectedPod.asStateFlow()
-
-    private val _resourceUsage = MutableStateFlow<ResourceUsageSummary?>(null)
-    val resourceUsage: StateFlow<ResourceUsageSummary?> = _resourceUsage.asStateFlow()
 
     private val _stalePods = MutableStateFlow<Map<String, PodInfo>>(emptyMap())
     val stalePods: StateFlow<Map<String, PodInfo>> = _stalePods.asStateFlow()
@@ -34,43 +36,54 @@ class PodsScreenViewModel(
     private var previousPodsByUid: Map<String, PodInfo> = emptyMap()
     private var pendingSelectUid: String? = null
 
-    private var podPollingJob: Job? = null
-    private var usagePollingJob: Job? = null
+    val state: StateFlow<ResourceState<List<PodInfo>>> = params
+        .flatMapLatest { (ns, _) ->
+            flow {
+                emit(ResourceState.Loading)
+                var loaded = false
+                while (true) {
+                    try {
+                        val pods = kubeClient.getPods(ns)
+                        emit(ResourceState.Success(pods))
+                        loaded = true
+                    } catch (e: Exception) {
+                        if (!loaded) {
+                            emit(ResourceState.Error(e.message ?: "Unknown error"))
+                        }
+                    }
+                    delay(5_000)
+                }
+            }
+        }
+        .onEach { state ->
+            if (state is ResourceState.Success) processPodUpdate(state.data)
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
 
-    fun startPolling(namespace: String?, selectPodUid: String? = null) {
-        podPollingJob?.cancel()
-        usagePollingJob?.cancel()
-        _state.value = ResourceState.Loading
+    val resourceUsage: StateFlow<ResourceUsageSummary?> = params
+        .flatMapLatest { (ns, _) ->
+            flow {
+                while (true) {
+                    val usage = try {
+                        kubeClient.getResourceUsage(ns)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    emit(usage)
+                    delay(10_000)
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setParams(namespace: String?, selectPodUid: String? = null) {
         _selectedPod.value = null
         _stalePods.value = emptyMap()
         previousPodsByUid = emptyMap()
         pendingSelectUid = selectPodUid
-
-        podPollingJob = viewModelScope.launch {
-            while (isActive) {
-                try {
-                    val pods = withContext(Dispatchers.IO) { kubeClient.getPods(namespace) }
-                    _state.value = ResourceState.Success(pods)
-                    processPodUpdate(pods)
-                } catch (e: Exception) {
-                    if (_state.value is ResourceState.Loading) {
-                        _state.value = ResourceState.Error(e.message ?: "Unknown error")
-                    }
-                }
-                delay(5_000)
-            }
-        }
-
-        usagePollingJob = viewModelScope.launch {
-            while (isActive) {
-                _resourceUsage.value = try {
-                    withContext(Dispatchers.IO) { kubeClient.getResourceUsage(namespace) }
-                } catch (_: Exception) {
-                    null
-                }
-                delay(10_000)
-            }
-        }
+        params.value = PodParams(namespace, selectPodUid)
     }
 
     fun selectPod(pod: PodInfo?) {

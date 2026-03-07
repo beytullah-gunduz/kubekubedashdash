@@ -67,7 +67,7 @@ fun ClusterOverviewScreen(
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(namespace) {
-        viewModel.startPolling(namespace)
+        viewModel.setNamespace(namespace)
     }
 
     when (val s = state) {
