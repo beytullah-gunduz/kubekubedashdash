@@ -29,13 +29,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.KdBorder
 import com.kubedash.KdPrimary
 import com.kubedash.KdTextSecondary
-import com.kubedash.ThemeManager
+import com.kubedash.ui.screens.viewmodel.SettingsScreenViewModel
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -78,21 +81,21 @@ fun SettingsScreen() {
         ) {
             ThemePreviewCard(
                 label = "Dark",
-                selected = ThemeManager.isDarkTheme,
+                selected = viewModel.isDarkTheme,
                 sidebarColor = Color(0xFF161819),
                 backgroundColor = Color(0xFF1E2124),
                 surfaceColor = Color(0xFF252A31),
                 textColor = Color(0xFFC8D1DC),
-                onClick = { ThemeManager.isDarkTheme = true },
+                onClick = { viewModel.setDarkTheme(true) },
             )
             ThemePreviewCard(
                 label = "Light",
-                selected = !ThemeManager.isDarkTheme,
+                selected = !viewModel.isDarkTheme,
                 sidebarColor = Color(0xFFFFFFFF),
                 backgroundColor = Color(0xFFF8FAFC),
                 surfaceColor = Color(0xFFE2E8F0),
                 textColor = Color(0xFF1E293B),
-                onClick = { ThemeManager.isDarkTheme = false },
+                onClick = { viewModel.setDarkTheme(false) },
             )
         }
     }

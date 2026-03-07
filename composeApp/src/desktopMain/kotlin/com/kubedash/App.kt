@@ -18,12 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -45,9 +42,7 @@ import com.kubedash.ui.screens.ResourceDetailScreen
 import com.kubedash.ui.screens.ServicesScreen
 import com.kubedash.ui.screens.SettingsScreen
 import com.kubedash.ui.screens.deployments.DeploymentsScreen
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.AppViewModel
 
 @Composable
 fun App(
@@ -57,67 +52,21 @@ fun App(
 ) {
     KubeDashTheme {
         val kubeClient = remember { KubeClient() }
-        var currentScreen by remember { mutableStateOf<Screen>(Screen.ClusterOverview) }
-        var previousScreen by remember { mutableStateOf<Screen?>(null) }
-        var selectedNamespace by remember { mutableStateOf("All Namespaces") }
-        var selectedContext by remember { mutableStateOf("") }
-        var contexts by remember { mutableStateOf(listOf<String>()) }
-        var namespaces by remember { mutableStateOf(listOf<String>()) }
-        var connectionError by remember { mutableStateOf<String?>(null) }
-        var isConnecting by remember { mutableStateOf(false) }
-        var isConnected by remember { mutableStateOf(false) }
-        var searchQuery by remember { mutableStateOf("") }
-        var showClusterSelector by remember { mutableStateOf(false) }
-        var retryCountdown by remember { mutableStateOf(0) }
-        var prerequisiteResult by remember { mutableStateOf<PrerequisiteResult?>(null) }
-        var showPrerequisites by remember { mutableStateOf(true) }
+        val viewModel = remember(kubeClient) { AppViewModel(kubeClient) }
 
-        val scope = rememberCoroutineScope()
-
-        fun navigate(screen: Screen) {
-            if (screen is Screen.Pods && screen.selectPodUid != null) {
-                selectedNamespace = "All Namespaces"
-            }
-            if (screen is Screen.ResourceDetail || screen is Screen.PodLogs) {
-                previousScreen = currentScreen
-            }
-            currentScreen = screen
-        }
-
-        fun connectToCluster(ctx: String) {
-            selectedContext = ctx
-            isConnecting = true
-            connectionError = null
-            scope.launch(Dispatchers.IO) {
-                kubeClient.connect(ctx).fold(
-                    onSuccess = {
-                        isConnected = true
-                        connectionError = null
-                        namespaces = try {
-                            kubeClient.getNamespaceNames()
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-                        selectedNamespace = "All Namespaces"
-                    },
-                    onFailure = { e ->
-                        isConnected = false
-                        connectionError = e.message
-                    },
-                )
-                isConnecting = false
-            }
-        }
-
-        LaunchedEffect(Unit) {
-            val result = withContext(Dispatchers.IO) { PrerequisiteChecker.runAll() }
-            prerequisiteResult = result
-            if (result.allPassed) {
-                showPrerequisites = false
-                showClusterSelector = true
-                withContext(Dispatchers.IO) { contexts = kubeClient.getContexts() }
-            }
-        }
+        val currentScreen by viewModel.currentScreen.collectAsState()
+        val selectedNamespace by viewModel.selectedNamespace.collectAsState()
+        val selectedContext by viewModel.selectedContext.collectAsState()
+        val contexts by viewModel.contexts.collectAsState()
+        val namespaces by viewModel.namespaces.collectAsState()
+        val connectionError by viewModel.connectionError.collectAsState()
+        val isConnecting by viewModel.isConnecting.collectAsState()
+        val isConnected by viewModel.isConnected.collectAsState()
+        val searchQuery by viewModel.searchQuery.collectAsState()
+        val showClusterSelector by viewModel.showClusterSelector.collectAsState()
+        val retryCountdown by viewModel.retryCountdown.collectAsState()
+        val prerequisiteResult by viewModel.prerequisiteResult.collectAsState()
+        val showPrerequisites by viewModel.showPrerequisites.collectAsState()
 
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -129,10 +78,10 @@ fun App(
                         windowState = windowState,
                         onClose = onClose,
                         searchQuery = searchQuery,
-                        onSearchChange = { searchQuery = it },
+                        onSearchChange = { viewModel.setSearchQuery(it) },
                         selectedNamespace = selectedNamespace,
                         namespaces = namespaces,
-                        onNamespaceChange = { selectedNamespace = it },
+                        onNamespaceChange = { viewModel.setSelectedNamespace(it) },
                     )
                 }
 
@@ -141,8 +90,8 @@ fun App(
                         currentScreen = currentScreen,
                         selectedContext = selectedContext,
                         isConnected = isConnected,
-                        onNavigate = { navigate(it) },
-                        onClusterSelectorClick = { showClusterSelector = true },
+                        onNavigate = { viewModel.navigate(it) },
+                        onClusterSelectorClick = { viewModel.showClusterSelector() },
                     )
 
                     Column(
@@ -159,14 +108,14 @@ fun App(
 
                             !isConnected && connectionError != null -> ConnectionErrorScreen(connectionError, retryCountdown)
 
-                            !isConnected -> NoClusterScreen { showClusterSelector = true }
+                            !isConnected -> NoClusterScreen { viewModel.showClusterSelector() }
 
                             else -> ContentRouter(
                                 screen = currentScreen,
                                 kubeClient = kubeClient,
                                 namespace = selectedNamespace,
                                 searchQuery = searchQuery,
-                                onNavigate = ::navigate,
+                                onNavigate = viewModel::navigate,
                             )
                         }
                     }
@@ -175,22 +124,9 @@ fun App(
 
             val prereq = prerequisiteResult
             if (showPrerequisites) {
-                val dismiss: () -> Unit = {
-                    showPrerequisites = false
-                    showClusterSelector = true
-                    scope.launch(Dispatchers.IO) { contexts = kubeClient.getContexts() }
-                }
                 if (prereq == null) {
                     PrerequisitesModal(
-                        result = PrerequisiteResult(
-                            listOf(
-                                PrerequisiteCheck(
-                                    name = "Initializing",
-                                    description = "Running system checks…",
-                                    status = CheckStatus.CHECKING,
-                                ),
-                            ),
-                        ),
+                        result = viewModel.loadingPrerequisiteResult(),
                         onQuit = onClose,
                         onIgnore = {},
                     )
@@ -198,7 +134,7 @@ fun App(
                     PrerequisitesModal(
                         result = prereq,
                         onQuit = onClose,
-                        onIgnore = dismiss,
+                        onIgnore = { viewModel.dismissPrerequisites() },
                     )
                 }
             } else if (showClusterSelector) {
@@ -206,12 +142,10 @@ fun App(
                     contexts = contexts,
                     selectedContext = selectedContext,
                     onContextSwitch = { ctx ->
-                        showClusterSelector = false
-                        connectToCluster(ctx)
+                        viewModel.dismissClusterSelector()
+                        viewModel.connectToCluster(ctx)
                     },
-                    onDismiss = {
-                        showClusterSelector = false
-                    },
+                    onDismiss = { viewModel.dismissClusterSelector() },
                 )
             }
         }

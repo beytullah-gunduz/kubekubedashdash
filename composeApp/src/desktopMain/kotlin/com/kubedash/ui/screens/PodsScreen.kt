@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.KdBorder
 import com.kubedash.KdError
 import com.kubedash.KdInfo
@@ -72,9 +74,7 @@ import com.kubedash.ui.TableRow
 import com.kubedash.ui.components.CircularUsageIndicator
 import com.kubedash.ui.components.ResizeHandle
 import com.kubedash.ui.components.statusColor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.PodsScreenViewModel
 
 @Composable
 fun PodsScreen(
@@ -83,71 +83,17 @@ fun PodsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
     selectPodUid: String? = null,
+    viewModel: PodsScreenViewModel = viewModel { PodsScreenViewModel(kubeClient) },
 ) {
-    var state by remember { mutableStateOf<ResourceState<List<PodInfo>>>(ResourceState.Loading) }
-    var selectedPod by remember { mutableStateOf<PodInfo?>(null) }
-    var pendingSelectUid by remember { mutableStateOf(selectPodUid) }
+    val state by viewModel.state.collectAsState()
+    val selectedPod by viewModel.selectedPod.collectAsState()
+    val resourceUsage by viewModel.resourceUsage.collectAsState()
+    val stalePods by viewModel.stalePods.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statsExpanded by remember { mutableStateOf(true) }
-    var resourceUsage by remember { mutableStateOf<ResourceUsageSummary?>(null) }
-    var stalePods by remember { mutableStateOf<Map<String, PodInfo>>(emptyMap()) }
-    var previousPodsByUid by remember { mutableStateOf<Map<String, PodInfo>>(emptyMap()) }
 
-    LaunchedEffect(namespace) {
-        state = ResourceState.Loading
-        selectedPod = null
-        stalePods = emptyMap()
-        previousPodsByUid = emptyMap()
-        while (true) {
-            state = try {
-                val pods = withContext(Dispatchers.IO) { kubeClient.getPods(namespace) }
-                ResourceState.Success(pods)
-            } catch (e: Exception) {
-                if (state is ResourceState.Loading) {
-                    ResourceState.Error(e.message ?: "Unknown error")
-                } else {
-                    state
-                }
-            }
-            delay(5_000)
-        }
-    }
-
-    LaunchedEffect(namespace) {
-        while (true) {
-            resourceUsage = try {
-                withContext(Dispatchers.IO) { kubeClient.getResourceUsage(namespace) }
-            } catch (_: Exception) {
-                null
-            }
-            delay(10_000)
-        }
-    }
-
-    LaunchedEffect(state) {
-        val current = (state as? ResourceState.Success)?.data ?: return@LaunchedEffect
-        val currentByUid = current.associateBy { it.uid }
-
-        val updatedStale = stalePods.toMutableMap()
-        updatedStale.keys.removeAll(currentByUid.keys)
-        for ((uid, pod) in previousPodsByUid) {
-            if (uid !in currentByUid && uid !in updatedStale) {
-                updatedStale[uid] = pod
-            }
-        }
-
-        previousPodsByUid = currentByUid
-        stalePods = updatedStale
-
-        val uid = pendingSelectUid
-        if (uid != null) {
-            selectedPod = currentByUid[uid] ?: updatedStale[uid]
-            pendingSelectUid = null
-        } else {
-            selectedPod = selectedPod?.let { sel ->
-                currentByUid[sel.uid] ?: updatedStale[sel.uid]
-            }
-        }
+    LaunchedEffect(namespace, selectPodUid) {
+        viewModel.setParams(namespace, selectPodUid)
     }
 
     when (val s = state) {
@@ -182,9 +128,7 @@ fun PodsScreen(
                         PodTable(
                             pods = filtered,
                             selectedUid = selectedPod?.uid,
-                            onPodClick = { pod ->
-                                selectedPod = if (selectedPod?.uid == pod.uid) null else pod
-                            },
+                            onPodClick = { pod -> viewModel.selectPod(pod) },
                         )
                     }
                 }
@@ -200,7 +144,7 @@ fun PodsScreen(
                             PodDetailPanel(
                                 pod = pod,
                                 kubeClient = kubeClient,
-                                onClose = { selectedPod = null },
+                                onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
                             )
                         }

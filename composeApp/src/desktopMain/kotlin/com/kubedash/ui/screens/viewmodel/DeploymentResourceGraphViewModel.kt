@@ -1,39 +1,41 @@
-package com.kubedash.ui.screens.deployments
+package com.kubedash.ui.screens.viewmodel
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubedash.KubeClient
 import com.kubedash.ResourceGraph
 import com.kubedash.ResourceGraphNode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class DeploymentResourceGraphViewModel(
     private val kubeClient: KubeClient,
 ) : ViewModel() {
-    var graph by mutableStateOf<ResourceGraph?>(null)
-        private set
-    var loading by mutableStateOf(true)
-        private set
-    var error by mutableStateOf<String?>(null)
-        private set
+    private val _graph = MutableStateFlow<ResourceGraph?>(null)
+    val graph: StateFlow<ResourceGraph?> = _graph.asStateFlow()
+
+    private val _loading = MutableStateFlow(true)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     fun load(deploymentName: String, namespace: String) {
         viewModelScope.launch {
-            loading = true
-            error = null
+            _loading.value = true
+            _error.value = null
             try {
-                graph = withContext(Dispatchers.IO) {
+                _graph.value = withContext(Dispatchers.IO) {
                     kubeClient.getDeploymentResourceGraph(deploymentName, namespace)
                 }
             } catch (e: Exception) {
-                error = e.message ?: "Failed to load resource graph"
+                _error.value = e.message ?: "Failed to load resource graph"
             }
-            loading = false
+            _loading.value = false
         }
     }
 

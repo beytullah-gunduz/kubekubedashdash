@@ -36,11 +36,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -49,6 +46,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubedash.KdBorder
 import com.kubedash.KdError
 import com.kubedash.KdPrimary
@@ -58,10 +56,7 @@ import com.kubedash.KdTextSecondary
 import com.kubedash.KdWarning
 import com.kubedash.KubeClient
 import com.kubedash.ui.ResourceLoadingIndicator
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.kubedash.ui.screens.viewmodel.LogViewerScreenViewModel
 
 @Composable
 fun LogViewerScreen(
@@ -69,37 +64,20 @@ fun LogViewerScreen(
     namespace: String,
     containerName: String?,
     kubeClient: KubeClient,
+    viewModel: LogViewerScreenViewModel = viewModel { LogViewerScreenViewModel(kubeClient) },
 ) {
-    var logLines by remember { mutableStateOf(listOf<String>()) }
-    var loading by remember { mutableStateOf(true) }
-    var following by remember { mutableStateOf(true) }
-    var filterText by remember { mutableStateOf("") }
-    var wrapLines by remember { mutableStateOf(false) }
+    val logLines by viewModel.logLines.collectAsState()
+    val loading by viewModel.loading.collectAsState()
+    val following by viewModel.following.collectAsState()
+    val filterText by viewModel.filterText.collectAsState()
+    val wrapLines by viewModel.wrapLines.collectAsState()
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(podName, namespace, containerName) {
-        loading = true
-        val logs = withContext(Dispatchers.IO) {
-            kubeClient.getPodLogs(podName, namespace, containerName, tailLines = 2000)
-        }
-        logLines = logs.lines()
-        loading = false
+        viewModel.setStreamParams(podName, namespace, containerName)
     }
 
-    // Auto-refresh
-    LaunchedEffect(podName, namespace, containerName) {
-        while (true) {
-            delay(3_000)
-            val logs = withContext(Dispatchers.IO) {
-                kubeClient.getPodLogs(podName, namespace, containerName, tailLines = 2000)
-            }
-            logLines = logs.lines()
-        }
-    }
-
-    // Auto-scroll to bottom when following
     LaunchedEffect(logLines.size, following) {
         if (following && logLines.isNotEmpty()) {
             listState.animateScrollToItem(logLines.lastIndex)
@@ -145,7 +123,7 @@ fun LogViewerScreen(
         ) {
             OutlinedTextField(
                 value = filterText,
-                onValueChange = { filterText = it },
+                onValueChange = { viewModel.setFilterText(it) },
                 placeholder = { Text("Filter logs...", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary) },
                 leadingIcon = { Icon(Icons.Default.FilterList, null, Modifier.size(16.dp), tint = KdTextSecondary) },
                 singleLine = true,
@@ -165,7 +143,7 @@ fun LogViewerScreen(
             )
 
             IconButton(
-                onClick = { following = !following },
+                onClick = { viewModel.toggleFollowing() },
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (following) KdPrimary else KdTextSecondary,
                 ),
@@ -178,7 +156,7 @@ fun LogViewerScreen(
             }
 
             IconButton(
-                onClick = { wrapLines = !wrapLines },
+                onClick = { viewModel.toggleWrapLines() },
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (wrapLines) KdPrimary else KdTextSecondary,
                 ),
@@ -192,7 +170,7 @@ fun LogViewerScreen(
                 Icon(Icons.Default.ContentCopy, "Copy logs", Modifier.size(18.dp), tint = KdTextSecondary)
             }
 
-            IconButton(onClick = { logLines = emptyList() }) {
+            IconButton(onClick = { viewModel.clearLogs() }) {
                 Icon(Icons.Default.ClearAll, "Clear", Modifier.size(18.dp), tint = KdTextSecondary)
             }
         }
