@@ -20,12 +20,9 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -104,11 +101,11 @@ private fun OverviewContent(info: ClusterInfo, onNavigate: (Screen) -> Unit) {
 
         // Summary cards
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SummaryCard("Nodes", "${info.nodesCount}", Icons.Default.Dns, KdPrimary, Modifier.weight(1f))
-            SummaryCard("Namespaces", "${info.namespacesCount}", Icons.Default.FolderSpecial, KdInfo, Modifier.weight(1f))
-            SummaryCard("Pods", "${info.podsCount}", Icons.Default.ViewInAr, KdSuccess, Modifier.weight(1f))
-            SummaryCard("Deployments", "${info.deploymentsCount}", Icons.Default.Layers, KdWarning, Modifier.weight(1f))
-            SummaryCard("Services", "${info.servicesCount}", Icons.Default.Cloud, Color(0xFF9C27B0), Modifier.weight(1f))
+            SummaryCard("Nodes", "${info.nodesCount}", Icons.Default.Dns, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Nodes) }
+            SummaryCard("Namespaces", "${info.namespacesCount}", Icons.Default.FolderSpecial, KdInfo, Modifier.weight(1f)) { onNavigate(Screen.Namespaces) }
+            SummaryCard("Pods", "${info.podsCount}", Icons.Default.ViewInAr, KdSuccess, Modifier.weight(1f)) { onNavigate(Screen.Pods()) }
+            SummaryCard("Deployments", "${info.deploymentsCount}", Icons.Default.Layers, KdWarning, Modifier.weight(1f)) { onNavigate(Screen.Deployments) }
+            SummaryCard("Services", "${info.servicesCount}", Icons.Default.Cloud, Color(0xFF9C27B0), Modifier.weight(1f)) { onNavigate(Screen.Services) }
         }
 
         Spacer(Modifier.height(24.dp))
@@ -142,37 +139,6 @@ private fun OverviewContent(info: ClusterInfo, onNavigate: (Screen) -> Unit) {
                 }
             }
         }
-
-        Spacer(Modifier.height(24.dp))
-
-        // Quick navigation
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = KdSurface,
-            border = ButtonDefaults.outlinedButtonBorder(true).copy(
-                brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
-            ),
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    "Quick Navigation",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = KdTextPrimary,
-                    fontWeight = FontWeight.Medium,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    QuickNavButton("Pods", Icons.Default.ViewInAr, Modifier.weight(1f)) { onNavigate(Screen.Pods()) }
-                    QuickNavButton("Deployments", Icons.Default.Layers, Modifier.weight(1f)) { onNavigate(Screen.Deployments) }
-                    QuickNavButton("Services", Icons.Default.Cloud, Modifier.weight(1f)) { onNavigate(Screen.Services) }
-                    QuickNavButton("Nodes", Icons.Default.Dns, Modifier.weight(1f)) { onNavigate(Screen.Nodes) }
-                    QuickNavButton("Events", Icons.Default.Notifications, Modifier.weight(1f)) { onNavigate(Screen.Events) }
-                }
-            }
-        }
     }
 }
 
@@ -190,27 +156,5 @@ private fun StatusLegend(label: String, count: Int, color: androidx.compose.ui.g
             style = MaterialTheme.typography.bodySmall,
             color = KdTextSecondary,
         )
-    }
-}
-
-@Composable
-private fun QuickNavButton(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(44.dp),
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
-        border = ButtonDefaults.outlinedButtonBorder(true).copy(
-            brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
-        ),
-    ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = KdPrimary)
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium)
     }
 }

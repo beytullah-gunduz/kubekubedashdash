@@ -116,7 +116,11 @@ fun PodsScreen(
                     val showStats = maxWidth >= 900.dp
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Hide stats panel when left view is too small (< 900dp)
-                        if (showStats) {
+                        AnimatedVisibility(
+                            visible = showStats,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut(),
+                        ) {
                             PodStatsPanel(
                                 pods = allPods,
                                 usage = resourceUsage,

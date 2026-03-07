@@ -132,7 +132,11 @@ fun NodesScreen(
                 BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     val showStats = maxWidth >= 900.dp
                     Column(modifier = Modifier.fillMaxSize()) {
-                        if (showStats) {
+                        AnimatedVisibility(
+                            visible = showStats,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut(),
+                        ) {
                             NodeStatsPanel(
                                 nodes = allNodes,
                                 usage = resourceUsage,

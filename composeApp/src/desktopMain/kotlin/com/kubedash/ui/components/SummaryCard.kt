@@ -21,6 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubedash.KdBorder
@@ -36,9 +38,14 @@ fun SummaryCard(
     icon: ImageVector,
     color: Color = KdPrimary,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.then(
+            if (onClick != null) Modifier.pointerHoverIcon(PointerIcon.Hand) else Modifier,
+        ),
+        onClick = onClick ?: {},
+        enabled = onClick != null,
         shape = RoundedCornerShape(10.dp),
         color = KdSurface,
         border = ButtonDefaults.outlinedButtonBorder(true).copy(
