@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # A PAT is required so the push triggers the Build Distributables workflow.
+          # The default GITHUB_TOKEN intentionally cannot trigger other workflows.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Parse current version
+        id: current
+        run: |
+          VERSION=$(sed -n 's/.*val appVersion *= *"\([^"]*\)".*/\1/p' composeApp/build.gradle.kts)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Could not parse version from build.gradle.kts (got '$VERSION')"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current version: **$VERSION**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compute next version
+        id: next
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${{ steps.current.outputs.version }}"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          if [[ "$MAJOR" -lt 1 ]]; then
+            echo "::error::Compose Multiplatform native packaging requires MAJOR >= 1 (got '$NEXT')"
+            exit 1
+          fi
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next version: **$NEXT** (${{ inputs.bump }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compute next development version
+        id: dev
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${{ steps.next.outputs.version }}"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          echo "version=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
+          echo "Dev version: **${MAJOR}.${MINOR}.${PATCH}**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check tag does not already exist
+        run: |
+          if git rev-parse "v${{ steps.next.outputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ steps.next.outputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Bump version in build.gradle.kts
+        run: sed -i 's/val appVersion = ".*"/val appVersion = "${{ steps.next.outputs.version }}"/' composeApp/build.gradle.kts
+
+      - name: Commit and tag release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add composeApp/build.gradle.kts
+          git commit -m "Release v${{ steps.next.outputs.version }}"
+          git tag "v${{ steps.next.outputs.version }}"
+
+      - name: Bump to next development version
+        run: |
+          sed -i 's/val appVersion = ".*"/val appVersion = "${{ steps.dev.outputs.version }}"/' composeApp/build.gradle.kts
+          git add composeApp/build.gradle.kts
+          git commit -m "Prepare next development version ${{ steps.dev.outputs.version }}"
+
+      - name: Push
+        run: git push origin main --tags

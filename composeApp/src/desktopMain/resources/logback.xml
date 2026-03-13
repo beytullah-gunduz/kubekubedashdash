@@ -1,0 +1,27 @@
+<configuration>
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %-36.36logger{36} - %msg%n%throwable</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="IN_MEMORY" class="com.kubekubedashdash.logging.InMemoryAppender">
+        <maxEntries>500</maxEntries>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level - %msg%throwable</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.kubekubedashdash" level="DEBUG" />
+
+    <logger name="io.fabric8" level="WARN" />
+    <logger name="okhttp3" level="WARN" />
+    <logger name="io.netty" level="WARN" />
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="IN_MEMORY" />
+    </root>
+</configuration>
