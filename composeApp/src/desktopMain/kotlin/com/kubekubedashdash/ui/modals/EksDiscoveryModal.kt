@@ -726,7 +726,6 @@ private fun Footer(
                         when (step) {
                             EksDiscoveryStep.PICK_REGIONS -> EksDiscoveryStep.PICK_PROFILE
                             EksDiscoveryStep.PICK_CLUSTERS -> EksDiscoveryStep.PICK_REGIONS
-                            else -> EksDiscoveryStep.PICK_PROFILE
                         },
                     )
                 },
