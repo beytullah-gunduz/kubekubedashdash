@@ -3,12 +3,12 @@ package com.kubekubedashdash.ui.modals.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.data.repository.PreferenceRepository
-import com.kubekubedashdash.services.KubeClientService
 import com.kubekubedashdash.util.AwsProfile
 import com.kubekubedashdash.util.AwsProfileReader
 import com.kubekubedashdash.util.EksCluster
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.KubeconfigLocator
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -59,10 +59,11 @@ sealed class ImportRowState {
 
 data class ImportRow(val cluster: EksCluster, val state: ImportRowState)
 
-class EksDiscoveryViewModel : ViewModel() {
+class EksDiscoveryViewModel(
+    private val reactiveClient: ReactiveKubeClient,
+) : ViewModel() {
 
     private val log = LoggerFactory.getLogger(EksDiscoveryViewModel::class.java)
-    private val reactiveClient = KubeClientService.reactiveClient
 
     private val _step = MutableStateFlow(EksDiscoveryStep.PICK_PROFILE)
     val step: StateFlow<EksDiscoveryStep> = _step.asStateFlow()

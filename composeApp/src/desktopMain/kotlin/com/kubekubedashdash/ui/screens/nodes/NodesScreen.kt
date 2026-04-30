@@ -18,8 +18,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -33,8 +35,9 @@ fun NodesScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
     selectNodeName: String? = null,
-    viewModel: NodesScreenViewModel = androidx.lifecycle.viewmodel.compose.viewModel { NodesScreenViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: NodesScreenViewModel = viewModel { NodesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     val resourceUsage by viewModel.resourceUsage.collectAsState()
     val cpuHistory by viewModel.cpuHistory.collectAsState()

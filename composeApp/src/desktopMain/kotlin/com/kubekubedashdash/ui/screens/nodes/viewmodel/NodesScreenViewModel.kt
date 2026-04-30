@@ -5,8 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
-import com.kubekubedashdash.services.KubeClientService
 import com.kubekubedashdash.ui.screens.nodes.MAX_HISTORY_SIZE
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -20,8 +20,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.withContext
 
-class NodesScreenViewModel : ViewModel() {
-    private val reactiveClient = KubeClientService.reactiveClient
+class NodesScreenViewModel(
+    private val reactiveClient: ReactiveKubeClient,
+) : ViewModel() {
     private val _selected = MutableStateFlow<NodeInfo?>(null)
     val selected: StateFlow<NodeInfo?> = _selected.asStateFlow()
 

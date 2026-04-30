@@ -63,7 +63,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.GenericYamlTab
@@ -81,7 +81,7 @@ fun EventDetailScreen(
     onNavigate: (Screen) -> Unit,
     onClose: (() -> Unit)? = null,
 ) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableIntStateOf(0) }
     LaunchedEffect(event.uid) { activeTab = 0 }
 

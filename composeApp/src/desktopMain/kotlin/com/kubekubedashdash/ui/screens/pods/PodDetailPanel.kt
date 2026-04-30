@@ -79,7 +79,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.MetricsLineChart
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -110,7 +110,7 @@ fun PodDetailPanel(
     onNavigateToNode: ((nodeName: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableStateOf(DetailTab.Overview) }
     var metricsHistory by remember(pod.uid) { mutableStateOf(listOf<PodMetricsSnapshot>()) }
 
@@ -411,7 +411,7 @@ private fun ContainerCard(container: ContainerInfo) {
 
 @Composable
 private fun YamlTab(pod: PodInfo) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     var yaml by remember(pod.uid) { mutableStateOf<String?>(null) }
     var loading by remember(pod.uid) { mutableStateOf(true) }
     LaunchedEffect(pod.uid) {
@@ -472,7 +472,7 @@ private fun YamlTab(pod: PodInfo) {
 
 @Composable
 private fun LogsTab(pod: PodInfo) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     var logLines by remember(pod.uid) { mutableStateOf(listOf<String>()) }
     var loading by remember(pod.uid) { mutableStateOf(true) }
     var following by remember { mutableStateOf(true) }

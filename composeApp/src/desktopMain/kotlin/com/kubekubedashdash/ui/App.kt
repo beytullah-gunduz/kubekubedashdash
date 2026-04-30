@@ -43,7 +43,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
@@ -73,24 +73,22 @@ import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun App(
+    workspace: Workspace,
     windowScope: WindowScope,
     windowState: WindowState,
     onClose: () -> Unit,
 ) {
     KubeDashTheme {
-        val appViewModel = remember { AppViewModel() }
-
-        val workspaces by WorkspaceManager.workspaces.collectAsState()
-        val workspace = workspaces.firstOrNull() ?: return@KubeDashTheme
+        val appViewModel = AppViewModel.instance
 
         val sessions by workspace.sessions.collectAsState()
         val activeSessionId by workspace.activeSessionId.collectAsState()
         val showClusterSelector by workspace.showClusterSelector.collectAsState()
+        val showEksDiscovery by workspace.showEksDiscovery.collectAsState()
 
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
-        val showEksDiscovery by appViewModel.showEksDiscovery.collectAsState()
 
         val activeSession = sessions.firstOrNull { it.id == activeSessionId }
             ?: return@KubeDashTheme
@@ -121,7 +119,12 @@ fun App(
         // content tree to the active session's ViewModelStore — switching tabs
         // therefore swaps to a fresh set of screen ViewModels that read the right
         // session's ReactiveKubeClient instead of the previously-active tab's.
-        CompositionLocalProvider(LocalViewModelStoreOwner provides activeSession) {
+        // LocalReactiveKubeClient is what those screens/VMs actually read from;
+        // it's window-scoped so each window's screens use their own connection.
+        CompositionLocalProvider(
+            LocalViewModelStoreOwner provides activeSession,
+            LocalReactiveKubeClient provides activeSession.reactiveClient,
+        ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -196,7 +199,7 @@ fun App(
                                         searchQuery = searchQuery,
                                         onNavigate = sessionVm::navigate,
                                         onSelectCluster = { workspace.showClusterSelector() },
-                                        onDiscoverEks = { appViewModel.showEksDiscovery() },
+                                        onDiscoverEks = { workspace.showEksDiscovery() },
                                     )
                                 }
                             },
@@ -232,14 +235,14 @@ fun App(
                             result = appViewModel.loadingPrerequisiteResult(),
                             onQuit = onClose,
                             onIgnore = {},
-                            onDiscoverEks = { appViewModel.showEksDiscovery() },
+                            onDiscoverEks = { workspace.showEksDiscovery() },
                         )
                     } else {
                         PrerequisitesModal(
                             result = prereq,
                             onQuit = onClose,
                             onIgnore = { appViewModel.dismissPrerequisites() },
-                            onDiscoverEks = { appViewModel.showEksDiscovery() },
+                            onDiscoverEks = { workspace.showEksDiscovery() },
                         )
                     }
                 } else if (showClusterSelector) {
@@ -252,15 +255,18 @@ fun App(
                             WorkspaceManager.openCluster(workspace, ctx, target)
                         },
                         onDismiss = { workspace.dismissClusterSelector() },
-                        onDiscoverEks = { appViewModel.showEksDiscovery() },
+                        onDiscoverEks = { workspace.showEksDiscovery() },
                         dismissable = selectedContext.isNotBlank(),
                     )
                 }
 
                 if (showEksDiscovery) {
                     EksDiscoveryModal(
-                        onDismiss = { appViewModel.dismissEksDiscovery() },
-                        onCompleted = { appViewModel.onEksImportComplete() },
+                        onDismiss = { workspace.dismissEksDiscovery() },
+                        onCompleted = {
+                            workspace.dismissEksDiscovery()
+                            appViewModel.onEksImportComplete()
+                        },
                         launchedFromClusterSelector = showClusterSelector,
                     )
                 }
@@ -277,7 +283,7 @@ fun ContentRouter(
     onSelectCluster: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
 ) {
-    val reactiveClient = KubeClientService.reactiveClient
+    val reactiveClient = LocalReactiveKubeClient.current
 
     AnimatedContent(
         targetState = screen,

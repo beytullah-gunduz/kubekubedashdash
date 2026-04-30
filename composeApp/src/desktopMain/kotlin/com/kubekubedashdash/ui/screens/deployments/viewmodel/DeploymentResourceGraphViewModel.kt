@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,8 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class DeploymentResourceGraphViewModel : ViewModel() {
-    private val reactiveClient = KubeClientService.reactiveClient
+class DeploymentResourceGraphViewModel(
+    private val reactiveClient: ReactiveKubeClient,
+) : ViewModel() {
     private val _graph = MutableStateFlow<ResourceGraph?>(null)
     val graph: StateFlow<ResourceGraph?> = _graph.asStateFlow()
 

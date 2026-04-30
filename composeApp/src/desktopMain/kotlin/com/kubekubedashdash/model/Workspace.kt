@@ -25,6 +25,9 @@ class Workspace(
     private val _showClusterSelector = MutableStateFlow(false)
     val showClusterSelector: StateFlow<Boolean> = _showClusterSelector.asStateFlow()
 
+    private val _showEksDiscovery = MutableStateFlow(false)
+    val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
+
     /** Snapshot accessor — the active session at this instant, or null if empty. */
     val activeSession: ClusterSession?
         get() = _sessions.value.firstOrNull { it.id == _activeSessionId.value }
@@ -55,5 +58,13 @@ class Workspace(
 
     fun dismissClusterSelector() {
         _showClusterSelector.value = false
+    }
+
+    fun showEksDiscovery() {
+        _showEksDiscovery.value = true
+    }
+
+    fun dismissEksDiscovery() {
+        _showEksDiscovery.value = false
     }
 }

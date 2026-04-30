@@ -43,6 +43,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.PodStatusBar
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -52,8 +53,9 @@ import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterOverviewViewMode
 @Composable
 fun ClusterOverviewScreen(
     onNavigate: (Screen) -> Unit,
-    viewModel: ClusterOverviewViewModel = viewModel { ClusterOverviewViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: ClusterOverviewViewModel = viewModel { ClusterOverviewViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
 
     when (val s = state) {

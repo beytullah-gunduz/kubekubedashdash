@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ServiceInfo
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -12,8 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
-class ServicesScreenViewModel : ViewModel() {
-    private val reactiveClient = KubeClientService.reactiveClient
+class ServicesScreenViewModel(
+    private val reactiveClient: ReactiveKubeClient,
+) : ViewModel() {
 
     private val _selected = MutableStateFlow<ServiceInfo?>(null)
     val selected: StateFlow<ServiceInfo?> = _selected.asStateFlow()

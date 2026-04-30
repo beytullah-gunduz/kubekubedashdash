@@ -51,7 +51,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,7 +64,7 @@ fun ResourceDetailScreen(
     onNavigate: (Screen) -> Unit,
     onClose: (() -> Unit)? = null,
 ) {
-    val reactiveClient = KubeClientService.reactiveClient
+    val reactiveClient = LocalReactiveKubeClient.current
     var yaml by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     val clipboardManager = LocalClipboardManager.current
