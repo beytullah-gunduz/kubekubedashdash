@@ -11,6 +11,7 @@ import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.services.WorkspaceManager
@@ -50,7 +51,10 @@ fun main() {
 
         workspaces.forEach { workspace ->
             key(workspace.id) {
-                val windowState = rememberWindowState(size = DpSize(1440.dp, 900.dp))
+                val windowState = rememberWindowState(
+                    size = DpSize(1440.dp, 900.dp),
+                    position = workspace.initialPosition ?: WindowPosition.PlatformDefault,
+                )
                 Window(
                     onCloseRequest = { WorkspaceManager.closeWorkspace(workspace.id) },
                     title = "KubeKubeDashDash",

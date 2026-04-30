@@ -40,6 +40,7 @@ fun WindowTabStrip(
     onSelectSession: (SessionId) -> Unit,
     onCloseSession: (SessionId) -> Unit,
     onAddCluster: () -> Unit,
+    onTearOutSession: (SessionId, Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val contexts: List<String> = sessions.map { session ->
@@ -76,6 +77,7 @@ fun WindowTabStrip(
                     isActive = session.id == activeSessionId,
                     onClick = { onSelectSession(session.id) },
                     onClose = { onCloseSession(session.id) },
+                    onTearOut = { x, y -> onTearOutSession(session.id, x, y) },
                 )
             }
 

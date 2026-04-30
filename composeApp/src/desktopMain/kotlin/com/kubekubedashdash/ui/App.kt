@@ -148,6 +148,9 @@ fun App(
                                         color = ClusterColor.fromContext(ctx),
                                         initial = clusterInitial(ctx),
                                         isActive = true,
+                                        onTearOut = { x, y ->
+                                            WorkspaceManager.tearOutSession(activeSession.id, x, y)
+                                        },
                                     )
                                 }
                             } else {
@@ -163,6 +166,9 @@ fun App(
                             onSelectSession = { workspace.setActive(it) },
                             onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
                             onAddCluster = { workspace.showClusterSelector() },
+                            onTearOutSession = { id, x, y ->
+                                WorkspaceManager.tearOutSession(id, x, y)
+                            },
                         )
                     }
 

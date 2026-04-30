@@ -1,5 +1,7 @@
 package com.kubekubedashdash.services
 
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.WindowPosition
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
@@ -116,5 +118,39 @@ object WorkspaceManager {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
         workspace.sessions.value.forEach { it.close() }
         _workspaces.value = _workspaces.value.filterNot { it.id == workspaceId }
+    }
+
+    /**
+     * Move [sessionId] out of its current workspace into a brand-new workspace
+     * positioned at the given screen coordinates. The session keeps its
+     * connection, informers, and ViewModelStore — only the parent workspace
+     * changes, so the user's place in the cluster is preserved across the
+     * tear-out. If the source workspace empties as a result, it is closed.
+     *
+     * Returns the new workspace's id, or `null` if [sessionId] could not be
+     * located.
+     */
+    fun tearOutSession(sessionId: SessionId, atScreenX: Int, atScreenY: Int): WorkspaceId? {
+        val source = _workspaces.value.firstOrNull { ws ->
+            ws.sessions.value.any { it.id == sessionId }
+        } ?: return null
+        if (source.sessions.value.size == 1) {
+            // Nothing to tear *away from* — this chip is the window's only
+            // session. Closing the source workspace and immediately respawning
+            // a new one at the cursor would visibly flicker the window
+            // disappearing and reappearing. Move the window via the title bar
+            // drag region instead.
+            return null
+        }
+        val session = source.removeSession(sessionId) ?: return null
+        val newWorkspace = Workspace(
+            initialPosition = WindowPosition.Absolute(atScreenX.dp, atScreenY.dp),
+        )
+        newWorkspace.addSession(session, makeActive = true)
+        _workspaces.value = _workspaces.value + newWorkspace
+        if (source.sessions.value.isEmpty()) {
+            closeWorkspace(source.id)
+        }
+        return newWorkspace.id
     }
 }
