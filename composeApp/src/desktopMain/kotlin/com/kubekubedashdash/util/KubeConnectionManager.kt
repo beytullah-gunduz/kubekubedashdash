@@ -61,16 +61,23 @@ class KubeConnectionManager : Closeable {
     fun connect(context: String? = null): Result<String> = try {
         log.info("Connecting to cluster context={}", context ?: "<default>")
         close()
+        log.debug("connect step 1/4: Config.autoConfigure")
         val config = Config.autoConfigure(context)
+        log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", config.masterUrl)
         _client = KubernetesClientBuilder().withConfig(config).build()
+        log.debug("connect step 3/4: clearConnectionError")
         clearConnectionError()
+        log.debug("connect step 4/4: fetch /version")
         val v = _client!!.kubernetesVersion
         log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, config.masterUrl)
         _connectionVersion.value++
         Result.success("${v.major}.${v.minor}")
-    } catch (e: Exception) {
-        log.error("Failed to connect to cluster context={}: {}", context, e.message)
-        Result.failure(e)
+    } catch (t: Throwable) {
+        // Catch Throwable, not just Exception, so that NoClassDefFoundError /
+        // LinkageError / OutOfMemoryError surface in the log + UI instead of
+        // disappearing into the void and leaving the app stuck on the spinner.
+        log.error("Failed to connect to cluster context={}", context, t)
+        Result.failure(if (t is Exception) t else RuntimeException(t))
     }
 
     fun connectWithClient(client: KubernetesClient, label: String): Result<String> = try {
@@ -81,9 +88,9 @@ class KubeConnectionManager : Closeable {
         log.info("Connected via pre-built client label={}", label)
         _connectionVersion.value++
         Result.success("mock")
-    } catch (e: Exception) {
-        log.error("Failed to connect with pre-built client label={}: {}", label, e.message)
-        Result.failure(e)
+    } catch (t: Throwable) {
+        log.error("Failed to connect with pre-built client label={}", label, t)
+        Result.failure(if (t is Exception) t else RuntimeException(t))
     }
 
     fun getContexts(): List<String> = try {
