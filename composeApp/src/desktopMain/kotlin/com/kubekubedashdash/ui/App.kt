@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.Workspace
+import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
@@ -215,7 +216,7 @@ fun App(
                                 isDropTarget = isDropTarget,
                                 onSelectSession = { workspace.setActive(it) },
                                 onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
-                                onAddCluster = { workspace.showClusterSelector() },
+                                onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
                                 onDragMoveSession = { id, x, y ->
                                     WorkspaceManager.notifyDragMove(id, x, y)
                                 },
@@ -307,10 +308,12 @@ fun App(
                         )
                     }
                 } else if (showClusterSelector) {
+                    val clusterSelectorDefault by workspace.clusterSelectorDefaultTarget.collectAsState()
                     ClusterSelectorModal(
                         contexts = contexts,
                         selectedContext = selectedContext,
                         canAddTab = isConnected,
+                        defaultTarget = clusterSelectorDefault,
                         onOpenCluster = { ctx, target ->
                             workspace.dismissClusterSelector()
                             WorkspaceManager.openCluster(workspace, ctx, target)

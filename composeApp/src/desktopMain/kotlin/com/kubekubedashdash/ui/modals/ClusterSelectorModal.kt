@@ -116,6 +116,7 @@ fun ClusterSelectorModal(
     onDiscoverEks: () -> Unit = {},
     dismissable: Boolean = true,
     canAddTab: Boolean = false,
+    defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val bindings = remember(contexts, reactiveClient) {
@@ -255,7 +256,7 @@ fun ClusterSelectorModal(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(bg)
                                     .clickable {
-                                        onOpenCluster(ctx, OpenTarget.CURRENT_VIEW)
+                                        onOpenCluster(ctx, defaultTarget)
                                         onDismiss()
                                     }
                                     .onPointerEvent(PointerEventType.Enter) { hovered = true }
@@ -357,25 +358,30 @@ fun ClusterSelectorModal(
                                 }
                                 if (canAddTab) {
                                     Spacer(Modifier.width(8.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(if (hovered) KdSurfaceVariant else Color.Transparent)
-                                            .clickable {
-                                                onOpenCluster(ctx, OpenTarget.NEW_TAB)
-                                                onDismiss()
-                                            },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Add,
-                                            contentDescription = "Open $ctx in new tab",
-                                            tint = KdTextSecondary,
-                                            modifier = Modifier.size(16.dp),
-                                        )
+                                    // Hide the per-row "+" when row-click already
+                                    // does NEW_TAB (i.e. opened from the tab strip's
+                                    // + button); it would just duplicate the action.
+                                    if (defaultTarget != OpenTarget.NEW_TAB) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                                                .clickable {
+                                                    onOpenCluster(ctx, OpenTarget.NEW_TAB)
+                                                    onDismiss()
+                                                },
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Add,
+                                                contentDescription = "Open $ctx in new tab",
+                                                tint = KdTextSecondary,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                        Spacer(Modifier.width(4.dp))
                                     }
-                                    Spacer(Modifier.width(4.dp))
                                     Box(
                                         modifier = Modifier
                                             .size(28.dp)
