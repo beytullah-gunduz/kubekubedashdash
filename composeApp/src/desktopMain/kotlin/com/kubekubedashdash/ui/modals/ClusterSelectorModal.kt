@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -56,6 +56,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.MockClusterProvider
 
 private val EksOrange = Color(0xFFFF9900)
@@ -109,6 +110,7 @@ fun ClusterSelectorModal(
     selectedContext: String,
     onContextSwitch: (String) -> Unit,
     onDismiss: () -> Unit,
+    onDiscoverEks: () -> Unit = {},
     dismissable: Boolean = true,
 ) {
     val bindings = remember(contexts) {
@@ -116,6 +118,7 @@ fun ClusterSelectorModal(
             .getOrElse { emptyList() }
             .associateBy { it.name }
     }
+    val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -222,14 +225,13 @@ fun ClusterSelectorModal(
                         }
                     }
                 } else {
-                    Column(
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 700.dp)
-                            .verticalScroll(rememberScrollState())
                             .padding(vertical = 8.dp),
                     ) {
-                        contexts.forEach { ctx ->
+                        items(contexts, key = { it }) { ctx ->
                             val isSelected = ctx == selectedContext
                             val awsProfile = bindings[ctx]?.awsProfile
                             val parsed = remember(ctx, awsProfile) { parseContext(ctx, awsProfile) }
@@ -243,6 +245,7 @@ fun ClusterSelectorModal(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItem()
                                     .padding(horizontal = 8.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(bg)
@@ -358,6 +361,66 @@ fun ClusterSelectorModal(
                                 }
                             }
                         }
+                    }
+                }
+
+                HorizontalDivider(color = KdBorder, thickness = 1.dp)
+
+                var footerHovered by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (awsCliAvailable) {
+                                Modifier
+                                    .clickable { onDiscoverEks() }
+                                    .onPointerEvent(PointerEventType.Enter) { footerHovered = true }
+                                    .onPointerEvent(PointerEventType.Exit) { footerHovered = false }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .background(if (footerHovered) KdHover else Color.Transparent)
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (awsCliAvailable) {
+                                    EksOrange.copy(alpha = 0.15f)
+                                } else {
+                                    KdSurfaceVariant
+                                },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.Cloud,
+                            contentDescription = null,
+                            tint = if (awsCliAvailable) EksOrange else KdTextSecondary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Discover EKS clusters",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (awsCliAvailable) KdTextPrimary else KdTextSecondary,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            if (awsCliAvailable) {
+                                "Add EKS clusters from your AWS account to kubeconfig"
+                            } else {
+                                "Requires AWS CLI on PATH"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdTextSecondary,
+                        )
                     }
                 }
             }

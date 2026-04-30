@@ -80,11 +80,23 @@ private val EksOrange = Color(0xFFFF9900)
 fun EksDiscoveryModal(
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
+    launchedFromClusterSelector: Boolean = false,
     viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel() },
 ) {
     val step by viewModel.step.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+
+    // After a successful import, every close path (X icon, footer Close) must refresh the
+    // parent's cluster list — otherwise the user goes back to a stale list and has to reopen
+    // the selector to see what they just imported.
+    val closeOrComplete: () -> Unit = {
+        if (step == EksDiscoveryStep.DONE && viewModel.anyImportSucceeded) {
+            onCompleted()
+        } else {
+            onDismiss()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -105,7 +117,7 @@ fun EksDiscoveryModal(
             shadowElevation = 24.dp,
         ) {
             Column {
-                ModalHeader(step = step, onClose = onDismiss)
+                ModalHeader(step = step, onClose = closeOrComplete)
                 HorizontalDivider(color = KdBorder)
 
                 if (!viewModel.awsCliAvailable) {
@@ -137,8 +149,9 @@ fun EksDiscoveryModal(
                         viewModel = viewModel,
                         step = step,
                         busy = busy,
-                        onDismiss = onDismiss,
+                        onDismiss = closeOrComplete,
                         onCompleted = onCompleted,
+                        hideOpenClustersButton = launchedFromClusterSelector,
                     )
                 }
             }
@@ -693,6 +706,7 @@ private fun Footer(
     busy: Boolean,
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
+    hideOpenClustersButton: Boolean,
 ) {
     val selectedProfile by viewModel.selectedProfile.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
@@ -781,17 +795,19 @@ private fun Footer(
                 Text("Importing…", color = Color.White)
             }
 
-            EksDiscoveryStep.DONE -> Button(
-                onClick = {
-                    val anySuccess = viewModel.anyImportSucceeded
-                    if (anySuccess) onCompleted() else onDismiss()
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-            ) {
-                Icon(Icons.Default.Cloud, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = Color.White)
+            EksDiscoveryStep.DONE -> if (!hideOpenClustersButton) {
+                Button(
+                    onClick = {
+                        val anySuccess = viewModel.anyImportSucceeded
+                        if (anySuccess) onCompleted() else onDismiss()
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                ) {
+                    Icon(Icons.Default.Cloud, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = Color.White)
+                }
             }
         }
     }

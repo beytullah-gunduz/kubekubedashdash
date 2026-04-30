@@ -221,6 +221,7 @@ fun App(
                         viewModel.connectToCluster(ctx)
                     },
                     onDismiss = { viewModel.dismissClusterSelector() },
+                    onDiscoverEks = { viewModel.showEksDiscovery() },
                     dismissable = selectedContext.isNotBlank(),
                 )
             }
@@ -229,6 +230,7 @@ fun App(
                 EksDiscoveryModal(
                     onDismiss = { viewModel.dismissEksDiscovery() },
                     onCompleted = { viewModel.onEksImportComplete() },
+                    launchedFromClusterSelector = showClusterSelector,
                 )
             }
         }
