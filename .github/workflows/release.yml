@@ -39,17 +39,17 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            task: packageDmg
+            task: packageReleaseDmg
             artifact-name: kubekubedashdash-macos
-            artifact-glob: composeApp/build/compose/binaries/main/dmg/*.dmg
+            artifact-glob: composeApp/build/compose/binaries/main-release/dmg/*.dmg
           - os: ubuntu-latest
-            task: packageDeb
+            task: packageReleaseDeb
             artifact-name: kubekubedashdash-linux
-            artifact-glob: composeApp/build/compose/binaries/main/deb/*.deb
+            artifact-glob: composeApp/build/compose/binaries/main-release/deb/*.deb
           - os: windows-latest
-            task: packageMsi
+            task: packageReleaseMsi
             artifact-name: kubekubedashdash-windows
-            artifact-glob: composeApp/build/compose/binaries/main/msi/*.msi
+            artifact-glob: composeApp/build/compose/binaries/main-release/msi/*.msi
 
     runs-on: ${{ matrix.os }}
 

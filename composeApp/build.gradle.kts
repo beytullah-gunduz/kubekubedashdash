@@ -110,5 +110,15 @@ compose.desktop {
                 iconFile.set(project.file("icons/icon_512.png"))
             }
         }
+
+        buildTypes.release.proguard {
+            configurationFiles.from(project.file("proguard-rules.pro"))
+            // Shrinking only. Optimization requires a fully-resolvable class
+            // hierarchy across every transitive jar, but we deliberately omit
+            // optional Netty/fabric8 deps (log4j2, conscrypt, OpenSSL native
+            // tcnative, jakarta.servlet, etc.) — the optimizer chokes on
+            // missing superclasses even when the code paths are unreachable.
+            optimize.set(false)
+        }
     }
 }
