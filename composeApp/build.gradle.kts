@@ -67,7 +67,11 @@ kotlin {
     }
 }
 
-val appVersion = "1.0.0"
+val appVersion: String =
+    project.findProperty("app.version")
+        ?.toString()
+        ?.removeSuffix("-SNAPSHOT")
+        ?: "1.0.0"
 
 val generateVersionProperties by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/resources/version")
