@@ -2,6 +2,7 @@ package com.kubekubedashdash.model
 
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.window.WindowPosition
+import com.kubekubedashdash.services.OpenTarget
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,17 @@ class Workspace(
 
     private val _showClusterSelector = MutableStateFlow(false)
     val showClusterSelector: StateFlow<Boolean> = _showClusterSelector.asStateFlow()
+
+    /**
+     * What [OpenTarget] a row-click in the cluster picker should resolve to.
+     * Set when [showClusterSelector] is invoked: the sidebar's cluster header
+     * leaves it at the default ([OpenTarget.CURRENT_VIEW] — replace the active
+     * session) while the tab-strip's `+` button bumps it to
+     * [OpenTarget.NEW_TAB] so picking a cluster appends instead of replacing.
+     * Per-row icon buttons in the modal still let the user override this.
+     */
+    private val _clusterSelectorDefaultTarget = MutableStateFlow(OpenTarget.CURRENT_VIEW)
+    val clusterSelectorDefaultTarget: StateFlow<OpenTarget> = _clusterSelectorDefaultTarget.asStateFlow()
 
     private val _showEksDiscovery = MutableStateFlow(false)
     val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
@@ -73,7 +85,8 @@ class Workspace(
         }
     }
 
-    fun showClusterSelector() {
+    fun showClusterSelector(defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW) {
+        _clusterSelectorDefaultTarget.value = defaultTarget
         _showClusterSelector.value = true
     }
 
