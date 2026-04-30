@@ -15,7 +15,7 @@ val dataStorePreferencesInstance: DataStore<Preferences> by lazy {
     PreferenceDataStoreFactory.createWithPath(
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
         produceFile = {
-            (SystemDirectories.applicationDirectory + "/" + PREFERENCE_DATASTORE).toPath()
+            (SystemDirectories.dataDirectory + "/" + PREFERENCE_DATASTORE).toPath()
         },
     )
 }

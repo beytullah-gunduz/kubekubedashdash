@@ -65,12 +65,24 @@
 # GraalVM Substrate VM annotations — only relevant for native-image builds.
 -dontwarn com.oracle.svm.core.annotate.**
 
-# Vert.x optional / dev-time pieces. Vertx is a transitive of fabric8's
-# httpclient-vertx; we use the vanilla OkHttp transport.
--dontwarn io.vertx.codegen.**
--dontwarn io.vertx.uritemplate.**
--dontwarn io.vertx.ext.web.**
--dontwarn io.vertx.ext.auth.**
+# Vert.x — fabric8's actual HTTP client transport in 7.x.
+# `kubernetes-httpclient-vertx` is the only HttpClient$Factory shipped with
+# this app, and Vert.x is heavy on reflection: enum-driven SSL config, codec
+# discovery via class scanning, future composition via MethodHandles. Without
+# broad keeps, SSLHelper.<clinit> fails with `EnumMap … keyUniverse is null`
+# (ProGuard strips an enum's $VALUES if no direct user-code reference exists),
+# every HttpClient construction then throws ExceptionInInitializerError, and
+# the kubernetes client connect hangs silently.
+-keep class io.vertx.** { *; }
+-keepclassmembers enum io.vertx.** { *; }
+-dontwarn io.vertx.**
+
+# Netty — Vert.x's underlying transport. Same reflection-heavy story
+# (handlers, codecs, allocators, attribute keys looked up by name). Strip
+# anything and TLS / HTTP/2 / DNS resolution silently breaks at runtime.
+-keep class io.netty.** { *; }
+-keepclassmembers enum io.netty.** { *; }
+
 # Vert.x's HybridJacksonPool calls MethodHandle#invokeExact reflectively
 # with a non-canonical signature; ProGuard can't model that.
 -dontwarn java.lang.invoke.MethodHandle
@@ -187,10 +199,14 @@
 -keep class io.modelcontextprotocol.** { *; }
 
 # ---------------------------------------------------------------------------
-# AndroidX DataStore (used for preferences persistence).
+# AndroidX DataStore (used for preferences persistence) + Okio.
+# DataStore's JVM build is backed by `datastore-core-okio`, which is the
+# only consumer of Okio in this app — keep both together.
 # ---------------------------------------------------------------------------
 -keep class androidx.datastore.** { *; }
 -dontwarn androidx.datastore.**
+-keep class okio.** { *; }
+-dontwarn okio.**
 
 # ---------------------------------------------------------------------------
 # JNA — used by NativeWindowDrag to call AppKit performWindowDragWithEvent:
@@ -210,15 +226,6 @@
 # ---------------------------------------------------------------------------
 -keep class org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
-
-# ---------------------------------------------------------------------------
-# OkHttp — fabric8's default HTTP client; reflection on platform.
-# ---------------------------------------------------------------------------
--keep class okhttp3.** { *; }
--keep interface okhttp3.** { *; }
--keep class okio.** { *; }
--dontwarn okhttp3.**
--dontwarn okio.**
 
 # ---------------------------------------------------------------------------
 # SnakeYAML — fabric8 uses it to parse kubeconfig.

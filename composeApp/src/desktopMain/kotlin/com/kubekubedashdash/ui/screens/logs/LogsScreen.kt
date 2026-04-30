@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,19 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.logging.AppLogStore
+import com.kubekubedashdash.util.SystemDirectories
+import java.awt.Desktop
+import java.io.File
+
+private fun openLogsFolder() {
+    val dir = File(SystemDirectories.logsDirectory)
+    runCatching {
+        dir.mkdirs()
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+            Desktop.getDesktop().open(dir)
+        }
+    }
+}
 
 @Composable
 fun LogsScreen() {
@@ -78,12 +92,21 @@ fun LogsScreen() {
                     color = KdTextSecondary,
                 )
             }
-            IconButton(onClick = { AppLogStore.clear() }) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Clear logs",
-                    tint = KdTextSecondary,
-                )
+            Row {
+                IconButton(onClick = { openLogsFolder() }) {
+                    Icon(
+                        Icons.Default.FolderOpen,
+                        contentDescription = "Open log folder",
+                        tint = KdTextSecondary,
+                    )
+                }
+                IconButton(onClick = { AppLogStore.clear() }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Clear logs",
+                        tint = KdTextSecondary,
+                    )
+                }
             }
         }
 
