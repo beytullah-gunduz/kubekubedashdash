@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
@@ -56,6 +57,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.MockClusterProvider
 
@@ -108,10 +110,11 @@ private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
 fun ClusterSelectorModal(
     contexts: List<String>,
     selectedContext: String,
-    onContextSwitch: (String) -> Unit,
+    onOpenCluster: (String, OpenTarget) -> Unit,
     onDismiss: () -> Unit,
     onDiscoverEks: () -> Unit = {},
     dismissable: Boolean = true,
+    canAddTab: Boolean = false,
 ) {
     val bindings = remember(contexts) {
         runCatching { KubeClientService.reactiveClient.getContextBindings() }
@@ -250,7 +253,7 @@ fun ClusterSelectorModal(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(bg)
                                     .clickable {
-                                        onContextSwitch(ctx)
+                                        onOpenCluster(ctx, OpenTarget.CURRENT_VIEW)
                                         onDismiss()
                                     }
                                     .onPointerEvent(PointerEventType.Enter) { hovered = true }
@@ -348,6 +351,27 @@ fun ClusterSelectorModal(
                                                 overflow = TextOverflow.Ellipsis,
                                             )
                                         }
+                                    }
+                                }
+                                if (canAddTab) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                                            .clickable {
+                                                onOpenCluster(ctx, OpenTarget.NEW_TAB)
+                                                onDismiss()
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Open $ctx in new tab",
+                                            tint = KdTextSecondary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
                                     }
                                 }
                                 if (isSelected) {

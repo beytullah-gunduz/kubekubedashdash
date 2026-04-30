@@ -6,11 +6,12 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * One OS window's worth of cluster sessions. A workspace holds an ordered list of
- * [ClusterSession]s (rendered as tabs once N≥2 lands in Phase 2) and tracks which
- * one is currently active.
+ * [ClusterSession]s (rendered as tabs when N≥2) and tracks which one is currently
+ * active.
  *
- * Phase 1 only ever has one workspace with one session; the multi-session API is
- * already present so Phase 2 can wire the tab strip without further refactoring.
+ * Per-window concerns also live here: the cluster-picker visibility flag is
+ * scoped per window (Decision 1 in `.docs/multi-cluster-plan.md`) so two open
+ * windows can independently show or hide their own pickers.
  */
 class Workspace(
     val id: WorkspaceId = WorkspaceId.new(),
@@ -20,6 +21,9 @@ class Workspace(
 
     private val _activeSessionId = MutableStateFlow<SessionId?>(null)
     val activeSessionId: StateFlow<SessionId?> = _activeSessionId.asStateFlow()
+
+    private val _showClusterSelector = MutableStateFlow(false)
+    val showClusterSelector: StateFlow<Boolean> = _showClusterSelector.asStateFlow()
 
     /** Snapshot accessor — the active session at this instant, or null if empty. */
     val activeSession: ClusterSession?
@@ -43,5 +47,13 @@ class Workspace(
         if (_sessions.value.any { it.id == id }) {
             _activeSessionId.value = id
         }
+    }
+
+    fun showClusterSelector() {
+        _showClusterSelector.value = true
+    }
+
+    fun dismissClusterSelector() {
+        _showClusterSelector.value = false
     }
 }
