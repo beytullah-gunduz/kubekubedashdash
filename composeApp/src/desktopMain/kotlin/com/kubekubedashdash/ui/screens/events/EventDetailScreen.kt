@@ -21,11 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -45,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -63,16 +57,23 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.code_filled
+import com.kubekubedashdash.resources.expand_more_filled
+import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
-private enum class EventDetailTab(val label: String, val icon: ImageVector) {
-    Overview("Overview", Icons.Default.Info),
-    Yaml("YAML", Icons.Default.Code),
+private enum class EventDetailTab(val label: String, val icon: DrawableResource) {
+    Overview("Overview", Res.drawable.info_filled),
+    Yaml("YAML", Res.drawable.code_filled),
 }
 
 @Composable
@@ -178,7 +179,7 @@ fun EventDetailScreen(
                 }
                 if (onClose != null) {
                     IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                        Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                     }
                 }
             }
@@ -201,7 +202,7 @@ fun EventDetailScreen(
                             modifier = Modifier.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(tab.icon, null, Modifier.size(14.dp))
+                            Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                             Spacer(Modifier.width(5.dp))
                             Text(tab.label, style = MaterialTheme.typography.labelMedium)
                         }
@@ -482,7 +483,7 @@ private fun CollapsibleSection(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    Icons.Default.ExpandMore,
+                    painterResource(Res.drawable.expand_more_filled),
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier
                         .size(18.dp)

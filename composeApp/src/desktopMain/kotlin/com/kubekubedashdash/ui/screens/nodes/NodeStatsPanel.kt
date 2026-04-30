@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -38,10 +35,14 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.ResourceUsageSummary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.keyboard_arrow_down_filled
+import com.kubekubedashdash.resources.keyboard_arrow_up_filled
 import com.kubekubedashdash.ui.components.HalfCircularUsageIndicator
 import com.kubekubedashdash.ui.components.UsageHistoryBar
 import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 internal fun NodeStatsPanel(
@@ -79,7 +80,7 @@ internal fun NodeStatsPanel(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    painter = painterResource(if (expanded) Res.drawable.keyboard_arrow_up_filled else Res.drawable.keyboard_arrow_down_filled),
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = KdTextSecondary,
                     modifier = Modifier.size(20.dp),

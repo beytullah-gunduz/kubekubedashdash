@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_filled
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 internal fun ThemePreviewCard(
@@ -129,7 +130,7 @@ internal fun ThemePreviewCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Default.Check,
+                        painterResource(Res.drawable.check_filled),
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(12.dp),

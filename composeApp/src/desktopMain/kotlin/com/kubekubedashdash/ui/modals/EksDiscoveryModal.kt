@@ -22,13 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -65,6 +58,13 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_circle_filled
+import com.kubekubedashdash.resources.check_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.error
+import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryStep
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryViewModel
@@ -73,6 +73,7 @@ import com.kubekubedashdash.ui.modals.viewmodel.ImportRowState
 import com.kubekubedashdash.ui.modals.viewmodel.RegionScanRow
 import com.kubekubedashdash.ui.modals.viewmodel.RegionScanState
 import com.kubekubedashdash.ui.modals.viewmodel.RegionScope
+import org.jetbrains.compose.resources.painterResource
 
 private val EksOrange = Color(0xFFFF9900)
 
@@ -140,7 +141,7 @@ fun EksDiscoveryModal(
                                 .padding(horizontal = 20.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Default.ErrorOutline, null, tint = KdError, modifier = Modifier.size(16.dp))
+                            Icon(painterResource(Res.drawable.error), null, tint = KdError, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(msg, color = KdError, style = MaterialTheme.typography.bodySmall)
                         }
@@ -192,7 +193,7 @@ private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
             )
         }
         Icon(
-            Icons.Default.Close,
+            painterResource(Res.drawable.close_filled),
             contentDescription = "Close",
             tint = KdTextSecondary,
             modifier = Modifier
@@ -220,7 +221,7 @@ private fun AwsCliMissing(onDismiss: () -> Unit) {
             .padding(horizontal = 20.dp, vertical = 24.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.ErrorOutline, null, tint = KdError, modifier = Modifier.size(20.dp))
+            Icon(painterResource(Res.drawable.error), null, tint = KdError, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 "AWS CLI is not on your PATH.",
@@ -412,7 +413,7 @@ private fun ScanRow(row: RegionScanRow) {
         Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
             when (val s = row.state) {
                 RegionScanState.Pending -> Icon(
-                    Icons.Default.HourglassEmpty,
+                    painterResource(Res.drawable.hourglass_empty_filled),
                     null,
                     tint = KdTextSecondary,
                     modifier = Modifier.size(14.dp),
@@ -425,14 +426,14 @@ private fun ScanRow(row: RegionScanRow) {
                 )
 
                 is RegionScanState.Done -> Icon(
-                    Icons.Default.CheckCircle,
+                    painterResource(Res.drawable.check_circle_filled),
                     null,
                     tint = if (s.clusters.isEmpty()) KdTextSecondary else KdSuccess,
                     modifier = Modifier.size(14.dp),
                 )
 
                 is RegionScanState.Failed -> Icon(
-                    Icons.Default.ErrorOutline,
+                    painterResource(Res.drawable.error),
                     null,
                     tint = KdError,
                     modifier = Modifier.size(14.dp),
@@ -601,7 +602,7 @@ private fun ImportRowView(row: ImportRow) {
         Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
             when (row.state) {
                 ImportRowState.Pending -> Icon(
-                    Icons.Default.HourglassEmpty,
+                    painterResource(Res.drawable.hourglass_empty_filled),
                     null,
                     tint = KdTextSecondary,
                     modifier = Modifier.size(14.dp),
@@ -614,14 +615,14 @@ private fun ImportRowView(row: ImportRow) {
                 )
 
                 is ImportRowState.Done -> Icon(
-                    Icons.Default.CheckCircle,
+                    painterResource(Res.drawable.check_circle_filled),
                     null,
                     tint = KdSuccess,
                     modifier = Modifier.size(14.dp),
                 )
 
                 is ImportRowState.Failed -> Icon(
-                    Icons.Default.ErrorOutline,
+                    painterResource(Res.drawable.error),
                     null,
                     tint = KdError,
                     modifier = Modifier.size(14.dp),
@@ -677,7 +678,7 @@ private fun DoneStep(viewModel: EksDiscoveryViewModel, @Suppress("UNUSED_PARAMET
             } else {
                 KdWarning
             }
-            Icon(Icons.Default.Check, null, tint = tint, modifier = Modifier.size(20.dp))
+            Icon(painterResource(Res.drawable.check_filled), null, tint = tint, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 summaryLine(ok, failed),
@@ -726,7 +727,6 @@ private fun Footer(
                         when (step) {
                             EksDiscoveryStep.PICK_REGIONS -> EksDiscoveryStep.PICK_PROFILE
                             EksDiscoveryStep.PICK_CLUSTERS -> EksDiscoveryStep.PICK_REGIONS
-                            else -> EksDiscoveryStep.PICK_PROFILE
                         },
                     )
                 },
@@ -805,7 +805,7 @@ private fun Footer(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
-                    Icon(Icons.Default.Cloud, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Icon(painterResource(Res.drawable.cloud_filled), null, tint = Color.White, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = Color.White)
                 }

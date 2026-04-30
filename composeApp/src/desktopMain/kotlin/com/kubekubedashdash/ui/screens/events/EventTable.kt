@@ -10,11 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
@@ -32,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -43,10 +37,17 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.EventInfo
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.error_filled
+import com.kubekubedashdash.resources.filter_list_filled
+import com.kubekubedashdash.resources.info
+import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.TableRow
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 internal fun EventTable(
@@ -188,11 +189,11 @@ internal fun EventTable(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventTypeIcon(type: String) {
-    val (icon: ImageVector, tint: Color) = when (type) {
-        "Warning" -> Icons.Default.Warning to KdWarning
-        "Error" -> Icons.Default.Error to KdError
-        "Normal" -> Icons.Outlined.Info to KdSuccess
-        else -> Icons.Outlined.Info to KdTextSecondary
+    val (icon: DrawableResource, tint: Color) = when (type) {
+        "Warning" -> Res.drawable.warning_filled to KdWarning
+        "Error" -> Res.drawable.error_filled to KdError
+        "Normal" -> Res.drawable.info to KdSuccess
+        else -> Res.drawable.info to KdTextSecondary
     }
     TooltipArea(
         tooltip = {
@@ -213,7 +214,7 @@ private fun EventTypeIcon(type: String) {
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         Icon(
-            imageVector = icon,
+            painter = painterResource(icon),
             contentDescription = type,
             modifier = Modifier.size(16.dp),
             tint = tint,
@@ -235,7 +236,7 @@ private fun ColumnFilterDropdown(
 ) {
     Box {
         Icon(
-            Icons.Default.FilterList,
+            painterResource(Res.drawable.filter_list_filled),
             contentDescription = "Filter",
             modifier = Modifier
                 .size(14.dp)

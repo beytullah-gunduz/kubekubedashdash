@@ -20,14 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -57,10 +49,19 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.add_filled
+import com.kubekubedashdash.resources.check_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.dns_filled
+import com.kubekubedashdash.resources.open_in_new_filled
+import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.MockClusterProvider
+import org.jetbrains.compose.resources.painterResource
 
 private val EksOrange = Color(0xFFFF9900)
 private val MockTeal = Color(0xFF00BFA5)
@@ -170,7 +171,7 @@ fun ClusterSelectorModal(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Default.Cloud,
+                            painterResource(Res.drawable.cloud_filled),
                             contentDescription = null,
                             tint = KdPrimary,
                             modifier = Modifier.size(20.dp),
@@ -196,7 +197,7 @@ fun ClusterSelectorModal(
                     }
                     if (dismissable) {
                         Icon(
-                            Icons.Default.Close,
+                            painterResource(Res.drawable.close_filled),
                             contentDescription = "Close",
                             tint = KdTextSecondary,
                             modifier = Modifier
@@ -273,7 +274,7 @@ fun ClusterSelectorModal(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
-                                            Icons.Default.Science,
+                                            painterResource(Res.drawable.science_filled),
                                             contentDescription = null,
                                             tint = Color.White,
                                             modifier = Modifier.size(16.dp),
@@ -310,7 +311,7 @@ fun ClusterSelectorModal(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
-                                            Icons.Default.Dns,
+                                            painterResource(Res.drawable.dns_filled),
                                             contentDescription = null,
                                             tint = if (isSelected) KdPrimary else KdTextSecondary,
                                             modifier = Modifier.size(16.dp),
@@ -374,7 +375,7 @@ fun ClusterSelectorModal(
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Icon(
-                                                Icons.Default.Add,
+                                                painterResource(Res.drawable.add_filled),
                                                 contentDescription = "Open $ctx in new tab",
                                                 tint = KdTextSecondary,
                                                 modifier = Modifier.size(16.dp),
@@ -394,7 +395,7 @@ fun ClusterSelectorModal(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
-                                            Icons.AutoMirrored.Filled.OpenInNew,
+                                            painterResource(Res.drawable.open_in_new_filled),
                                             contentDescription = "Open $ctx in new window",
                                             tint = KdTextSecondary,
                                             modifier = Modifier.size(14.dp),
@@ -404,7 +405,7 @@ fun ClusterSelectorModal(
                                 if (isSelected) {
                                     Spacer(Modifier.width(8.dp))
                                     Icon(
-                                        Icons.Default.Check,
+                                        painterResource(Res.drawable.check_filled),
                                         contentDescription = null,
                                         tint = KdPrimary,
                                         modifier = Modifier.size(18.dp),
@@ -449,7 +450,7 @@ fun ClusterSelectorModal(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Default.Cloud,
+                            painterResource(Res.drawable.cloud_filled),
                             contentDescription = null,
                             tint = if (awsCliAvailable) EksOrange else KdTextSecondary,
                             modifier = Modifier.size(16.dp),

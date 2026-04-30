@@ -1,14 +1,14 @@
 package com.kubekubedashdash.ui.screens.deployments
 
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.DeploymentInfo
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
@@ -42,7 +42,7 @@ fun DeploymentDetailScreen(
         extraTabs = listOf(
             ExtraTab(
                 label = "Graph",
-                icon = Icons.Default.AccountTree,
+                icon = Res.drawable.account_tree_filled,
             ) {
                 DeploymentResourceGraphTab(
                     deploymentName = deployment.name,

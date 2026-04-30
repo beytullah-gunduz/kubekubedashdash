@@ -41,7 +41,7 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
-            implementation(compose.materialIconsExtended)
+            implementation(compose.components.resources)
 
             implementation(libs.compose.material3.adaptive)
             implementation(libs.compose.material3.adaptive.layout)
@@ -66,6 +66,12 @@ kotlin {
             implementation(libs.jna)
         }
     }
+}
+
+compose.resources {
+    publicResClass = false
+    packageOfResClass = "com.kubekubedashdash.resources"
+    generateResClass = always
 }
 
 val appVersion: String =

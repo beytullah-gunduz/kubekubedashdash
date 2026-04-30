@@ -12,12 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +37,12 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.dns_filled
+import com.kubekubedashdash.resources.folder_special_filled
+import com.kubekubedashdash.resources.layers_filled
+import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.PodStatusBar
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
@@ -91,11 +91,11 @@ private fun OverviewContent(info: ClusterInfo, onNavigate: (Screen) -> Unit) {
         Spacer(Modifier.height(24.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SummaryCard("Nodes", "${info.nodesCount}", Icons.Default.Dns, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Main.Nodes()) }
-            SummaryCard("Namespaces", "${info.namespacesCount}", Icons.Default.FolderSpecial, KdInfo, Modifier.weight(1f)) { onNavigate(Screen.Main.Namespaces) }
-            SummaryCard("Pods", "${info.podsCount}", Icons.Default.ViewInAr, KdSuccess, Modifier.weight(1f)) { onNavigate(Screen.Main.Pods()) }
-            SummaryCard("Deployments", "${info.deploymentsCount}", Icons.Default.Layers, KdWarning, Modifier.weight(1f)) { onNavigate(Screen.Main.Deployments) }
-            SummaryCard("Services", "${info.servicesCount}", Icons.Default.Cloud, Color(0xFF9C27B0), Modifier.weight(1f)) { onNavigate(Screen.Main.Services) }
+            SummaryCard("Nodes", "${info.nodesCount}", Res.drawable.dns_filled, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Main.Nodes()) }
+            SummaryCard("Namespaces", "${info.namespacesCount}", Res.drawable.folder_special_filled, KdInfo, Modifier.weight(1f)) { onNavigate(Screen.Main.Namespaces) }
+            SummaryCard("Pods", "${info.podsCount}", Res.drawable.view_in_ar_filled, KdSuccess, Modifier.weight(1f)) { onNavigate(Screen.Main.Pods()) }
+            SummaryCard("Deployments", "${info.deploymentsCount}", Res.drawable.layers_filled, KdWarning, Modifier.weight(1f)) { onNavigate(Screen.Main.Deployments) }
+            SummaryCard("Services", "${info.servicesCount}", Res.drawable.cloud_filled, Color(0xFF9C27B0), Modifier.weight(1f)) { onNavigate(Screen.Main.Services) }
         }
 
         Spacer(Modifier.height(24.dp))

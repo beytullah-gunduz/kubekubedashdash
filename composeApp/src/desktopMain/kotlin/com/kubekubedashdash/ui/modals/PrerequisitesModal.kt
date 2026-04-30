@@ -29,12 +29,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Rocket
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,10 +61,17 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.logging.AppLogStore
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.rocket_filled
+import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteResult
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun PrerequisitesModal(
@@ -113,7 +114,7 @@ fun PrerequisitesModal(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Default.Rocket,
+                            painterResource(Res.drawable.rocket_filled),
                             contentDescription = null,
                             tint = KdPrimary,
                             modifier = Modifier.size(20.dp),
@@ -164,7 +165,7 @@ fun PrerequisitesModal(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    Icons.Default.Warning,
+                                    painterResource(Res.drawable.warning_filled),
                                     contentDescription = null,
                                     tint = KdError,
                                     modifier = Modifier.size(16.dp),
@@ -188,7 +189,7 @@ fun PrerequisitesModal(
                                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                                 ) {
                                     Icon(
-                                        Icons.Default.Cloud,
+                                        painterResource(Res.drawable.cloud_filled),
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
                                         tint = Color.White,
@@ -343,7 +344,7 @@ private fun CheckRow(check: PrerequisiteCheck) {
                         .background(KdSuccess.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = KdSuccess)
+                    Icon(painterResource(Res.drawable.check_filled), null, Modifier.size(13.dp), tint = KdSuccess)
                 }
 
                 CheckStatus.WARN -> Box(
@@ -353,7 +354,7 @@ private fun CheckRow(check: PrerequisiteCheck) {
                         .background(KdWarning.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.Warning, null, Modifier.size(13.dp), tint = KdWarning)
+                    Icon(painterResource(Res.drawable.warning_filled), null, Modifier.size(13.dp), tint = KdWarning)
                 }
 
                 CheckStatus.FAILED -> Box(
@@ -363,7 +364,7 @@ private fun CheckRow(check: PrerequisiteCheck) {
                         .background(KdError.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.Close, null, Modifier.size(13.dp), tint = KdError)
+                    Icon(painterResource(Res.drawable.close_filled), null, Modifier.size(13.dp), tint = KdError)
                 }
             }
         }

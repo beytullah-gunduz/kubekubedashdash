@@ -20,9 +20,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +46,10 @@ import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.arrow_downward_filled
+import com.kubekubedashdash.resources.arrow_upward_filled
+import org.jetbrains.compose.resources.painterResource
 
 data class ColumnDef(
     val header: String,
@@ -128,7 +129,7 @@ fun ResourceTable(
                     )
                     if (sortColumn == index) {
                         Icon(
-                            if (sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            painterResource(if (sortAscending) Res.drawable.arrow_upward_filled else Res.drawable.arrow_downward_filled),
                             contentDescription = null,
                             modifier = Modifier.size(12.dp).padding(start = 2.dp),
                             tint = KdPrimary,

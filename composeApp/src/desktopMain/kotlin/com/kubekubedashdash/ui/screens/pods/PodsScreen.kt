@@ -67,7 +67,7 @@ fun PodsScreen(
     AnimatedVisibility(state is ResourceState.Success, enter = enter, exit = exit) {
         with(state) {
             if (this is ResourceState.Success) {
-                val s = this as ResourceState.Success
+                val s = this
                 val allPods = s.data + stalePods.values
                 val filtered = allPods.filter { pod ->
                     searchQuery.isBlank() ||
