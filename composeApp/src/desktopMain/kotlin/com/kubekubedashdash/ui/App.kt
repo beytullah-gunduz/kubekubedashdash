@@ -43,6 +43,7 @@ import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.services.KubeClientService
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
+import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
@@ -87,6 +88,7 @@ fun App(
         val showClusterSelector by viewModel.showClusterSelector.collectAsState()
         val prerequisiteResult by viewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by viewModel.showPrerequisites.collectAsState()
+        val showEksDiscovery by viewModel.showEksDiscovery.collectAsState()
 
         /*val navigator = rememberListDetailPaneScaffoldNavigator<Screen?>(
             scaffoldDirective = PaneScaffoldDirective(
@@ -164,6 +166,7 @@ fun App(
                                     searchQuery = searchQuery,
                                     onNavigate = viewModel::navigate,
                                     onSelectCluster = { viewModel.showClusterSelector() },
+                                    onDiscoverEks = { viewModel.showEksDiscovery() },
                                 )
                             }
                         },
@@ -199,12 +202,14 @@ fun App(
                         result = viewModel.loadingPrerequisiteResult(),
                         onQuit = onClose,
                         onIgnore = {},
+                        onDiscoverEks = { viewModel.showEksDiscovery() },
                     )
                 } else {
                     PrerequisitesModal(
                         result = prereq,
                         onQuit = onClose,
                         onIgnore = { viewModel.dismissPrerequisites() },
+                        onDiscoverEks = { viewModel.showEksDiscovery() },
                     )
                 }
             } else if (showClusterSelector) {
@@ -219,6 +224,13 @@ fun App(
                     dismissable = selectedContext.isNotBlank(),
                 )
             }
+
+            if (showEksDiscovery) {
+                EksDiscoveryModal(
+                    onDismiss = { viewModel.dismissEksDiscovery() },
+                    onCompleted = { viewModel.onEksImportComplete() },
+                )
+            }
         }
     }
 }
@@ -229,6 +241,7 @@ fun ContentRouter(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
     onSelectCluster: () -> Unit = {},
+    onDiscoverEks: () -> Unit = {},
 ) {
     val reactiveClient = KubeClientService.reactiveClient
 
@@ -261,7 +274,7 @@ fun ContentRouter(
             is Screen.Main.PersistentVolumeClaims -> GenericResourceScreen("PersistentVolumeClaim", searchQuery, sourceFlow = reactiveClient.persistentVolumeClaims)
             is Screen.Main.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.storageClasses)
             is Screen.Main.Logs -> LogsScreen()
-            is Screen.Main.Settings -> SettingsScreen()
+            is Screen.Main.Settings -> SettingsScreen(onDiscoverEks = onDiscoverEks)
             else -> {}
         }
     }

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -17,6 +18,7 @@ object PreferenceRepository {
     private val DARK_THEME by lazy { booleanPreferencesKey("dark_theme") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
+    private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
 
     var darkTheme: Boolean
         get() = runBlocking { dataStore.data.firstOrNull()?.get(DARK_THEME) ?: true }
@@ -52,6 +54,16 @@ object PreferenceRepository {
             runBlocking {
                 dataStore.edit {
                     it[MCP_SERVER_PORT] = value
+                }
+            }
+        }
+
+    var lastAwsProfile: String?
+        get() = runBlocking { dataStore.data.firstOrNull()?.get(LAST_AWS_PROFILE) }
+        set(value) {
+            runBlocking {
+                dataStore.edit {
+                    if (value.isNullOrBlank()) it.remove(LAST_AWS_PROFILE) else it[LAST_AWS_PROFILE] = value
                 }
             }
         }

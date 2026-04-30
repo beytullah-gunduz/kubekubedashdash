@@ -9,9 +9,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,14 +36,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdBorder
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
+import com.kubekubedashdash.util.EksClusterDiscoverer
 
 @Composable
 fun SettingsScreen(
+    onDiscoverEks: () -> Unit = {},
     viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
 ) {
+    val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
     var showAboutModal by remember { mutableStateOf(false) }
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isReady = true }
@@ -176,6 +184,58 @@ fun SettingsScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     textStyle = MaterialTheme.typography.bodyMedium,
                 )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            Text(
+                "CLUSTER DISCOVERY",
+                style = MaterialTheme.typography.labelMedium,
+                color = KdTextSecondary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "AWS EKS",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Find EKS clusters in your AWS account and add them to your kubeconfig.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = KdTextSecondary,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = onDiscoverEks,
+                    enabled = awsCliAvailable,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, KdBorder),
+                ) {
+                    Icon(
+                        Icons.Default.Cloud,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (awsCliAvailable) KdPrimary else KdTextSecondary,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Discover EKS Clusters", color = KdTextPrimary)
+                }
+                if (!awsCliAvailable) {
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Requires AWS CLI on PATH",
+                        color = KdTextSecondary,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
 
             Spacer(Modifier.height(32.dp))

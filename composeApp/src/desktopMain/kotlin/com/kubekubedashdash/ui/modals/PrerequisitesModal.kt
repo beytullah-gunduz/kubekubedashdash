@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Rocket
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -67,6 +68,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.util.CheckStatus
+import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteResult
 
@@ -75,7 +77,9 @@ fun PrerequisitesModal(
     result: PrerequisiteResult,
     onQuit: () -> Unit,
     onIgnore: () -> Unit,
+    onDiscoverEks: () -> Unit = {},
 ) {
+    val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -175,8 +179,32 @@ fun PrerequisitesModal(
                             Spacer(Modifier.height(12.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                Button(
+                                    onClick = onDiscoverEks,
+                                    enabled = awsCliAvailable,
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                                ) {
+                                    Icon(
+                                        Icons.Default.Cloud,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = Color.White,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Discover EKS Clusters", color = Color.White)
+                                }
+                                if (!awsCliAvailable) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Requires AWS CLI",
+                                        color = KdTextSecondary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                Spacer(Modifier.weight(1f))
                                 OutlinedButton(
                                     onClick = onIgnore,
                                     shape = RoundedCornerShape(8.dp),

@@ -75,6 +75,7 @@ class ReactiveKubeClient(
     }
 
     fun getContexts(): List<String> = connectionManager.getContexts()
+    fun getContextBindings(): List<ContextBinding> = connectionManager.getContextBindings()
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
     fun getClusterServer(): String = connectionManager.getClusterServer()
 
