@@ -18,11 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,12 +51,19 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.code_filled
+import com.kubekubedashdash.resources.content_copy_filled
+import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
@@ -76,7 +77,7 @@ data class DetailField(
 
 class ExtraTab(
     val label: String,
-    val icon: ImageVector,
+    val icon: DrawableResource,
     val badgeCount: Int? = null,
     val isLoading: Boolean = false,
     val content: @Composable () -> Unit,
@@ -97,11 +98,11 @@ fun ResourceDetailPanel(
     var activeTab by remember { mutableIntStateOf(0) }
     LaunchedEffect(name, namespace) { activeTab = 0 }
 
-    data class TabDef(val label: String, val icon: ImageVector, val badgeCount: Int? = null, val isLoading: Boolean = false)
+    data class TabDef(val label: String, val icon: DrawableResource, val badgeCount: Int? = null, val isLoading: Boolean = false)
     val tabs = buildList {
-        add(TabDef("Overview", Icons.Default.Info))
+        add(TabDef("Overview", Res.drawable.info_filled))
         extraTabs.forEach { add(TabDef(it.label, it.icon, it.badgeCount, it.isLoading)) }
-        add(TabDef("YAML", Icons.Default.Code))
+        add(TabDef("YAML", Res.drawable.code_filled))
     }
     val yamlIndex = tabs.lastIndex
 
@@ -139,7 +140,7 @@ fun ResourceDetailPanel(
                     }
                 }
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                 }
             }
 
@@ -161,7 +162,7 @@ fun ResourceDetailPanel(
                             modifier = Modifier.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(tab.icon, null, Modifier.size(14.dp))
+                            Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                             Spacer(Modifier.width(5.dp))
                             Text(tab.label, style = MaterialTheme.typography.labelMedium)
                             if (tab.isLoading) {
@@ -266,7 +267,7 @@ internal fun GenericYamlTab(kind: String, name: String, namespace: String?) {
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) {
-                Icon(Icons.Default.ContentCopy, null, Modifier.size(13.dp))
+                Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Copy", style = MaterialTheme.typography.labelSmall)
             }

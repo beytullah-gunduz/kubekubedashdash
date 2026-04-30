@@ -15,10 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,10 +47,15 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.article_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun ResourceDetailScreen(
@@ -111,7 +112,7 @@ fun ResourceDetailScreen(
 
             if (onClose != null) {
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                 }
                 Spacer(Modifier.width(8.dp))
             }
@@ -125,7 +126,7 @@ fun ResourceDetailScreen(
                         brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
                     ),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Article, null, Modifier.size(16.dp))
+                    Icon(painterResource(Res.drawable.article_filled), null, Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("View Logs", style = MaterialTheme.typography.labelMedium)
                 }
@@ -140,7 +141,7 @@ fun ResourceDetailScreen(
                     brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
                 ),
             ) {
-                Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp))
+                Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Copy YAML", style = MaterialTheme.typography.labelMedium)
             }

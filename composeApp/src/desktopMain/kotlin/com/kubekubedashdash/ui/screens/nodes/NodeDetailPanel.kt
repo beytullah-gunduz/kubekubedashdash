@@ -16,12 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.EventNote
-import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
@@ -54,6 +47,12 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.code_filled
+import com.kubekubedashdash.resources.event_note_filled
+import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.view_list_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.StatusBadge
@@ -62,12 +61,14 @@ import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
-private enum class NodeDetailTab(val label: String, val icon: ImageVector) {
-    Overview("Overview", Icons.Default.Info),
-    Pods("Pods", Icons.AutoMirrored.Filled.ViewList),
-    Events("Events", Icons.AutoMirrored.Filled.EventNote),
-    Yaml("YAML", Icons.Default.Code),
+private enum class NodeDetailTab(val label: String, val icon: DrawableResource) {
+    Overview("Overview", Res.drawable.info_filled),
+    Pods("Pods", Res.drawable.view_list_filled),
+    Events("Events", Res.drawable.event_note_filled),
+    Yaml("YAML", Res.drawable.code_filled),
 }
 
 private val nodeTallTabs = listOf(NodeDetailTab.Overview, NodeDetailTab.Yaml)
@@ -149,7 +150,7 @@ internal fun NodeDetailPanel(
                         }
                     }
                     IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                        Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                     }
                 }
 
@@ -167,7 +168,7 @@ internal fun NodeDetailPanel(
                             unselectedContentColor = KdTextSecondary,
                         ) {
                             Row(modifier = Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(tab.icon, null, Modifier.size(14.dp))
+                                Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                                 Spacer(Modifier.width(5.dp))
                                 Text(tab.label, style = MaterialTheme.typography.labelMedium)
                             }

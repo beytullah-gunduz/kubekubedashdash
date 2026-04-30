@@ -16,13 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.WrapText
-import androidx.compose.material.icons.filled.ClearAll
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,9 +42,17 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.clear_all_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.content_copy_filled
+import com.kubekubedashdash.resources.filter_list_filled
+import com.kubekubedashdash.resources.vertical_align_bottom_filled
+import com.kubekubedashdash.resources.wrap_text_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.screens.logviewer.viewmodel.LogViewerScreenViewModel
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun LogViewerScreen(
@@ -109,7 +110,7 @@ fun LogViewerScreen(
 
             if (onClose != null) {
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                 }
                 Spacer(Modifier.width(8.dp))
             }
@@ -126,7 +127,7 @@ fun LogViewerScreen(
                 value = filterText,
                 onValueChange = { viewModel.setFilterText(it) },
                 placeholder = { Text("Filter logs...", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary) },
-                leadingIcon = { Icon(Icons.Default.FilterList, null, Modifier.size(16.dp), tint = KdTextSecondary) },
+                leadingIcon = { Icon(painterResource(Res.drawable.filter_list_filled), null, Modifier.size(16.dp), tint = KdTextSecondary) },
                 singleLine = true,
                 modifier = Modifier.weight(1f).height(34.dp),
                 textStyle = MaterialTheme.typography.bodySmall.copy(
@@ -150,7 +151,7 @@ fun LogViewerScreen(
                 ),
             ) {
                 Icon(
-                    Icons.Default.VerticalAlignBottom,
+                    painterResource(Res.drawable.vertical_align_bottom_filled),
                     contentDescription = if (following) "Following" else "Not following",
                     modifier = Modifier.size(18.dp),
                 )
@@ -162,17 +163,17 @@ fun LogViewerScreen(
                     contentColor = if (wrapLines) KdPrimary else KdTextSecondary,
                 ),
             ) {
-                Icon(Icons.AutoMirrored.Filled.WrapText, "Toggle wrap", Modifier.size(18.dp))
+                Icon(painterResource(Res.drawable.wrap_text_filled), "Toggle wrap", Modifier.size(18.dp))
             }
 
             IconButton(onClick = {
                 clipboardManager.setText(AnnotatedString(logLines.joinToString("\n")))
             }) {
-                Icon(Icons.Default.ContentCopy, "Copy logs", Modifier.size(18.dp), tint = KdTextSecondary)
+                Icon(painterResource(Res.drawable.content_copy_filled), "Copy logs", Modifier.size(18.dp), tint = KdTextSecondary)
             }
 
             IconButton(onClick = { viewModel.clearLogs() }) {
-                Icon(Icons.Default.ClearAll, "Clear", Modifier.size(18.dp), tint = KdTextSecondary)
+                Icon(painterResource(Res.drawable.clear_all_filled), "Clear", Modifier.size(18.dp), tint = KdTextSecondary)
             }
         }
 

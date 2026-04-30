@@ -24,17 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.VerticalAlignBottom
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,7 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -79,6 +67,17 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.code_filled
+import com.kubekubedashdash.resources.content_copy_filled
+import com.kubekubedashdash.resources.expand_more_filled
+import com.kubekubedashdash.resources.filter_list_filled
+import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.terminal_filled
+import com.kubekubedashdash.resources.vertical_align_bottom_filled
+import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.MetricsLineChart
@@ -91,13 +90,15 @@ import com.kubekubedashdash.util.formatMemorySize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
-private enum class DetailTab(val label: String, val icon: ImageVector) {
-    Overview("Overview", Icons.Default.Info),
-    Yaml("YAML", Icons.Default.Code),
-    Logs("Logs", Icons.Default.Terminal),
+private enum class DetailTab(val label: String, val icon: DrawableResource) {
+    Overview("Overview", Res.drawable.info_filled),
+    Yaml("YAML", Res.drawable.code_filled),
+    Logs("Logs", Res.drawable.terminal_filled),
 }
 
 private val tallTabs = listOf(DetailTab.Overview, DetailTab.Yaml)
@@ -186,7 +187,7 @@ private fun PanelHeader(pod: PodInfo, onClose: () -> Unit) {
             }
         }
         IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Default.Close, "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+            Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
         }
     }
 }
@@ -212,7 +213,7 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, onTabChange: 
                     modifier = Modifier.padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(tab.icon, null, Modifier.size(14.dp))
+                    Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
                     Text(tab.label, style = MaterialTheme.typography.labelMedium)
                 }
@@ -430,7 +431,7 @@ private fun YamlTab(pod: PodInfo) {
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) {
-                Icon(Icons.Default.ContentCopy, null, Modifier.size(13.dp))
+                Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Copy", style = MaterialTheme.typography.labelSmall)
             }
@@ -518,7 +519,7 @@ private fun LogsTab(pod: PodInfo) {
                 placeholder = {
                     Text("Filter logs...", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                 },
-                leadingIcon = { Icon(Icons.Default.FilterList, null, Modifier.size(14.dp), tint = KdTextSecondary) },
+                leadingIcon = { Icon(painterResource(Res.drawable.filter_list_filled), null, Modifier.size(14.dp), tint = KdTextSecondary) },
                 singleLine = true,
                 modifier = Modifier.weight(1f).height(32.dp),
                 textStyle = MaterialTheme.typography.labelSmall.copy(
@@ -542,7 +543,7 @@ private fun LogsTab(pod: PodInfo) {
                     contentColor = if (following) KdPrimary else KdTextSecondary,
                 ),
             ) {
-                Icon(Icons.Default.VerticalAlignBottom, "Follow", Modifier.size(15.dp))
+                Icon(painterResource(Res.drawable.vertical_align_bottom_filled), "Follow", Modifier.size(15.dp))
             }
         }
 
@@ -601,10 +602,10 @@ private fun ContainerPicker(containers: List<String>, selected: String, onSelect
             colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
             border = BorderStroke(1.dp, KdBorder),
         ) {
-            Icon(Icons.Default.ViewInAr, null, Modifier.size(12.dp), tint = KdTextSecondary)
+            Icon(painterResource(Res.drawable.view_in_ar_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
             Spacer(Modifier.width(4.dp))
             Text(selected, style = MaterialTheme.typography.labelSmall)
-            Icon(Icons.Default.ExpandMore, null, Modifier.size(14.dp))
+            Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
         }
         DropdownMenu(
             expanded = expanded,
@@ -619,7 +620,7 @@ private fun ContainerPicker(containers: List<String>, selected: String, onSelect
                         expanded = false
                     },
                     leadingIcon = {
-                        if (c == selected) Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = KdPrimary)
+                        if (c == selected) Icon(painterResource(Res.drawable.check_filled), null, Modifier.size(14.dp), tint = KdPrimary)
                     },
                 )
             }

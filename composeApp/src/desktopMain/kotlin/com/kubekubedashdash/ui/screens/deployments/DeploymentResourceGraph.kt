@@ -27,9 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +65,9 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.kindColor
@@ -76,6 +76,7 @@ import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentResourceG
 import com.kubekubedashdash.ui.screens.highlightYamlLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun DeploymentResourceGraphTab(
@@ -426,10 +427,10 @@ private fun GraphYamlPanel(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { yaml?.let { clipboardManager.setText(AnnotatedString(it)) } }) {
-                    Icon(Icons.Default.ContentCopy, "Copy", Modifier.size(14.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.content_copy_filled), "Copy", Modifier.size(14.dp), tint = KdTextSecondary)
                 }
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, "Close", Modifier.size(14.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(14.dp), tint = KdTextSecondary)
                 }
             }
 

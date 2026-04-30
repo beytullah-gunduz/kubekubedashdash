@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +35,10 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.info_filled
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun AboutModal(onDismiss: () -> Unit) {
@@ -80,7 +81,7 @@ fun AboutModal(onDismiss: () -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Default.Info,
+                            painterResource(Res.drawable.info_filled),
                             contentDescription = null,
                             tint = KdPrimary,
                             modifier = Modifier.size(20.dp),
@@ -101,7 +102,7 @@ fun AboutModal(onDismiss: () -> Unit) {
                         )
                     }
                     Icon(
-                        Icons.Default.Close,
+                        painterResource(Res.drawable.close_filled),
                         contentDescription = "Close",
                         tint = KdTextSecondary,
                         modifier = Modifier

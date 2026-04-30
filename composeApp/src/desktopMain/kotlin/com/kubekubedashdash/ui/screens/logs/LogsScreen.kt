@@ -15,9 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +35,11 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.logging.AppLogStore
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.delete_filled
+import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.util.SystemDirectories
+import org.jetbrains.compose.resources.painterResource
 import java.awt.Desktop
 import java.io.File
 
@@ -95,14 +96,14 @@ fun LogsScreen() {
             Row {
                 IconButton(onClick = { openLogsFolder() }) {
                     Icon(
-                        Icons.Default.FolderOpen,
+                        painterResource(Res.drawable.folder_open_filled),
                         contentDescription = "Open log folder",
                         tint = KdTextSecondary,
                     )
                 }
                 IconButton(onClick = { AppLogStore.clear() }) {
                     Icon(
-                        Icons.Default.Delete,
+                        painterResource(Res.drawable.delete_filled),
                         contentDescription = "Clear logs",
                         tint = KdTextSecondary,
                     )

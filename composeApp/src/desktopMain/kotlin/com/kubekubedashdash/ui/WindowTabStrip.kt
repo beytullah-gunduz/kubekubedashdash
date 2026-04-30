@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.add
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Tab strip rendered between the title bar and the content scaffold when a window
@@ -110,7 +111,7 @@ fun WindowTabStrip(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Outlined.Add,
+                    painterResource(Res.drawable.add),
                     contentDescription = "Open another cluster",
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,

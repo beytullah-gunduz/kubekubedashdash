@@ -15,8 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,8 +39,11 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun SettingsScreen(
@@ -223,7 +224,7 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, KdBorder),
                 ) {
                     Icon(
-                        Icons.Default.Cloud,
+                        painterResource(Res.drawable.cloud_filled),
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
                         tint = if (awsCliAvailable) KdPrimary else KdTextSecondary,

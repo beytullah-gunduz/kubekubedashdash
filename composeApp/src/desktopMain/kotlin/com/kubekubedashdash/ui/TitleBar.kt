@@ -20,12 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.window.WindowDraggableArea
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -67,6 +61,13 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_filled
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.expand_more_filled
+import com.kubekubedashdash.resources.folder_special_filled
+import com.kubekubedashdash.resources.search_filled
+import org.jetbrains.compose.resources.painterResource
 
 private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
 
@@ -211,12 +212,12 @@ private fun CompactSearchField(
             Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
         },
         leadingIcon = {
-            Icon(Icons.Default.Search, null, Modifier.size(14.dp), tint = KdTextSecondary)
+            Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextSecondary)
         },
         trailingIcon = {
             if (searchQuery.isNotEmpty()) {
                 IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp)) {
-                    Icon(Icons.Default.Close, null, Modifier.size(12.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.close_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
                 }
             }
         },
@@ -253,11 +254,11 @@ private fun CompactNamespaceSelector(
             ),
             contentPadding = PaddingValues(horizontal = 8.dp),
         ) {
-            Icon(Icons.Default.FolderSpecial, null, Modifier.size(12.dp), tint = KdTextSecondary)
+            Icon(painterResource(Res.drawable.folder_special_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
             Spacer(Modifier.width(4.dp))
             Text(selectedNamespace, style = MaterialTheme.typography.labelSmall)
             Spacer(Modifier.width(2.dp))
-            Icon(Icons.Default.ExpandMore, null, Modifier.size(12.dp))
+            Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(12.dp))
         }
 
         DropdownMenu(
@@ -281,7 +282,7 @@ private fun CompactNamespaceSelector(
                 },
                 leadingIcon = {
                     if (selectedNamespace == "All Namespaces") {
-                        Icon(Icons.Default.Check, null, tint = KdPrimary, modifier = Modifier.size(16.dp))
+                        Icon(painterResource(Res.drawable.check_filled), null, tint = KdPrimary, modifier = Modifier.size(16.dp))
                     }
                 },
             )
@@ -301,7 +302,7 @@ private fun CompactNamespaceSelector(
                     },
                     leadingIcon = {
                         if (ns == selectedNamespace) {
-                            Icon(Icons.Default.Check, null, tint = KdPrimary, modifier = Modifier.size(16.dp))
+                            Icon(painterResource(Res.drawable.check_filled), null, tint = KdPrimary, modifier = Modifier.size(16.dp))
                         }
                     },
                 )
