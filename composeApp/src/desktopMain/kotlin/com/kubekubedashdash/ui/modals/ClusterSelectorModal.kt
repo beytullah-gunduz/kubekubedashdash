@@ -2,6 +2,8 @@ package com.kubekubedashdash.ui.modals
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -39,6 +41,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
@@ -50,13 +53,13 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.add_filled
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
+import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -359,47 +362,61 @@ fun ClusterSelectorModal(
                                 }
                                 if (canAddTab) {
                                     Spacer(Modifier.width(8.dp))
-                                    // Hide the per-row "+" when row-click already
+                                    // Hide the per-row tab button when row-click already
                                     // does NEW_TAB (i.e. opened from the tab strip's
                                     // + button); it would just duplicate the action.
                                     if (defaultTarget != OpenTarget.NEW_TAB) {
+                                        TooltipArea(
+                                            tooltip = { ClusterActionTooltip("Open in a new tab") },
+                                            tooltipPlacement = TooltipPlacement.CursorPoint(
+                                                offset = DpOffset(0.dp, 16.dp),
+                                            ),
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                                                    .clickable {
+                                                        onOpenCluster(ctx, OpenTarget.NEW_TAB)
+                                                        onDismiss()
+                                                    },
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    painterResource(Res.drawable.tab_filled),
+                                                    contentDescription = "Open $ctx in new tab",
+                                                    tint = KdTextSecondary,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    TooltipArea(
+                                        tooltip = { ClusterActionTooltip("Open in a new window") },
+                                        tooltipPlacement = TooltipPlacement.CursorPoint(
+                                            offset = DpOffset(0.dp, 16.dp),
+                                        ),
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(28.dp)
                                                 .clip(RoundedCornerShape(6.dp))
                                                 .background(if (hovered) KdSurfaceVariant else Color.Transparent)
                                                 .clickable {
-                                                    onOpenCluster(ctx, OpenTarget.NEW_TAB)
+                                                    onOpenCluster(ctx, OpenTarget.NEW_WINDOW)
                                                     onDismiss()
                                                 },
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Icon(
-                                                painterResource(Res.drawable.add_filled),
-                                                contentDescription = "Open $ctx in new tab",
+                                                painterResource(Res.drawable.open_in_new_filled),
+                                                contentDescription = "Open $ctx in new window",
                                                 tint = KdTextSecondary,
-                                                modifier = Modifier.size(16.dp),
+                                                modifier = Modifier.size(14.dp),
                                             )
                                         }
-                                        Spacer(Modifier.width(4.dp))
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(if (hovered) KdSurfaceVariant else Color.Transparent)
-                                            .clickable {
-                                                onOpenCluster(ctx, OpenTarget.NEW_WINDOW)
-                                                onDismiss()
-                                            },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            painterResource(Res.drawable.open_in_new_filled),
-                                            contentDescription = "Open $ctx in new window",
-                                            tint = KdTextSecondary,
-                                            modifier = Modifier.size(14.dp),
-                                        )
                                     }
                                 }
                                 if (isSelected) {
@@ -477,5 +494,22 @@ fun ClusterSelectorModal(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ClusterActionTooltip(text: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = KdSurface,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = KdTextPrimary,
+        )
     }
 }
