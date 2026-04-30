@@ -37,6 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
@@ -85,6 +94,10 @@ fun App(
         val activeSessionId by workspace.activeSessionId.collectAsState()
         val showClusterSelector by workspace.showClusterSelector.collectAsState()
         val showEksDiscovery by workspace.showEksDiscovery.collectAsState()
+        val dragTarget by WorkspaceManager.dragTarget.collectAsState()
+        val isDropTarget = dragTarget == workspace.id
+        val density = LocalDensity.current
+        val awtWindow = windowScope.window
 
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
@@ -130,46 +143,88 @@ fun App(
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 ) {
                     val isMultiTab = sessions.size >= 2
-                    with(windowScope) {
-                        TitleBar(
-                            title = "KubeKubeDashDash",
-                            windowState = windowState,
-                            onClose = onClose,
-                            searchQuery = searchQuery,
-                            onSearchChange = { sessionVm.setSearchQuery(it) },
-                            selectedNamespace = selectedNamespace,
-                            namespaces = namespaces,
-                            onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
-                            chipSlot = if (!isMultiTab && selectedContext.isNotBlank()) {
-                                @Composable {
-                                    val ctx = selectedContext
-                                    ClusterChip(
-                                        label = ctx,
-                                        color = ClusterColor.fromContext(ctx),
-                                        initial = clusterInitial(ctx),
-                                        isActive = true,
-                                        onTearOut = { x, y ->
-                                            WorkspaceManager.tearOutSession(activeSession.id, x, y)
-                                        },
-                                    )
-                                }
-                            } else {
-                                null
-                            },
-                        )
-                    }
+                    // The drop zone for chip-on-chip merge is the union of the
+                    // title bar and (when present) the tab strip — i.e. the
+                    // window's "header" region. A drop anywhere in this band
+                    // counts as targeting this window, which matches the
+                    // browser-tab convention and is much easier to hit than
+                    // the chip pill itself.
+                    Column(
+                        modifier = Modifier.onGloballyPositioned { coords ->
+                            workspace.updateDropZoneScreenBounds(
+                                coords.toScreenRect(awtWindow, density),
+                            )
+                        },
+                    ) {
+                        with(windowScope) {
+                            TitleBar(
+                                title = "KubeKubeDashDash",
+                                windowState = windowState,
+                                onClose = onClose,
+                                searchQuery = searchQuery,
+                                onSearchChange = { sessionVm.setSearchQuery(it) },
+                                selectedNamespace = selectedNamespace,
+                                namespaces = namespaces,
+                                onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
+                                chipSlot = if (!isMultiTab && selectedContext.isNotBlank()) {
+                                    @Composable {
+                                        val ctx = selectedContext
+                                        Box(
+                                            // Eat press events over the chip area so the title bar's
+                                            // ancestor pointerInput doesn't kick off macOS's
+                                            // performWindowDragWithEvent: on every chip press —
+                                            // without this, AppKit captures the drag and the chip's
+                                            // own detector never sees the move events.
+                                            modifier = Modifier.pointerInput(Unit) {
+                                                awaitPointerEventScope {
+                                                    while (true) {
+                                                        val event = awaitPointerEvent(PointerEventPass.Main)
+                                                        if (event.type == PointerEventType.Press) {
+                                                            event.changes.forEach { it.consume() }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        ) {
+                                            ClusterChip(
+                                                label = ctx,
+                                                color = ClusterColor.fromContext(ctx),
+                                                initial = clusterInitial(ctx),
+                                                isActive = true,
+                                                isDropTarget = isDropTarget,
+                                                onDragMove = { x, y ->
+                                                    WorkspaceManager.notifyDragMove(activeSession.id, x, y)
+                                                },
+                                                onDragRelease = { x, y ->
+                                                    WorkspaceManager.handleChipRelease(activeSession.id, x, y)
+                                                },
+                                                onDragCancelled = { WorkspaceManager.cancelDrag() },
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
 
-                    if (isMultiTab) {
-                        WindowTabStrip(
-                            sessions = sessions,
-                            activeSessionId = activeSessionId,
-                            onSelectSession = { workspace.setActive(it) },
-                            onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
-                            onAddCluster = { workspace.showClusterSelector() },
-                            onTearOutSession = { id, x, y ->
-                                WorkspaceManager.tearOutSession(id, x, y)
-                            },
-                        )
+                        if (isMultiTab) {
+                            WindowTabStrip(
+                                sessions = sessions,
+                                activeSessionId = activeSessionId,
+                                isDropTarget = isDropTarget,
+                                onSelectSession = { workspace.setActive(it) },
+                                onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
+                                onAddCluster = { workspace.showClusterSelector() },
+                                onDragMoveSession = { id, x, y ->
+                                    WorkspaceManager.notifyDragMove(id, x, y)
+                                },
+                                onDragReleaseSession = { id, x, y ->
+                                    WorkspaceManager.handleChipRelease(id, x, y)
+                                },
+                                onDragCancelled = { _ -> WorkspaceManager.cancelDrag() },
+                            )
+                        }
                     }
 
                     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -364,4 +419,48 @@ fun ExtraPaneRouter(
             else -> { /* nothing */ }
         }
     }
+}
+
+/**
+ * Convert this layout's bounds to a screen-space rectangle that
+ * [com.kubekubedashdash.services.WorkspaceManager.handleChipRelease] can hit-
+ * test against AWT's `MouseInfo` cursor location at chip-drag end.
+ *
+ * Compose's `positionOnScreen` returns *physical* pixels on JBR with Retina
+ * (a 2x scaling), but `MouseInfo.getPointerInfo().location` returns *logical*
+ * pixels — feeding the two into the same hit-test silently shifted every
+ * drop zone south-east by 2x on a 2x display. We compute the screen rect
+ * via AWT (`Window.locationOnScreen`, logical) plus the layout's
+ * window-local position converted from physical pixels through [density],
+ * which keeps both sides of the comparison in AWT's coordinate space.
+ *
+ * Returns null if the layout is detached or the AWT window is not yet
+ * showing on screen.
+ */
+private fun LayoutCoordinates.toScreenRect(
+    awtWindow: java.awt.Window,
+    density: Density,
+): Rect? {
+    if (!isAttached) return null
+    val winOrigin = runCatching { awtWindow.locationOnScreen }.getOrNull() ?: return null
+    val localPx = positionInWindow()
+    val sizePx = size
+    val localDpX: Float
+    val localDpY: Float
+    val sizeDpX: Float
+    val sizeDpY: Float
+    with(density) {
+        localDpX = localPx.x.toDp().value
+        localDpY = localPx.y.toDp().value
+        sizeDpX = sizePx.width.toDp().value
+        sizeDpY = sizePx.height.toDp().value
+    }
+    val left = winOrigin.x + localDpX
+    val top = winOrigin.y + localDpY
+    return Rect(
+        left = left,
+        top = top,
+        right = left + sizeDpX,
+        bottom = top + sizeDpY,
+    )
 }

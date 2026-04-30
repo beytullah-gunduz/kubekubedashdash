@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -33,15 +34,23 @@ import kotlin.math.sqrt
  * The always-visible cluster chip that anchors a session.
  *
  * Single chip lives inline in the title bar at N=1; chips lift into a
- * [WindowTabStrip] at N≥2. When [onTearOut] is non-null, dragging the chip
- * past [TEAR_OUT_THRESHOLD_PX] pixels of cumulative movement triggers
- * tear-out — the session is moved to a fresh workspace (= new window)
- * opened at the current cursor position.
+ * [WindowTabStrip] at N≥2. When [onDragRelease] is non-null, the chip becomes
+ * a drag handle: once the cursor has moved [DRAG_THRESHOLD_PX] pixels in screen
+ * space the gesture is "committed", subsequent moves stream through
+ * [onDragMove] (so other windows can highlight their chip-drop zones), and the
+ * mouse-up fires [onDragRelease] with the final screen position. The caller
+ * decides between merge-into-another-window and tear-out-to-new-window from
+ * that release point — see
+ * [com.kubekubedashdash.services.WorkspaceManager.handleChipRelease].
  *
  * Tap and drag are independent gestures: a brief click still fires [onClick]
  * (the drag detector waits for Compose's touch slop before claiming events).
+ * If the gesture finishes without ever reaching the drag threshold, the
+ * chip's drag callbacks never fire — but [onDragCancelled] is invoked so the
+ * caller can clear any stale drag-over highlight that might have leaked
+ * through.
  */
-private const val TEAR_OUT_THRESHOLD_PX = 30.0
+private const val DRAG_THRESHOLD_PX = 30.0
 
 @Composable
 fun ClusterChip(
@@ -50,46 +59,85 @@ fun ClusterChip(
     initial: String,
     modifier: Modifier = Modifier,
     isActive: Boolean = true,
+    isDropTarget: Boolean = false,
     onClick: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
-    onTearOut: ((screenX: Int, screenY: Int) -> Unit)? = null,
+    onDragMove: ((screenX: Int, screenY: Int) -> Unit)? = null,
+    onDragRelease: ((screenX: Int, screenY: Int) -> Unit)? = null,
+    onDragCancelled: (() -> Unit)? = null,
 ) {
-    val background = if (isActive) {
-        MaterialTheme.colorScheme.surfaceVariant
-    } else {
-        Color.Transparent
+    val background = when {
+        isDropTarget -> MaterialTheme.colorScheme.primaryContainer
+        isActive -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Transparent
     }
 
-    val tearModifier = if (onTearOut != null) {
-        Modifier.pointerInput(onTearOut) {
+    val dragModifier = if (onDragRelease != null) {
+        // Stable key — re-keying mid-drag would discard `crossedThreshold` /
+        // `lastScreen` and the drag would silently degrade. The captured
+        // callbacks freeze at first composition, but they all funnel through
+        // [com.kubekubedashdash.services.WorkspaceManager] singleton methods
+        // and the session id captured by the caller's lambda is itself stable
+        // for the chip's lifetime.
+        Modifier.pointerInput(Unit) {
             var startScreen: java.awt.Point? = null
-            var teared = false
+            var lastScreen: java.awt.Point? = null
+            var crossedThreshold = false
             detectDragGestures(
                 onDragStart = {
-                    teared = false
+                    crossedThreshold = false
                     startScreen = MouseInfo.getPointerInfo()?.location
+                    lastScreen = startScreen
                 },
                 onDrag = { _, _ ->
-                    if (teared) return@detectDragGestures
                     val now = MouseInfo.getPointerInfo()?.location ?: return@detectDragGestures
-                    val start = startScreen ?: return@detectDragGestures
-                    val dx = (now.x - start.x).toDouble()
-                    val dy = (now.y - start.y).toDouble()
-                    if (sqrt(dx * dx + dy * dy) > TEAR_OUT_THRESHOLD_PX) {
-                        teared = true
-                        onTearOut(now.x, now.y)
+                    lastScreen = now
+                    if (!crossedThreshold) {
+                        val start = startScreen ?: return@detectDragGestures
+                        val dx = (now.x - start.x).toDouble()
+                        val dy = (now.y - start.y).toDouble()
+                        if (sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD_PX) {
+                            crossedThreshold = true
+                        }
+                    }
+                    if (crossedThreshold) {
+                        onDragMove?.invoke(now.x, now.y)
                     }
                 },
                 onDragEnd = {
-                    teared = false
+                    val end = lastScreen
+                    if (crossedThreshold && end != null) {
+                        onDragRelease(end.x, end.y)
+                    } else {
+                        // Sub-threshold drag — treat as a click; just make sure
+                        // any leaked drag-over highlight on other windows is
+                        // cleared.
+                        onDragCancelled?.invoke()
+                    }
+                    crossedThreshold = false
                     startScreen = null
+                    lastScreen = null
                 },
                 onDragCancel = {
-                    teared = false
+                    if (crossedThreshold) {
+                        onDragCancelled?.invoke()
+                    }
+                    crossedThreshold = false
                     startScreen = null
+                    lastScreen = null
                 },
             )
         }
+    } else {
+        Modifier
+    }
+
+    val targetBorder = if (isDropTarget) {
+        Modifier.border(
+            width = 1.5.dp,
+            color = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(6.dp),
+        )
     } else {
         Modifier
     }
@@ -98,7 +146,8 @@ fun ClusterChip(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
             .background(background)
-            .then(tearModifier)
+            .then(targetBorder)
+            .then(dragModifier)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
