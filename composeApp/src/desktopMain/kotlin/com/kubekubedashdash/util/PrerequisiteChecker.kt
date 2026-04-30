@@ -3,7 +3,6 @@ package com.kubekubedashdash.util
 import io.fabric8.kubernetes.client.Config
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 enum class CheckStatus { CHECKING, PASSED, FAILED, WARN }
 
@@ -162,25 +161,7 @@ object PrerequisiteChecker {
         )
     }
 
-    private fun isCommandAvailable(command: String): Boolean = try {
-        val pb = ProcessBuilder("which", command)
-            .redirectErrorStream(true)
-        pb.environment()
-        val p = pb.start()
-        p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0
-    } catch (_: Exception) {
-        false
-    }
+    private fun isCommandAvailable(command: String): Boolean = ShellEnvironment.resolveCommand(command) != null
 
-    private fun resolveCommandPath(command: String): String? = try {
-        val pb = ProcessBuilder("which", command)
-            .redirectErrorStream(true)
-        pb.environment()
-        val p = pb.start()
-        val path = p.inputStream.bufferedReader().readText().trim()
-        p.waitFor(3, TimeUnit.SECONDS)
-        path.ifBlank { null }
-    } catch (_: Exception) {
-        null
-    }
+    private fun resolveCommandPath(command: String): String? = ShellEnvironment.resolveCommand(command)
 }

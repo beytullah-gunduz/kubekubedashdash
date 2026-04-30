@@ -32,12 +32,7 @@ object EksClusterDiscoverer {
         "ap-northeast-1",
     )
 
-    fun isAwsCliAvailable(): Boolean = try {
-        val p = ProcessBuilder("which", "aws").redirectErrorStream(true).start()
-        p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0
-    } catch (_: Exception) {
-        false
-    }
+    fun isAwsCliAvailable(): Boolean = ShellEnvironment.resolveCommand("aws") != null
 
     suspend fun listEnabledRegions(profile: String): Result<List<String>> = withContext(Dispatchers.IO) {
         log.info("Listing enabled regions for profile={}", profile)
@@ -121,7 +116,15 @@ object EksClusterDiscoverer {
     }
 
     private fun runCli(args: List<String>, timeoutSeconds: Long): Result<String> = try {
-        val pb = ProcessBuilder(args).redirectErrorStream(false)
+        val resolvedArgs = if (args.firstOrNull() == "aws") {
+            val abs = ShellEnvironment.resolveCommand("aws")
+                ?: return Result.failure(RuntimeException("aws CLI not found on PATH"))
+            listOf(abs) + args.drop(1)
+        } else {
+            args
+        }
+        val pb = ProcessBuilder(resolvedArgs).redirectErrorStream(false)
+        ShellEnvironment.applyTo(pb)
         val process = pb.start()
         process.outputStream.close()
         val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
