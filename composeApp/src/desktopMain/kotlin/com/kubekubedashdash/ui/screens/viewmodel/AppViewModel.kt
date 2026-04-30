@@ -17,18 +17,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * App-shell ViewModel — owns app-level state (kubeconfig contexts, prerequisite-check
- * status, EKS-discovery modal flag, cluster-picker visibility) and forwards
- * per-session reads/writes to [SessionViewModel] via the active session.
+ * App-shell ViewModel — owns app-level state (kubeconfig contexts,
+ * prerequisite-check status, EKS-discovery modal flag) and forwards per-session
+ * reads/writes to [SessionViewModel] via the active session.
  *
  * Per-session state (current screen, namespace, search query, connection flags)
  * lives on the active [com.kubekubedashdash.model.ClusterSession]'s
- * [SessionViewModel]. The forwarding properties below preserve the existing public
- * API so [com.kubekubedashdash.ui.App] doesn't have to know about the slicing.
+ * [SessionViewModel]. Per-window state (cluster-picker visibility) lives on the
+ * [com.kubekubedashdash.model.Workspace] (Decision 1 in
+ * `.docs/multi-cluster-plan.md`).
+ *
+ * Forwarding properties preserve the public API used by
+ * [com.kubekubedashdash.ui.App] so existing screens compile unchanged.
  */
 class AppViewModel : ViewModel() {
 
     private val sessionVm get() = WorkspaceManager.activeSession.viewModel
+    private val bootstrapWorkspace get() = WorkspaceManager.workspaces.value.first()
 
     // ── Forwarded per-session state ─────────────────────────────────────────────
 
@@ -48,9 +53,6 @@ class AppViewModel : ViewModel() {
 
     private val _contexts = MutableStateFlow<List<String>>(emptyList())
     val contexts: StateFlow<List<String>> = _contexts.asStateFlow()
-
-    private val _showClusterSelector = MutableStateFlow(false)
-    val showClusterSelector: StateFlow<Boolean> = _showClusterSelector.asStateFlow()
 
     private val _prerequisiteResult = MutableStateFlow<PrerequisiteResult?>(null)
     val prerequisiteResult: StateFlow<PrerequisiteResult?> = _prerequisiteResult.asStateFlow()
@@ -81,7 +83,7 @@ class AppViewModel : ViewModel() {
             _prerequisiteResult.value = result
             if (result.allPassed) {
                 _showPrerequisites.value = false
-                _showClusterSelector.value = true
+                bootstrapWorkspace.showClusterSelector()
                 withContext(Dispatchers.IO) {
                     _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
                         WorkspaceManager.activeSession.connectionManager.getContexts()
@@ -90,17 +92,9 @@ class AppViewModel : ViewModel() {
         }
     }
 
-    fun showClusterSelector() {
-        _showClusterSelector.value = true
-    }
-
-    fun dismissClusterSelector() {
-        _showClusterSelector.value = false
-    }
-
     fun dismissPrerequisites() {
         _showPrerequisites.value = false
-        _showClusterSelector.value = true
+        bootstrapWorkspace.showClusterSelector()
         viewModelScope.launch(Dispatchers.IO) {
             _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
                 WorkspaceManager.activeSession.connectionManager.getContexts()

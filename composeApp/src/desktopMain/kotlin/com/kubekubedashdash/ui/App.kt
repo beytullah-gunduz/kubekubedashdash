@@ -28,6 +28,7 @@ import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,9 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
@@ -75,35 +78,33 @@ fun App(
     onClose: () -> Unit,
 ) {
     KubeDashTheme {
-        val viewModel = remember { AppViewModel() }
+        val appViewModel = remember { AppViewModel() }
 
-        val currentScreen by viewModel.currentScreen.collectAsState(Screen.Main.Connecting)
-        val extraPaneScreen by viewModel.extraPaneScreen.collectAsState()
-        val selectedNamespace by viewModel.selectedNamespace.collectAsState()
-        val selectedContext by viewModel.selectedContext.collectAsState()
-        val contexts by viewModel.contexts.collectAsState()
-        val namespaces by viewModel.namespaces.collectAsState()
-        val isConnected by viewModel.isConnected.collectAsState()
-        val searchQuery by viewModel.searchQuery.collectAsState()
-        val showClusterSelector by viewModel.showClusterSelector.collectAsState()
-        val prerequisiteResult by viewModel.prerequisiteResult.collectAsState()
-        val showPrerequisites by viewModel.showPrerequisites.collectAsState()
-        val showEksDiscovery by viewModel.showEksDiscovery.collectAsState()
+        val workspaces by WorkspaceManager.workspaces.collectAsState()
+        val workspace = workspaces.firstOrNull() ?: return@KubeDashTheme
 
-        /*val navigator = rememberListDetailPaneScaffoldNavigator<Screen?>(
-            scaffoldDirective = PaneScaffoldDirective(
-                maxHorizontalPartitions = 2,
-                horizontalPartitionSpacerSize = 0.dp,
-                maxVerticalPartitions = 1,
-                verticalPartitionSpacerSize = 0.dp,
-                defaultPanePreferredWidth = 240.dp,
-                excludedBounds = emptyList(),
-            ),
-        )*/
+        val sessions by workspace.sessions.collectAsState()
+        val activeSessionId by workspace.activeSessionId.collectAsState()
+        val showClusterSelector by workspace.showClusterSelector.collectAsState()
 
-        val defaultDirective = calculatePaneScaffoldDirective(
-            currentWindowAdaptiveInfo(),
-        )
+        val contexts by appViewModel.contexts.collectAsState()
+        val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
+        val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
+        val showEksDiscovery by appViewModel.showEksDiscovery.collectAsState()
+
+        val activeSession = sessions.firstOrNull { it.id == activeSessionId }
+            ?: return@KubeDashTheme
+        val sessionVm = activeSession.viewModel
+
+        val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
+        val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
+        val selectedNamespace by sessionVm.selectedNamespace.collectAsState()
+        val selectedContext by sessionVm.selectedContext.collectAsState()
+        val namespaces by sessionVm.namespaces.collectAsState()
+        val isConnected by sessionVm.isConnected.collectAsState()
+        val searchQuery by sessionVm.searchQuery.collectAsState()
+
+        val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
         val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
             scaffoldDirective = defaultDirective,
             adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
@@ -116,122 +117,153 @@ fun App(
             navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentScreen)
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-            ) {
-                with(windowScope) {
-                    TitleBar(
-                        title = "KubeKubeDashDash",
-                        windowState = windowState,
-                        onClose = onClose,
-                        searchQuery = searchQuery,
-                        onSearchChange = { viewModel.setSearchQuery(it) },
-                        selectedNamespace = selectedNamespace,
-                        namespaces = namespaces,
-                        onNamespaceChange = { viewModel.setSelectedNamespace(it) },
-                    )
-                }
-                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    ListDetailPaneScaffold(
-                        paneExpansionDragHandle = { state ->
-                            val interactionSource = remember { MutableInteractionSource() }
-                            VerticalDragHandle(
-                                modifier =
-                                Modifier.paneExpansionDraggable(
-                                    state,
-                                    LocalMinimumInteractiveComponentSize.current,
-                                    interactionSource,
-                                ),
-                                interactionSource = interactionSource,
-                            )
-                        },
-                        directive = navigator.scaffoldDirective,
-                        scaffoldState = navigator.scaffoldState,
-                        listPane = {
-                            AnimatedPane {
-                                Sidebar(
-                                    currentScreen = currentScreen,
-                                    selectedContext = selectedContext,
-                                    isConnected = isConnected,
-                                    onNavigate = { viewModel.navigate(it) },
-                                    onClusterSelectorClick = { viewModel.showClusterSelector() },
+        // CompositionLocalProvider routes every viewModel { … } lookup inside the
+        // content tree to the active session's ViewModelStore — switching tabs
+        // therefore swaps to a fresh set of screen ViewModels that read the right
+        // session's ReactiveKubeClient instead of the previously-active tab's.
+        CompositionLocalProvider(LocalViewModelStoreOwner provides activeSession) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                ) {
+                    val isMultiTab = sessions.size >= 2
+                    with(windowScope) {
+                        TitleBar(
+                            title = "KubeKubeDashDash",
+                            windowState = windowState,
+                            onClose = onClose,
+                            searchQuery = searchQuery,
+                            onSearchChange = { sessionVm.setSearchQuery(it) },
+                            selectedNamespace = selectedNamespace,
+                            namespaces = namespaces,
+                            onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
+                            chipSlot = if (!isMultiTab && selectedContext.isNotBlank()) {
+                                @Composable {
+                                    val ctx = selectedContext
+                                    ClusterChip(
+                                        label = ctx,
+                                        color = ClusterColor.fromContext(ctx),
+                                        initial = clusterInitial(ctx),
+                                        isActive = true,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+
+                    if (isMultiTab) {
+                        WindowTabStrip(
+                            sessions = sessions,
+                            activeSessionId = activeSessionId,
+                            onSelectSession = { workspace.setActive(it) },
+                            onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
+                            onAddCluster = { workspace.showClusterSelector() },
+                        )
+                    }
+
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        ListDetailPaneScaffold(
+                            paneExpansionDragHandle = { state ->
+                                val interactionSource = remember { MutableInteractionSource() }
+                                VerticalDragHandle(
+                                    modifier = Modifier.paneExpansionDraggable(
+                                        state,
+                                        LocalMinimumInteractiveComponentSize.current,
+                                        interactionSource,
+                                    ),
+                                    interactionSource = interactionSource,
+                                )
+                            },
+                            directive = navigator.scaffoldDirective,
+                            scaffoldState = navigator.scaffoldState,
+                            listPane = {
+                                AnimatedPane {
+                                    Sidebar(
+                                        currentScreen = currentScreen,
+                                        selectedContext = selectedContext,
+                                        isConnected = isConnected,
+                                        onNavigate = { sessionVm.navigate(it) },
+                                        onClusterSelectorClick = { workspace.showClusterSelector() },
+                                    )
+                                }
+                            },
+                            detailPane = {
+                                AnimatedPane {
+                                    ContentRouter(
+                                        screen = currentScreen,
+                                        searchQuery = searchQuery,
+                                        onNavigate = sessionVm::navigate,
+                                        onSelectCluster = { workspace.showClusterSelector() },
+                                        onDiscoverEks = { appViewModel.showEksDiscovery() },
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+
+                        var extraPaneWidth by remember { mutableFloatStateOf(800f) }
+
+                        AnimatedVisibility(
+                            visible = extraPaneScreen != null,
+                            enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
+                            exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
+                        ) {
+                            Row(modifier = Modifier.fillMaxHeight()) {
+                                com.kubekubedashdash.ui.components.ResizeHandle { delta ->
+                                    extraPaneWidth = (extraPaneWidth - delta).coerceIn(400f, 1200f)
+                                }
+                                ExtraPaneRouter(
+                                    screen = extraPaneScreen,
+                                    onNavigate = sessionVm::navigate,
+                                    onClose = { sessionVm.closeExtraPane() },
+                                    modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
                                 )
                             }
-                        },
-                        detailPane = {
-                            AnimatedPane {
-                                ContentRouter(
-                                    screen = currentScreen,
-                                    searchQuery = searchQuery,
-                                    onNavigate = viewModel::navigate,
-                                    onSelectCluster = { viewModel.showClusterSelector() },
-                                    onDiscoverEks = { viewModel.showEksDiscovery() },
-                                )
-                            }
-                        },
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                    )
-
-                    var extraPaneWidth by remember { mutableFloatStateOf(800f) }
-
-                    AnimatedVisibility(
-                        visible = extraPaneScreen != null,
-                        enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
-                        exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
-                    ) {
-                        Row(modifier = Modifier.fillMaxHeight()) {
-                            com.kubekubedashdash.ui.components.ResizeHandle { delta ->
-                                extraPaneWidth = (extraPaneWidth - delta).coerceIn(400f, 1200f)
-                            }
-                            ExtraPaneRouter(
-                                screen = extraPaneScreen,
-                                onNavigate = viewModel::navigate,
-                                onClose = { viewModel.closeExtraPane() },
-                                modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
-                            )
                         }
                     }
                 }
-            }
 
-            val prereq = prerequisiteResult
-            if (showPrerequisites) {
-                if (prereq == null) {
-                    PrerequisitesModal(
-                        result = viewModel.loadingPrerequisiteResult(),
-                        onQuit = onClose,
-                        onIgnore = {},
-                        onDiscoverEks = { viewModel.showEksDiscovery() },
-                    )
-                } else {
-                    PrerequisitesModal(
-                        result = prereq,
-                        onQuit = onClose,
-                        onIgnore = { viewModel.dismissPrerequisites() },
-                        onDiscoverEks = { viewModel.showEksDiscovery() },
+                val prereq = prerequisiteResult
+                if (showPrerequisites) {
+                    if (prereq == null) {
+                        PrerequisitesModal(
+                            result = appViewModel.loadingPrerequisiteResult(),
+                            onQuit = onClose,
+                            onIgnore = {},
+                            onDiscoverEks = { appViewModel.showEksDiscovery() },
+                        )
+                    } else {
+                        PrerequisitesModal(
+                            result = prereq,
+                            onQuit = onClose,
+                            onIgnore = { appViewModel.dismissPrerequisites() },
+                            onDiscoverEks = { appViewModel.showEksDiscovery() },
+                        )
+                    }
+                } else if (showClusterSelector) {
+                    ClusterSelectorModal(
+                        contexts = contexts,
+                        selectedContext = selectedContext,
+                        canAddTab = isConnected,
+                        onOpenCluster = { ctx, target ->
+                            workspace.dismissClusterSelector()
+                            WorkspaceManager.openCluster(workspace, ctx, target)
+                        },
+                        onDismiss = { workspace.dismissClusterSelector() },
+                        onDiscoverEks = { appViewModel.showEksDiscovery() },
+                        dismissable = selectedContext.isNotBlank(),
                     )
                 }
-            } else if (showClusterSelector) {
-                ClusterSelectorModal(
-                    contexts = contexts,
-                    selectedContext = selectedContext,
-                    onContextSwitch = { ctx ->
-                        viewModel.dismissClusterSelector()
-                        viewModel.connectToCluster(ctx)
-                    },
-                    onDismiss = { viewModel.dismissClusterSelector() },
-                    onDiscoverEks = { viewModel.showEksDiscovery() },
-                    dismissable = selectedContext.isNotBlank(),
-                )
-            }
 
-            if (showEksDiscovery) {
-                EksDiscoveryModal(
-                    onDismiss = { viewModel.dismissEksDiscovery() },
-                    onCompleted = { viewModel.onEksImportComplete() },
-                    launchedFromClusterSelector = showClusterSelector,
-                )
+                if (showEksDiscovery) {
+                    EksDiscoveryModal(
+                        onDismiss = { appViewModel.dismissEksDiscovery() },
+                        onCompleted = { appViewModel.onEksImportComplete() },
+                        launchedFromClusterSelector = showClusterSelector,
+                    )
+                }
             }
         }
     }

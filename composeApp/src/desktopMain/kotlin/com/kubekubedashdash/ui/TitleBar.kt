@@ -87,6 +87,7 @@ fun WindowScope.TitleBar(
     selectedNamespace: String,
     namespaces: List<String>,
     onNamespaceChange: (String) -> Unit,
+    chipSlot: (@Composable () -> Unit)? = null,
 ) {
     val toggleMaximize = {
         windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
@@ -154,14 +155,18 @@ fun WindowScope.TitleBar(
                 Spacer(Modifier.width(12.dp))
             }
 
-            Text(
-                text = title,
-                color = KdTextSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (chipSlot != null) {
+                chipSlot()
+            } else {
+                Text(
+                    text = title,
+                    color = KdTextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
             Spacer(Modifier.weight(1f))
 
