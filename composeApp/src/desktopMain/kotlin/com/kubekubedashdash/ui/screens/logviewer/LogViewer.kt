@@ -49,6 +49,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.screens.logviewer.viewmodel.LogViewerScreenViewModel
 
@@ -58,8 +59,9 @@ fun LogViewerScreen(
     namespace: String,
     containerName: String?,
     onClose: (() -> Unit)? = null,
-    viewModel: LogViewerScreenViewModel = viewModel { LogViewerScreenViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: LogViewerScreenViewModel = viewModel { LogViewerScreenViewModel(reactiveClient) }
     val logLines by viewModel.logLines.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val following by viewModel.following.collectAsState()

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -21,8 +22,9 @@ import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenView
 fun NamespacesScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
-    viewModel: NamespacesScreenViewModel = viewModel { NamespacesScreenViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: NamespacesScreenViewModel = viewModel { NamespacesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
 

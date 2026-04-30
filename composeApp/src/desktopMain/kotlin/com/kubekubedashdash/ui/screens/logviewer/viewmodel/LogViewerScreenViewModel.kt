@@ -2,7 +2,7 @@ package com.kubekubedashdash.ui.screens.logviewer.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,8 +18,9 @@ import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class LogViewerScreenViewModel : ViewModel() {
-    private val reactiveClient = KubeClientService.reactiveClient
+class LogViewerScreenViewModel(
+    private val reactiveClient: ReactiveKubeClient,
+) : ViewModel() {
     private val podName = MutableStateFlow("")
     private val namespace = MutableStateFlow("")
     private val containerName = MutableStateFlow<String?>(null)

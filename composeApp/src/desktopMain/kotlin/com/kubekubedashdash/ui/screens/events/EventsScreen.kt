@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -22,8 +23,9 @@ import com.kubekubedashdash.ui.screens.events.viewmodel.EventsScreenViewModel
 fun EventsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
-    viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedEventUid by rememberSaveable { mutableStateOf<String?>(null) }
 

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -33,8 +34,9 @@ fun PodsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
     selectPodUid: String? = null,
-    viewModel: PodsScreenViewModel = viewModel { PodsScreenViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: PodsScreenViewModel = viewModel { PodsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     val resourceUsage by viewModel.resourceUsage.collectAsState()
     val stalePods by viewModel.stalePods.collectAsState()

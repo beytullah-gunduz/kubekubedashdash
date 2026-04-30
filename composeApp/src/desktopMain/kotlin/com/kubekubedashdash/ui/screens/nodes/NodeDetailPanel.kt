@@ -54,7 +54,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.statusColor
@@ -80,7 +80,7 @@ internal fun NodeDetailPanel(
     onPodClick: (PodInfo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableStateOf(NodeDetailTab.Overview) }
     LaunchedEffect(node.uid) { activeTab = NodeDetailTab.Overview }
 

@@ -2,7 +2,6 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kubekubedashdash.Screen
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.MockClusterProvider
@@ -17,39 +16,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * App-shell ViewModel — owns app-level state (kubeconfig contexts,
- * prerequisite-check status, EKS-discovery modal flag) and forwards per-session
- * reads/writes to [SessionViewModel] via the active session.
+ * App-shell ViewModel — owns process-wide state that is meaningful at app
+ * level rather than per-window or per-session: the kubeconfig contexts list,
+ * the prerequisite-check result, and the prereq-modal visibility flag.
  *
- * Per-session state (current screen, namespace, search query, connection flags)
- * lives on the active [com.kubekubedashdash.model.ClusterSession]'s
- * [SessionViewModel]. Per-window state (cluster-picker visibility) lives on the
- * [com.kubekubedashdash.model.Workspace] (Decision 1 in
- * `.docs/multi-cluster-plan.md`).
+ * One instance per app via [instance]. Multiple windows share it so the
+ * prereq checks run exactly once at startup, and the contexts list refreshed
+ * after EKS import is reflected everywhere.
  *
- * Forwarding properties preserve the public API used by
- * [com.kubekubedashdash.ui.App] so existing screens compile unchanged.
+ * Per-window modal flags ([com.kubekubedashdash.model.Workspace.showClusterSelector],
+ * [com.kubekubedashdash.model.Workspace.showEksDiscovery]) and per-session UI
+ * state ([SessionViewModel]) live elsewhere — see Decision 1 in
+ * `.docs/multi-cluster-plan.md`.
  */
-class AppViewModel : ViewModel() {
-
-    private val sessionVm get() = WorkspaceManager.activeSession.viewModel
-    private val bootstrapWorkspace get() = WorkspaceManager.workspaces.value.first()
-
-    // ── Forwarded per-session state ─────────────────────────────────────────────
-
-    val currentScreen: StateFlow<Screen> get() = sessionVm.currentScreen
-    val previousScreen: StateFlow<Screen?> get() = sessionVm.previousScreen
-    val extraPaneScreen: StateFlow<Screen?> get() = sessionVm.extraPaneScreen
-    val selectedNamespace: StateFlow<String> get() = sessionVm.selectedNamespace
-    val selectedContext: StateFlow<String> get() = sessionVm.selectedContext
-    val namespaces: StateFlow<List<String>> get() = sessionVm.namespaces
-    val connectionError: StateFlow<String?> get() = sessionVm.connectionError
-    val isConnecting: StateFlow<Boolean> get() = sessionVm.isConnecting
-    val isConnected: StateFlow<Boolean> get() = sessionVm.isConnected
-    val searchQuery: StateFlow<String> get() = sessionVm.searchQuery
-    val retryCountdown: StateFlow<Int> get() = sessionVm.retryCountdown
-
-    // ── App-shell state ─────────────────────────────────────────────────────────
+class AppViewModel private constructor() : ViewModel() {
 
     private val _contexts = MutableStateFlow<List<String>>(emptyList())
     val contexts: StateFlow<List<String>> = _contexts.asStateFlow()
@@ -60,22 +40,9 @@ class AppViewModel : ViewModel() {
     private val _showPrerequisites = MutableStateFlow(true)
     val showPrerequisites: StateFlow<Boolean> = _showPrerequisites.asStateFlow()
 
-    private val _showEksDiscovery = MutableStateFlow(false)
-    val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
-
     init {
         runPrerequisiteChecks()
     }
-
-    // ── Forwarded per-session methods ───────────────────────────────────────────
-
-    fun navigate(screen: Screen) = sessionVm.navigate(screen)
-    fun closeExtraPane() = sessionVm.closeExtraPane()
-    fun connectToCluster(ctx: String) = sessionVm.connectToCluster(ctx)
-    fun setSelectedNamespace(namespace: String) = sessionVm.setSelectedNamespace(namespace)
-    fun setSearchQuery(query: String) = sessionVm.setSearchQuery(query)
-
-    // ── App-shell methods ───────────────────────────────────────────────────────
 
     private fun runPrerequisiteChecks() {
         viewModelScope.launch {
@@ -83,22 +50,16 @@ class AppViewModel : ViewModel() {
             _prerequisiteResult.value = result
             if (result.allPassed) {
                 _showPrerequisites.value = false
-                bootstrapWorkspace.showClusterSelector()
-                withContext(Dispatchers.IO) {
-                    _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
-                        WorkspaceManager.activeSession.connectionManager.getContexts()
-                }
+                WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
+                refreshContexts()
             }
         }
     }
 
     fun dismissPrerequisites() {
         _showPrerequisites.value = false
-        bootstrapWorkspace.showClusterSelector()
-        viewModelScope.launch(Dispatchers.IO) {
-            _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
-                WorkspaceManager.activeSession.connectionManager.getContexts()
-        }
+        WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
+        refreshContexts()
     }
 
     fun loadingPrerequisiteResult(): PrerequisiteResult = PrerequisiteResult(
@@ -111,23 +72,32 @@ class AppViewModel : ViewModel() {
         ),
     )
 
-    fun showEksDiscovery() {
-        _showEksDiscovery.value = true
+    /**
+     * Reload the list of kubeconfig contexts. Call after the user imports new
+     * EKS clusters so the picker shows them without a restart.
+     */
+    fun refreshContexts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
+                WorkspaceManager.activeSession.connectionManager.getContexts()
+        }
     }
 
-    fun dismissEksDiscovery() {
-        _showEksDiscovery.value = false
-    }
-
+    /**
+     * Called when the EKS-import flow completes (with or without imports).
+     * If prereqs are still showing, re-run the checks (an aws-cli install just
+     * happened); otherwise just refresh contexts so the new clusters appear in
+     * the picker.
+     */
     fun onEksImportComplete() {
-        _showEksDiscovery.value = false
         if (_showPrerequisites.value) {
             runPrerequisiteChecks()
         } else {
-            viewModelScope.launch(Dispatchers.IO) {
-                _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
-                    WorkspaceManager.activeSession.connectionManager.getContexts()
-            }
+            refreshContexts()
         }
+    }
+
+    companion object {
+        val instance: AppViewModel by lazy { AppViewModel() }
     }
 }

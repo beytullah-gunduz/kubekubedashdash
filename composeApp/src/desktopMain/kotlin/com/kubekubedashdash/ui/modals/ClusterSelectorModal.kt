@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -56,8 +57,8 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.services.KubeClientService
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.MockClusterProvider
 
@@ -116,8 +117,9 @@ fun ClusterSelectorModal(
     dismissable: Boolean = true,
     canAddTab: Boolean = false,
 ) {
-    val bindings = remember(contexts) {
-        runCatching { KubeClientService.reactiveClient.getContextBindings() }
+    val reactiveClient = LocalReactiveKubeClient.current
+    val bindings = remember(contexts, reactiveClient) {
+        runCatching { reactiveClient.getContextBindings() }
             .getOrElse { emptyList() }
             .associateBy { it.name }
     }
@@ -371,6 +373,25 @@ fun ClusterSelectorModal(
                                             contentDescription = "Open $ctx in new tab",
                                             tint = KdTextSecondary,
                                             modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                                            .clickable {
+                                                onOpenCluster(ctx, OpenTarget.NEW_WINDOW)
+                                                onDismiss()
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.OpenInNew,
+                                            contentDescription = "Open $ctx in new window",
+                                            tint = KdTextSecondary,
+                                            modifier = Modifier.size(14.dp),
                                         )
                                     }
                                 }

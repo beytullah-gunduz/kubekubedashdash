@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,8 +14,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
-class PodsScreenViewModel : ViewModel() {
-    private val reactiveClient = KubeClientService.reactiveClient
+class PodsScreenViewModel(
+    private val reactiveClient: ReactiveKubeClient,
+) : ViewModel() {
 
     private val _selectedPod = MutableStateFlow<PodInfo?>(null)
     val selectedPod: StateFlow<PodInfo?> = _selectedPod.asStateFlow()

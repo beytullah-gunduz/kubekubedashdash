@@ -57,7 +57,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
@@ -247,7 +247,7 @@ private fun GenericOverviewTab(fields: List<DetailField>, labels: Map<String, St
 
 @Composable
 internal fun GenericYamlTab(kind: String, name: String, namespace: String?) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
     LaunchedEffect(kind, name, namespace) {

@@ -27,6 +27,12 @@ class KubeConnectionManager : Closeable {
     val client: KubernetesClient
         get() = _client ?: throw IllegalStateException("Not connected to a cluster")
 
+    // Remembers which kube context this manager is connected to. Required for
+    // multi-window: each session has its own KubeConnectionManager and must
+    // report ITS context, not the kubeconfig file's `current-context` default
+    // (which is the same for every session in the process).
+    private var _connectedContext: String? = null
+
     // ── Connection version (incremented on each connect, used by reactive flows) ─
     private val _connectionVersion = MutableStateFlow(0L)
     val connectionVersion: StateFlow<Long> = _connectionVersion.asStateFlow()
@@ -65,6 +71,7 @@ class KubeConnectionManager : Closeable {
         val config = Config.autoConfigure(context)
         log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", config.masterUrl)
         _client = KubernetesClientBuilder().withConfig(config).build()
+        _connectedContext = context ?: config.currentContext?.name
         log.debug("connect step 3/4: clearConnectionError")
         clearConnectionError()
         log.debug("connect step 4/4: fetch /version")
@@ -84,6 +91,7 @@ class KubeConnectionManager : Closeable {
         log.info("Connecting with pre-built client label={}", label)
         close()
         _client = client
+        _connectedContext = label
         clearConnectionError()
         log.info("Connected via pre-built client label={}", label)
         _connectionVersion.value++
@@ -124,7 +132,14 @@ class KubeConnectionManager : Closeable {
         }
     }
 
-    fun getCurrentContext(): String = try {
+    /**
+     * The context THIS session is connected to. Returns the session's connected
+     * context if any, falling back to the kubeconfig file's `current-context`
+     * (the legacy behavior, used before any session has connected). This is what
+     * the cluster overview header / breadcrumbs read — different sessions must
+     * see different values, otherwise multi-window all looks like one cluster.
+     */
+    fun getCurrentContext(): String = _connectedContext ?: try {
         Config.autoConfigure(null).currentContext?.name ?: ""
     } catch (e: Exception) {
         log.warn("Failed to get current context: {}", e.message)
@@ -141,5 +156,6 @@ class KubeConnectionManager : Closeable {
         }
         _client?.close()
         _client = null
+        _connectedContext = null
     }
 }

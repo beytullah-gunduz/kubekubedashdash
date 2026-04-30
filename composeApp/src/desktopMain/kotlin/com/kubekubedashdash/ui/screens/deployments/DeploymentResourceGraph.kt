@@ -68,7 +68,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
@@ -82,7 +82,8 @@ fun DeploymentResourceGraphTab(
     deploymentName: String,
     namespace: String,
 ) {
-    val viewModel = remember { DeploymentResourceGraphViewModel() }
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel = remember(reactiveClient) { DeploymentResourceGraphViewModel(reactiveClient) }
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
     val graph by viewModel.graph.collectAsState()
@@ -112,7 +113,7 @@ fun DeploymentResourceGraphTab(
 
 @Composable
 private fun ResourceGraphContent(graph: ResourceGraph, namespace: String) {
-    val kubeClient = KubeClientService.reactiveClient
+    val kubeClient = LocalReactiveKubeClient.current
     val nodeRects = remember(graph) { mutableStateMapOf<String, Rect>() }
     var boxCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val layers = remember(graph) { DeploymentResourceGraphViewModel.groupIntoLayers(graph) }

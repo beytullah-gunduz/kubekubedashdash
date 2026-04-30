@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -21,8 +22,9 @@ import com.kubekubedashdash.ui.screens.services.viewmodel.ServicesScreenViewMode
 fun ServicesScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
-    viewModel: ServicesScreenViewModel = viewModel { ServicesScreenViewModel() },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    val viewModel: ServicesScreenViewModel = viewModel { ServicesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
 
