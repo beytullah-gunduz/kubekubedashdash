@@ -3,64 +3,54 @@ package com.kubekubedashdash.ui.screens.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.models.ResourceState
-import com.kubekubedashdash.services.KubeClientService
+import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.MockClusterProvider
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteChecker
 import com.kubekubedashdash.util.PrerequisiteResult
-import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * App-shell ViewModel — owns app-level state (kubeconfig contexts, prerequisite-check
+ * status, EKS-discovery modal flag, cluster-picker visibility) and forwards
+ * per-session reads/writes to [SessionViewModel] via the active session.
+ *
+ * Per-session state (current screen, namespace, search query, connection flags)
+ * lives on the active [com.kubekubedashdash.model.ClusterSession]'s
+ * [SessionViewModel]. The forwarding properties below preserve the existing public
+ * API so [com.kubekubedashdash.ui.App] doesn't have to know about the slicing.
+ */
 class AppViewModel : ViewModel() {
-    val reactiveClient: ReactiveKubeClient = KubeClientService.reactiveClient
-    private val _currentScreen = MutableStateFlow<Screen>(Screen.Main.Connecting)
-    val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
-    private val _previousScreen = MutableStateFlow<Screen?>(null)
-    val previousScreen: StateFlow<Screen?> = _previousScreen.asStateFlow()
+    private val sessionVm get() = WorkspaceManager.activeSession.viewModel
 
-    private val _extraPaneScreen = MutableStateFlow<Screen?>(null)
-    val extraPaneScreen: StateFlow<Screen?> = _extraPaneScreen.asStateFlow()
+    // ── Forwarded per-session state ─────────────────────────────────────────────
 
-    private val _selectedNamespace = MutableStateFlow("All Namespaces")
-    val selectedNamespace: StateFlow<String> = _selectedNamespace.asStateFlow()
+    val currentScreen: StateFlow<Screen> get() = sessionVm.currentScreen
+    val previousScreen: StateFlow<Screen?> get() = sessionVm.previousScreen
+    val extraPaneScreen: StateFlow<Screen?> get() = sessionVm.extraPaneScreen
+    val selectedNamespace: StateFlow<String> get() = sessionVm.selectedNamespace
+    val selectedContext: StateFlow<String> get() = sessionVm.selectedContext
+    val namespaces: StateFlow<List<String>> get() = sessionVm.namespaces
+    val connectionError: StateFlow<String?> get() = sessionVm.connectionError
+    val isConnecting: StateFlow<Boolean> get() = sessionVm.isConnecting
+    val isConnected: StateFlow<Boolean> get() = sessionVm.isConnected
+    val searchQuery: StateFlow<String> get() = sessionVm.searchQuery
+    val retryCountdown: StateFlow<Int> get() = sessionVm.retryCountdown
 
-    private val _selectedContext = MutableStateFlow("")
-    val selectedContext: StateFlow<String> = _selectedContext.asStateFlow()
+    // ── App-shell state ─────────────────────────────────────────────────────────
 
     private val _contexts = MutableStateFlow<List<String>>(emptyList())
     val contexts: StateFlow<List<String>> = _contexts.asStateFlow()
 
-    private val _namespaces = MutableStateFlow<List<String>>(emptyList())
-    val namespaces: StateFlow<List<String>> = _namespaces.asStateFlow()
-
-    private val _connectionError = MutableStateFlow<String?>(null)
-    val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
-
-    private val _isConnecting = MutableStateFlow(false)
-    val isConnecting: StateFlow<Boolean> = _isConnecting.asStateFlow()
-
-    private val _isConnected = MutableStateFlow(false)
-    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
-
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
     private val _showClusterSelector = MutableStateFlow(false)
     val showClusterSelector: StateFlow<Boolean> = _showClusterSelector.asStateFlow()
-
-    private val _retryCountdown = MutableStateFlow(0)
-    val retryCountdown: StateFlow<Int> = _retryCountdown.asStateFlow()
 
     private val _prerequisiteResult = MutableStateFlow<PrerequisiteResult?>(null)
     val prerequisiteResult: StateFlow<PrerequisiteResult?> = _prerequisiteResult.asStateFlow()
@@ -71,51 +61,19 @@ class AppViewModel : ViewModel() {
     private val _showEksDiscovery = MutableStateFlow(false)
     val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
 
-    private var retryJob: Job? = null
-
     init {
         runPrerequisiteChecks()
-        observeConnectionHealth()
-        observeNamespaces()
     }
 
-    private fun observeNamespaces() {
-        viewModelScope.launch {
-            reactiveClient.namespaceNames.collect { state ->
-                if (state is ResourceState.Success) {
-                    _namespaces.value = state.data
-                }
-            }
-        }
-    }
+    // ── Forwarded per-session methods ───────────────────────────────────────────
 
-    private fun observeConnectionHealth() {
-        viewModelScope.launch {
-            reactiveClient.connectionError.filterNotNull().collect { error ->
-                if (_isConnected.value) {
-                    _isConnected.value = false
-                    _connectionError.value = error
-                    _currentScreen.value = Screen.Main.ConnectionError(error, 10)
-                    scheduleRetry()
-                }
-            }
-        }
-    }
+    fun navigate(screen: Screen) = sessionVm.navigate(screen)
+    fun closeExtraPane() = sessionVm.closeExtraPane()
+    fun connectToCluster(ctx: String) = sessionVm.connectToCluster(ctx)
+    fun setSelectedNamespace(namespace: String) = sessionVm.setSelectedNamespace(namespace)
+    fun setSearchQuery(query: String) = sessionVm.setSearchQuery(query)
 
-    private fun scheduleRetry() {
-        retryJob?.cancel()
-        val ctx = _selectedContext.value
-        if (ctx.isBlank()) return
-        retryJob = viewModelScope.launch {
-            for (countdown in 10 downTo 1) {
-                _retryCountdown.value = countdown
-                _currentScreen.value = Screen.Main.ConnectionError(_connectionError.value, countdown)
-                delay(1_000)
-            }
-            _retryCountdown.value = 0
-            connectToCluster(ctx)
-        }
-    }
+    // ── App-shell methods ───────────────────────────────────────────────────────
 
     private fun runPrerequisiteChecks() {
         viewModelScope.launch {
@@ -124,72 +82,12 @@ class AppViewModel : ViewModel() {
             if (result.allPassed) {
                 _showPrerequisites.value = false
                 _showClusterSelector.value = true
-                _currentScreen.value = Screen.Main.Connecting
                 withContext(Dispatchers.IO) {
-                    _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) + reactiveClient.getContexts()
+                    _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
+                        WorkspaceManager.activeSession.connectionManager.getContexts()
                 }
             }
         }
-    }
-
-    fun navigate(screen: Screen) {
-        if (screen is Screen.Main.Pods && screen.selectPodUid != null) {
-            _selectedNamespace.value = "All Namespaces"
-        }
-        if (screen is Screen.Detail) {
-            _previousScreen.value = _currentScreen.value
-            _extraPaneScreen.value = screen
-        } else {
-            _extraPaneScreen.value = null
-            _currentScreen.value = screen
-        }
-    }
-
-    fun closeExtraPane() {
-        _extraPaneScreen.value = null
-    }
-
-    fun connectToCluster(ctx: String) {
-        retryJob?.cancel()
-        _retryCountdown.value = 0
-        _selectedContext.value = ctx
-        _isConnecting.value = true
-        _connectionError.value = null
-        _currentScreen.value = Screen.Main.Connecting
-        viewModelScope.launch(Dispatchers.IO) {
-            val isMock = ctx == MockClusterProvider.MOCK_CONTEXT_NAME
-            val result = if (isMock) {
-                reactiveClient.connectMock()
-            } else {
-                MockClusterProvider.stop()
-                reactiveClient.connect(ctx)
-            }
-            result.fold(
-                onSuccess = {
-                    _isConnected.value = true
-                    _connectionError.value = null
-                    _currentScreen.value = Screen.Main.ClusterOverview
-                    _selectedNamespace.value = "All Namespaces"
-                    reactiveClient.setSelectedNamespace(null)
-                },
-                onFailure = { e ->
-                    _isConnected.value = false
-                    _connectionError.value = e.message
-                    _currentScreen.value = Screen.Main.ConnectionError(e.message, 10)
-                    if (!isMock) scheduleRetry()
-                },
-            )
-            _isConnecting.value = false
-        }
-    }
-
-    fun setSelectedNamespace(namespace: String) {
-        _selectedNamespace.value = namespace
-        reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
-    }
-
-    fun setSearchQuery(query: String) {
-        _searchQuery.value = query
     }
 
     fun showClusterSelector() {
@@ -204,7 +102,8 @@ class AppViewModel : ViewModel() {
         _showPrerequisites.value = false
         _showClusterSelector.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) + reactiveClient.getContexts()
+            _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
+                WorkspaceManager.activeSession.connectionManager.getContexts()
         }
     }
 
@@ -232,7 +131,8 @@ class AppViewModel : ViewModel() {
             runPrerequisiteChecks()
         } else {
             viewModelScope.launch(Dispatchers.IO) {
-                _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) + reactiveClient.getContexts()
+                _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
+                    WorkspaceManager.activeSession.connectionManager.getContexts()
             }
         }
     }
