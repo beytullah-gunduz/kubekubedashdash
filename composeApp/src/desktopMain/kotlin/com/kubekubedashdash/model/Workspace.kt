@@ -1,5 +1,6 @@
 package com.kubekubedashdash.model
 
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.window.WindowPosition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,19 @@ class Workspace(
 
     private val _showEksDiscovery = MutableStateFlow(false)
     val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
+
+    /**
+     * Screen-space rectangle of this window's chip-drop zone — the chip slot in
+     * the title bar at N=1 or the [com.kubekubedashdash.ui.WindowTabStrip] row
+     * at N≥2. Updated by the corresponding composable via `onGloballyPositioned`
+     * (see [com.kubekubedashdash.ui.App]) and queried by
+     * [com.kubekubedashdash.services.WorkspaceManager.handleChipRelease] to hit-
+     * test the cursor at drag end and decide between chip-on-chip merge and
+     * tear-out. Null while the layout is being measured for the first time or
+     * after the corresponding composable detaches.
+     */
+    private val _dropZoneScreenBounds = MutableStateFlow<Rect?>(null)
+    val dropZoneScreenBounds: StateFlow<Rect?> = _dropZoneScreenBounds.asStateFlow()
 
     /** Snapshot accessor — the active session at this instant, or null if empty. */
     val activeSession: ClusterSession?
@@ -73,5 +87,9 @@ class Workspace(
 
     fun dismissEksDiscovery() {
         _showEksDiscovery.value = false
+    }
+
+    fun updateDropZoneScreenBounds(bounds: Rect?) {
+        _dropZoneScreenBounds.value = bounds
     }
 }

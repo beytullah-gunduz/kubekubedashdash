@@ -1,5 +1,6 @@
 package com.kubekubedashdash.services
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPosition
 import com.kubekubedashdash.model.ClusterSession
@@ -36,6 +37,20 @@ enum class OpenTarget { CURRENT_VIEW, NEW_TAB, NEW_WINDOW }
 object WorkspaceManager {
     private val _workspaces = MutableStateFlow<List<Workspace>>(emptyList())
     val workspaces: StateFlow<List<Workspace>> = _workspaces.asStateFlow()
+
+    /**
+     * The workspace whose drop zone currently sits under the cursor mid-drag,
+     * or null when no other window is being targeted (or no drag is in
+     * progress). Each window's [com.kubekubedashdash.ui.App] subscribes to this
+     * to render the drag-over highlight on its own chip slot / tab strip.
+     *
+     * Updated by [notifyDragMove] as the source chip's screen position changes,
+     * and cleared at drag end (either through [handleChipRelease] or
+     * [cancelDrag]). Source workspace is excluded from the search so dropping
+     * back over the source's own zone is a no-op rather than a self-merge.
+     */
+    private val _dragTarget = MutableStateFlow<WorkspaceId?>(null)
+    val dragTarget: StateFlow<WorkspaceId?> = _dragTarget.asStateFlow()
 
     init {
         val workspace = Workspace()
@@ -152,5 +167,101 @@ object WorkspaceManager {
             closeWorkspace(source.id)
         }
         return newWorkspace.id
+    }
+
+    /**
+     * Move [sessionId] from its current workspace into [toWorkspaceId], appending
+     * it to the destination's tab list and making it active. The session keeps
+     * its connection, informers, and ViewModelStore, so the user's place in the
+     * cluster is preserved across the merge. If the source workspace empties as
+     * a result, it is closed (Decision 2 of `.docs/multi-cluster-plan.md`),
+     * which can in turn cascade to app exit if it was the last workspace.
+     *
+     * No-op if source and destination are the same workspace, or if either id
+     * cannot be resolved. Returns true on success.
+     */
+    fun moveSession(sessionId: SessionId, toWorkspaceId: WorkspaceId): Boolean {
+        val source = _workspaces.value.firstOrNull { ws ->
+            ws.sessions.value.any { it.id == sessionId }
+        } ?: return false
+        if (source.id == toWorkspaceId) return false
+        val target = workspaceById(toWorkspaceId) ?: return false
+        val session = source.removeSession(sessionId) ?: return false
+        target.addSession(session, makeActive = true)
+        if (source.sessions.value.isEmpty()) {
+            closeWorkspace(source.id)
+        }
+        return true
+    }
+
+    /**
+     * Called by the source chip's drag handler each time the cursor moves past
+     * the drag threshold. Updates [dragTarget] so other windows can highlight
+     * their drop zone when the cursor is over it. Excludes the source workspace
+     * so dragging within the source window's own area shows no highlight (and
+     * is ultimately a no-op cancellation).
+     */
+    fun notifyDragMove(sessionId: SessionId, screenX: Int, screenY: Int) {
+        val source = _workspaces.value.firstOrNull { ws ->
+            ws.sessions.value.any { it.id == sessionId }
+        } ?: run {
+            _dragTarget.value = null
+            return
+        }
+        _dragTarget.value = findDropTargetWorkspace(screenX, screenY, exclude = source.id)
+    }
+
+    /**
+     * Drag-end dispatcher for the cluster chip. Decides between four outcomes:
+     *
+     * - Cursor over the **source's own** drop zone → no-op cancellation
+     *   (Decision 5.6 of `.docs/multi-cluster-plan.md` — keeps a chip wiggled
+     *   a few px and released on its own row from spawning a redundant window).
+     * - Cursor over **another** workspace's drop zone → merge via [moveSession].
+     * - Cursor over empty space, source has only one session → no-op
+     *   (tear-out is refused at N=1; see [tearOutSession]).
+     * - Cursor over empty space, source has ≥2 sessions → tear-out into a
+     *   fresh window at the cursor.
+     *
+     * Always clears [dragTarget]. Idempotent on repeat calls.
+     */
+    fun handleChipRelease(sessionId: SessionId, screenX: Int, screenY: Int) {
+        _dragTarget.value = null
+        val source = _workspaces.value.firstOrNull { ws ->
+            ws.sessions.value.any { it.id == sessionId }
+        } ?: return
+        val pt = Offset(screenX.toFloat(), screenY.toFloat())
+        if (source.dropZoneScreenBounds.value?.contains(pt) == true) {
+            // Released over our own chip / tab strip — treat as cancellation.
+            return
+        }
+        val target = findDropTargetWorkspace(screenX, screenY, exclude = source.id)
+        if (target != null) {
+            moveSession(sessionId, target)
+        } else {
+            tearOutSession(sessionId, screenX, screenY)
+        }
+    }
+
+    /**
+     * Clear [dragTarget] without committing a drop. Called when the chip's drag
+     * gesture is cancelled (e.g. the user releases before crossing the drag
+     * threshold) so any drag-over highlight on other windows fades out.
+     */
+    fun cancelDrag() {
+        _dragTarget.value = null
+    }
+
+    private fun findDropTargetWorkspace(
+        screenX: Int,
+        screenY: Int,
+        exclude: WorkspaceId,
+    ): WorkspaceId? {
+        val pt = Offset(screenX.toFloat(), screenY.toFloat())
+        return _workspaces.value
+            .firstOrNull { ws ->
+                ws.id != exclude && ws.dropZoneScreenBounds.value?.contains(pt) == true
+            }
+            ?.id
     }
 }
