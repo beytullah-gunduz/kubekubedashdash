@@ -10,3 +10,5 @@ bin/
 local.properties
 *.hprof
 .kotlin/**/*.salive
+.docs
+samples
