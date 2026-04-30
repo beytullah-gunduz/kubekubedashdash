@@ -63,7 +63,18 @@ On launch the application verifies that the required tools are available before 
 - **Cluster contexts** — ensures at least one context is defined
 - **Cloud CLI tools** — checks for `aws`, `gcloud`, or `kubelogin`/`az` only when the kubeconfig contains EKS, GKE, or AKS contexts respectively
 
-If all checks pass the modal is dismissed automatically. If any required check fails, the user can choose to quit or ignore the warning and continue.
+If all checks pass the modal is dismissed automatically. If any required check fails, the user can choose to quit, ignore the warning and continue, or run **EKS cluster discovery** to populate the kubeconfig from AWS without leaving the app.
+
+### EKS cluster discovery
+
+A built-in wizard finds EKS clusters in your AWS account and adds them to your kubeconfig. Available from:
+
+- The system check modal when no kubeconfig is found (the **Discover EKS Clusters** button)
+- Settings → **Cluster Discovery → AWS EKS** at any time
+
+The flow lets you pick an AWS profile, choose a region scope (default region only, common regions, or all enabled regions), and select which clusters to import. Each import calls `aws eks update-kubeconfig --profile <name>`, which embeds `AWS_PROFILE` into the kubeconfig user exec block — so the profile binding travels with the cluster entry and `aws eks get-token` always uses the right profile at connection time. The bound profile is shown in the cluster selector for every EKS context.
+
+If `~/.kube/config` does not exist, the directory and file are created on demand. The feature requires the AWS CLI v2 to be installed and on `PATH`.
 
 ### UI
 

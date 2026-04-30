@@ -68,6 +68,9 @@ class AppViewModel : ViewModel() {
     private val _showPrerequisites = MutableStateFlow(true)
     val showPrerequisites: StateFlow<Boolean> = _showPrerequisites.asStateFlow()
 
+    private val _showEksDiscovery = MutableStateFlow(false)
+    val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
+
     private var retryJob: Job? = null
 
     init {
@@ -214,4 +217,23 @@ class AppViewModel : ViewModel() {
             ),
         ),
     )
+
+    fun showEksDiscovery() {
+        _showEksDiscovery.value = true
+    }
+
+    fun dismissEksDiscovery() {
+        _showEksDiscovery.value = false
+    }
+
+    fun onEksImportComplete() {
+        _showEksDiscovery.value = false
+        if (_showPrerequisites.value) {
+            runPrerequisiteChecks()
+        } else {
+            viewModelScope.launch(Dispatchers.IO) {
+                _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) + reactiveClient.getContexts()
+            }
+        }
+    }
 }

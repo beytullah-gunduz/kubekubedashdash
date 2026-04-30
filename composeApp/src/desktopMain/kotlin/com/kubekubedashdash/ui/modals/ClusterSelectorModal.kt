@@ -55,6 +55,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.services.KubeClientService
 import com.kubekubedashdash.util.MockClusterProvider
 
 private val EksOrange = Color(0xFFFF9900)
@@ -69,9 +70,10 @@ private data class ParsedContext(
     val clusterName: String,
     val awsAccount: String? = null,
     val awsRegion: String? = null,
+    val awsProfile: String? = null,
 )
 
-private fun parseContext(ctx: String): ParsedContext {
+private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
     if (ctx == MockClusterProvider.MOCK_CONTEXT_NAME) {
         return ParsedContext(
             rawName = ctx,
@@ -88,12 +90,14 @@ private fun parseContext(ctx: String): ParsedContext {
             clusterName = match.groupValues[3],
             awsRegion = match.groupValues[1],
             awsAccount = match.groupValues[2],
+            awsProfile = awsProfile,
         )
     } else {
         ParsedContext(
             rawName = ctx,
             isEks = false,
             clusterName = ctx,
+            awsProfile = awsProfile,
         )
     }
 }
@@ -107,6 +111,11 @@ fun ClusterSelectorModal(
     onDismiss: () -> Unit,
     dismissable: Boolean = true,
 ) {
+    val bindings = remember(contexts) {
+        runCatching { KubeClientService.reactiveClient.getContextBindings() }
+            .getOrElse { emptyList() }
+            .associateBy { it.name }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -222,7 +231,8 @@ fun ClusterSelectorModal(
                     ) {
                         contexts.forEach { ctx ->
                             val isSelected = ctx == selectedContext
-                            val parsed = remember(ctx) { parseContext(ctx) }
+                            val awsProfile = bindings[ctx]?.awsProfile
+                            val parsed = remember(ctx, awsProfile) { parseContext(ctx, awsProfile) }
                             var hovered by remember { mutableStateOf(false) }
                             val bg = when {
                                 isSelected -> KdSelected
@@ -317,13 +327,24 @@ fun ClusterSelectorModal(
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                     } else if (parsed.isEks) {
+                                        val base = "${parsed.awsAccount} · ${parsed.awsRegion}"
+                                        val subtitle = parsed.awsProfile?.let { "$base · profile: $it" } ?: base
                                         Text(
-                                            "${parsed.awsAccount} · ${parsed.awsRegion}",
+                                            subtitle,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = KdTextSecondary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
+                                        if (parsed.awsProfile == null) {
+                                            Text(
+                                                "no profile bound — uses default credentials",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = KdTextSecondary.copy(alpha = 0.75f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
                                     }
                                 }
                                 if (isSelected) {

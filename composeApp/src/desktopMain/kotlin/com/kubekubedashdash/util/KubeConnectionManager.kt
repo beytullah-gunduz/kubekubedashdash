@@ -3,12 +3,19 @@ package com.kubekubedashdash.util
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
+import io.fabric8.kubernetes.client.internal.KubeConfigUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.slf4j.LoggerFactory
 import java.io.Closeable
+import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+
+data class ContextBinding(
+    val name: String,
+    val awsProfile: String?,
+)
 
 class KubeConnectionManager : Closeable {
 
@@ -86,6 +93,28 @@ class KubeConnectionManager : Closeable {
     } catch (e: Exception) {
         log.warn("Failed to load kube contexts: {}", e.message)
         emptyList()
+    }
+
+    fun getContextBindings(): List<ContextBinding> {
+        return try {
+            val path = KubeconfigLocator.activePath()
+            val file = File(path)
+            if (!file.exists() || !file.canRead()) {
+                return emptyList()
+            }
+            val raw = KubeConfigUtils.parseConfig(file)
+            val users = raw.users.orEmpty().associateBy { it.name }
+            raw.contexts.orEmpty().map { namedCtx ->
+                val userName = namedCtx.context?.user
+                val authInfo = users[userName]?.user
+                val awsProfile = authInfo?.exec?.env.orEmpty()
+                    .firstOrNull { it.name == "AWS_PROFILE" }?.value
+                ContextBinding(name = namedCtx.name, awsProfile = awsProfile)
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to read context bindings: {}", e.message)
+            emptyList()
+        }
     }
 
     fun getCurrentContext(): String = try {

@@ -81,9 +81,7 @@ object PrerequisiteChecker {
     }
 
     private fun checkKubeconfig(): PrerequisiteCheck {
-        val home = System.getProperty("user.home")
-        val kubeconfig = System.getenv("KUBECONFIG")?.split(File.pathSeparator)?.firstOrNull()
-            ?: "$home/.kube/config"
+        val kubeconfig = KubeconfigLocator.activePath()
         val file = File(kubeconfig)
         return if (file.exists() && file.canRead()) {
             log.debug("Kubeconfig found at {}", kubeconfig)
