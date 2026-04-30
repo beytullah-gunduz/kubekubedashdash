@@ -193,6 +193,18 @@
 -dontwarn androidx.datastore.**
 
 # ---------------------------------------------------------------------------
+# JNA — used by NativeWindowDrag to call AppKit performWindowDragWithEvent:
+# on macOS. Heavy reflection over native types; needs the whole package.
+# ---------------------------------------------------------------------------
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class com.sun.jna.** { *; }
+-keep class * implements com.sun.jna.Library { *; }
+-keep class * extends com.sun.jna.Structure { *; }
+-keep class * extends com.sun.jna.Callback { *; }
+-dontwarn com.sun.jna.**
+-dontwarn java.awt.**
+
+# ---------------------------------------------------------------------------
 # BouncyCastle — fabric8 uses it for OIDC token signing on some auth flows.
 # Reflection over provider classes.
 # ---------------------------------------------------------------------------
