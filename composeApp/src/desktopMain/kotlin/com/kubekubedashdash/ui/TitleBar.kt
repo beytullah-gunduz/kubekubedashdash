@@ -96,7 +96,7 @@ fun WindowScope.TitleBar(
         }
     }
 
-    WindowDraggableArea {
+    val rowContent: @Composable () -> Unit = {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -106,14 +106,24 @@ fun WindowScope.TitleBar(
                     var lastPressTime = 0L
                     awaitPointerEventScope {
                         while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (event.type == PointerEventType.Press) {
-                                val now = System.currentTimeMillis()
-                                if (now - lastPressTime in 1..400) {
-                                    toggleMaximize()
-                                    lastPressTime = 0L
-                                } else {
-                                    lastPressTime = now
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            if (event.type != PointerEventType.Press) continue
+                            if (event.changes.any { it.isConsumed }) continue
+
+                            val now = System.currentTimeMillis()
+                            val isDoubleClick = (now - lastPressTime) in 1..400
+                            if (isDoubleClick) {
+                                toggleMaximize()
+                                lastPressTime = 0L
+                                event.changes.forEach { it.consume() }
+                            } else {
+                                lastPressTime = now
+                                // On macOS, AWT-based WindowDraggableArea clamps at the
+                                // primary display's edge on multi-monitor setups; delegate
+                                // the drag to AppKit's performWindowDragWithEvent: instead.
+                                // Other platforms continue to use WindowDraggableArea below.
+                                if (isMacOS && NativeWindowDrag.startDrag()) {
+                                    event.changes.forEach { it.consume() }
                                 }
                             }
                         }
@@ -172,6 +182,14 @@ fun WindowScope.TitleBar(
             } else {
                 Spacer(Modifier.width(12.dp))
             }
+        }
+    }
+
+    if (isMacOS) {
+        rowContent()
+    } else {
+        WindowDraggableArea {
+            rowContent()
         }
     }
 }
