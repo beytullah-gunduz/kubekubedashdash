@@ -5,13 +5,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +24,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SingleChoiceSegmentedButtonRowScope
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +52,29 @@ import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import org.jetbrains.compose.resources.painterResource
+
+private class SegmentedButtonRowScopeImpl(scope: RowScope) :
+    SingleChoiceSegmentedButtonRowScope,
+    RowScope by scope
+
+// M3's SingleChoiceSegmentedButtonRow uses width(IntrinsicSize.Min) which collapses to the
+// sum of each button's min-intrinsic width; equal weight(1f) then gives each button 1/N of
+// that sum, starving the widest label. This wrapper uses fillMaxWidth() instead so each
+// button gets 1/N of the actual container width — always enough on a desktop settings pane.
+@Composable
+private fun FullWidthSingleChoiceSegmentedButtonRow(
+    modifier: Modifier = Modifier,
+    content: @Composable SingleChoiceSegmentedButtonRowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(-SegmentedButtonDefaults.BorderWidth),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val scope = remember { SegmentedButtonRowScopeImpl(this) }
+        scope.content()
+    }
+}
 
 @Composable
 fun SettingsScreen(
@@ -152,7 +178,7 @@ fun SettingsScreen(
                 CloseTabFocus.PREVIOUS_ACTIVE to "Last used",
             )
 
-            SingleChoiceSegmentedButtonRow {
+            FullWidthSingleChoiceSegmentedButtonRow {
                 tabFocusOptions.forEachIndexed { index, (value, label) ->
                     SegmentedButton(
                         selected = closeTabFocus == value,
@@ -162,7 +188,7 @@ fun SettingsScreen(
                             count = tabFocusOptions.size,
                         ),
                     ) {
-                        Text(label)
+                        Text(label, maxLines = 1, softWrap = false)
                     }
                 }
             }
