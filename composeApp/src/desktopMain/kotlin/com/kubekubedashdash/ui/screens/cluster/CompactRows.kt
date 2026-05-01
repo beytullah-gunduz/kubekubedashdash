@@ -40,7 +40,7 @@ internal fun CompactNodeRow(node: NodeInfo, onClick: () -> Unit) {
             node.name,
             style = MaterialTheme.typography.bodySmall,
             color = KdTextPrimary,
-            modifier = Modifier.weight(2f),
+            modifier = Modifier.weight(3f),
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
@@ -48,13 +48,18 @@ internal fun CompactNodeRow(node: NodeInfo, onClick: () -> Unit) {
             node.status,
             style = MaterialTheme.typography.labelSmall,
             color = statusColor(node.status),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(70.dp),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             node.pods,
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
-            modifier = Modifier.weight(0.7f),
+            modifier = Modifier.width(48.dp),
+            maxLines = 1,
+            softWrap = false,
         )
         Text(
             node.age,
@@ -77,7 +82,7 @@ internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
             pod.name,
             style = MaterialTheme.typography.bodySmall,
             color = KdTextPrimary,
-            modifier = Modifier.weight(2f),
+            modifier = Modifier.weight(3f),
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
@@ -85,13 +90,16 @@ internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
             pod.status,
             style = MaterialTheme.typography.labelSmall,
             color = statusColor(pod.status),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(100.dp),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             pod.namespace,
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
-            modifier = Modifier.weight(1.2f),
+            modifier = Modifier.width(120.dp),
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
@@ -136,7 +144,7 @@ internal fun CompactEventRow(event: EventInfo, onClick: () -> Unit) {
             event.namespace.ifBlank { "-" },
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(120.dp),
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
