@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,7 +47,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,6 +93,7 @@ import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -114,8 +119,7 @@ fun PodDetailPanel(
     val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableStateOf(DetailTab.Overview) }
     var metricsHistory by remember(pod.uid) { mutableStateOf(listOf<PodMetricsSnapshot>()) }
-
-    LaunchedEffect(pod.uid) { activeTab = DetailTab.Overview }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(pod.uid) {
         while (true) {
@@ -133,26 +137,51 @@ fun PodDetailPanel(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isTall = maxHeight >= 1000.dp
             val tabs = if (isTall) tallTabs else compactTabs
+            val pagerState = rememberPagerState(pageCount = { tabs.size })
+
+            LaunchedEffect(pod.uid) {
+                activeTab = DetailTab.Overview
+                pagerState.scrollToPage(0)
+            }
 
             LaunchedEffect(isTall) {
-                if (isTall && activeTab == DetailTab.Logs) activeTab = DetailTab.Overview
+                if (isTall && activeTab == DetailTab.Logs) {
+                    activeTab = DetailTab.Overview
+                    pagerState.scrollToPage(0)
+                }
+            }
+
+            LaunchedEffect(pagerState, tabs) {
+                snapshotFlow { pagerState.currentPage }.collect { page ->
+                    tabs.getOrNull(page)?.let { activeTab = it }
+                }
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
                 PanelHeader(pod, onClose)
-                PanelTabs(activeTab, tabs) { activeTab = it }
-                when (activeTab) {
-                    DetailTab.Overview -> {
-                        if (isTall) {
-                            OverviewAndLogsTab(pod, metricsHistory, onNavigateToNode)
-                        } else {
-                            OverviewTab(pod, metricsHistory, onNavigateToNode)
-                        }
+                PanelTabs(activeTab, tabs) { newTab ->
+                    activeTab = newTab
+                    scope.launch {
+                        pagerState.animateScrollToPage(tabs.indexOf(newTab).coerceAtLeast(0))
                     }
+                }
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    when (tabs[page]) {
+                        DetailTab.Overview -> {
+                            if (isTall) {
+                                OverviewAndLogsTab(pod, metricsHistory, onNavigateToNode)
+                            } else {
+                                OverviewTab(pod, metricsHistory, onNavigateToNode)
+                            }
+                        }
 
-                    DetailTab.Yaml -> YamlTab(pod)
+                        DetailTab.Yaml -> YamlTab(pod)
 
-                    DetailTab.Logs -> LogsTab(pod)
+                        DetailTab.Logs -> LogsTab(pod)
+                    }
                 }
             }
         }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,7 +38,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +71,7 @@ import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -84,7 +89,7 @@ fun EventDetailScreen(
 ) {
     val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableIntStateOf(0) }
-    LaunchedEffect(event.uid) { activeTab = 0 }
+    val scope = rememberCoroutineScope()
 
     // Node events
     var nodeEvents by remember(event.uid) { mutableStateOf<List<EventInfo>>(emptyList()) }
@@ -140,6 +145,17 @@ fun EventDetailScreen(
     }
 
     val tabs = EventDetailTab.entries.toList()
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+
+    LaunchedEffect(event.uid) {
+        activeTab = 0
+        pagerState.scrollToPage(0)
+    }
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { activeTab = it }
+    }
+
     val typeColor = when (event.type) {
         "Warning" -> KdWarning
         "Error" -> KdError
@@ -194,7 +210,10 @@ fun EventDetailScreen(
                 tabs.forEachIndexed { index, tab ->
                     Tab(
                         selected = index == activeTab,
-                        onClick = { activeTab = index },
+                        onClick = {
+                            activeTab = index
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        },
                         selectedContentColor = KdPrimary,
                         unselectedContentColor = KdTextSecondary,
                     ) {
@@ -210,20 +229,25 @@ fun EventDetailScreen(
                 }
             }
 
-            when (activeTab) {
-                0 -> EventOverviewTab(
-                    event = event,
-                    typeColor = typeColor,
-                    nodeEvents = nodeEvents,
-                    nodeEventsLoading = nodeEventsLoading,
-                    podInfo = podInfo,
-                    podInfoLoading = podInfoLoading,
-                    podLogs = podLogs,
-                    podLogsLoading = podLogsLoading,
-                    onNavigate = onNavigate,
-                )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                when (page) {
+                    0 -> EventOverviewTab(
+                        event = event,
+                        typeColor = typeColor,
+                        nodeEvents = nodeEvents,
+                        nodeEventsLoading = nodeEventsLoading,
+                        podInfo = podInfo,
+                        podInfoLoading = podInfoLoading,
+                        podLogs = podLogs,
+                        podLogsLoading = podLogsLoading,
+                        onNavigate = onNavigate,
+                    )
 
-                1 -> GenericYamlTab("Event", event.objectRef, event.namespace)
+                    1 -> GenericYamlTab("Event", event.objectRef, event.namespace)
+                }
             }
         }
     }

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,7 +32,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +64,7 @@ import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -83,7 +88,7 @@ internal fun NodeDetailPanel(
 ) {
     val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableStateOf(NodeDetailTab.Overview) }
-    LaunchedEffect(node.uid) { activeTab = NodeDetailTab.Overview }
+    val scope = rememberCoroutineScope()
 
     var pods by remember(node.name) { mutableStateOf<List<PodInfo>>(emptyList()) }
     var podsLoading by remember(node.name) { mutableStateOf(true) }
@@ -118,10 +123,23 @@ internal fun NodeDetailPanel(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isTall = maxHeight >= 1000.dp
             val tabs = if (isTall) nodeTallTabs else nodeCompactTabs
+            val pagerState = rememberPagerState(pageCount = { tabs.size })
+
+            LaunchedEffect(node.uid) {
+                activeTab = NodeDetailTab.Overview
+                pagerState.scrollToPage(0)
+            }
 
             LaunchedEffect(isTall) {
                 if (isTall && activeTab != NodeDetailTab.Overview && activeTab != NodeDetailTab.Yaml) {
                     activeTab = NodeDetailTab.Overview
+                    pagerState.scrollToPage(0)
+                }
+            }
+
+            LaunchedEffect(pagerState, tabs) {
+                snapshotFlow { pagerState.currentPage }.collect { page ->
+                    tabs.getOrNull(page)?.let { activeTab = it }
                 }
             }
 
@@ -163,7 +181,12 @@ internal fun NodeDetailPanel(
                     tabs.forEach { tab ->
                         Tab(
                             selected = tab == activeTab,
-                            onClick = { activeTab = tab },
+                            onClick = {
+                                activeTab = tab
+                                scope.launch {
+                                    pagerState.animateScrollToPage(tabs.indexOf(tab).coerceAtLeast(0))
+                                }
+                            },
                             selectedContentColor = KdPrimary,
                             unselectedContentColor = KdTextSecondary,
                         ) {
@@ -176,20 +199,25 @@ internal fun NodeDetailPanel(
                     }
                 }
 
-                when (activeTab) {
-                    NodeDetailTab.Overview -> {
-                        if (isTall) {
-                            NodeOverviewCombinedTab(node, pods, podsLoading, events, eventsLoading, onPodClick)
-                        } else {
-                            NodeDetailsOnlyTab(node)
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    when (tabs[page]) {
+                        NodeDetailTab.Overview -> {
+                            if (isTall) {
+                                NodeOverviewCombinedTab(node, pods, podsLoading, events, eventsLoading, onPodClick)
+                            } else {
+                                NodeDetailsOnlyTab(node)
+                            }
                         }
+
+                        NodeDetailTab.Pods -> NodePodsTab(pods, podsLoading, onPodClick)
+
+                        NodeDetailTab.Events -> NodeEventsTab(events, eventsLoading)
+
+                        NodeDetailTab.Yaml -> GenericYamlTab("Node", node.name, null)
                     }
-
-                    NodeDetailTab.Pods -> NodePodsTab(pods, podsLoading, onPodClick)
-
-                    NodeDetailTab.Events -> NodeEventsTab(events, eventsLoading)
-
-                    NodeDetailTab.Yaml -> GenericYamlTab("Node", node.name, null)
                 }
             }
         }
