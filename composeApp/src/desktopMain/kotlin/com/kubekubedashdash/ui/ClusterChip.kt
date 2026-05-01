@@ -45,7 +45,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -90,6 +94,8 @@ private const val MIN_SPINNER_VISIBLE_MS: Long = 1100L
 // flipping between the connecting and settled visuals, so the arc closes
 // into a ring (or unwraps back into a partial arc) rather than snapping.
 private const val ARC_TRANSITION_MS = 400
+
+private val LABEL_MAX_WIDTH = 180.dp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -206,12 +212,27 @@ fun ClusterChip(
                 isConnecting = isConnecting,
             )
 
+            // Width-measured start truncation: pick the longest suffix that
+            // still fits LABEL_MAX_WIDTH at the actual font/density, prefix
+            // with `…`. Avoids char-count magic numbers (which were wrong on
+            // macOS — `…` + 23 chars at labelMedium still overflowed 140 dp,
+            // re-triggering Compose's *trailing* ellipsis on top of our
+            // leading one). Compose Multiplatform 1.11's desktop renderer
+            // silently treats `TextOverflow.StartEllipsis` as the default
+            // trailing-ellipsis, so this is the workaround.
+            val labelStyle = MaterialTheme.typography.labelMedium
+            val measurer = rememberTextMeasurer()
+            val maxLabelWidthPx = with(LocalDensity.current) { LABEL_MAX_WIDTH.roundToPx() }
+            val displayLabel = remember(label, maxLabelWidthPx, labelStyle) {
+                truncateStart(label, measurer, labelStyle, maxLabelWidthPx)
+            }
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
+                text = displayLabel,
+                style = labelStyle,
                 maxLines = 1,
+                // Safety net only — `displayLabel` is already measured to fit.
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 140.dp),
+                modifier = Modifier.widthIn(max = LABEL_MAX_WIDTH),
                 color = if (isActive) {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 } else {
@@ -382,6 +403,39 @@ private fun ClusterAvatar(
             }
         }
     }
+}
+
+/**
+ * Width-measured start-side truncation. If [label] is wider than
+ * [maxWidthPx] at [style], returns `"…" + label.takeLast(n)` where `n` is
+ * the largest tail length whose rendered width still fits. Otherwise
+ * returns [label] unchanged. Uses binary search over `n` so a long ARN
+ * costs ~`log2(label.length)` measurements (~10 for a 1k-char string).
+ */
+private fun truncateStart(
+    label: String,
+    measurer: TextMeasurer,
+    style: TextStyle,
+    maxWidthPx: Int,
+): String {
+    if (label.isEmpty()) return label
+    val fullWidth = measurer.measure(label, style, maxLines = 1).size.width
+    if (fullWidth <= maxWidthPx) return label
+    var lo = 0
+    var hi = label.length
+    var best = "…"
+    while (lo <= hi) {
+        val mid = (lo + hi) / 2
+        val candidate = "…" + label.takeLast(mid)
+        val candidateWidth = measurer.measure(candidate, style, maxLines = 1).size.width
+        if (candidateWidth <= maxWidthPx) {
+            best = candidate
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    return best
 }
 
 @Composable
