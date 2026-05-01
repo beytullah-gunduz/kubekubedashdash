@@ -19,10 +19,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +43,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
@@ -117,6 +122,49 @@ fun SettingsScreen(
                     secondaryColors = LightPreviewColors,
                     onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                 )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            val closeTabFocus by viewModel.closeTabFocus.collectAsState()
+
+            Text(
+                "TAB BEHAVIOR",
+                style = MaterialTheme.typography.labelMedium,
+                color = KdTextSecondary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "When closing the active tab, focus:",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            val tabFocusOptions = listOf(
+                CloseTabFocus.FIRST to "First tab",
+                CloseTabFocus.LEFT_NEIGHBOR to "Left neighbor",
+                CloseTabFocus.PREVIOUS_ACTIVE to "Last used",
+            )
+
+            SingleChoiceSegmentedButtonRow {
+                tabFocusOptions.forEachIndexed { index, (value, label) ->
+                    SegmentedButton(
+                        selected = closeTabFocus == value,
+                        onClick = { viewModel.setCloseTabFocus(value) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = tabFocusOptions.size,
+                        ),
+                    ) {
+                        Text(label)
+                    }
+                }
             }
 
             Spacer(Modifier.height(32.dp))

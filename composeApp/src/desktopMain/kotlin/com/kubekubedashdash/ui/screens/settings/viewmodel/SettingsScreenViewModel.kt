@@ -9,7 +9,11 @@ import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
+import com.kubekubedashdash.model.CloseTabFocus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class SettingsScreenViewModel : ViewModel() {
@@ -46,6 +50,14 @@ class SettingsScreenViewModel : ViewModel() {
                 McpServerManager.start(port)
             }
         }
+    }
+
+    private val _closeTabFocus = MutableStateFlow(PreferenceRepository.closeTabFocus)
+    val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
+
+    fun setCloseTabFocus(value: CloseTabFocus) {
+        PreferenceRepository.closeTabFocus = value
+        _closeTabFocus.value = value
     }
 
     init {

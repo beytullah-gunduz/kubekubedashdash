@@ -3,6 +3,7 @@ package com.kubekubedashdash.services
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPosition
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
@@ -118,7 +119,8 @@ object WorkspaceManager {
      * [workspaces] flow, which `Main.kt` watches to call `exitApplication`.
      */
     fun closeSession(workspace: Workspace, sessionId: SessionId) {
-        workspace.removeSession(sessionId)?.close()
+        val behavior = PreferenceRepository.closeTabFocus
+        workspace.removeSession(sessionId, behavior)?.close()
         if (workspace.sessions.value.isEmpty()) {
             closeWorkspace(workspace.id)
         }

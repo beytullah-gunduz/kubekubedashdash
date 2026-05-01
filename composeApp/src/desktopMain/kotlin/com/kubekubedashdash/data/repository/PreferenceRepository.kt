@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
+import com.kubekubedashdash.model.CloseTabFocus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -20,6 +21,7 @@ object PreferenceRepository {
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
+    private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
 
     var themeMode: ThemeMode
         get() = runBlocking {
@@ -67,4 +69,24 @@ object PreferenceRepository {
                 }
             }
         }
+
+    var closeTabFocus: CloseTabFocus
+        get() = runBlocking {
+            val raw = dataStore.data.firstOrNull()?.get(CLOSE_TAB_FOCUS)
+            decodeCloseTabFocus(raw)
+        }
+        set(value) {
+            runBlocking {
+                dataStore.edit {
+                    it[CLOSE_TAB_FOCUS] = value.name
+                }
+            }
+        }
+
+    fun closeTabFocus(): Flow<CloseTabFocus> = dataStore.data.map {
+        decodeCloseTabFocus(it[CLOSE_TAB_FOCUS])
+    }
+
+    private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() }
+        ?: CloseTabFocus.LEFT_NEIGHBOR
 }
