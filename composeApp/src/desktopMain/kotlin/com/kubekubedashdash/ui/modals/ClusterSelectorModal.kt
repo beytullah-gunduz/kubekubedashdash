@@ -419,14 +419,22 @@ fun ClusterSelectorModal(
                                         }
                                     }
                                 }
-                                if (isSelected) {
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(
-                                        painterResource(Res.drawable.check_filled),
-                                        contentDescription = null,
-                                        tint = KdPrimary,
-                                        modifier = Modifier.size(18.dp),
-                                    )
+                                // Always reserve the trailing slot so the
+                                // tab/window action icons stay vertically
+                                // aligned across selected and unselected rows.
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier.size(18.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            painterResource(Res.drawable.check_filled),
+                                            contentDescription = null,
+                                            tint = KdPrimary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
