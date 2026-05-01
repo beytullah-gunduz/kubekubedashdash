@@ -127,6 +127,7 @@ fun App(
         val selectedContext by sessionVm.selectedContext.collectAsState()
         val namespaces by sessionVm.namespaces.collectAsState()
         val isConnected by sessionVm.isConnected.collectAsState()
+        val isConnecting by sessionVm.isConnecting.collectAsState()
         val searchQuery by sessionVm.searchQuery.collectAsState()
 
         // Pager state mirrors workspace.activeSessionId. Tab clicks / drag-drop
@@ -227,6 +228,7 @@ fun App(
                                                 isActive = true,
                                                 isDropTarget = isDropTarget,
                                                 isConnected = isConnected,
+                                                isConnecting = isConnecting,
                                                 onClick = { workspace.showClusterSelector() },
                                                 onDragMove = { x, y ->
                                                     WorkspaceManager.notifyDragMove(activeSession.id, x, y)
