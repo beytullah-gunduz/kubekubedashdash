@@ -1,8 +1,10 @@
 package com.kubekubedashdash.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -11,9 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -23,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -64,7 +67,7 @@ private data class ClusterDisplay(
  * merges — when [isDropTarget] is true (because another window's chip is
  * being dragged over us), the background lightens to advertise the drop.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun WindowTabStrip(
     tabs: List<WorkspaceTab>,
@@ -126,13 +129,12 @@ fun WindowTabStrip(
         label = "tabStripDropTargetBg",
     )
 
-    val listState = rememberLazyListState()
+    val scrollState = rememberScrollState()
+    val requesters = remember { mutableMapOf<String, BringIntoViewRequester>() }
 
-    LaunchedEffect(activeTabKey, tabs) {
-        val activeIndex = tabs.indexOfFirst { it.key == activeTabKey }
-        if (activeIndex >= 0) {
-            listState.animateScrollToItem(activeIndex)
-        }
+    LaunchedEffect(activeTabKey) {
+        val target = requesters[activeTabKey] ?: return@LaunchedEffect
+        target.bringIntoView()
     }
 
     Box(modifier = modifier.fillMaxWidth()) {
@@ -143,21 +145,13 @@ fun WindowTabStrip(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LazyRow(
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .onPointerEvent(PointerEventType.Scroll) { event ->
-                        val change = event.changes.firstOrNull() ?: return@onPointerEvent
-                        val delta = change.scrollDelta
-                        if (delta.x == 0f && delta.y != 0f) {
-                            listState.dispatchRawDelta(delta.y * SCROLL_PIXELS_PER_WHEEL_TICK)
-                            change.consume()
-                        }
-                    }
+                    .weight(1f, fill = false)
                     .drawWithContent {
                         drawContent()
                         val fadePx = EDGE_FADE_WIDTH.toPx()
-                        if (listState.canScrollBackward) {
+                        if (scrollState.canScrollBackward) {
                             drawRect(
                                 brush = Brush.horizontalGradient(
                                     colors = listOf(targetBg, Color.Transparent),
@@ -168,7 +162,7 @@ fun WindowTabStrip(
                                 size = Size(fadePx, size.height),
                             )
                         }
-                        if (listState.canScrollForward) {
+                        if (scrollState.canScrollForward) {
                             drawRect(
                                 brush = Brush.horizontalGradient(
                                     colors = listOf(Color.Transparent, targetBg),
@@ -179,16 +173,27 @@ fun WindowTabStrip(
                                 size = Size(fadePx, size.height),
                             )
                         }
+                    }
+                    .horizontalScroll(scrollState)
+                    .onPointerEvent(PointerEventType.Scroll) { event ->
+                        val change = event.changes.firstOrNull() ?: return@onPointerEvent
+                        val delta = change.scrollDelta
+                        if (delta.x == 0f && delta.y != 0f) {
+                            scrollState.dispatchRawDelta(delta.y * SCROLL_PIXELS_PER_WHEEL_TICK)
+                            change.consume()
+                        }
                     },
-                state = listState,
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                items(tabs, key = { it.key }) { tab ->
+                tabs.forEach { tab ->
+                    val requester = requesters.getOrPut(tab.key) { BringIntoViewRequester() }
+                    val chipModifier = Modifier.bringIntoViewRequester(requester)
                     when (tab) {
                         is WorkspaceTab.Cluster -> {
-                            val display = clusterDisplayByKey[tab.key] ?: return@items
+                            val display = clusterDisplayByKey[tab.key] ?: return@forEach
                             ClusterChip(
+                                modifier = chipModifier,
                                 label = display.label,
                                 color = ClusterColor.fromContext(display.context),
                                 initial = clusterInitial(display.context),
@@ -206,6 +211,7 @@ fun WindowTabStrip(
 
                         WorkspaceTab.Logs -> {
                             LogsChip(
+                                modifier = chipModifier,
                                 isActive = tab.key == activeTabKey,
                                 onClick = { onSelectTab(tab.key) },
                                 onClose = { onCloseTab(tab.key) },
