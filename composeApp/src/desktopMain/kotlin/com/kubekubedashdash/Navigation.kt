@@ -12,7 +12,7 @@ sealed class Screen(val title: String) {
         data object ClusterOverview : Main("Cluster")
         data class Nodes(val selectNodeName: String? = null) : Main("Nodes")
         data object Namespaces : Main("Namespaces")
-        data object Events : Main("Events")
+        data class Events(val selectEventUid: String? = null) : Main("Events")
 
         data class Pods(val selectPodUid: String? = null) : Main("Pods")
         data object Deployments : Main("Deployments")

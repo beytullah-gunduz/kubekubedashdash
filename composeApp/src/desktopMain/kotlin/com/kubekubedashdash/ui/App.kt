@@ -513,7 +513,7 @@ fun ContentRouter(
             is Screen.Main.ClusterOverview -> ClusterOverviewScreen(onNavigate)
             is Screen.Main.Nodes -> NodesScreen(searchQuery, onNavigate, target.selectNodeName)
             is Screen.Main.Namespaces -> NamespacesScreen(searchQuery, onNavigate)
-            is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate)
+            is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)
             is Screen.Main.Pods -> PodsScreen(searchQuery, onNavigate, target.selectPodUid)
             is Screen.Main.Deployments -> DeploymentsScreen(searchQuery, onNavigate)
             is Screen.Main.Services -> ServicesScreen(searchQuery, onNavigate)

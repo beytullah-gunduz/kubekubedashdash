@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.events
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,16 +19,28 @@ import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.screens.events.viewmodel.EventsScreenViewModel
+import kotlinx.coroutines.flow.first
 
 @Composable
 fun EventsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
+    selectEventUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedEventUid by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectEventUid) {
+        viewModel.setParams(selectEventUid)
+        if (selectEventUid != null) {
+            viewModel.selected.first { it != null }?.let {
+                selectedEventUid = it.uid
+                onNavigate(Screen.Detail.EventDetail(it))
+            }
+        }
+    }
 
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()

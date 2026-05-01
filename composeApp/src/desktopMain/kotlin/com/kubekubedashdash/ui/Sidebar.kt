@@ -108,7 +108,7 @@ fun Sidebar(
                 onNavigate(Screen.Main.Namespaces)
             }
             SidebarItem(Res.drawable.notifications_filled, "Events", currentScreen is Screen.Main.Events) {
-                onNavigate(Screen.Main.Events)
+                onNavigate(Screen.Main.Events())
             }
 
             SidebarSection("Workloads") {
