@@ -11,6 +11,7 @@ data class PodInfo(
     val ready: String,
     val restarts: Int,
     val age: String,
+    val creationTimestamp: String = "",
     val node: String,
     val ip: String,
     val labels: Map<String, String>,

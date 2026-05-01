@@ -16,5 +16,6 @@ data class NodeInfo(
     val memory: String,
     val pods: String,
     val age: String,
+    val creationTimestamp: String = "",
     val labels: Map<String, String>,
 )
