@@ -84,20 +84,13 @@ import org.jetbrains.compose.resources.painterResource
 @Composable
 fun Sidebar(
     currentScreen: Screen,
-    selectedContext: String,
-    isConnected: Boolean,
     onNavigate: (Screen) -> Unit,
-    onClusterSelectorClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(KdSidebarBg),
     ) {
-        ClusterHeader(selectedContext, isConnected, onClusterSelectorClick)
-
-        HorizontalDivider(color = KdBorder, thickness = 1.dp)
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -155,79 +148,6 @@ fun Sidebar(
             }
             SidebarItem(Res.drawable.settings_filled, "Settings", currentScreen is Screen.Main.Settings) {
                 onNavigate(Screen.Main.Settings)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClusterHeader(
-    selectedContext: String,
-    isConnected: Boolean,
-    onClusterSelectorClick: () -> Unit,
-) {
-    Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(KdPrimary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painterResource(Res.drawable.cloud_filled),
-                        contentDescription = null,
-                        tint = KdPrimary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "KubeKubeDashDash",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = KdTextPrimary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(if (isConnected) KdSuccess else KdError),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            if (isConnected) "Connected" else "Disconnected",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = onClusterSelectorClick,
-                modifier = Modifier.fillMaxWidth().height(32.dp),
-                shape = RoundedCornerShape(6.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
-                border = BorderStroke(1.dp, KdBorder),
-                contentPadding = PaddingValues(horizontal = 10.dp),
-            ) {
-                Icon(painterResource(Res.drawable.swap_horiz_filled), null, Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    selectedContext.ifEmpty { "No context" },
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
             }
         }
     }

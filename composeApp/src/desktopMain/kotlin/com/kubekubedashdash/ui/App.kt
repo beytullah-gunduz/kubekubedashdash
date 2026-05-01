@@ -226,6 +226,8 @@ fun App(
                                                 initial = clusterInitial(ctx),
                                                 isActive = true,
                                                 isDropTarget = isDropTarget,
+                                                isConnected = isConnected,
+                                                onClick = { workspace.showClusterSelector() },
                                                 onDragMove = { x, y ->
                                                     WorkspaceManager.notifyDragMove(activeSession.id, x, y)
                                                 },
@@ -263,7 +265,19 @@ fun App(
                                 sessions = sessions,
                                 activeSessionId = activeSessionId,
                                 isDropTarget = isDropTarget,
-                                onSelectSession = { workspace.setActive(it) },
+                                onSelectSession = { id ->
+                                    // Click the already-active tab → open the
+                                    // cluster selector to swap that session's
+                                    // context. Click an inactive tab → switch
+                                    // to it. Replaces the dedicated "Switch
+                                    // cluster" button that used to live in
+                                    // the sidebar header.
+                                    if (id == activeSessionId) {
+                                        workspace.showClusterSelector()
+                                    } else {
+                                        workspace.setActive(id)
+                                    }
+                                },
                                 onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
                                 onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
                                 onDragMoveSession = { id, x, y ->
@@ -357,8 +371,6 @@ private fun SessionPaneContent(
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
-    val selectedContext by sessionVm.selectedContext.collectAsState()
-    val isConnected by sessionVm.isConnected.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
 
     val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
@@ -397,10 +409,7 @@ private fun SessionPaneContent(
                     AnimatedPane {
                         Sidebar(
                             currentScreen = currentScreen,
-                            selectedContext = selectedContext,
-                            isConnected = isConnected,
                             onNavigate = { sessionVm.navigate(it) },
-                            onClusterSelectorClick = onSelectCluster,
                         )
                     }
                 },
