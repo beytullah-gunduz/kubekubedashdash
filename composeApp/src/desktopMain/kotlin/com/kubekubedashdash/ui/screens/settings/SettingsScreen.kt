@@ -29,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -39,6 +38,7 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
@@ -88,7 +88,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Choose between dark and light appearance",
+                "Choose dark, light, or follow your system appearance",
                 style = MaterialTheme.typography.bodyMedium,
                 color = KdTextSecondary,
             )
@@ -100,21 +100,22 @@ fun SettingsScreen(
             ) {
                 ThemePreviewCard(
                     label = "Dark",
-                    selected = viewModel.isDarkTheme,
-                    sidebarColor = Color(0xFF161819),
-                    backgroundColor = Color(0xFF1E2124),
-                    surfaceColor = Color(0xFF252A31),
-                    textColor = Color(0xFFC8D1DC),
-                    onClick = { viewModel.setDarkTheme(true) },
+                    selected = viewModel.themeMode == ThemeMode.DARK,
+                    primaryColors = DarkPreviewColors,
+                    onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
                 )
                 ThemePreviewCard(
                     label = "Light",
-                    selected = !viewModel.isDarkTheme,
-                    sidebarColor = Color(0xFFFFFFFF),
-                    backgroundColor = Color(0xFFF8FAFC),
-                    surfaceColor = Color(0xFFE2E8F0),
-                    textColor = Color(0xFF1E293B),
-                    onClick = { viewModel.setDarkTheme(false) },
+                    selected = viewModel.themeMode == ThemeMode.LIGHT,
+                    primaryColors = LightPreviewColors,
+                    onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
+                )
+                ThemePreviewCard(
+                    label = "System",
+                    selected = viewModel.themeMode == ThemeMode.SYSTEM,
+                    primaryColors = DarkPreviewColors,
+                    secondaryColors = LightPreviewColors,
+                    onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                 )
             }
 
