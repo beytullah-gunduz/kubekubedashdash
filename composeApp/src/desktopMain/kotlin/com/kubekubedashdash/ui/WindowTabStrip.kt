@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -31,6 +32,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
@@ -39,6 +42,7 @@ import com.kubekubedashdash.resources.add
 import org.jetbrains.compose.resources.painterResource
 
 private val EDGE_FADE_WIDTH = 20.dp
+private const val SCROLL_PIXELS_PER_WHEEL_TICK = 64f
 
 private data class ClusterDisplay(
     val label: String,
@@ -60,6 +64,7 @@ private data class ClusterDisplay(
  * merges — when [isDropTarget] is true (because another window's chip is
  * being dragged over us), the background lightens to advertise the drop.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun WindowTabStrip(
     tabs: List<WorkspaceTab>,
@@ -141,6 +146,14 @@ fun WindowTabStrip(
             LazyRow(
                 modifier = Modifier
                     .weight(1f)
+                    .onPointerEvent(PointerEventType.Scroll) { event ->
+                        val change = event.changes.firstOrNull() ?: return@onPointerEvent
+                        val delta = change.scrollDelta
+                        if (delta.x == 0f && delta.y != 0f) {
+                            listState.dispatchRawDelta(delta.y * SCROLL_PIXELS_PER_WHEEL_TICK)
+                            change.consume()
+                        }
+                    }
                     .drawWithContent {
                         drawContent()
                         val fadePx = EDGE_FADE_WIDTH.toPx()
