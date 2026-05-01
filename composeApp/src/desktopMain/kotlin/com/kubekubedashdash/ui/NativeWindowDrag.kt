@@ -20,6 +20,13 @@ private interface ObjC : Library {
 }
 
 object NativeWindowDrag {
+    // NSWindowStyleMaskResizable. macOS's edge-tiling (drag-to-half-screen)
+    // checks this bit on the target NSWindow before applying the snap; an
+    // undecorated Compose window is created with NSWindowStyleMaskBorderless
+    // (= 0) and JBR's setResizable(true) does not OR this bit in, so the
+    // tile preview shows but the resize never lands. We set it ourselves.
+    private const val NS_WINDOW_STYLE_MASK_RESIZABLE: Long = 8L
+
     private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
 
     private val objc: ObjC? by lazy {
@@ -44,11 +51,19 @@ object NativeWindowDrag {
             val sharedSel = o.sel_registerName("sharedApplication") ?: return@runCatching false
             val currentEventSel = o.sel_registerName("currentEvent") ?: return@runCatching false
             val keyWindowSel = o.sel_registerName("keyWindow") ?: return@runCatching false
+            val styleMaskSel = o.sel_registerName("styleMask") ?: return@runCatching false
+            val setStyleMaskSel = o.sel_registerName("setStyleMask:") ?: return@runCatching false
             val performDragSel = o.sel_registerName("performWindowDragWithEvent:") ?: return@runCatching false
 
             val sharedApp = send.invokePointer(arrayOf(nsApp, sharedSel)) ?: return@runCatching false
             val currentEvent = send.invokePointer(arrayOf(sharedApp, currentEventSel)) ?: return@runCatching false
             val keyWindow = send.invokePointer(arrayOf(sharedApp, keyWindowSel)) ?: return@runCatching false
+
+            val currentMask = send.invokeLong(arrayOf(keyWindow, styleMaskSel))
+            val desiredMask = currentMask or NS_WINDOW_STYLE_MASK_RESIZABLE
+            if (desiredMask != currentMask) {
+                send.invokeVoid(arrayOf(keyWindow, setStyleMaskSel, desiredMask))
+            }
 
             send.invokeVoid(arrayOf(keyWindow, performDragSel, currentEvent))
             true
