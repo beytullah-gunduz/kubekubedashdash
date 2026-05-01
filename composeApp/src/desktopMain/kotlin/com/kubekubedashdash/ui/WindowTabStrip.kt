@@ -26,12 +26,19 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import org.jetbrains.compose.resources.painterResource
+
+private val EDGE_FADE_WIDTH = 20.dp
 
 /**
  * Tab strip rendered between the title bar and the content scaffold when a window
@@ -123,9 +130,38 @@ fun WindowTabStrip(
             // clipping, and so we can animateScrollToItem(activeIndex) when
             // a new session becomes active without measuring chip widths
             // ourselves. macOS trackpad two-finger horizontal scroll picks
-            // this up natively.
+            // this up natively. drawWithContent overlays a fade-to-bg
+            // gradient at whichever edge has off-screen content so the user
+            // can see at a glance that the strip is scrollable.
             LazyRow(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .drawWithContent {
+                        drawContent()
+                        val fadePx = EDGE_FADE_WIDTH.toPx()
+                        if (listState.canScrollBackward) {
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(targetBg, Color.Transparent),
+                                    startX = 0f,
+                                    endX = fadePx,
+                                ),
+                                topLeft = Offset.Zero,
+                                size = Size(fadePx, size.height),
+                            )
+                        }
+                        if (listState.canScrollForward) {
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(Color.Transparent, targetBg),
+                                    startX = size.width - fadePx,
+                                    endX = size.width,
+                                ),
+                                topLeft = Offset(size.width - fadePx, 0f),
+                                size = Size(fadePx, size.height),
+                            )
+                        }
+                    },
                 state = listState,
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
