@@ -16,11 +16,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isTertiaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
@@ -40,6 +44,7 @@ private const val LOGS_DRAG_THRESHOLD_PX = 30.0
  * same height, same active underline, same close ×, same drag-to-new-window gesture.
  * No color ring, no initial letter.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun LogsChip(
     isActive: Boolean,
@@ -114,6 +119,12 @@ fun LogsChip(
                 }
             }
             .then(dragModifier)
+            .onPointerEvent(PointerEventType.Press) { event ->
+                if (event.buttons.isTertiaryPressed) {
+                    onClose()
+                    event.changes.firstOrNull()?.consume()
+                }
+            }
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
