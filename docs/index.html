@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>KubeKubeDashDash — a desktop Kubernetes dashboard</title>
+        <meta
+            name="description"
+            content="A Compose Desktop dashboard for Kubernetes clusters. Multi-window, multi-tab, real-time."
+        />
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <header class="hero">
+            <div class="container">
+                <h1>KubeKubeDashDash</h1>
+                <p class="tagline">
+                    A desktop dashboard for Kubernetes — multi-window,
+                    multi-tab, reactive.
+                </p>
+                <p class="meta">
+                    Built with Kotlin Multiplatform + Compose Desktop · Connects
+                    via kubeconfig contexts · Live demo cluster baked in
+                </p>
+            </div>
+        </header>
+
+        <main class="container">
+            <section class="showcase">
+                <h2>Cluster overview</h2>
+                <figure>
+                    <img
+                        src="screenshots/01-cluster-overview.png"
+                        alt="Cluster overview"
+                    />
+                </figure>
+            </section>
+
+            <section class="showcase">
+                <h2>Light &amp; dark themes</h2>
+                <p>
+                    Pick dark, light, or follow the system — every screen,
+                    panel, and chart adapts.
+                </p>
+                <figure>
+                    <img
+                        src="screenshots/99-theme.png"
+                        alt="Cluster overview rendered in dark and light themes side by side"
+                    />
+                    <figcaption>
+                        The same Cluster Overview, dark on the left and light on
+                        the right.
+                    </figcaption>
+                </figure>
+            </section>
+
+            <section class="showcase">
+                <h2>Many windows, many tabs</h2>
+                <p>
+                    Each cluster gets its own tab. Drag a tab between windows to
+                    reorganize, or tear one off into a new window — the
+                    connection moves with it.
+                </p>
+                <div class="grid two">
+                    <figure>
+                        <img
+                            src="screenshots/99-multi-tab.png"
+                            alt="Multiple cluster tabs in one window"
+                        />
+                        <figcaption>
+                            Three cluster tabs in a single window.
+                        </figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/99-multi-window.png"
+                            alt="Two windows side by side"
+                        />
+                        <figcaption>
+                            Two windows, two clusters, side by side.
+                        </figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <section class="showcase">
+                <h2>Workloads</h2>
+                <div class="grid two">
+                    <figure>
+                        <img src="screenshots/05-pods.png" alt="Pods" />
+                        <figcaption>Pods</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/06-deployments.png"
+                            alt="Deployments"
+                        />
+                        <figcaption>Deployments</figcaption>
+                    </figure>
+                </div>
+                <p class="also-available">Also available:</p>
+                <ul class="resource-list">
+                    <li>StatefulSets</li>
+                    <li>DaemonSets</li>
+                    <li>ReplicaSets</li>
+                    <li>Jobs</li>
+                    <li>CronJobs</li>
+                </ul>
+            </section>
+
+            <section class="showcase">
+                <h2>Cluster &amp; nodes</h2>
+                <div class="grid three">
+                    <figure>
+                        <img src="screenshots/02-nodes.png" alt="Nodes" />
+                        <figcaption>Nodes</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/03-namespaces.png"
+                            alt="Namespaces"
+                        />
+                        <figcaption>Namespaces</figcaption>
+                    </figure>
+                    <figure>
+                        <img src="screenshots/04-events.png" alt="Events" />
+                        <figcaption>Events</figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <section class="showcase">
+                <h2>Config &amp; secrets</h2>
+                <div class="grid three">
+                    <figure>
+                        <img
+                            src="screenshots/12-configmaps.png"
+                            alt="ConfigMaps"
+                        />
+                        <figcaption>ConfigMaps</figcaption>
+                    </figure>
+                    <figure>
+                        <img src="screenshots/13-secrets.png" alt="Secrets" />
+                        <figcaption>Secrets</figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <section class="showcase">
+                <h2>Networking</h2>
+                <figure>
+                    <img src="screenshots/14-services.png" alt="Services" />
+                    <figcaption>Services</figcaption>
+                </figure>
+                <p class="also-available">Also available:</p>
+                <ul class="resource-list">
+                    <li>Ingresses</li>
+                    <li>Endpoints</li>
+                    <li>Network Policies</li>
+                </ul>
+            </section>
+
+            <section class="showcase">
+                <h2>Storage</h2>
+                <div class="grid three">
+                    <figure>
+                        <img
+                            src="screenshots/18-persistent-volumes.png"
+                            alt="Persistent Volumes"
+                        />
+                        <figcaption>Persistent Volumes</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/19-persistent-volume-claims.png"
+                            alt="Persistent Volume Claims"
+                        />
+                        <figcaption>Persistent Volume Claims</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/20-storage-classes.png"
+                            alt="Storage Classes"
+                        />
+                        <figcaption>Storage Classes</figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <section class="showcase">
+                <h2>Settings</h2>
+                <figure>
+                    <img src="screenshots/21-settings.png" alt="Settings" />
+                </figure>
+            </section>
+        </main>
+
+        <footer>
+            <div class="container">
+                <p>
+                    Screenshots generated locally against a built-in mock
+                    cluster for demo purpose
+                </p>
+            </div>
+        </footer>
+
+        <div
+            class="lightbox"
+            id="lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Screenshot viewer"
+            hidden
+        >
+            <button class="lightbox-close" type="button" aria-label="Close">
+                &times;
+            </button>
+            <button
+                class="lightbox-nav lightbox-prev"
+                type="button"
+                aria-label="Previous"
+            >
+                &#8249;
+            </button>
+            <button
+                class="lightbox-nav lightbox-next"
+                type="button"
+                aria-label="Next"
+            >
+                &#8250;
+            </button>
+            <img class="lightbox-image" alt="" />
+        </div>
+
+        <script>
+            (function () {
+                const lightbox = document.getElementById("lightbox");
+                const lightboxImg = lightbox.querySelector(".lightbox-image");
+                const closeBtn = lightbox.querySelector(".lightbox-close");
+                const prevBtn = lightbox.querySelector(".lightbox-prev");
+                const nextBtn = lightbox.querySelector(".lightbox-next");
+
+                const images = Array.from(
+                    document.querySelectorAll(".showcase figure img"),
+                );
+                let index = -1;
+
+                function show(i) {
+                    index = (i + images.length) % images.length;
+                    const img = images[index];
+                    lightboxImg.src = img.src;
+                    lightboxImg.alt = img.alt || "";
+                }
+
+                function open(i) {
+                    show(i);
+                    lightbox.hidden = false;
+                    document.body.style.overflow = "hidden";
+                }
+
+                function close() {
+                    lightbox.hidden = true;
+                    lightboxImg.src = "";
+                    document.body.style.overflow = "";
+                }
+
+                images.forEach(function (img, i) {
+                    img.addEventListener("click", function () {
+                        open(i);
+                    });
+                });
+
+                closeBtn.addEventListener("click", close);
+                prevBtn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    show(index - 1);
+                });
+                nextBtn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    show(index + 1);
+                });
+
+                lightbox.addEventListener("click", function (e) {
+                    if (e.target === lightbox) close();
+                });
+                document.addEventListener("keydown", function (e) {
+                    if (lightbox.hidden) return;
+                    if (e.key === "Escape") close();
+                    else if (e.key === "ArrowLeft") show(index - 1);
+                    else if (e.key === "ArrowRight") show(index + 1);
+                });
+            })();
+        </script>
+    </body>
+</html>
