@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
@@ -108,6 +110,13 @@ fun ClusterChip(
     isDropTarget: Boolean = false,
     isConnected: Boolean? = null,
     isConnecting: Boolean = false,
+    /**
+     * When true, the active chip gets a vibrant bottom underline drawn
+     * across its full width — the visual "this tab is selected" signal.
+     * Only meaningful in a multi-chip strip; the single-chip-in-title-bar
+     * caller leaves this off because there's nothing to compare against.
+     */
+    showActiveIndicator: Boolean = false,
     onClick: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     onDragMove: ((screenX: Int, screenY: Int) -> Unit)? = null,
@@ -198,6 +207,19 @@ fun ClusterChip(
             modifier = modifier
                 .clip(RoundedCornerShape(6.dp))
                 .background(background)
+                .drawBehind {
+                    // Active-tab underline. Drawn after the rounded clip so the
+                    // bar's lower-left and lower-right are softly tucked into
+                    // the chip's corner radius, matching browser-tab look.
+                    if (showActiveIndicator && isActive) {
+                        val barHeight = 1.5.dp.toPx()
+                        drawRect(
+                            color = KdPrimary,
+                            topLeft = Offset(0f, size.height - barHeight),
+                            size = Size(size.width, barHeight),
+                        )
+                    }
+                }
                 .then(targetBorder)
                 .then(dragModifier)
                 .let { if (onClick != null) it.clickable(onClick = onClick) else it }

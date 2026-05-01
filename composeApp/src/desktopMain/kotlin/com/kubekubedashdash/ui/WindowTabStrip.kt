@@ -110,6 +110,7 @@ fun WindowTabStrip(
                         isActive = session.id == activeSessionId,
                         isConnected = connectedFlags[index],
                         isConnecting = connectingFlags[index],
+                        showActiveIndicator = true,
                         onClick = { onSelectSession(session.id) },
                         onClose = { onCloseSession(session.id) },
                         onDragMove = { x, y -> onDragMoveSession(session.id, x, y) },
