@@ -96,6 +96,17 @@ kotlin.sourceSets.named("desktopMain") {
     resources.srcDir(generateVersionProperties.map { it.outputs.files.singleFile })
 }
 
+val generateScreenshots by tasks.registering(JavaExec::class) {
+    group = "documentation"
+    description = "Drives the live app via WorkspaceManager and captures every Screen.Main + multi-tab + multi-window into docs/screenshots/. Runs on your Mac; the window must stay visible while it runs."
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    dependsOn(desktopMain.compileTaskProvider)
+    classpath(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
+    mainClass.set("com.kubekubedashdash.screenshots.GenerateScreenshotsKt")
+    workingDir = rootProject.rootDir
+    jvmArgs("--add-opens=java.base/java.util=ALL-UNNAMED")
+}
+
 compose.desktop {
     application {
         mainClass = "com.kubekubedashdash.MainKt"
