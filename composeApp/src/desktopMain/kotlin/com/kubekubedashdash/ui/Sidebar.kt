@@ -143,9 +143,6 @@ fun Sidebar(
         HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            SidebarItem(Res.drawable.list_filled, "Logs", currentScreen is Screen.Main.Logs) {
-                onNavigate(Screen.Main.Logs)
-            }
             SidebarItem(Res.drawable.settings_filled, "Settings", currentScreen is Screen.Main.Settings) {
                 onNavigate(Screen.Main.Settings)
             }

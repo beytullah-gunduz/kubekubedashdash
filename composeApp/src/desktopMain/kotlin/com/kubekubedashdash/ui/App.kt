@@ -63,6 +63,7 @@ import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.Workspace
+import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.services.OpenTarget
@@ -91,8 +92,22 @@ import com.kubekubedashdash.ui.screens.services.ServiceDetailScreen
 import com.kubekubedashdash.ui.screens.services.ServicesScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsScreen
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
 import org.jetbrains.compose.resources.painterResource
+
+/** Conditionally wrap [content] in a [CompositionLocalProvider] for [session] when non-null. */
+@Composable
+private fun MaybeProvideSessionLocals(session: ClusterSession?, content: @Composable () -> Unit) {
+    if (session != null) {
+        CompositionLocalProvider(
+            LocalViewModelStoreOwner provides session,
+            LocalReactiveKubeClient provides session.reactiveClient,
+        ) { content() }
+    } else {
+        content()
+    }
+}
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -105,8 +120,8 @@ fun App(
     KubeDashTheme {
         val appViewModel = AppViewModel.instance
 
-        val sessions by workspace.sessions.collectAsState()
-        val activeSessionId by workspace.activeSessionId.collectAsState()
+        val tabs by workspace.tabs.collectAsState()
+        val activeTabKey by workspace.activeTabKey.collectAsState()
         val showClusterSelector by workspace.showClusterSelector.collectAsState()
         val showEksDiscovery by workspace.showEksDiscovery.collectAsState()
         val dragTarget by WorkspaceManager.dragTarget.collectAsState()
@@ -118,26 +133,39 @@ fun App(
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
 
-        val activeSession = sessions.firstOrNull { it.id == activeSessionId }
-            ?: return@KubeDashTheme
-        val sessionVm = activeSession.viewModel
+        // Nothing to show until bootstrap populates the tab list.
+        if (tabs.isEmpty()) return@KubeDashTheme
 
-        // Title-bar-scoped reads (always reflect the active session)
-        val selectedNamespace by sessionVm.selectedNamespace.collectAsState()
-        val selectedContext by sessionVm.selectedContext.collectAsState()
-        val namespaces by sessionVm.namespaces.collectAsState()
-        val isConnected by sessionVm.isConnected.collectAsState()
-        val isConnecting by sessionVm.isConnecting.collectAsState()
-        val searchQuery by sessionVm.searchQuery.collectAsState()
+        val activeTab = tabs.firstOrNull { it.key == activeTabKey }
+        val activeSession = (activeTab as? WorkspaceTab.Cluster)?.session
 
-        // Pager state mirrors workspace.activeSessionId. Tab clicks / drag-drop
-        // / close events drive activeSessionId externally and the LaunchedEffect
+        // For title-bar context use the active cluster session; fall back to the
+        // first cluster tab when the Logs tab is active, so the namespace picker
+        // and search remain usable while switching.
+        val titleSession = activeSession
+            ?: tabs.filterIsInstance<WorkspaceTab.Cluster>().firstOrNull()?.session
+        val titleVm = titleSession?.viewModel
+
+        // Stable empty-state flows so collected Compose states don't change type.
+        val emptyString = remember { MutableStateFlow("") }
+        val emptyBool = remember { MutableStateFlow(false) }
+        val emptyList = remember { MutableStateFlow(emptyList<String>()) }
+
+        val selectedNamespace by (titleVm?.selectedNamespace ?: emptyString).collectAsState()
+        val selectedContext by (titleVm?.selectedContext ?: emptyString).collectAsState()
+        val namespaces by (titleVm?.namespaces ?: emptyList).collectAsState()
+        val isConnected by (titleVm?.isConnected ?: emptyBool).collectAsState()
+        val isConnecting by (titleVm?.isConnecting ?: emptyBool).collectAsState()
+        val searchQuery by (titleVm?.searchQuery ?: emptyString).collectAsState()
+
+        // Pager state mirrors workspace.activeTabKey. Tab clicks / drag-drop
+        // / close events drive activeTabKey externally and the LaunchedEffect
         // animates the pager toward that page; user swipes on the pager flip
         // the direction by calling workspace.setActive once the page settles.
-        val activeIndex = sessions.indexOf(activeSession).coerceAtLeast(0)
+        val activeIndex = tabs.indexOfFirst { it.key == activeTabKey }.coerceAtLeast(0)
         val pagerState = rememberPagerState(
             initialPage = activeIndex,
-            pageCount = { sessions.size },
+            pageCount = { tabs.size },
         )
 
         LaunchedEffect(activeIndex) {
@@ -146,42 +174,38 @@ fun App(
             }
         }
 
-        LaunchedEffect(pagerState, sessions) {
+        LaunchedEffect(pagerState, tabs) {
             // Drop the first emission. snapshotFlow re-emits the current
             // settledPage every time this effect re-launches — including when
-            // `sessions` changes from addSession(). At that moment the pager
-            // hasn't started animating to the new active page yet, so the
-            // emitted value is still the *old* index, and acting on it would
-            // call workspace.setActive(oldSession.id), undoing the just-set
-            // active session. We only want to react to genuine user-driven
-            // settle events, which arrive as subsequent emissions.
+            // `tabs` changes from addTab(). At that moment the pager hasn't
+            // started animating to the new active page yet, so the emitted
+            // value is still the *old* index, and acting on it would call
+            // workspace.setActive(oldTab.key), undoing the just-set active tab.
+            // We only want to react to genuine user-driven settle events.
             snapshotFlow { pagerState.settledPage }.drop(1).collect { idx ->
-                sessions.getOrNull(idx)?.let { settled ->
-                    if (settled.id != activeSessionId) workspace.setActive(settled.id)
+                tabs.getOrNull(idx)?.let { settled ->
+                    if (settled.key != activeTabKey) workspace.setActive(settled.key)
                 }
             }
         }
 
-        // Outer CompositionLocalProvider gives the active session's clients to
-        // everything that lives at the App scope: the title bar, the tab
-        // strip, and the modals (cluster selector, EKS discovery, prerequisites).
-        // SessionPaneContent re-provides locals keyed to *its* page's session,
-        // so non-active pager pages still see their own ReactiveKubeClient.
-        CompositionLocalProvider(
-            LocalViewModelStoreOwner provides activeSession,
-            LocalReactiveKubeClient provides activeSession.reactiveClient,
-        ) {
+        // Provide the title session's locals at App scope for modals and the
+        // title bar. SessionPaneContent re-provides per-page locals so each
+        // cluster page sees its own session. LogsPaneContent needs neither.
+        MaybeProvideSessionLocals(titleSession) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 ) {
-                    val isMultiTab = sessions.size >= 2
+                    // isMultiTab: show the strip when there are ≥2 tabs, OR
+                    // when any non-cluster tab (Logs) is present — so the user
+                    // always sees the strip and its + button even with a single
+                    // cluster tab alongside the Logs tab.
+                    val hasNonClusterTab = tabs.any { it !is WorkspaceTab.Cluster }
+                    val isMultiTab = tabs.size >= 2 || hasNonClusterTab
+
                     // The drop zone for chip-on-chip merge is the union of the
-                    // title bar and (when present) the tab strip — i.e. the
-                    // window's "header" region. A drop anywhere in this band
-                    // counts as targeting this window, which matches the
-                    // browser-tab convention and is much easier to hit than
-                    // the chip pill itself.
+                    // title bar and (when present) the tab strip.
                     Column(
                         modifier = Modifier.onGloballyPositioned { coords ->
                             workspace.updateDropZoneScreenBounds(
@@ -195,19 +219,17 @@ fun App(
                                 windowState = windowState,
                                 onClose = onClose,
                                 searchQuery = searchQuery,
-                                onSearchChange = { sessionVm.setSearchQuery(it) },
+                                onSearchChange = { titleVm?.setSearchQuery(it) },
                                 selectedNamespace = selectedNamespace,
                                 namespaces = namespaces,
-                                onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
-                                chipSlot = if (!isMultiTab && selectedContext.isNotBlank()) {
+                                onNamespaceChange = { titleVm?.setSelectedNamespace(it) },
+                                chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
                                     @Composable {
                                         val ctx = selectedContext
                                         Row(
                                             // Eat press events over the chip + add-button area so the
                                             // title bar's ancestor pointerInput doesn't kick off
-                                            // macOS's performWindowDragWithEvent: on every press —
-                                            // without this, AppKit captures the drag and the chip's
-                                            // own detector never sees the move events.
+                                            // macOS's performWindowDragWithEvent: on every press.
                                             modifier = Modifier.pointerInput(Unit) {
                                                 awaitPointerEventScope {
                                                     while (true) {
@@ -264,23 +286,20 @@ fun App(
 
                         if (isMultiTab) {
                             WindowTabStrip(
-                                sessions = sessions,
-                                activeSessionId = activeSessionId,
+                                tabs = tabs,
+                                activeTabKey = activeTabKey,
                                 isDropTarget = isDropTarget,
-                                onSelectSession = { id ->
-                                    // Click the already-active tab → open the
-                                    // cluster selector to swap that session's
-                                    // context. Click an inactive tab → switch
-                                    // to it. Replaces the dedicated "Switch
-                                    // cluster" button that used to live in
-                                    // the sidebar header.
-                                    if (id == activeSessionId) {
-                                        workspace.showClusterSelector()
+                                onSelectTab = { key ->
+                                    val tab = tabs.firstOrNull { it.key == key }
+                                    if (key == activeTabKey) {
+                                        // Clicking the already-active cluster tab opens the cluster
+                                        // selector so the user can swap that session's context.
+                                        if (tab is WorkspaceTab.Cluster) workspace.showClusterSelector()
                                     } else {
-                                        workspace.setActive(id)
+                                        workspace.setActive(key)
                                     }
                                 },
-                                onCloseSession = { id -> WorkspaceManager.closeSession(workspace, id) },
+                                onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
                                 onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
                                 onDragMoveSession = { id, x, y ->
                                     WorkspaceManager.notifyDragMove(id, x, y)
@@ -289,6 +308,13 @@ fun App(
                                     WorkspaceManager.handleChipRelease(id, x, y)
                                 },
                                 onDragCancelled = { _ -> WorkspaceManager.cancelDrag() },
+                                onDragMoveTab = { key, x, y ->
+                                    WorkspaceManager.notifyDragMoveTab(key, x, y)
+                                },
+                                onDragReleaseTab = { key, x, y ->
+                                    WorkspaceManager.handleTabRelease(key, x, y)
+                                },
+                                onDragCancelledTab = { WorkspaceManager.cancelDrag() },
                             )
                         }
                     }
@@ -296,13 +322,18 @@ fun App(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                        key = { idx -> sessions[idx].id },
+                        key = { idx -> tabs[idx].key },
                     ) { page ->
-                        SessionPaneContent(
-                            session = sessions[page],
-                            onSelectCluster = { workspace.showClusterSelector() },
-                            onDiscoverEks = { workspace.showEksDiscovery() },
-                        )
+                        when (val tab = tabs[page]) {
+                            is WorkspaceTab.Cluster -> SessionPaneContent(
+                                session = tab.session,
+                                onSelectCluster = { workspace.showClusterSelector() },
+                                onDiscoverEks = { workspace.showEksDiscovery() },
+                                onOpenLogsTab = { workspace.openLogsTab() },
+                            )
+
+                            WorkspaceTab.Logs -> LogsPaneContent()
+                        }
                     }
                 }
 
@@ -369,6 +400,7 @@ private fun SessionPaneContent(
     session: ClusterSession,
     onSelectCluster: () -> Unit,
     onDiscoverEks: () -> Unit,
+    onOpenLogsTab: () -> Unit,
 ) {
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
@@ -423,6 +455,7 @@ private fun SessionPaneContent(
                             onNavigate = sessionVm::navigate,
                             onSelectCluster = onSelectCluster,
                             onDiscoverEks = onDiscoverEks,
+                            onOpenLogsTab = onOpenLogsTab,
                         )
                     }
                 },
@@ -452,6 +485,12 @@ private fun SessionPaneContent(
     }
 }
 
+/** Pane content for the Logs tab. Renders [LogsScreen] without any cluster Locals. */
+@Composable
+private fun LogsPaneContent() {
+    LogsScreen()
+}
+
 @Composable
 fun ContentRouter(
     screen: Screen,
@@ -459,6 +498,7 @@ fun ContentRouter(
     onNavigate: (Screen) -> Unit,
     onSelectCluster: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
+    onOpenLogsTab: () -> Unit = {},
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
 
@@ -490,8 +530,7 @@ fun ContentRouter(
             is Screen.Main.PersistentVolumes -> GenericResourceScreen("PersistentVolume", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.persistentVolumes)
             is Screen.Main.PersistentVolumeClaims -> GenericResourceScreen("PersistentVolumeClaim", searchQuery, sourceFlow = reactiveClient.persistentVolumeClaims)
             is Screen.Main.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.storageClasses)
-            is Screen.Main.Logs -> LogsScreen()
-            is Screen.Main.Settings -> SettingsScreen(onDiscoverEks = onDiscoverEks)
+            is Screen.Main.Settings -> SettingsScreen(onDiscoverEks = onDiscoverEks, onOpenLogsTab = onOpenLogsTab)
             else -> {}
         }
     }

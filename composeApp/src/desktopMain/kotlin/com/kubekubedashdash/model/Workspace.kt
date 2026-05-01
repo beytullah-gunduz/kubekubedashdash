@@ -30,9 +30,9 @@ enum class CloseTabFocus {
 }
 
 /**
- * One OS window's worth of cluster sessions. A workspace holds an ordered list of
- * [ClusterSession]s (rendered as tabs when N≥2) and tracks which one is currently
- * active.
+ * One OS window's worth of tabs. A workspace holds an ordered list of
+ * [WorkspaceTab]s (rendered as a strip when N≥2 or any non-cluster tab is open)
+ * and tracks which one is currently active.
  *
  * Per-window concerns also live here: the cluster-picker visibility flag is
  * scoped per window (Decision 1 in `.docs/multi-cluster-plan.md`) so two open
@@ -47,11 +47,11 @@ class Workspace(
     val id: WorkspaceId = WorkspaceId.new(),
     val initialPosition: WindowPosition? = null,
 ) {
-    private val _sessions = MutableStateFlow<List<ClusterSession>>(emptyList())
-    val sessions: StateFlow<List<ClusterSession>> = _sessions.asStateFlow()
+    private val _tabs = MutableStateFlow<List<WorkspaceTab>>(emptyList())
+    val tabs: StateFlow<List<WorkspaceTab>> = _tabs.asStateFlow()
 
-    private val _activeSessionId = MutableStateFlow<SessionId?>(null)
-    val activeSessionId: StateFlow<SessionId?> = _activeSessionId.asStateFlow()
+    private val _activeTabKey = MutableStateFlow<String?>(null)
+    val activeTabKey: StateFlow<String?> = _activeTabKey.asStateFlow()
 
     private val activationHistory = ArrayDeque<SessionId>()
     private val historyCapacity = 16
@@ -86,69 +86,106 @@ class Workspace(
     private val _dropZoneScreenBounds = MutableStateFlow<Rect?>(null)
     val dropZoneScreenBounds: StateFlow<Rect?> = _dropZoneScreenBounds.asStateFlow()
 
-    /** Snapshot accessor — the active session at this instant, or null if empty. */
+    /** Snapshot accessor — the active cluster session at this instant, or null if empty or Logs tab active. */
     val activeSession: ClusterSession?
-        get() = _sessions.value.firstOrNull { it.id == _activeSessionId.value }
+        get() {
+            val key = _activeTabKey.value ?: return null
+            val tab = _tabs.value.firstOrNull { it.key == key } ?: return null
+            return (tab as? WorkspaceTab.Cluster)?.session
+        }
 
-    private fun pushHistory(previous: SessionId?) {
-        if (previous == null) return
-        if (activationHistory.lastOrNull() == previous) return
-        activationHistory.addLast(previous)
+    private fun pushHistory(key: String?) {
+        if (key == null) return
+        val tab = _tabs.value.firstOrNull { it.key == key } ?: return
+        val session = (tab as? WorkspaceTab.Cluster)?.session ?: return
+        if (activationHistory.lastOrNull() == session.id) return
+        activationHistory.addLast(session.id)
         while (activationHistory.size > historyCapacity) {
             activationHistory.removeFirst()
         }
     }
 
-    internal fun addSession(session: ClusterSession, makeActive: Boolean = true) {
-        _sessions.value = _sessions.value + session
+    internal fun addTab(tab: WorkspaceTab, makeActive: Boolean = true) {
+        _tabs.value = _tabs.value + tab
         if (makeActive) {
-            pushHistory(_activeSessionId.value)
-            _activeSessionId.value = session.id
+            pushHistory(_activeTabKey.value)
+            _activeTabKey.value = tab.key
         }
     }
 
-    internal fun removeSession(
-        id: SessionId,
+    internal fun removeTab(
+        key: String,
         behavior: CloseTabFocus = CloseTabFocus.LEFT_NEIGHBOR,
-    ): ClusterSession? {
-        val oldList = _sessions.value
-        val session = oldList.firstOrNull { it.id == id } ?: return null
-        val closedIndex = oldList.indexOf(session)
-        val newList = oldList.filterNot { it.id == id }
-        _sessions.value = newList
-
-        activationHistory.removeAll { it == id }
-
-        if (_activeSessionId.value == id) {
-            _activeSessionId.value = computeNewActive(closedIndex, newList, behavior)
+    ): WorkspaceTab? {
+        val tab = _tabs.value.firstOrNull { it.key == key } ?: return null
+        val closedIndex = _tabs.value.indexOf(tab)
+        val newList = _tabs.value.filterNot { it.key == key }
+        if (tab is WorkspaceTab.Cluster) {
+            activationHistory.removeAll { it == tab.session.id }
         }
-        return session
+        _tabs.value = newList
+        if (_activeTabKey.value == key) {
+            _activeTabKey.value = computeNewActiveKey(closedIndex, newList, behavior)
+        }
+        return tab
     }
 
-    private fun computeNewActive(
+    private fun computeNewActiveKey(
         closedIndex: Int,
-        newList: List<ClusterSession>,
+        newList: List<WorkspaceTab>,
         behavior: CloseTabFocus,
-    ): SessionId? {
+    ): String? {
         if (newList.isEmpty()) return null
         return when (behavior) {
-            CloseTabFocus.FIRST -> newList.first().id
+            CloseTabFocus.FIRST -> newList.first().key
 
             CloseTabFocus.LEFT_NEIGHBOR ->
-                newList.getOrNull((closedIndex - 1).coerceAtLeast(0))?.id
+                newList.getOrNull((closedIndex - 1).coerceAtLeast(0))?.key
 
             CloseTabFocus.PREVIOUS_ACTIVE -> {
-                val livingIds = newList.mapTo(HashSet(newList.size)) { it.id }
-                val recovered = activationHistory.lastOrNull { it in livingIds }
-                recovered ?: newList.getOrNull((closedIndex - 1).coerceAtLeast(0))?.id
+                val clusterTabs = newList.filterIsInstance<WorkspaceTab.Cluster>()
+                val livingIds = clusterTabs.mapTo(HashSet(clusterTabs.size)) { it.session.id }
+                val recoveredId = activationHistory.lastOrNull { it in livingIds }
+                val recoveredKey = recoveredId?.let { id ->
+                    newList.firstOrNull { it is WorkspaceTab.Cluster && it.session.id == id }?.key
+                }
+                recoveredKey ?: newList.getOrNull((closedIndex - 1).coerceAtLeast(0))?.key
             }
         }
     }
 
-    internal fun setActive(id: SessionId) {
-        if (_sessions.value.any { it.id == id }) {
-            pushHistory(_activeSessionId.value)
-            _activeSessionId.value = id
+    internal fun setActive(key: String) {
+        if (_tabs.value.any { it.key == key }) {
+            pushHistory(_activeTabKey.value)
+            _activeTabKey.value = key
+        }
+    }
+
+    /** Convenience for callers that still think in [SessionId]. */
+    internal fun addSession(session: ClusterSession, makeActive: Boolean = true) {
+        addTab(WorkspaceTab.Cluster(session), makeActive)
+    }
+
+    /** Convenience for callers that still think in [SessionId]. */
+    internal fun removeSession(
+        id: SessionId,
+        behavior: CloseTabFocus = CloseTabFocus.LEFT_NEIGHBOR,
+    ): ClusterSession? {
+        val key = "cluster:${id.value}"
+        val tab = removeTab(key, behavior) ?: return null
+        return (tab as? WorkspaceTab.Cluster)?.session
+    }
+
+    /**
+     * Append a Logs tab and activate it, or — if a Logs tab already exists —
+     * just activate the existing one. Singleton: at most one Logs tab per window.
+     */
+    fun openLogsTab() {
+        val existing = _tabs.value.firstOrNull { it is WorkspaceTab.Logs }
+        if (existing != null) {
+            _activeTabKey.value = existing.key
+        } else {
+            addTab(WorkspaceTab.Logs, makeActive = true)
         }
     }
 

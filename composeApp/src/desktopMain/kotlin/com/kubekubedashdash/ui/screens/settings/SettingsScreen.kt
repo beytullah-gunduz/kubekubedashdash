@@ -49,6 +49,7 @@ import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import org.jetbrains.compose.resources.painterResource
@@ -79,6 +80,7 @@ private fun FullWidthSingleChoiceSegmentedButtonRow(
 @Composable
 fun SettingsScreen(
     onDiscoverEks: () -> Unit = {},
+    onOpenLogsTab: () -> Unit = {},
     viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
 ) {
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
@@ -315,6 +317,47 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            Text(
+                "DIAGNOSTICS",
+                style = MaterialTheme.typography.labelMedium,
+                color = KdTextSecondary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "Application logs",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Open the in-app log viewer in a new tab to inspect application events.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = KdTextSecondary,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onOpenLogsTab,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, KdBorder),
+            ) {
+                Icon(
+                    painterResource(Res.drawable.description_filled),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = KdPrimary,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Open application logs", color = KdTextPrimary)
             }
 
             Spacer(Modifier.height(32.dp))

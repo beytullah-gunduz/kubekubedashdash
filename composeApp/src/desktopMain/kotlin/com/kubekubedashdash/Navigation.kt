@@ -37,7 +37,6 @@ sealed class Screen(val title: String) {
         data object Connecting : Main("Connecting")
         data class ConnectionError(val error: String?, val retryCountdown: Int) : Main("Connection Error")
 
-        data object Logs : Main("Logs")
         data object Settings : Main("Settings")
     }
 

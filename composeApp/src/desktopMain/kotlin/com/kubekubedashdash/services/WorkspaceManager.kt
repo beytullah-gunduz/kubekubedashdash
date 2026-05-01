@@ -8,6 +8,7 @@ import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
+import com.kubekubedashdash.model.WorkspaceTab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,7 +26,7 @@ enum class OpenTarget { CURRENT_VIEW, NEW_TAB, NEW_WINDOW }
 
 /**
  * Process-wide coordinator for [Workspace]s (one per OS window) and the
- * [ClusterSession]s they contain (one per tab).
+ * [ClusterSession]s they contain (one per cluster tab).
  *
  * Phase 3: bootstraps with one workspace + one (initially-disconnected) session.
  * Supports all three [OpenTarget]s and propagates "close last tab → close
@@ -113,27 +114,97 @@ object WorkspaceManager {
     }
 
     /**
+     * Close a tab by its key. Cluster tabs dispose their session; the Logs tab
+     * just leaves the list. Empty workspace cascades to window close per
+     * Decision 2 of `.docs/multi-cluster-plan.md`.
+     */
+    fun closeTab(workspace: Workspace, tabKey: String) {
+        val behavior = PreferenceRepository.closeTabFocus
+        when (val removed = workspace.removeTab(tabKey, behavior)) {
+            is WorkspaceTab.Cluster -> removed.session.close()
+            WorkspaceTab.Logs, null -> { /* no resources to free */ }
+        }
+        if (workspace.tabs.value.isEmpty()) {
+            closeWorkspace(workspace.id)
+        }
+    }
+
+    /**
      * Close a session in [workspace] and dispose its connection + ViewModels.
      * If this empties [workspace], the workspace is closed too (Decision 2 — no
      * empty windows). Closing the last workspace propagates up via the
      * [workspaces] flow, which `Main.kt` watches to call `exitApplication`.
      */
     fun closeSession(workspace: Workspace, sessionId: SessionId) {
-        val behavior = PreferenceRepository.closeTabFocus
-        workspace.removeSession(sessionId, behavior)?.close()
-        if (workspace.sessions.value.isEmpty()) {
-            closeWorkspace(workspace.id)
-        }
+        val key = "cluster:${sessionId.value}"
+        closeTab(workspace, key)
+    }
+
+    /** Open or focus the Logs tab in [workspace]. Singleton. */
+    fun openLogsTab(workspace: Workspace) {
+        workspace.openLogsTab()
     }
 
     /**
-     * Close a workspace and dispose every session it still holds. Intended both
-     * as the cascade target for [closeSession] when the last tab leaves and as
+     * Called by any tab's drag handler (including Logs) each time the cursor
+     * moves past the drag threshold. Updates [dragTarget] exactly like
+     * [notifyDragMove], but keyed by tab key rather than [SessionId].
+     */
+    fun notifyDragMoveTab(tabKey: String, screenX: Int, screenY: Int) {
+        val source = _workspaces.value.firstOrNull { ws ->
+            ws.tabs.value.any { it.key == tabKey }
+        } ?: run {
+            _dragTarget.value = null
+            return
+        }
+        _dragTarget.value = findDropTargetWorkspace(screenX, screenY, exclude = source.id)
+    }
+
+    /**
+     * Drag-end dispatcher for any tab type (cluster or Logs). Mirrors
+     * [handleChipRelease] but works with any [WorkspaceTab]. Merge drops
+     * are always allowed; tear-out is refused when the source has only one
+     * tab (same rule as [tearOutSession]).
+     */
+    fun handleTabRelease(tabKey: String, screenX: Int, screenY: Int) {
+        _dragTarget.value = null
+        val source = _workspaces.value.firstOrNull { ws ->
+            ws.tabs.value.any { it.key == tabKey }
+        } ?: return
+        val pt = Offset(screenX.toFloat(), screenY.toFloat())
+        if (source.dropZoneScreenBounds.value?.contains(pt) == true) return
+        val targetId = findDropTargetWorkspace(screenX, screenY, exclude = source.id)
+        if (targetId != null) {
+            val target = workspaceById(targetId) ?: return
+            val tab = source.removeTab(tabKey) ?: return
+            when (tab) {
+                is WorkspaceTab.Logs -> target.openLogsTab()
+                is WorkspaceTab.Cluster -> target.addSession(tab.session, makeActive = true)
+            }
+            if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
+        } else if (source.tabs.value.size > 1) {
+            val tab = source.removeTab(tabKey) ?: return
+            val newWorkspace = Workspace(
+                initialPosition = WindowPosition.Absolute(screenX.dp, screenY.dp),
+            )
+            when (tab) {
+                is WorkspaceTab.Logs -> newWorkspace.openLogsTab()
+                is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
+            }
+            _workspaces.value = _workspaces.value + newWorkspace
+            if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
+        }
+        // single-tab window dropped over empty space → no-op, use title bar to move
+    }
+
+    /**
+     * Close a workspace and dispose every cluster session it still holds. Intended
+     * both as the cascade target for [closeTab] when the last tab leaves and as
      * the OS-window-close handler.
      */
     fun closeWorkspace(workspaceId: WorkspaceId) {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
-        workspace.sessions.value.forEach { it.close() }
+        workspace.tabs.value.filterIsInstance<WorkspaceTab.Cluster>().forEach { it.session.close() }
         _workspaces.value = _workspaces.value.filterNot { it.id == workspaceId }
     }
 
@@ -149,14 +220,11 @@ object WorkspaceManager {
      */
     fun tearOutSession(sessionId: SessionId, atScreenX: Int, atScreenY: Int): WorkspaceId? {
         val source = _workspaces.value.firstOrNull { ws ->
-            ws.sessions.value.any { it.id == sessionId }
+            ws.tabs.value.any { it is WorkspaceTab.Cluster && it.session.id == sessionId }
         } ?: return null
-        if (source.sessions.value.size == 1) {
-            // Nothing to tear *away from* — this chip is the window's only
-            // session. Closing the source workspace and immediately respawning
-            // a new one at the cursor would visibly flicker the window
-            // disappearing and reappearing. Move the window via the title bar
-            // drag region instead.
+        if (source.tabs.value.size == 1) {
+            // This chip is the window's only tab — tear-out would leave nothing.
+            // Move the window via the title bar drag region instead.
             return null
         }
         val session = source.removeSession(sessionId) ?: return null
@@ -165,7 +233,7 @@ object WorkspaceManager {
         )
         newWorkspace.addSession(session, makeActive = true)
         _workspaces.value = _workspaces.value + newWorkspace
-        if (source.sessions.value.isEmpty()) {
+        if (source.tabs.value.isEmpty()) {
             closeWorkspace(source.id)
         }
         return newWorkspace.id
@@ -184,13 +252,13 @@ object WorkspaceManager {
      */
     fun moveSession(sessionId: SessionId, toWorkspaceId: WorkspaceId): Boolean {
         val source = _workspaces.value.firstOrNull { ws ->
-            ws.sessions.value.any { it.id == sessionId }
+            ws.tabs.value.any { it is WorkspaceTab.Cluster && it.session.id == sessionId }
         } ?: return false
         if (source.id == toWorkspaceId) return false
         val target = workspaceById(toWorkspaceId) ?: return false
         val session = source.removeSession(sessionId) ?: return false
         target.addSession(session, makeActive = true)
-        if (source.sessions.value.isEmpty()) {
+        if (source.tabs.value.isEmpty()) {
             closeWorkspace(source.id)
         }
         return true
@@ -205,7 +273,7 @@ object WorkspaceManager {
      */
     fun notifyDragMove(sessionId: SessionId, screenX: Int, screenY: Int) {
         val source = _workspaces.value.firstOrNull { ws ->
-            ws.sessions.value.any { it.id == sessionId }
+            ws.tabs.value.any { it is WorkspaceTab.Cluster && it.session.id == sessionId }
         } ?: run {
             _dragTarget.value = null
             return
@@ -220,9 +288,9 @@ object WorkspaceManager {
      *   (Decision 5.6 of `.docs/multi-cluster-plan.md` — keeps a chip wiggled
      *   a few px and released on its own row from spawning a redundant window).
      * - Cursor over **another** workspace's drop zone → merge via [moveSession].
-     * - Cursor over empty space, source has only one session → no-op
+     * - Cursor over empty space, source has only one tab → no-op
      *   (tear-out is refused at N=1; see [tearOutSession]).
-     * - Cursor over empty space, source has ≥2 sessions → tear-out into a
+     * - Cursor over empty space, source has ≥2 tabs → tear-out into a
      *   fresh window at the cursor.
      *
      * Always clears [dragTarget]. Idempotent on repeat calls.
@@ -230,7 +298,7 @@ object WorkspaceManager {
     fun handleChipRelease(sessionId: SessionId, screenX: Int, screenY: Int) {
         _dragTarget.value = null
         val source = _workspaces.value.firstOrNull { ws ->
-            ws.sessions.value.any { it.id == sessionId }
+            ws.tabs.value.any { it is WorkspaceTab.Cluster && it.session.id == sessionId }
         } ?: return
         val pt = Offset(screenX.toFloat(), screenY.toFloat())
         if (source.dropZoneScreenBounds.value?.contains(pt) == true) {

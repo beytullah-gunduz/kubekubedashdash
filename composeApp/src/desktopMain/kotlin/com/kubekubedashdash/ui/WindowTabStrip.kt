@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
@@ -32,18 +32,26 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
+import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import org.jetbrains.compose.resources.painterResource
 
 private val EDGE_FADE_WIDTH = 20.dp
 
+private data class ClusterDisplay(
+    val label: String,
+    val context: String,
+    val connected: Boolean,
+    val connecting: Boolean,
+)
+
 /**
- * Tab strip rendered between the title bar and the content scaffold when a window
- * holds N≥2 cluster sessions. Each tab is a [ClusterChip] with a close ×, plus
- * a trailing `+` button that opens the cluster picker (Decision 3).
+ * Tab strip rendered between the title bar and the content scaffold when the
+ * workspace has ≥2 tabs or any non-cluster tab. Each cluster tab is a
+ * [ClusterChip] with a close ×; the Logs tab is a [LogsChip]; plus a trailing
+ * `+` button that opens the cluster picker.
  *
  * Tab labels use the kubeconfig context name, with `(2)`, `(3)`, … appended on
  * collisions within the workspace (Decision 4).
@@ -54,34 +62,39 @@ private val EDGE_FADE_WIDTH = 20.dp
  */
 @Composable
 fun WindowTabStrip(
-    sessions: List<ClusterSession>,
-    activeSessionId: SessionId?,
+    tabs: List<WorkspaceTab>,
+    activeTabKey: String?,
     isDropTarget: Boolean,
-    onSelectSession: (SessionId) -> Unit,
-    onCloseSession: (SessionId) -> Unit,
+    onSelectTab: (String) -> Unit,
+    onCloseTab: (String) -> Unit,
     onAddCluster: () -> Unit,
     onDragMoveSession: (SessionId, Int, Int) -> Unit,
     onDragReleaseSession: (SessionId, Int, Int) -> Unit,
     onDragCancelled: (SessionId) -> Unit,
+    onDragMoveTab: (String, Int, Int) -> Unit,
+    onDragReleaseTab: (String, Int, Int) -> Unit,
+    onDragCancelledTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val contexts: List<String> = sessions.map { session ->
-        key(session.id) {
-            val ctx by session.viewModel.selectedContext.collectAsState()
+    val clusterTabs = tabs.filterIsInstance<WorkspaceTab.Cluster>()
+
+    val contexts: List<String> = clusterTabs.map { ct ->
+        key(ct.session.id) {
+            val ctx by ct.session.viewModel.selectedContext.collectAsState()
             ctx.ifBlank { "Loading…" }
         }
     }
 
-    val connectedFlags: List<Boolean> = sessions.map { session ->
-        key(session.id) {
-            val connected by session.viewModel.isConnected.collectAsState()
+    val connectedFlags: List<Boolean> = clusterTabs.map { ct ->
+        key(ct.session.id) {
+            val connected by ct.session.viewModel.isConnected.collectAsState()
             connected
         }
     }
 
-    val connectingFlags: List<Boolean> = sessions.map { session ->
-        key(session.id) {
-            val connecting by session.viewModel.isConnecting.collectAsState()
+    val connectingFlags: List<Boolean> = clusterTabs.map { ct ->
+        key(ct.session.id) {
+            val connecting by ct.session.viewModel.isConnecting.collectAsState()
             connecting
         }
     }
@@ -95,6 +108,10 @@ fun WindowTabStrip(
         }
     }
 
+    val clusterDisplayByKey: Map<String, ClusterDisplay> = clusterTabs.mapIndexed { i, ct ->
+        ct.key to ClusterDisplay(labels[i], contexts[i], connectedFlags[i], connectingFlags[i])
+    }.toMap()
+
     val targetBg by animateColorAsState(
         if (isDropTarget) {
             MaterialTheme.colorScheme.primaryContainer
@@ -106,13 +123,8 @@ fun WindowTabStrip(
 
     val listState = rememberLazyListState()
 
-    // Keep the active chip in view. Fires on tab open / close / select /
-    // drag-merge — anything that changes which session is active or where
-    // it sits in the list. animateScrollToItem is a no-op when the target
-    // is already visible, so a click on an already-visible tab won't jolt
-    // the strip.
-    LaunchedEffect(activeSessionId, sessions) {
-        val activeIndex = sessions.indexOfFirst { it.id == activeSessionId }
+    LaunchedEffect(activeTabKey, tabs) {
+        val activeIndex = tabs.indexOfFirst { it.key == activeTabKey }
         if (activeIndex >= 0) {
             listState.animateScrollToItem(activeIndex)
         }
@@ -126,13 +138,6 @@ fun WindowTabStrip(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // LazyRow so chip overflow scrolls horizontally instead of
-            // clipping, and so we can animateScrollToItem(activeIndex) when
-            // a new session becomes active without measuring chip widths
-            // ourselves. macOS trackpad two-finger horizontal scroll picks
-            // this up natively. drawWithContent overlays a fade-to-bg
-            // gradient at whichever edge has off-screen content so the user
-            // can see at a glance that the strip is scrollable.
             LazyRow(
                 modifier = Modifier
                     .weight(1f)
@@ -166,23 +171,36 @@ fun WindowTabStrip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                itemsIndexed(sessions, key = { _, s -> s.id }) { index, session ->
-                    val ctx = contexts[index]
-                    key(session.id) {
-                        ClusterChip(
-                            label = labels[index],
-                            color = ClusterColor.fromContext(ctx),
-                            initial = clusterInitial(ctx),
-                            isActive = session.id == activeSessionId,
-                            isConnected = connectedFlags[index],
-                            isConnecting = connectingFlags[index],
-                            showActiveIndicator = true,
-                            onClick = { onSelectSession(session.id) },
-                            onClose = { onCloseSession(session.id) },
-                            onDragMove = { x, y -> onDragMoveSession(session.id, x, y) },
-                            onDragRelease = { x, y -> onDragReleaseSession(session.id, x, y) },
-                            onDragCancelled = { onDragCancelled(session.id) },
-                        )
+                items(tabs, key = { it.key }) { tab ->
+                    when (tab) {
+                        is WorkspaceTab.Cluster -> {
+                            val display = clusterDisplayByKey[tab.key] ?: return@items
+                            ClusterChip(
+                                label = display.label,
+                                color = ClusterColor.fromContext(display.context),
+                                initial = clusterInitial(display.context),
+                                isActive = tab.key == activeTabKey,
+                                isConnected = display.connected,
+                                isConnecting = display.connecting,
+                                showActiveIndicator = true,
+                                onClick = { onSelectTab(tab.key) },
+                                onClose = { onCloseTab(tab.key) },
+                                onDragMove = { x, y -> onDragMoveSession(tab.session.id, x, y) },
+                                onDragRelease = { x, y -> onDragReleaseSession(tab.session.id, x, y) },
+                                onDragCancelled = { onDragCancelled(tab.session.id) },
+                            )
+                        }
+
+                        WorkspaceTab.Logs -> {
+                            LogsChip(
+                                isActive = tab.key == activeTabKey,
+                                onClick = { onSelectTab(tab.key) },
+                                onClose = { onCloseTab(tab.key) },
+                                onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
+                                onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
+                                onDragCancelled = { onDragCancelledTab() },
+                            )
+                        }
                     }
                 }
             }
