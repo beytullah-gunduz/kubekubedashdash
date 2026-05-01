@@ -66,6 +66,13 @@ fun WindowTabStrip(
         }
     }
 
+    val connectingFlags: List<Boolean> = sessions.map { session ->
+        key(session.id) {
+            val connecting by session.viewModel.isConnecting.collectAsState()
+            connecting
+        }
+    }
+
     val labels: List<String> = run {
         val counts = mutableMapOf<String, Int>()
         contexts.map { name ->
@@ -102,6 +109,7 @@ fun WindowTabStrip(
                         initial = clusterInitial(ctx),
                         isActive = session.id == activeSessionId,
                         isConnected = connectedFlags[index],
+                        isConnecting = connectingFlags[index],
                         onClick = { onSelectSession(session.id) },
                         onClose = { onCloseSession(session.id) },
                         onDragMove = { x, y -> onDragMoveSession(session.id, x, y) },

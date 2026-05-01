@@ -1,5 +1,15 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
@@ -20,10 +30,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,8 +54,10 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import java.awt.MouseInfo
 import kotlin.math.sqrt
@@ -61,6 +83,13 @@ import kotlin.math.sqrt
  * through.
  */
 private const val DRAG_THRESHOLD_PX = 30.0
+private const val ARC_ROTATION_MS = 1100
+private const val MIN_SPINNER_VISIBLE_MS: Long = 1100L
+
+// Sweep / color / track-alpha all crossfade over this same window when
+// flipping between the connecting and settled visuals, so the arc closes
+// into a ring (or unwraps back into a partial arc) rather than snapping.
+private const val ARC_TRANSITION_MS = 400
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -72,6 +101,7 @@ fun ClusterChip(
     isActive: Boolean = true,
     isDropTarget: Boolean = false,
     isConnected: Boolean? = null,
+    isConnecting: Boolean = false,
     onClick: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     onDragMove: ((screenX: Int, screenY: Int) -> Unit)? = null,
@@ -169,36 +199,12 @@ fun ClusterChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .background(color.composeColor)
-                    .let { base ->
-                        // Connection-state ring: green when connected, red when
-                        // disconnected, transparent when state is unknown (e.g.
-                        // single-chip-in-title-bar callers that don't pass it).
-                        // Drawn after clip so the stroke is contained inside
-                        // the avatar's circle and doesn't bleed past it.
-                        if (isConnected != null) {
-                            base.border(
-                                width = 2.5.dp,
-                                color = if (isConnected) KdSuccess else KdError,
-                                shape = CircleShape,
-                            )
-                        } else {
-                            base
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = initial,
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            ClusterAvatar(
+                color = color.composeColor,
+                initial = initial,
+                isConnected = isConnected,
+                isConnecting = isConnecting,
+            )
 
             Text(
                 text = label,
@@ -228,6 +234,151 @@ fun ClusterChip(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 20 dp avatar — colored circle with the cluster's initial — overlaid by
+ * a connection-state ring:
+ *
+ * * `isConnecting = true` → 360° faint warning-tinted track + a 120°
+ *   warning-colored arc rotating once per [ARC_ROTATION_MS]. The arc is
+ *   held visible for at least one full revolution after [isConnecting]
+ *   flips back to false (anti-flash hold) so a sub-second connect still
+ *   reads as activity instead of a flicker.
+ * * Steady state (after the hold expires) → full green ring when
+ *   [isConnected] is true, full red ring when false, no ring when null.
+ *
+ * The avatar background and centered initial render the same in all
+ * three states so the chip's identity never blanks during transitions.
+ *
+ * Pattern follows the `compose-rotating-arc-status-dot` skill: 120°
+ * sweep (anything below ~100° reads as stationary), 1100 ms full
+ * revolution with [LinearEasing], `MIN_SPINNER_VISIBLE_MS` matched to
+ * one revolution.
+ */
+@Composable
+private fun ClusterAvatar(
+    color: Color,
+    initial: String,
+    isConnected: Boolean?,
+    isConnecting: Boolean,
+) {
+    var enteredConnectingAt by remember {
+        mutableStateOf<Long?>(if (isConnecting) System.currentTimeMillis() else null)
+    }
+    LaunchedEffect(isConnecting) {
+        if (isConnecting) {
+            enteredConnectingAt = System.currentTimeMillis()
+        } else {
+            val started = enteredConnectingAt ?: return@LaunchedEffect
+            val elapsed = System.currentTimeMillis() - started
+            val remaining = (MIN_SPINNER_VISIBLE_MS - elapsed).coerceAtLeast(0L)
+            if (remaining > 0) delay(remaining)
+            enteredConnectingAt = null
+        }
+    }
+    val showSpinner = isConnecting || enteredConnectingAt != null
+
+    // Freeze the last rotating-arc angle once the spinner stops, so the
+    // arc keeps the same start angle while its sweep grows from 120° to
+    // 360°. Without this the partial arc would snap to a fixed angle
+    // (e.g., 12 o'clock) the moment the rotation animation tears down,
+    // before the sweep growth had time to hide the discontinuity.
+    var lastRotation by remember { mutableStateOf(0f) }
+    val arcRotation = if (showSpinner) {
+        val transition = rememberInfiniteTransition(label = "clusterArc")
+        val rotation by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = ARC_ROTATION_MS, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "clusterArcAngle",
+        )
+        SideEffect { lastRotation = rotation }
+        rotation
+    } else {
+        lastRotation
+    }
+
+    // Animated targets so the connecting → settled (and reverse) transition
+    // feels like the arc closing into a ring, not a sudden swap.
+    val targetSweep = if (showSpinner) 120f else 360f
+    val targetArcColor = when {
+        showSpinner -> KdWarning
+        isConnected == true -> KdSuccess
+        isConnected == false -> KdError
+        else -> KdWarning // never displayed (gated below by isConnected != null)
+    }
+    val targetTrackAlpha = if (showSpinner) 0.25f else 0f
+    val animatedSweep by animateFloatAsState(
+        targetValue = targetSweep,
+        animationSpec = tween(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
+        label = "clusterArcSweep",
+    )
+    val animatedArcColor by animateColorAsState(
+        targetValue = targetArcColor,
+        animationSpec = tween(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
+        label = "clusterArcColor",
+    )
+    val animatedTrackAlpha by animateFloatAsState(
+        targetValue = targetTrackAlpha,
+        animationSpec = tween(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
+        label = "clusterArcTrackAlpha",
+    )
+
+    Box(
+        modifier = Modifier.size(20.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Cluster-color fill, intentionally smaller than the avatar's outer
+        // 20 dp footprint so there's a ~0.5 dp transparent gap between the
+        // fill's edge and the ring's inner edge. Without it, a green-tinted
+        // cluster color blends into the connected-green ring (and likewise
+        // for any cluster whose color happens to match a state color),
+        // erasing the ring visually.
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Text(
+            text = initial,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        if (showSpinner || isConnected != null) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val stroke = 2.5.dp.toPx()
+                val pad = stroke / 2f
+                val arcSize = Size(size.width - stroke, size.height - stroke)
+                val topLeft = Offset(pad, pad)
+                if (animatedTrackAlpha > 0.001f) {
+                    drawArc(
+                        color = KdWarning.copy(alpha = animatedTrackAlpha),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = stroke),
+                    )
+                }
+                drawArc(
+                    color = animatedArcColor,
+                    startAngle = arcRotation - 90f,
+                    sweepAngle = animatedSweep,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
             }
         }
     }
