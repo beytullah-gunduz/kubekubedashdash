@@ -8,16 +8,21 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.VerticalDragHandle
@@ -40,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -57,6 +63,8 @@ import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.Workspace
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -83,6 +91,8 @@ import com.kubekubedashdash.ui.screens.services.ServiceDetailScreen
 import com.kubekubedashdash.ui.screens.services.ServicesScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsScreen
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
+import kotlinx.coroutines.flow.drop
+import org.jetbrains.compose.resources.painterResource
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -136,7 +146,15 @@ fun App(
         }
 
         LaunchedEffect(pagerState, sessions) {
-            snapshotFlow { pagerState.settledPage }.collect { idx ->
+            // Drop the first emission. snapshotFlow re-emits the current
+            // settledPage every time this effect re-launches — including when
+            // `sessions` changes from addSession(). At that moment the pager
+            // hasn't started animating to the new active page yet, so the
+            // emitted value is still the *old* index, and acting on it would
+            // call workspace.setActive(oldSession.id), undoing the just-set
+            // active session. We only want to react to genuine user-driven
+            // settle events, which arrive as subsequent emissions.
+            snapshotFlow { pagerState.settledPage }.drop(1).collect { idx ->
                 sessions.getOrNull(idx)?.let { settled ->
                     if (settled.id != activeSessionId) workspace.setActive(settled.id)
                 }
@@ -183,10 +201,10 @@ fun App(
                                 chipSlot = if (!isMultiTab && selectedContext.isNotBlank()) {
                                     @Composable {
                                         val ctx = selectedContext
-                                        Box(
-                                            // Eat press events over the chip area so the title bar's
-                                            // ancestor pointerInput doesn't kick off macOS's
-                                            // performWindowDragWithEvent: on every chip press —
+                                        Row(
+                                            // Eat press events over the chip + add-button area so the
+                                            // title bar's ancestor pointerInput doesn't kick off
+                                            // macOS's performWindowDragWithEvent: on every press —
                                             // without this, AppKit captures the drag and the chip's
                                             // own detector never sees the move events.
                                             modifier = Modifier.pointerInput(Unit) {
@@ -199,6 +217,8 @@ fun App(
                                                     }
                                                 }
                                             },
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
                                             ClusterChip(
                                                 label = ctx,
@@ -214,6 +234,22 @@ fun App(
                                                 },
                                                 onDragCancelled = { WorkspaceManager.cancelDrag() },
                                             )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .clip(CircleShape)
+                                                    .clickable {
+                                                        workspace.showClusterSelector(OpenTarget.NEW_TAB)
+                                                    },
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    painterResource(Res.drawable.add),
+                                                    contentDescription = "Open another cluster",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
