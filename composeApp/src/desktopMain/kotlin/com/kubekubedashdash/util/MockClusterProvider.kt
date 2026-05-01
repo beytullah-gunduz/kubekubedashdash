@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder
@@ -9,11 +10,13 @@ import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
 import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
+import io.fabric8.kubernetes.api.model.Node
 import io.fabric8.kubernetes.api.model.NodeAddressBuilder
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.NodeConditionBuilder
 import io.fabric8.kubernetes.api.model.NodeSystemInfoBuilder
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.PodSpecBuilder
 import io.fabric8.kubernetes.api.model.PodStatusBuilder
@@ -29,52 +32,219 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.Context
 import io.fabric8.mockwebserver.MockWebServer
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.slf4j.LoggerFactory
+import java.io.Closeable
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicBoolean
+
+class MockClusterHandle internal constructor(
+    val client: KubernetesClient,
+) : Closeable {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) {
+            MockClusterProvider.releaseInternal(this)
+        }
+    }
+}
 
 object MockClusterProvider {
 
     const val MOCK_CONTEXT_NAME = "demo-cluster (mock)"
 
     private val log = LoggerFactory.getLogger(MockClusterProvider::class.java)
+    private val lock = Any()
 
+    // Guarded by `lock`.
     private var mockServer: KubernetesMockServer? = null
-    private var mockClient: KubernetesClient? = null
+    private val handles = mutableSetOf<MockClusterHandle>()
+    private var simulator: DemoClusterSimulator? = null
 
-    fun start(): KubernetesClient {
-        stop()
-        log.info("Starting mock Kubernetes server in CRUD mode")
+    private val _isRunning = MutableStateFlow(false)
+    val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
+
+    private val _connectedTabCount = MutableStateFlow(0)
+    val connectedTabCount: StateFlow<Int> = _connectedTabCount.asStateFlow()
+
+    fun acquire(): MockClusterHandle = synchronized(lock) {
+        val server = mockServer ?: bootServer()
+        val client = server.createClient()
+        val handle = MockClusterHandle(client)
+        handles += handle
+        _connectedTabCount.value = handles.size
+        log.info("Mock cluster acquired (refCount={})", handles.size)
+        handle
+    }
+
+    internal fun releaseInternal(handle: MockClusterHandle): Unit = synchronized(lock) {
+        if (!handles.remove(handle)) return
+        runCatching { handle.client.close() }
+        _connectedTabCount.value = handles.size
+        log.info("Mock cluster released (refCount={})", handles.size)
+        if (handles.isEmpty()) shutdownServer()
+    }
+
+    /** Hard kill — only for the "Kill mock server" button in Settings. */
+    fun forceShutdown() = synchronized(lock) {
+        log.warn("Mock cluster force-shutdown requested (refCount was {})", handles.size)
+        shutdownServer()
+    }
+
+    fun simulatorOrNull(): DemoClusterSimulator? = synchronized(lock) { simulator }
+
+    private fun bootServer(): KubernetesMockServer {
+        log.info("Starting mock Kubernetes server")
         val server = KubernetesMockServer(
             Context(),
             MockWebServer(),
             HashMap(),
             KubernetesCrudDispatcher(),
-            false, // useHttps
+            false,
         )
         server.init()
         mockServer = server
-        val client = server.createClient()
-        mockClient = client
-        seedResources(client)
-        log.info("Mock Kubernetes server started at {}", client.configuration.masterUrl)
-        return client
+        val seedClient = server.createClient()
+        try {
+            seedResources(seedClient)
+        } finally {
+            seedClient.close()
+        }
+        val targets = PreferenceRepository.demoTargets
+        simulator = DemoClusterSimulator(server.createClient(), targets).also { it.start() }
+        _isRunning.value = true
+        log.info("Mock Kubernetes server started")
+        return server
     }
 
-    fun stop() {
-        mockClient?.close()
-        mockClient = null
+    private fun shutdownServer() {
+        simulator?.stop()
+        simulator = null
         mockServer?.let {
             log.info("Stopping mock Kubernetes server")
-            it.destroy()
+            runCatching { it.destroy() }
         }
         mockServer = null
+        _isRunning.value = false
     }
 
-    private fun now(): String = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
+    // ── Time helpers (internal so DemoClusterSimulator can share them) ────────
+
+    internal fun now(): String = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
 
     private fun minutesAgo(m: Long): String = ZonedDateTime.now(ZoneOffset.UTC).minusMinutes(m).format(DateTimeFormatter.ISO_INSTANT)
+
+    // ── Node/Pod builders shared with DemoClusterSimulator ───────────────────
+
+    internal fun buildNode(
+        name: String,
+        cpuCores: Int = 4,
+        memGiB: Int = 8,
+        creationTimestamp: String = now(),
+        ip: String = "10.${(0..9).random()}.${(0..9).random()}.${(10..250).random()}",
+    ): Node = NodeBuilder()
+        .withNewMetadata()
+        .withName(name)
+        .withCreationTimestamp(creationTimestamp)
+        .addToLabels("kubernetes.io/hostname", name)
+        .addToLabels("kubernetes.io/os", "linux")
+        .addToLabels("kubernetes.io/arch", "amd64")
+        .endMetadata()
+        .withNewStatus()
+        .withConditions(
+            NodeConditionBuilder()
+                .withType("Ready").withStatus("True")
+                .withLastHeartbeatTime(now())
+                .build(),
+        )
+        .withAddresses(
+            NodeAddressBuilder().withType("InternalIP").withAddress(ip).build(),
+            NodeAddressBuilder().withType("Hostname").withAddress(name).build(),
+        )
+        .addToAllocatable("cpu", Quantity(cpuCores.toString()))
+        .addToAllocatable("memory", Quantity("${memGiB}Gi"))
+        .addToAllocatable("pods", Quantity("110"))
+        .addToCapacity("cpu", Quantity(cpuCores.toString()))
+        .addToCapacity("memory", Quantity("${memGiB}Gi"))
+        .addToCapacity("pods", Quantity("110"))
+        .withNodeInfo(
+            NodeSystemInfoBuilder()
+                .withKubeletVersion("v1.30.2")
+                .withOsImage("Ubuntu 22.04 LTS")
+                .withArchitecture("amd64")
+                .withContainerRuntimeVersion("containerd://1.7.2")
+                .withKernelVersion("5.15.0-78-generic")
+                .withOperatingSystem("linux")
+                .build(),
+        )
+        .endStatus()
+        .build()
+
+    internal fun buildPod(
+        name: String,
+        ns: String,
+        app: String,
+        image: String,
+        nodeName: String?,
+        phase: String = "Pending",
+        podIp: String? = null,
+        restartCount: Int = 0,
+        creationTimestamp: String = now(),
+    ): Pod {
+        val isRunning = phase == "Running"
+        return PodBuilder()
+            .withNewMetadata()
+            .withName(name)
+            .withNamespace(ns)
+            .withCreationTimestamp(creationTimestamp)
+            .addToLabels("app", app)
+            .endMetadata()
+            .withSpec(
+                PodSpecBuilder()
+                    .withNodeName(nodeName)
+                    .withContainers(
+                        ContainerBuilder()
+                            .withName(app)
+                            .withImage(image)
+                            .withPorts(ContainerPortBuilder().withContainerPort(8080).build())
+                            .build(),
+                    )
+                    .build(),
+            )
+            .withStatus(
+                PodStatusBuilder()
+                    .withPhase(phase)
+                    .withPodIP(podIp)
+                    .withContainerStatuses(
+                        if (isRunning) {
+                            listOf(
+                                ContainerStatusBuilder()
+                                    .withName(app)
+                                    .withImage(image)
+                                    .withReady(true)
+                                    .withRestartCount(restartCount)
+                                    .withState(
+                                        ContainerStateBuilder()
+                                            .withRunning(ContainerStateRunningBuilder().withStartedAt(now()).build())
+                                            .build(),
+                                    )
+                                    .build(),
+                            )
+                        } else {
+                            emptyList()
+                        },
+                    )
+                    .build(),
+            )
+            .build()
+    }
+
+    // ── Seed ─────────────────────────────────────────────────────────────────
 
     private fun seedResources(client: KubernetesClient) {
         log.debug("Seeding mock cluster with sample resources")
@@ -91,44 +261,14 @@ object MockClusterProvider {
 
         // ── Node ────────────────────────────────────────────────────────────────
         client.nodes().resource(
-            NodeBuilder()
-                .withNewMetadata()
-                .withName("mock-node-1")
-                .withCreationTimestamp(minutesAgo(4320))
-                .addToLabels("kubernetes.io/hostname", "mock-node-1")
-                .addToLabels("node-role.kubernetes.io/control-plane", "")
-                .addToLabels("kubernetes.io/os", "linux")
-                .addToLabels("kubernetes.io/arch", "amd64")
-                .endMetadata()
-                .withNewStatus()
-                .withConditions(
-                    NodeConditionBuilder()
-                        .withType("Ready").withStatus("True")
-                        .withLastHeartbeatTime(now())
-                        .build(),
-                )
-                .withAddresses(
-                    NodeAddressBuilder().withType("InternalIP").withAddress("10.0.0.10").build(),
-                    NodeAddressBuilder().withType("Hostname").withAddress("mock-node-1").build(),
-                )
-                .addToAllocatable("cpu", Quantity("4"))
-                .addToAllocatable("memory", Quantity("8Gi"))
-                .addToAllocatable("pods", Quantity("110"))
-                .addToCapacity("cpu", Quantity("4"))
-                .addToCapacity("memory", Quantity("8Gi"))
-                .addToCapacity("pods", Quantity("110"))
-                .withNodeInfo(
-                    NodeSystemInfoBuilder()
-                        .withKubeletVersion("v1.30.2")
-                        .withOsImage("Ubuntu 22.04 LTS")
-                        .withArchitecture("amd64")
-                        .withContainerRuntimeVersion("containerd://1.7.2")
-                        .withKernelVersion("5.15.0-78-generic")
-                        .withOperatingSystem("linux")
-                        .build(),
-                )
-                .endStatus()
-                .build(),
+            buildNode("mock-node-1", 4, 8, minutesAgo(4320), "10.0.0.10")
+                .let { node ->
+                    NodeBuilder(node)
+                        .editMetadata()
+                        .addToLabels("node-role.kubernetes.io/control-plane", "")
+                        .endMetadata()
+                        .build()
+                },
         ).create()
 
         // ── Pods ────────────────────────────────────────────────────────────────
@@ -146,53 +286,18 @@ object MockClusterProvider {
         )
 
         podDefs.forEach { def ->
-            val isRunning = def.phase == "Running"
+            val ts = minutesAgo(if (def.phase == "Running") 120 else 2)
             client.pods().inNamespace(def.ns).resource(
-                PodBuilder()
-                    .withNewMetadata()
-                    .withName(def.name)
-                    .withNamespace(def.ns)
-                    .withCreationTimestamp(minutesAgo(if (isRunning) 120 else 2))
-                    .addToLabels("app", def.app)
-                    .endMetadata()
-                    .withSpec(
-                        PodSpecBuilder()
-                            .withNodeName(if (isRunning) def.node else null)
-                            .withContainers(
-                                ContainerBuilder()
-                                    .withName(def.app)
-                                    .withImage(def.image)
-                                    .withPorts(ContainerPortBuilder().withContainerPort(8080).build())
-                                    .build(),
-                            )
-                            .build(),
-                    )
-                    .withStatus(
-                        PodStatusBuilder()
-                            .withPhase(def.phase)
-                            .withPodIP(def.ip.ifEmpty { null })
-                            .withContainerStatuses(
-                                if (isRunning) {
-                                    listOf(
-                                        ContainerStatusBuilder()
-                                            .withName(def.app)
-                                            .withImage(def.image)
-                                            .withReady(true)
-                                            .withRestartCount(0)
-                                            .withState(
-                                                ContainerStateBuilder()
-                                                    .withRunning(ContainerStateRunningBuilder().withStartedAt(minutesAgo(120)).build())
-                                                    .build(),
-                                            )
-                                            .build(),
-                                    )
-                                } else {
-                                    emptyList()
-                                },
-                            )
-                            .build(),
-                    )
-                    .build(),
+                buildPod(
+                    def.name,
+                    def.ns,
+                    def.app,
+                    def.image,
+                    if (def.phase == "Running") def.node else null,
+                    def.phase,
+                    def.ip.ifEmpty { null },
+                    creationTimestamp = ts,
+                ),
             ).create()
         }
 
@@ -234,7 +339,6 @@ object MockClusterProvider {
                     .build(),
             ).create()
 
-            // Matching ReplicaSet
             client.apps().replicaSets().inNamespace(def.ns).resource(
                 ReplicaSetBuilder()
                     .withNewMetadata()
@@ -355,7 +459,7 @@ object MockClusterProvider {
         )
 
         eventDefs.forEachIndexed { idx, (podName, reason, message) ->
-            val ns = if (podName.startsWith("data-migration")) "default" else "default"
+            val ns = "default"
             val evType = if (reason == "FailedScheduling") "Warning" else "Normal"
             client.v1().events().inNamespace(ns).resource(
                 EventBuilder()

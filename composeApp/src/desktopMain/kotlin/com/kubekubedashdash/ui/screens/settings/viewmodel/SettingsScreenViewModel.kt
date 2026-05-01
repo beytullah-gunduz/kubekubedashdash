@@ -10,6 +10,8 @@ import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.util.DemoClusterSimulator
+import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +60,35 @@ class SettingsScreenViewModel : ViewModel() {
     fun setCloseTabFocus(value: CloseTabFocus) {
         PreferenceRepository.closeTabFocus = value
         _closeTabFocus.value = value
+    }
+
+    // ── Demo cluster simulator ─────────────────────────────────────────────────
+
+    val mockIsRunning: StateFlow<Boolean> = MockClusterProvider.isRunning
+    val mockConnectedTabs: StateFlow<Int> = MockClusterProvider.connectedTabCount
+
+    val mockTargets: StateFlow<DemoClusterSimulator.Targets>
+        get() = MockClusterProvider.simulatorOrNull()?.targets ?: _defaultTargets
+    val mockPaused: StateFlow<Boolean>
+        get() = MockClusterProvider.simulatorOrNull()?.paused ?: MutableStateFlow(false)
+
+    private val _defaultTargets = MutableStateFlow(DemoClusterSimulator.Targets())
+
+    fun setMockPaused(p: Boolean) {
+        MockClusterProvider.simulatorOrNull()?.setPaused(p)
+    }
+
+    fun setMockTargets(t: DemoClusterSimulator.Targets) {
+        MockClusterProvider.simulatorOrNull()?.setTargets(t)
+        viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.demoTargets = t }
+    }
+
+    fun stopAllMockResources() {
+        MockClusterProvider.simulatorOrNull()?.stopAll()
+    }
+
+    fun killMockServer() {
+        MockClusterProvider.forceShutdown()
     }
 
     init {

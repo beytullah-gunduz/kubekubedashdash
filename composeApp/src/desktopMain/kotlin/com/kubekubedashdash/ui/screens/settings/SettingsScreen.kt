@@ -18,15 +18,18 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRowScope
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -78,6 +82,157 @@ private fun FullWidthSingleChoiceSegmentedButtonRow(
 }
 
 @Composable
+private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
+    val connectedTabs by viewModel.mockConnectedTabs.collectAsState()
+    val targets by viewModel.mockTargets.collectAsState()
+    val paused by viewModel.mockPaused.collectAsState()
+    var showStopAllDialog by remember { mutableStateOf(false) }
+    var showKillServerDialog by remember { mutableStateOf(false) }
+
+    Text(
+        "DEMO CLUSTER SIMULATOR",
+        style = MaterialTheme.typography.labelMedium,
+        color = KdTextSecondary,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.5.sp,
+    )
+
+    Spacer(Modifier.height(16.dp))
+
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("●", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "Running — $connectedTabs ${if (connectedTabs == 1) "tab" else "tabs"} connected",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Switch(checked = paused, onCheckedChange = { viewModel.setMockPaused(it) })
+        Text(
+            if (paused) "Simulation paused" else "Simulation running",
+            style = MaterialTheme.typography.bodyMedium,
+            color = KdTextSecondary,
+        )
+    }
+
+    Spacer(Modifier.height(20.dp))
+
+    Text("Node range", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        "Min ${targets.nodesMin}  ·  Max ${targets.nodesMax}",
+        style = MaterialTheme.typography.bodySmall,
+        color = KdTextSecondary,
+    )
+    Spacer(Modifier.height(4.dp))
+    RangeSlider(
+        value = targets.nodesMin.toFloat()..targets.nodesMax.toFloat(),
+        onValueChange = { range ->
+            val lo = range.start.toInt().coerceIn(1, 100)
+            val hi = range.endInclusive.toInt().coerceIn(lo, 100)
+            viewModel.setMockTargets(targets.copy(nodesMin = lo, nodesMax = hi))
+        },
+        valueRange = 1f..100f,
+        steps = 98,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    Spacer(Modifier.height(20.dp))
+
+    Text("Pod range", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        "Min ${targets.podsMin}  ·  Max ${targets.podsMax}",
+        style = MaterialTheme.typography.bodySmall,
+        color = KdTextSecondary,
+    )
+    Spacer(Modifier.height(4.dp))
+    RangeSlider(
+        value = targets.podsMin.toFloat()..targets.podsMax.toFloat(),
+        onValueChange = { range ->
+            val lo = range.start.toInt().coerceIn(10, 1000)
+            val hi = range.endInclusive.toInt().coerceIn(lo, 1000)
+            viewModel.setMockTargets(targets.copy(podsMin = lo, podsMax = hi))
+        },
+        valueRange = 10f..1000f,
+        steps = 989,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    Spacer(Modifier.height(20.dp))
+
+    Text("Chaos", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(Modifier.height(8.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { showStopAllDialog = true },
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, KdBorder),
+        ) {
+            Text("Stop all nodes & pods", color = MaterialTheme.colorScheme.error)
+        }
+        OutlinedButton(
+            onClick = { showKillServerDialog = true },
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, KdBorder),
+        ) {
+            Text("Kill mock server", color = MaterialTheme.colorScheme.error)
+        }
+    }
+
+    if (showStopAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showStopAllDialog = false },
+            title = { Text("Stop all nodes & pods?") },
+            text = {
+                Text("Delete every node and pod in the demo cluster, including the protected baseline. The simulator will start rebuilding immediately.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.stopAllMockResources()
+                        showStopAllDialog = false
+                    },
+                ) {
+                    Text("Stop all", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStopAllDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showKillServerDialog) {
+        AlertDialog(
+            onDismissRequest = { showKillServerDialog = false },
+            title = { Text("Kill mock server?") },
+            text = {
+                Text("Shut down the mock Kubernetes server. Open demo tabs will show a connection error until you reconnect.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.killMockServer()
+                        showKillServerDialog = false
+                    },
+                ) {
+                    Text("Kill server", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showKillServerDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+@Composable
 fun SettingsScreen(
     onDiscoverEks: () -> Unit = {},
     onOpenLogsTab: () -> Unit = {},
@@ -87,6 +242,7 @@ fun SettingsScreen(
     var showAboutModal by remember { mutableStateOf(false) }
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isReady = true }
+    val mockRunning by viewModel.mockIsRunning.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (!isReady) return@Box
@@ -317,6 +473,11 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+            }
+
+            if (mockRunning) {
+                Spacer(Modifier.height(32.dp))
+                DemoClusterSimulatorSection(viewModel)
             }
 
             Spacer(Modifier.height(32.dp))

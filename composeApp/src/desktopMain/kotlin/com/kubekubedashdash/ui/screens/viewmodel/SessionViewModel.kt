@@ -130,7 +130,6 @@ class SessionViewModel(
             val result = if (isMock) {
                 reactiveClient.connectMock()
             } else {
-                MockClusterProvider.stop()
                 reactiveClient.connect(ctx)
             }
             result.fold(

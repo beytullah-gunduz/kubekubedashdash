@@ -22,6 +22,7 @@ class KubeConnectionManager : Closeable {
     private val log = LoggerFactory.getLogger(KubeConnectionManager::class.java)
 
     private var _client: KubernetesClient? = null
+    private var _mockHandle: MockClusterHandle? = null
     val isConnected: Boolean get() = _client != null
 
     val client: KubernetesClient
@@ -101,6 +102,20 @@ class KubeConnectionManager : Closeable {
         Result.failure(if (t is Exception) t else RuntimeException(t))
     }
 
+    fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = try {
+        log.info("Connecting via mock handle")
+        close()
+        _client = handle.client
+        _mockHandle = handle
+        _connectedContext = MockClusterProvider.MOCK_CONTEXT_NAME
+        clearConnectionError()
+        _connectionVersion.value++
+        Result.success("mock")
+    } catch (t: Throwable) {
+        log.error("Failed to connect via mock handle", t)
+        Result.failure(if (t is Exception) t else RuntimeException(t))
+    }
+
     fun getContexts(): List<String> = try {
         val ctxs = Config.autoConfigure(null).contexts?.map { it.name } ?: emptyList()
         log.debug("Loaded {} kube contexts", ctxs.size)
@@ -154,7 +169,9 @@ class KubeConnectionManager : Closeable {
         if (_client != null) {
             log.info("Closing Kubernetes client connection")
         }
-        _client?.close()
+        _mockHandle?.close() // releases ref-count; also closes the client for mock connections
+        _mockHandle = null
+        _client?.close() // no-op for mock (already closed above), real cleanup for non-mock
         _client = null
         _connectedContext = null
     }

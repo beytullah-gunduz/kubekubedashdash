@@ -68,8 +68,8 @@ class ReactiveKubeClient(
     fun connect(context: String? = null): Result<String> = connectionManager.connect(context)
 
     fun connectMock(): Result<String> = try {
-        val client = MockClusterProvider.start()
-        connectionManager.connectWithClient(client, MockClusterProvider.MOCK_CONTEXT_NAME)
+        val handle = MockClusterProvider.acquire()
+        connectionManager.connectWithMockHandle(handle)
     } catch (e: Exception) {
         Result.failure(e)
     }

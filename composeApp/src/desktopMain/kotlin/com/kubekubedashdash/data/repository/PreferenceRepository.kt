@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.util.DemoClusterSimulator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -22,6 +23,10 @@ object PreferenceRepository {
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
+    private val DEMO_NODES_MIN by lazy { intPreferencesKey("demo_nodes_min") }
+    private val DEMO_NODES_MAX by lazy { intPreferencesKey("demo_nodes_max") }
+    private val DEMO_PODS_MIN by lazy { intPreferencesKey("demo_pods_min") }
+    private val DEMO_PODS_MAX by lazy { intPreferencesKey("demo_pods_max") }
 
     var themeMode: ThemeMode
         get() = runBlocking {
@@ -89,4 +94,25 @@ object PreferenceRepository {
 
     private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() }
         ?: CloseTabFocus.LEFT_NEIGHBOR
+
+    var demoTargets: DemoClusterSimulator.Targets
+        get() = runBlocking {
+            val p = dataStore.data.firstOrNull()
+            DemoClusterSimulator.Targets(
+                nodesMin = p?.get(DEMO_NODES_MIN) ?: 1,
+                nodesMax = p?.get(DEMO_NODES_MAX) ?: 100,
+                podsMin = p?.get(DEMO_PODS_MIN) ?: 10,
+                podsMax = p?.get(DEMO_PODS_MAX) ?: 1000,
+            )
+        }
+        set(value) {
+            runBlocking {
+                dataStore.edit {
+                    it[DEMO_NODES_MIN] = value.nodesMin
+                    it[DEMO_NODES_MAX] = value.nodesMax
+                    it[DEMO_PODS_MIN] = value.podsMin
+                    it[DEMO_PODS_MAX] = value.podsMax
+                }
+            }
+        }
 }
