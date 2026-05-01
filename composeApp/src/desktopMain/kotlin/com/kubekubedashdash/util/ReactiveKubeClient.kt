@@ -6,6 +6,7 @@ import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.NodeInfo
+import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.models.ResourceGraph
@@ -246,6 +247,52 @@ class ReactiveKubeClient(
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
 
+    private fun <T> pollingStateFlow(
+        intervalMs: Long = 5_000,
+        fetch: () -> T,
+    ): StateFlow<ResourceState<T>> = _connectionVersion
+        .flatMapLatest {
+            flow {
+                emit(ResourceState.Loading)
+                var loaded = false
+                while (true) {
+                    try {
+                        val data = fetch()
+                        reportSuccess()
+                        emit(ResourceState.Success(data))
+                        loaded = true
+                    } catch (e: Exception) {
+                        reportError(e.message ?: "Unknown error")
+                        if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
+                    }
+                    delay(intervalMs)
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+
+    private fun <T> directPollingStateFlow(
+        intervalMs: Long = 5_000,
+        initial: T,
+        fetch: () -> T,
+    ): StateFlow<T> = _connectionVersion
+        .flatMapLatest {
+            flow {
+                emit(initial)
+                while (true) {
+                    try {
+                        emit(fetch())
+                    } catch (_: Exception) {
+                        // keep previous value on error
+                    }
+                    delay(intervalMs)
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), initial)
+
     // ── Mapping: Pods ───────────────────────────────────────────────────────────
 
     private fun mapPod(pod: Pod): PodInfo {
@@ -272,6 +319,7 @@ class ReactiveKubeClient(
             ready = "${containers.count { it.ready }}/${containers.size}",
             restarts = containers.sumOf { it.restartCount },
             age = formatAge(pod.metadata.creationTimestamp),
+            creationTimestamp = pod.metadata.creationTimestamp ?: "",
             node = pod.spec?.nodeName ?: "<none>",
             ip = pod.status?.podIP ?: "<none>",
             labels = pod.metadata.labels ?: emptyMap(),
@@ -442,6 +490,7 @@ class ReactiveKubeClient(
                 memory = alloc?.get("memory")?.toString() ?: "",
                 pods = alloc?.get("pods")?.toString() ?: "",
                 age = formatAge(node.metadata.creationTimestamp),
+                creationTimestamp = node.metadata.creationTimestamp ?: "",
                 labels = node.metadata.labels ?: emptyMap(),
             )
         },
@@ -858,6 +907,39 @@ class ReactiveKubeClient(
                 memCap += parseMemoryToBytes(alloc["memory"]?.toString() ?: "0")
             }
             ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true)
+        },
+    )
+
+    // ── Per-node resource usage (polling) ────────────────────────────────────────
+
+    val nodeUsages: StateFlow<Map<String, NodeResourceUsage>> = directPollingStateFlow(
+        intervalMs = 10_000,
+        initial = emptyMap(),
+        fetch = {
+            val nodeMetrics = try {
+                k8s.top().nodes().metrics().items ?: emptyList()
+            } catch (_: Exception) {
+                return@directPollingStateFlow emptyMap()
+            }
+            val nodeItems = try {
+                k8s.nodes().list().items ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val capacityByName: Map<String, Pair<Long, Long>> = nodeItems
+                .associate { node ->
+                    val alloc = node.status?.allocatable
+                    val cpuCap = parseCpuToMillis(alloc?.get("cpu")?.toString() ?: "0")
+                    val memCap = parseMemoryToBytes(alloc?.get("memory")?.toString() ?: "0")
+                    node.metadata.name to (cpuCap to memCap)
+                }
+            nodeMetrics.associate { nm ->
+                val name = nm.metadata.name
+                val cpu = parseCpuToMillis(nm.usage?.get("cpu")?.toString() ?: "0")
+                val mem = parseMemoryToBytes(nm.usage?.get("memory")?.toString() ?: "0")
+                val (cpuCap, memCap) = capacityByName[name] ?: (0L to 0L)
+                name to NodeResourceUsage(name, cpu, cpuCap, mem, memCap)
+            }
         },
     )
 
