@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -15,24 +16,23 @@ import kotlinx.coroutines.runBlocking
 object PreferenceRepository {
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
 
-    private val DARK_THEME by lazy { booleanPreferencesKey("dark_theme") }
+    private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
 
-    var darkTheme: Boolean
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(DARK_THEME) ?: true }
+    var themeMode: ThemeMode
+        get() = runBlocking {
+            val name = dataStore.data.firstOrNull()?.get(THEME_MODE) ?: return@runBlocking ThemeMode.SYSTEM
+            runCatching { ThemeMode.valueOf(name) }.getOrDefault(ThemeMode.SYSTEM)
+        }
         set(value) {
             runBlocking {
                 dataStore.edit {
-                    it[DARK_THEME] = value
+                    it[THEME_MODE] = value.name
                 }
             }
         }
-
-    fun darkTheme(): Flow<Boolean> = dataStore.data.map {
-        it[DARK_THEME] ?: true
-    }
 
     var mcpServerEnabled: Boolean
         get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_SERVER_ENABLED) ?: false }

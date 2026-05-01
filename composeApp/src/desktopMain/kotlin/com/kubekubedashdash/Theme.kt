@@ -1,10 +1,12 @@
 package com.kubekubedashdash
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,15 +17,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.data.repository.PreferenceRepository
 
-object ThemeManager {
-    private var _isDarkTheme by mutableStateOf(PreferenceRepository.darkTheme)
+enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
-    var isDarkTheme: Boolean
-        get() = _isDarkTheme
-        set(value) {
-            _isDarkTheme = value
-            PreferenceRepository.darkTheme = value
+object ThemeManager {
+    private var _mode by mutableStateOf(PreferenceRepository.themeMode)
+    private var _isDarkTheme by mutableStateOf(_mode != ThemeMode.LIGHT)
+
+    val mode: ThemeMode get() = _mode
+
+    // For SYSTEM mode, KubeDashTheme keeps this in sync via applySystemDarkTheme.
+    val isDarkTheme: Boolean get() = _isDarkTheme
+
+    fun setMode(newMode: ThemeMode) {
+        _mode = newMode
+        PreferenceRepository.themeMode = newMode
+        when (newMode) {
+            ThemeMode.LIGHT -> _isDarkTheme = false
+            ThemeMode.DARK -> _isDarkTheme = true
+            ThemeMode.SYSTEM -> Unit
         }
+    }
+
+    internal fun applySystemDarkTheme(systemIsDark: Boolean) {
+        if (_mode == ThemeMode.SYSTEM) {
+            _isDarkTheme = systemIsDark
+        }
+    }
 }
 
 private val KdBackgroundDark = Color(0xFF1E2124)
@@ -163,6 +182,10 @@ private val AppTypography = Typography(
 
 @Composable
 fun KubeDashTheme(content: @Composable () -> Unit) {
+    val systemIsDark = isSystemInDarkTheme()
+    LaunchedEffect(systemIsDark, ThemeManager.mode) {
+        ThemeManager.applySystemDarkTheme(systemIsDark)
+    }
     val colorScheme = if (ThemeManager.isDarkTheme) DarkColorScheme else LightColorScheme
     MaterialTheme(
         colorScheme = colorScheme,

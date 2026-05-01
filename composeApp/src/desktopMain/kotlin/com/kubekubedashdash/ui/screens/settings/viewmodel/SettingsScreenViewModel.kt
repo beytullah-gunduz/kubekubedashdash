@@ -6,17 +6,18 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class SettingsScreenViewModel : ViewModel() {
-    val isDarkTheme: Boolean
-        get() = ThemeManager.isDarkTheme
+    val themeMode: ThemeMode
+        get() = ThemeManager.mode
 
-    fun setDarkTheme(dark: Boolean) {
-        ThemeManager.isDarkTheme = dark
+    fun setThemeMode(mode: ThemeMode) {
+        ThemeManager.setMode(mode)
     }
 
     var isMcpServerEnabled: Boolean by mutableStateOf(McpServerManager.isRunning)
