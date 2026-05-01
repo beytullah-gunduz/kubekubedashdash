@@ -1,5 +1,8 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,8 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kubekubedashdash.KdSurface
+import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import org.jetbrains.compose.resources.painterResource
@@ -53,6 +60,7 @@ import kotlin.math.sqrt
  */
 private const val DRAG_THRESHOLD_PX = 30.0
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ClusterChip(
     label: String,
@@ -143,60 +151,82 @@ fun ClusterChip(
         Modifier
     }
 
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(background)
-            .then(targetBorder)
-            .then(dragModifier)
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    TooltipArea(
+        tooltip = { ChipTooltip(label) },
+        tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(color.composeColor),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier = modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(background)
+                .then(targetBorder)
+                .then(dragModifier)
+                .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = initial,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 140.dp),
-            color = if (isActive) {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            },
-        )
-
-        if (onClose != null) {
             Box(
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(20.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onClose),
+                    .background(color.composeColor),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    painterResource(Res.drawable.close),
-                    contentDescription = "Close $label",
-                    modifier = Modifier.size(12.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(
+                    text = initial,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
                 )
             }
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 140.dp),
+                color = if (isActive) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                },
+            )
+
+            if (onClose != null) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painterResource(Res.drawable.close),
+                        contentDescription = "Close $label",
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun ChipTooltip(label: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = KdSurface,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = KdTextPrimary,
+        )
     }
 }
