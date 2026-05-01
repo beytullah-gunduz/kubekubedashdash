@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.resources.Res
@@ -69,6 +71,7 @@ fun ClusterChip(
     modifier: Modifier = Modifier,
     isActive: Boolean = true,
     isDropTarget: Boolean = false,
+    isConnected: Boolean? = null,
     onClick: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     onDragMove: ((screenX: Int, screenY: Int) -> Unit)? = null,
@@ -170,7 +173,23 @@ fun ClusterChip(
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .background(color.composeColor),
+                    .background(color.composeColor)
+                    .let { base ->
+                        // Connection-state ring: green when connected, red when
+                        // disconnected, transparent when state is unknown (e.g.
+                        // single-chip-in-title-bar callers that don't pass it).
+                        // Drawn after clip so the stroke is contained inside
+                        // the avatar's circle and doesn't bleed past it.
+                        if (isConnected != null) {
+                            base.border(
+                                width = 2.5.dp,
+                                color = if (isConnected) KdSuccess else KdError,
+                                shape = CircleShape,
+                            )
+                        } else {
+                            base
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
