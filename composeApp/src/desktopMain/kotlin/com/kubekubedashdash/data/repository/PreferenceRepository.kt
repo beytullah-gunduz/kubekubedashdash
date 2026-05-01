@@ -99,9 +99,9 @@ object PreferenceRepository {
         get() = runBlocking {
             val p = dataStore.data.firstOrNull()
             DemoClusterSimulator.Targets(
-                nodesMin = p?.get(DEMO_NODES_MIN) ?: 1,
+                nodesMin = p?.get(DEMO_NODES_MIN) ?: 30,
                 nodesMax = p?.get(DEMO_NODES_MAX) ?: 100,
-                podsMin = p?.get(DEMO_PODS_MIN) ?: 10,
+                podsMin = p?.get(DEMO_PODS_MIN) ?: 300,
                 podsMax = p?.get(DEMO_PODS_MAX) ?: 1000,
             )
         }

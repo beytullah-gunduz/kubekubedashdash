@@ -7,6 +7,10 @@ import io.fabric8.kubernetes.api.model.ContainerPortBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateRunningBuilder
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
+import io.fabric8.kubernetes.api.model.EndpointAddressBuilder
+import io.fabric8.kubernetes.api.model.EndpointPortBuilder
+import io.fabric8.kubernetes.api.model.EndpointSubsetBuilder
+import io.fabric8.kubernetes.api.model.EndpointsBuilder
 import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
@@ -16,6 +20,8 @@ import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.NodeConditionBuilder
 import io.fabric8.kubernetes.api.model.NodeSystemInfoBuilder
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
+import io.fabric8.kubernetes.api.model.PersistentVolumeBuilder
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.PodSpecBuilder
@@ -25,8 +31,20 @@ import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.api.model.ServiceBuilder
 import io.fabric8.kubernetes.api.model.ServicePortBuilder
 import io.fabric8.kubernetes.api.model.ServiceSpecBuilder
+import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
+import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.Job
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.ContainerMetricsBuilder
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetrics
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetricsBuilder
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
+import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyBuilder
+import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
@@ -41,6 +59,7 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
+import io.fabric8.kubernetes.api.model.Duration as FabricDuration
 
 class MockClusterHandle internal constructor(
     val client: KubernetesClient,
@@ -242,6 +261,82 @@ object MockClusterProvider {
                     .build(),
             )
             .build()
+    }
+
+    internal fun buildJob(
+        name: String,
+        ns: String,
+        app: String,
+        image: String,
+        creationTimestamp: String = now(),
+        ownerCronJob: String? = null,
+    ): Job {
+        val builder = JobBuilder()
+            .withNewMetadata()
+            .withName(name)
+            .withNamespace(ns)
+            .withCreationTimestamp(creationTimestamp)
+            .addToLabels("app", app)
+            .addToLabels("job-name", name)
+        if (ownerCronJob != null) {
+            builder.addToLabels("cronjob", ownerCronJob)
+        }
+        return builder.endMetadata()
+            .withNewSpec()
+            .withCompletions(1)
+            .withParallelism(1)
+            .withBackoffLimit(3)
+            .withNewSelector().addToMatchLabels("job-name", name).endSelector()
+            .withNewTemplate()
+            .withNewMetadata().addToLabels("app", app).addToLabels("job-name", name).endMetadata()
+            .withNewSpec()
+            .withRestartPolicy("Never")
+            .withContainers(
+                ContainerBuilder()
+                    .withName(app)
+                    .withImage(image)
+                    .withCommand("/bin/sh", "-c", "echo working && sleep 30 && echo done")
+                    .build(),
+            )
+            .endSpec()
+            .endTemplate()
+            .endSpec()
+            .withNewStatus()
+            .withActive(1)
+            .withStartTime(creationTimestamp)
+            .endStatus()
+            .build()
+    }
+
+    private fun metricsWindow(): FabricDuration = FabricDuration(java.time.Duration.ofSeconds(10))
+
+    internal fun buildNodeMetrics(name: String, cpuMillis: Long, memBytes: Long): NodeMetrics = NodeMetricsBuilder()
+        .withNewMetadata().withName(name).endMetadata()
+        .withTimestamp(now())
+        .withWindow(metricsWindow())
+        .addToUsage("cpu", Quantity("${cpuMillis}m"))
+        .addToUsage("memory", Quantity(memBytes.toString()))
+        .build()
+
+    internal fun buildPodMetrics(
+        name: String,
+        ns: String,
+        containers: List<Triple<String, Long, Long>>,
+    ): PodMetrics {
+        val builder = PodMetricsBuilder()
+            .withNewMetadata().withName(name).withNamespace(ns).endMetadata()
+            .withTimestamp(now())
+            .withWindow(metricsWindow())
+        containers.forEach { (cName, cpuMillis, memBytes) ->
+            builder.addToContainers(
+                ContainerMetricsBuilder()
+                    .withName(cName)
+                    .addToUsage("cpu", Quantity("${cpuMillis}m"))
+                    .addToUsage("memory", Quantity(memBytes.toString()))
+                    .build(),
+            )
+        }
+        return builder.build()
     }
 
     // ── Seed ─────────────────────────────────────────────────────────────────
@@ -486,6 +581,380 @@ object MockClusterProvider {
             ).create()
         }
 
-        log.info("Mock cluster seeded: 3 namespaces, 1 node, {} pods, {} deployments, 3 services, 1 configmap, 1 secret, {} events", podDefs.size, deployDefs.size, eventDefs.size)
+        // ── StorageClasses ──────────────────────────────────────────────────────
+        data class ScDef(val name: String, val provisioner: String, val isDefault: Boolean, val volumeBindingMode: String)
+
+        val scDefs = listOf(
+            ScDef("standard", "kubernetes.io/no-provisioner", isDefault = true, volumeBindingMode = "WaitForFirstConsumer"),
+            ScDef("fast-ssd", "kubernetes.io/no-provisioner", isDefault = false, volumeBindingMode = "Immediate"),
+        )
+
+        scDefs.forEach { def ->
+            val metaBuilder = StorageClassBuilder()
+                .withNewMetadata()
+                .withName(def.name)
+                .withCreationTimestamp(minutesAgo(1440))
+            if (def.isDefault) {
+                metaBuilder.addToAnnotations("storageclass.kubernetes.io/is-default-class", "true")
+            }
+            client.storage().v1().storageClasses().resource(
+                metaBuilder.endMetadata()
+                    .withProvisioner(def.provisioner)
+                    .withVolumeBindingMode(def.volumeBindingMode)
+                    .withReclaimPolicy("Retain")
+                    .build(),
+            ).create()
+        }
+
+        // ── PersistentVolumes ───────────────────────────────────────────────────
+        data class PvDef(
+            val name: String,
+            val sc: String,
+            val capacityGi: Int,
+            val accessModes: List<String>,
+            val hostPath: String,
+            val claimName: String? = null,
+            val claimNs: String? = null,
+        )
+
+        val pvDefs = listOf(
+            PvDef("pv-postgres-data", "standard", 20, listOf("ReadWriteOnce"), "/data/postgres", "postgres-data", "production"),
+            PvDef("pv-redis-data", "fast-ssd", 5, listOf("ReadWriteOnce"), "/data/redis", "redis-data", "production"),
+            PvDef("pv-logs-archive", "standard", 50, listOf("ReadWriteMany"), "/data/logs"),
+            PvDef("pv-ssd-cache", "fast-ssd", 10, listOf("ReadWriteOnce"), "/data/cache"),
+        )
+
+        pvDefs.forEach { def ->
+            val phase = if (def.claimName != null) "Bound" else "Available"
+            val specBuilder = PersistentVolumeBuilder()
+                .withNewMetadata()
+                .withName(def.name)
+                .withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withNewSpec()
+                .withStorageClassName(def.sc)
+                .addToCapacity("storage", Quantity("${def.capacityGi}Gi"))
+                .withAccessModes(def.accessModes)
+                .withPersistentVolumeReclaimPolicy("Retain")
+                .withNewHostPath().withPath(def.hostPath).endHostPath()
+            if (def.claimName != null) {
+                specBuilder.withNewClaimRef()
+                    .withKind("PersistentVolumeClaim")
+                    .withName(def.claimName)
+                    .withNamespace(def.claimNs)
+                    .endClaimRef()
+            }
+            client.persistentVolumes().resource(
+                specBuilder.endSpec()
+                    .withNewStatus().withPhase(phase).endStatus()
+                    .build(),
+            ).create()
+        }
+
+        // ── PersistentVolumeClaims ──────────────────────────────────────────────
+        data class PvcDef(
+            val name: String,
+            val ns: String,
+            val sc: String,
+            val requestGi: Int,
+            val accessModes: List<String>,
+            val volumeName: String? = null,
+        )
+
+        val pvcDefs = listOf(
+            PvcDef("postgres-data", "production", "standard", 20, listOf("ReadWriteOnce"), "pv-postgres-data"),
+            PvcDef("redis-data", "production", "fast-ssd", 5, listOf("ReadWriteOnce"), "pv-redis-data"),
+            PvcDef("app-logs", "default", "standard", 10, listOf("ReadWriteMany")),
+        )
+
+        pvcDefs.forEach { def ->
+            val phase = if (def.volumeName != null) "Bound" else "Pending"
+            val specBuilder = PersistentVolumeClaimBuilder()
+                .withNewMetadata()
+                .withName(def.name)
+                .withNamespace(def.ns)
+                .withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withNewSpec()
+                .withStorageClassName(def.sc)
+                .withAccessModes(def.accessModes)
+                .withNewResources()
+                .addToRequests("storage", Quantity("${def.requestGi}Gi"))
+                .endResources()
+            if (def.volumeName != null) {
+                specBuilder.withVolumeName(def.volumeName)
+            }
+            val statusBuilder = specBuilder.endSpec().withNewStatus().withPhase(phase)
+            if (def.volumeName != null) {
+                statusBuilder.addToCapacity("storage", Quantity("${def.requestGi}Gi"))
+                statusBuilder.withAccessModes(def.accessModes)
+            }
+            client.persistentVolumeClaims().inNamespace(def.ns).resource(
+                statusBuilder.endStatus().build(),
+            ).create()
+        }
+
+        // ── StatefulSets ───────────────────────────────────────────────────────
+        data class StsDef(val name: String, val ns: String, val app: String, val image: String, val replicas: Int, val serviceName: String)
+
+        val stsDefs = listOf(
+            StsDef("postgres", "production", "postgres", "postgres:16", 1, "postgres"),
+            StsDef("kafka", "monitoring", "kafka", "bitnami/kafka:3.7", 3, "kafka-headless"),
+        )
+
+        stsDefs.forEach { def ->
+            client.apps().statefulSets().inNamespace(def.ns).resource(
+                StatefulSetBuilder()
+                    .withNewMetadata()
+                    .withName(def.name)
+                    .withNamespace(def.ns)
+                    .withCreationTimestamp(minutesAgo(1440))
+                    .addToLabels("app", def.app)
+                    .endMetadata()
+                    .withNewSpec()
+                    .withReplicas(def.replicas)
+                    .withServiceName(def.serviceName)
+                    .withNewSelector().addToMatchLabels("app", def.app).endSelector()
+                    .withNewTemplate()
+                    .withNewMetadata().addToLabels("app", def.app).endMetadata()
+                    .withNewSpec()
+                    .withContainers(ContainerBuilder().withName(def.app).withImage(def.image).build())
+                    .endSpec()
+                    .endTemplate()
+                    .endSpec()
+                    .withNewStatus()
+                    .withReplicas(def.replicas)
+                    .withReadyReplicas(def.replicas)
+                    .withAvailableReplicas(def.replicas)
+                    .withCurrentReplicas(def.replicas)
+                    .withUpdatedReplicas(def.replicas)
+                    .endStatus()
+                    .build(),
+            ).create()
+        }
+
+        // ── DaemonSets ─────────────────────────────────────────────────────────
+        data class DsDef(val name: String, val ns: String, val app: String, val image: String)
+
+        val dsDefs = listOf(
+            DsDef("fluentd", "monitoring", "fluentd", "fluent/fluentd:v1.17"),
+            DsDef("node-exporter", "monitoring", "node-exporter", "prom/node-exporter:v1.7.0"),
+        )
+
+        dsDefs.forEach { def ->
+            client.apps().daemonSets().inNamespace(def.ns).resource(
+                DaemonSetBuilder()
+                    .withNewMetadata()
+                    .withName(def.name)
+                    .withNamespace(def.ns)
+                    .withCreationTimestamp(minutesAgo(1440))
+                    .addToLabels("app", def.app)
+                    .endMetadata()
+                    .withNewSpec()
+                    .withNewSelector().addToMatchLabels("app", def.app).endSelector()
+                    .withNewTemplate()
+                    .withNewMetadata().addToLabels("app", def.app).endMetadata()
+                    .withNewSpec()
+                    .withHostNetwork(true)
+                    .withContainers(ContainerBuilder().withName(def.app).withImage(def.image).build())
+                    .endSpec()
+                    .endTemplate()
+                    .endSpec()
+                    .withNewStatus()
+                    .withDesiredNumberScheduled(1)
+                    .withCurrentNumberScheduled(1)
+                    .withNumberReady(1)
+                    .withNumberAvailable(1)
+                    .withNumberMisscheduled(0)
+                    .endStatus()
+                    .build(),
+            ).create()
+        }
+
+        // ── CronJobs ───────────────────────────────────────────────────────────
+        data class CjDef(val name: String, val ns: String, val schedule: String, val app: String, val image: String, val command: String)
+
+        val cjDefs = listOf(
+            CjDef("nightly-backup", "production", "0 2 * * *", "backup", "busybox:1.36", "echo 'taking backup' && sleep 5"),
+            CjDef("db-vacuum", "production", "30 4 * * 0", "db-vacuum", "postgres:16", "vacuumdb --all --analyze"),
+            CjDef("log-rotation", "monitoring", "*/15 * * * *", "log-rotator", "busybox:1.36", "find /var/log -name '*.gz' -mtime +7 -delete"),
+            CjDef("cert-renewal", "default", "0 0 * * 1", "cert-bot", "certbot/certbot:v2.10.0", "certbot renew --quiet"),
+        )
+
+        cjDefs.forEach { def ->
+            client.batch().v1().cronjobs().inNamespace(def.ns).resource(
+                CronJobBuilder()
+                    .withNewMetadata()
+                    .withName(def.name)
+                    .withNamespace(def.ns)
+                    .withCreationTimestamp(minutesAgo(1440))
+                    .addToLabels("app", def.app)
+                    .endMetadata()
+                    .withNewSpec()
+                    .withSchedule(def.schedule)
+                    .withSuspend(false)
+                    .withConcurrencyPolicy("Forbid")
+                    .withSuccessfulJobsHistoryLimit(3)
+                    .withFailedJobsHistoryLimit(1)
+                    .withNewJobTemplate()
+                    .withNewSpec()
+                    .withNewTemplate()
+                    .withNewMetadata().addToLabels("app", def.app).endMetadata()
+                    .withNewSpec()
+                    .withRestartPolicy("OnFailure")
+                    .withContainers(
+                        ContainerBuilder()
+                            .withName(def.app)
+                            .withImage(def.image)
+                            .withCommand("/bin/sh", "-c", def.command)
+                            .build(),
+                    )
+                    .endSpec()
+                    .endTemplate()
+                    .endSpec()
+                    .endJobTemplate()
+                    .endSpec()
+                    .withNewStatus()
+                    .withLastScheduleTime(minutesAgo(60))
+                    .endStatus()
+                    .build(),
+            ).create()
+        }
+
+        // ── Endpoints ──────────────────────────────────────────────────────────
+        data class EpDef(val svc: String, val ns: String, val targets: List<Triple<String, String, Int>>)
+
+        val epDefs = listOf(
+            EpDef(
+                "frontend-svc",
+                "default",
+                listOf(
+                    Triple("10.244.0.5", "frontend-7b9d5c8f4-abc12", 8080),
+                    Triple("10.244.0.6", "frontend-7b9d5c8f4-def34", 8080),
+                ),
+            ),
+            EpDef(
+                "backend-api-svc",
+                "default",
+                listOf(
+                    Triple("10.244.0.7", "backend-api-6c4f8d9b2-xyz99", 3000),
+                    Triple("10.244.0.8", "backend-api-6c4f8d9b2-uvw88", 3000),
+                ),
+            ),
+            EpDef(
+                "redis-svc",
+                "production",
+                listOf(Triple("10.244.0.11", "redis-cache-5f7a3b1d0-qrs55", 6379)),
+            ),
+        )
+
+        epDefs.forEach { def ->
+            val addresses = def.targets.map { (ip, podName, _) ->
+                EndpointAddressBuilder()
+                    .withIp(ip)
+                    .withNodeName("mock-node-1")
+                    .withNewTargetRef()
+                    .withKind("Pod")
+                    .withName(podName)
+                    .withNamespace(def.ns)
+                    .endTargetRef()
+                    .build()
+            }
+            val ports = def.targets.map { (_, _, port) ->
+                EndpointPortBuilder().withPort(port).withProtocol("TCP").build()
+            }.distinct()
+
+            client.endpoints().inNamespace(def.ns).resource(
+                EndpointsBuilder()
+                    .withNewMetadata()
+                    .withName(def.svc)
+                    .withNamespace(def.ns)
+                    .withCreationTimestamp(minutesAgo(1440))
+                    .endMetadata()
+                    .withSubsets(
+                        EndpointSubsetBuilder()
+                            .withAddresses(addresses)
+                            .withPorts(ports)
+                            .build(),
+                    )
+                    .build(),
+            ).create()
+        }
+
+        // ── NetworkPolicies ────────────────────────────────────────────────────
+        client.network().networkPolicies().inNamespace("production").resource(
+            NetworkPolicyBuilder()
+                .withNewMetadata()
+                .withName("default-deny-all")
+                .withNamespace("production")
+                .withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withNewSpec()
+                .withNewPodSelector().endPodSelector()
+                .withPolicyTypes("Ingress", "Egress")
+                .endSpec()
+                .build(),
+        ).create()
+
+        client.network().networkPolicies().inNamespace("default").resource(
+            NetworkPolicyBuilder()
+                .withNewMetadata()
+                .withName("allow-frontend-to-backend")
+                .withNamespace("default")
+                .withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withNewSpec()
+                .withNewPodSelector().addToMatchLabels("app", "backend-api").endPodSelector()
+                .withPolicyTypes("Ingress")
+                .addNewIngress()
+                .addNewFrom()
+                .withNewPodSelector().addToMatchLabels("app", "frontend").endPodSelector()
+                .endFrom()
+                .addNewPort()
+                .withProtocol("TCP")
+                .withNewPort(3000)
+                .endPort()
+                .endIngress()
+                .endSpec()
+                .build(),
+        ).create()
+
+        client.network().networkPolicies().inNamespace("monitoring").resource(
+            NetworkPolicyBuilder()
+                .withNewMetadata()
+                .withName("allow-prometheus-scrape")
+                .withNamespace("monitoring")
+                .withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withNewSpec()
+                .withNewPodSelector().endPodSelector()
+                .withPolicyTypes("Ingress")
+                .addNewIngress()
+                .addNewFrom()
+                .withNewNamespaceSelector().addToMatchLabels("kubernetes.io/metadata.name", "monitoring").endNamespaceSelector()
+                .endFrom()
+                .addNewPort()
+                .withProtocol("TCP")
+                .withNewPort(9090)
+                .endPort()
+                .endIngress()
+                .endSpec()
+                .build(),
+        ).create()
+
+        log.info(
+            "Mock cluster seeded: 3 namespaces, 1 node, {} pods, {} deployments, 3 services, 1 configmap, 1 secret, {} events, " +
+                "{} storage classes, {} PVs, {} PVCs, {} statefulsets, {} daemonsets, {} cronjobs, {} endpoints, 3 networkpolicies",
+            podDefs.size,
+            deployDefs.size,
+            eventDefs.size,
+            scDefs.size,
+            pvDefs.size,
+            pvcDefs.size,
+            stsDefs.size,
+            dsDefs.size,
+            cjDefs.size,
+            epDefs.size,
+        )
     }
 }

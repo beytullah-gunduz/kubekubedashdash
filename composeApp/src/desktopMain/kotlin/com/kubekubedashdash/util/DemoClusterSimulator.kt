@@ -6,8 +6,12 @@ import io.fabric8.kubernetes.api.model.ContainerStateWaitingBuilder
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
 import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
+import io.fabric8.kubernetes.api.model.Node
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.api.model.Quantity
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -33,9 +37,9 @@ class DemoClusterSimulator(
 ) {
 
     data class Targets(
-        val nodesMin: Int = 1,
+        val nodesMin: Int = 30,
         val nodesMax: Int = 100,
-        val podsMin: Int = 10,
+        val podsMin: Int = 300,
         val podsMax: Int = 1000,
     )
 
@@ -50,6 +54,16 @@ class DemoClusterSimulator(
             val restartCount: Int = 0,
             val nextCrashMs: Long = CRASH_RESTART_MIN_MS,
         ) : PodFate()
+    }
+
+    private sealed class JobFate {
+        abstract val createdAt: Long
+
+        // Active until `runForMs` elapses, then transitions to Completed.
+        data class Active(override val createdAt: Long, val runForMs: Long, val willSucceed: Boolean) : JobFate()
+
+        // Terminal — keep visible until `expiresAt` then delete.
+        data class Completed(override val createdAt: Long, val expiresAt: Long) : JobFate()
     }
 
     private val log = LoggerFactory.getLogger(DemoClusterSimulator::class.java)
@@ -67,6 +81,10 @@ class DemoClusterSimulator(
 
     fun setTargets(t: Targets) {
         _targets.value = t
+        // Snap the internal walk into the new range so the next tick spawns/deletes
+        // immediately instead of drifting one step at a time.
+        currentTargetNodes = currentTargetNodes.coerceIn(t.nodesMin.coerceAtLeast(1), t.nodesMax)
+        currentTargetPods = currentTargetPods.coerceIn(t.podsMin, t.podsMax)
     }
     fun setPaused(p: Boolean) {
         _paused.value = p
@@ -75,6 +93,17 @@ class DemoClusterSimulator(
     // Simulator-owned pods. Key = "ns/name". Entry added when pod becomes Running,
     // removed when the pod enters its exit sequence.
     private val podFates = ConcurrentHashMap<String, PodFate>()
+
+    // Simulator-owned jobs. Key = "ns/name".
+    private val jobFates = ConcurrentHashMap<String, JobFate>()
+
+    // Smoothly-drifting metrics baselines so the chart wobbles instead of jumping.
+    private data class NodeMetricsBaseline(var cpuMillis: Long, var memBytes: Long)
+    private data class ContainerMetricsBaseline(var cpuMillis: Long, var memBytes: Long)
+    private data class PodMetricsBaseline(val containers: MutableMap<String, ContainerMetricsBaseline> = mutableMapOf())
+
+    private val nodeMetricsState = ConcurrentHashMap<String, NodeMetricsBaseline>()
+    private val podMetricsState = ConcurrentHashMap<String, PodMetricsBaseline>()
 
     private val protectedNodes = setOf("mock-node-1")
     private val protectedPods = setOf(
@@ -98,12 +127,28 @@ class DemoClusterSimulator(
     )
     private val nsPool = listOf("default", "production", "monitoring")
 
+    private val jobAppPool = listOf(
+        "data-export" to "busybox:1.36",
+        "image-resize" to "alpine:3.20",
+        "report-builder" to "python:3.12-alpine",
+        "etl" to "python:3.12-alpine",
+        "metrics-rollup" to "prom/prometheus:v2.54.0",
+        "thumbnail-gen" to "alpine:3.20",
+        "email-batch" to "node:20-alpine",
+        "ml-inference" to "tensorflow/tensorflow:2.16.1",
+        "log-shipper" to "fluent/fluent-bit:3.1",
+        "db-migrate" to "postgres:16",
+    )
+    private val cronOwnerPool = listOf("nightly-backup", "log-rotation", "db-vacuum", null, null, null)
+
     private var currentTargetNodes = initialTargets.nodesMin.coerceAtLeast(1)
     private var currentTargetPods = initialTargets.podsMin.coerceAtLeast(10)
 
     fun start() {
         scope.launch { nodeLoop() }
         scope.launch { podLoop() }
+        scope.launch { jobLoop() }
+        scope.launch { metricsLoop() }
         scope.launch { eventNoiseLoop() }
     }
 
@@ -114,7 +159,11 @@ class DemoClusterSimulator(
     fun stopAll() {
         log.warn("Demo cluster: stopAll requested")
         podFates.clear()
+        jobFates.clear()
+        nodeMetricsState.clear()
+        podMetricsState.clear()
         runCatching { client.pods().inAnyNamespace().delete() }
+        runCatching { client.batch().v1().jobs().inAnyNamespace().delete() }
         runCatching { client.nodes().list().items.forEach { client.nodes().withName(it.metadata.name).delete() } }
     }
 
@@ -132,11 +181,22 @@ class DemoClusterSimulator(
 
                 val nodes = client.nodes().list().items
                 val nodeCount = nodes.size
+                val deficit = currentTargetNodes - nodeCount
+                val surplus = nodeCount - currentTargetNodes
 
                 when {
-                    nodeCount < currentTargetNodes && random.nextInt(100) < 70 -> spawnNode()
+                    deficit >= NODE_BURST_THRESHOLD -> repeat(minOf(deficit, NODE_BURST_SIZE)) { spawnNode() }
 
-                    nodeCount > currentTargetNodes && random.nextInt(100) < 50 -> {
+                    deficit > 0 && random.nextInt(100) < 70 -> spawnNode()
+
+                    surplus >= NODE_BURST_THRESHOLD -> {
+                        nodes.filter { it.metadata.name !in protectedNodes }
+                            .shuffled()
+                            .take(minOf(surplus, NODE_BURST_SIZE))
+                            .forEach { removeNode(it.metadata.name) }
+                    }
+
+                    surplus > 0 && random.nextInt(100) < 50 -> {
                         val candidate = nodes.filter { it.metadata.name !in protectedNodes }.randomOrNull()
                         if (candidate != null) removeNode(candidate.metadata.name)
                     }
@@ -195,11 +255,22 @@ class DemoClusterSimulator(
                     .coerceIn(t.podsMin, t.podsMax)
 
                 val totalPods = runCatching { client.pods().inAnyNamespace().list().items.size }.getOrElse { 0 }
+                val deficit = currentTargetPods - totalPods
+                val surplus = totalPods - currentTargetPods
 
                 when {
-                    totalPods < currentTargetPods -> spawnPod()
+                    deficit >= POD_BURST_THRESHOLD -> repeat(minOf(deficit, POD_BURST_SIZE)) { spawnPod() }
 
-                    totalPods > currentTargetPods -> {
+                    deficit > 0 -> spawnPod()
+
+                    surplus >= POD_BURST_THRESHOLD -> {
+                        podFates.keys.filter { it !in protectedPods }
+                            .shuffled()
+                            .take(minOf(surplus, POD_BURST_SIZE))
+                            .forEach { podFates[it] = PodFate.CleanExit(System.currentTimeMillis(), 0) }
+                    }
+
+                    surplus > 0 -> {
                         val candidate = podFates.keys.filter { it !in protectedPods }.randomOrNull()
                         if (candidate != null) {
                             // Force immediate clean exit on the next advancePodFates tick.
@@ -471,6 +542,217 @@ class DemoClusterSimulator(
         log.debug("Pod crash-final: {}/{}", ns, name)
     }
 
+    // ── Job loop ──────────────────────────────────────────────────────────────
+
+    private suspend fun jobLoop() {
+        while (true) {
+            try {
+                awaitNotPaused()
+                jitterDelay(JOB_LOOP_MEAN_MS, JOB_LOOP_JITTER_MS)
+
+                advanceJobFates()
+
+                val activeCount = jobFates.values.count { it is JobFate.Active }
+                if (activeCount < JOB_TARGET_ACTIVE && random.nextInt(100) < JOB_SPAWN_PROBABILITY) {
+                    spawnJob()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("jobLoop tick error: {}", e.message)
+            }
+        }
+    }
+
+    private fun spawnJob() {
+        val (app, image) = jobAppPool.random()
+        val ns = nsPool.random()
+        val suffix = "${random.nextInt(10_000, 99_999)}"
+        val cronOwner = cronOwnerPool.random()
+        val name = if (cronOwner != null) "$cronOwner-${System.currentTimeMillis() / 1000}-$suffix" else "$app-$suffix"
+        val key = "$ns/$name"
+
+        runCatching {
+            client.batch().v1().jobs().inNamespace(ns).resource(
+                MockClusterProvider.buildJob(name, ns, app, image, ownerCronJob = cronOwner),
+            ).create()
+        }.onSuccess {
+            emitEvent("Normal", "SuccessfulCreate", "Created job $name", "Job", ns, name, "job-controller")
+            val now = System.currentTimeMillis()
+            val willSucceed = random.nextInt(100) < JOB_SUCCESS_PROBABILITY
+            jobFates[key] = JobFate.Active(
+                createdAt = now,
+                runForMs = random.nextLong(JOB_RUN_MIN_MS, JOB_RUN_MAX_MS),
+                willSucceed = willSucceed,
+            )
+            log.debug("Job spawned: {} (willSucceed={})", key, willSucceed)
+        }.onFailure { log.warn("Failed to spawn job {}: {}", key, it.message) }
+    }
+
+    private fun advanceJobFates() {
+        val now = System.currentTimeMillis()
+        val iter = jobFates.entries.iterator()
+        while (iter.hasNext()) {
+            val (key, fate) = iter.next()
+            val (ns, name) = key.split("/", limit = 2)
+
+            when (fate) {
+                is JobFate.Active -> {
+                    if (now - fate.createdAt >= fate.runForMs) {
+                        val expiresAt = now + random.nextLong(JOB_LINGER_MIN_MS, JOB_LINGER_MAX_MS)
+                        jobFates[key] = JobFate.Completed(createdAt = now, expiresAt = expiresAt)
+                        scope.launch { finishJob(ns, name, fate.willSucceed) }
+                    }
+                }
+
+                is JobFate.Completed -> {
+                    if (now >= fate.expiresAt) {
+                        iter.remove()
+                        scope.launch { deleteJob(ns, name) }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun finishJob(ns: String, name: String, succeeded: Boolean) {
+        runCatching {
+            val existing = client.batch().v1().jobs().inNamespace(ns).withName(name).get() ?: return
+            val builder = JobBuilder(existing).editStatus().withActive(0).withCompletionTime(now())
+            if (succeeded) {
+                builder.withSucceeded(1).withFailed(0)
+            } else {
+                builder.withSucceeded(0).withFailed(1)
+            }
+            client.batch().v1().jobs().inNamespace(ns).resource(builder.endStatus().build()).update()
+        }
+        if (succeeded) {
+            emitEvent("Normal", "Completed", "Job completed", "Job", ns, name, "job-controller")
+        } else {
+            emitEvent("Warning", "BackoffLimitExceeded", "Job has reached the specified backoff limit", "Job", ns, name, "job-controller")
+        }
+        log.debug("Job finished: {}/{} succeeded={}", ns, name, succeeded)
+    }
+
+    private fun deleteJob(ns: String, name: String) {
+        runCatching { client.batch().v1().jobs().inNamespace(ns).withName(name).delete() }
+        log.debug("Job deleted: {}/{}", ns, name)
+    }
+
+    // ── Metrics loop ──────────────────────────────────────────────────────────
+
+    private suspend fun metricsLoop() {
+        // Immediate first publish so gauges aren't blank for the first poll cycle.
+        runCatching { updateAllMetrics() }
+        while (true) {
+            try {
+                awaitNotPaused()
+                jitterDelay(METRICS_LOOP_MEAN_MS, METRICS_LOOP_JITTER_MS)
+                updateAllMetrics()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("metricsLoop tick error: {}", e.message)
+            }
+        }
+    }
+
+    private fun updateAllMetrics() {
+        val nodes = runCatching { client.nodes().list().items }.getOrElse { return }
+        val pods = runCatching { client.pods().inAnyNamespace().list().items }.getOrElse { return }
+
+        // Drop baselines for resources that are gone.
+        val nodeNames = nodes.mapNotNull { it.metadata?.name }.toSet()
+        val podKeys = pods.mapNotNull { p ->
+            val n = p.metadata?.name ?: return@mapNotNull null
+            val ns = p.metadata?.namespace ?: return@mapNotNull null
+            "$ns/$n"
+        }.toSet()
+        nodeMetricsState.keys.retainAll(nodeNames)
+        podMetricsState.keys.retainAll(podKeys)
+
+        for (node in nodes) updateOneNodeMetrics(node)
+        for (pod in pods) {
+            if (pod.status?.phase == "Running") {
+                updateOnePodMetrics(pod)
+            } else {
+                val n = pod.metadata?.name ?: continue
+                val ns = pod.metadata?.namespace ?: continue
+                podMetricsState.remove("$ns/$n")
+                runCatching {
+                    client.resource(MockClusterProvider.buildPodMetrics(n, ns, emptyList())).delete()
+                }
+            }
+        }
+    }
+
+    private fun updateOneNodeMetrics(node: Node) {
+        val name = node.metadata?.name ?: return
+        val alloc = node.status?.allocatable ?: return
+        val cpuCap = quantityToCpuMillis(alloc["cpu"])
+        val memCap = quantityToBytes(alloc["memory"])
+        if (cpuCap <= 0L || memCap <= 0L) return
+
+        val state = nodeMetricsState.getOrPut(name) {
+            NodeMetricsBaseline(
+                cpuMillis = cpuCap * (30 + random.nextInt(30)) / 100,
+                memBytes = memCap * (40 + random.nextInt(20)) / 100,
+            )
+        }
+        state.cpuMillis = (state.cpuMillis + cpuCap * random.nextInt(-5, 6) / 100)
+            .coerceIn(cpuCap / 10, cpuCap * 85 / 100)
+        state.memBytes = (state.memBytes + memCap * random.nextInt(-4, 5) / 100)
+            .coerceIn(memCap / 5, memCap * 85 / 100)
+
+        val nm = MockClusterProvider.buildNodeMetrics(name, state.cpuMillis, state.memBytes)
+        runCatching { client.resource(nm).delete() }
+        runCatching { client.resource(nm).create() }
+    }
+
+    private fun updateOnePodMetrics(pod: Pod) {
+        val name = pod.metadata?.name ?: return
+        val ns = pod.metadata?.namespace ?: return
+        val containers = pod.spec?.containers ?: return
+        if (containers.isEmpty()) return
+        val key = "$ns/$name"
+
+        val state = podMetricsState.getOrPut(key) { PodMetricsBaseline() }
+        // Drop containers that no longer exist on the pod spec.
+        val liveContainerNames = containers.mapNotNull { it.name }.toSet()
+        state.containers.keys.retainAll(liveContainerNames)
+
+        val containerMetrics = containers.mapNotNull { c ->
+            val cName = c.name ?: return@mapNotNull null
+            val cState = state.containers.getOrPut(cName) {
+                ContainerMetricsBaseline(
+                    cpuMillis = random.nextLong(POD_CPU_MIN_MILLIS, POD_CPU_MAX_MILLIS / 2),
+                    memBytes = random.nextLong(POD_MEM_MIN_BYTES, POD_MEM_MAX_BYTES / 2),
+                )
+            }
+            cState.cpuMillis = (cState.cpuMillis + random.nextLong(-15, 16))
+                .coerceIn(POD_CPU_MIN_MILLIS, POD_CPU_MAX_MILLIS)
+            cState.memBytes = (cState.memBytes + random.nextLong(-(8L * 1024 * 1024), 9L * 1024 * 1024))
+                .coerceIn(POD_MEM_MIN_BYTES, POD_MEM_MAX_BYTES)
+            Triple(cName, cState.cpuMillis, cState.memBytes)
+        }
+
+        val pm = MockClusterProvider.buildPodMetrics(name, ns, containerMetrics)
+        runCatching { client.resource(pm).delete() }
+        runCatching { client.resource(pm).create() }
+    }
+
+    private fun quantityToCpuMillis(q: Quantity?): Long {
+        if (q == null) return 0L
+        return runCatching {
+            (Quantity.getAmountInBytes(q).toDouble() * 1000).toLong()
+        }.getOrDefault(0L)
+    }
+
+    private fun quantityToBytes(q: Quantity?): Long {
+        if (q == null) return 0L
+        return runCatching { Quantity.getAmountInBytes(q).toLong() }.getOrDefault(0L)
+    }
+
     // ── Event noise loop ──────────────────────────────────────────────────────
 
     private suspend fun eventNoiseLoop() {
@@ -568,5 +850,32 @@ class DemoClusterSimulator(
         private const val EVENT_NOISE_JITTER_MS = 3_500L
         private const val CRASH_RESTART_MIN_MS = 30_000L
         private const val CRASH_RESTART_MAX_MS = 90_001L
+
+        // Burst sizes — when the running cluster is far from the target band, spawn or
+        // remove resources in batches per tick instead of drifting one at a time. Keeps
+        // the simulator responsive when the user changes min/max in Settings.
+        private const val NODE_BURST_THRESHOLD = 3
+        private const val NODE_BURST_SIZE = 5
+        private const val POD_BURST_THRESHOLD = 5
+        private const val POD_BURST_SIZE = 20
+
+        // Metrics — refresh half as often as the read-side polls so the UI sees fresh
+        // data on each tick without overshooting the mock server.
+        private const val METRICS_LOOP_MEAN_MS = 5_000L
+        private const val METRICS_LOOP_JITTER_MS = 1_500L
+        private const val POD_CPU_MIN_MILLIS = 5L
+        private const val POD_CPU_MAX_MILLIS = 250L
+        private const val POD_MEM_MIN_BYTES = 32L * 1024 * 1024
+        private const val POD_MEM_MAX_BYTES = 512L * 1024 * 1024
+
+        private const val JOB_LOOP_MEAN_MS = 4_000L
+        private const val JOB_LOOP_JITTER_MS = 2_500L
+        private const val JOB_TARGET_ACTIVE = 8
+        private const val JOB_SPAWN_PROBABILITY = 70
+        private const val JOB_SUCCESS_PROBABILITY = 85
+        private const val JOB_RUN_MIN_MS = 15_000L
+        private const val JOB_RUN_MAX_MS = 90_000L
+        private const val JOB_LINGER_MIN_MS = 30_000L
+        private const val JOB_LINGER_MAX_MS = 180_000L
     }
 }

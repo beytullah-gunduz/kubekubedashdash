@@ -67,18 +67,23 @@ class SettingsScreenViewModel : ViewModel() {
     val mockIsRunning: StateFlow<Boolean> = MockClusterProvider.isRunning
     val mockConnectedTabs: StateFlow<Int> = MockClusterProvider.connectedTabCount
 
-    val mockTargets: StateFlow<DemoClusterSimulator.Targets>
-        get() = MockClusterProvider.simulatorOrNull()?.targets ?: _defaultTargets
-    val mockPaused: StateFlow<Boolean>
-        get() = MockClusterProvider.simulatorOrNull()?.paused ?: MutableStateFlow(false)
+    // Single source of truth for mock targets. Seeded from preferences so the Settings
+    // screen shows the saved values even before the simulator boots, and updated
+    // synchronously by setMockTargets so slider drags reflect immediately.
+    private val _mockTargets = MutableStateFlow(PreferenceRepository.demoTargets)
+    val mockTargets: StateFlow<DemoClusterSimulator.Targets> = _mockTargets.asStateFlow()
 
-    private val _defaultTargets = MutableStateFlow(DemoClusterSimulator.Targets())
+    val mockPaused: StateFlow<Boolean>
+        get() = MockClusterProvider.simulatorOrNull()?.paused ?: _defaultPaused
+
+    private val _defaultPaused = MutableStateFlow(false)
 
     fun setMockPaused(p: Boolean) {
         MockClusterProvider.simulatorOrNull()?.setPaused(p)
     }
 
     fun setMockTargets(t: DemoClusterSimulator.Targets) {
+        _mockTargets.value = t
         MockClusterProvider.simulatorOrNull()?.setTargets(t)
         viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.demoTargets = t }
     }
