@@ -3,7 +3,6 @@ package com.kubekubedashdash.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,12 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -95,6 +97,20 @@ fun WindowTabStrip(
         label = "tabStripDropTargetBg",
     )
 
+    val listState = rememberLazyListState()
+
+    // Keep the active chip in view. Fires on tab open / close / select /
+    // drag-merge — anything that changes which session is active or where
+    // it sits in the list. animateScrollToItem is a no-op when the target
+    // is already visible, so a click on an already-visible tab won't jolt
+    // the strip.
+    LaunchedEffect(activeSessionId, sessions) {
+        val activeIndex = sessions.indexOfFirst { it.id == activeSessionId }
+        if (activeIndex >= 0) {
+            listState.animateScrollToItem(activeIndex)
+        }
+    }
+
     Box(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -103,18 +119,18 @@ fun WindowTabStrip(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // The chip strip scrolls horizontally so that opening many tabs
-            // never pushes the trailing "+" off-screen and never makes a
-            // chip unreachable when the window is narrow. On macOS this
-            // picks up trackpad horizontal scroll natively.
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
+            // LazyRow so chip overflow scrolls horizontally instead of
+            // clipping, and so we can animateScrollToItem(activeIndex) when
+            // a new session becomes active without measuring chip widths
+            // ourselves. macOS trackpad two-finger horizontal scroll picks
+            // this up natively.
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                state = listState,
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                sessions.forEachIndexed { index, session ->
+                itemsIndexed(sessions, key = { _, s -> s.id }) { index, session ->
                     val ctx = contexts[index]
                     key(session.id) {
                         ClusterChip(
