@@ -3,8 +3,11 @@ package com.kubekubedashdash.ui.screens.cluster
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -31,12 +34,12 @@ internal fun RecentClusterActivity(
         val threeColumns = maxWidth >= THREE_COLUMN_THRESHOLD
         if (threeColumns) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                NodesCard(nodes, onNodeClick, onViewAllNodes, Modifier.weight(1f))
-                PodsCard(pods, onPodClick, onViewAllPods, Modifier.weight(1f))
-                EventsCard(events, onEventClick, onViewAllEvents, Modifier.weight(1f))
+                NodesCard(nodes, onNodeClick, onViewAllNodes, Modifier.weight(1f).fillMaxHeight())
+                PodsCard(pods, onPodClick, onViewAllPods, Modifier.weight(1f).fillMaxHeight())
+                EventsCard(events, onEventClick, onViewAllEvents, Modifier.weight(1f).fillMaxHeight())
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
