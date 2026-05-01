@@ -2,7 +2,7 @@
 
 A desktop Kubernetes cluster dashboard built with Jetpack Compose Multiplatform. It connects to clusters through your local kubeconfig and provides a read-oriented interface for browsing resources, viewing YAML, and streaming pod logs.
 
-![KubeKubeDashDash overview](screenshots/overview.png)
+![KubeKubeDashDash overview](docs/screenshots/01-cluster-overview.png)
 
 ## Features
 
@@ -119,14 +119,22 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 
 | Component | Library / Version |
 |-----------|-------------------|
-| Language | Kotlin 2.2.0 |
-| UI framework | Compose Multiplatform 1.10.0 |
-| Kubernetes client | fabric8 kubernetes-client 7.5.2 |
-| Coroutines | kotlinx-coroutines 1.10.1 |
+| Language | Kotlin 2.3.21 |
+| UI framework | Compose Multiplatform 1.11.0 |
+| Material 3 | compose-material3 1.11.0, material3-adaptive 1.3.0 (ListDetailPaneScaffold) |
+| ViewModel / lifecycle | androidx.lifecycle 2.10.0 (multiplatform) |
+| Persistence | androidx.datastore-preferences 1.1.7 |
+| Kubernetes client | fabric8 kubernetes-client + kubernetes-server-mock 7.5.2 |
+| Coroutines | kotlinx-coroutines 1.10.1 (core + swing) |
 | Serialization | kotlinx-serialization 1.8.0 |
 | Date/time | kotlinx-datetime 0.7.0 |
-| Logging | Logback Classic 1.5.x (via SLF4J) |
-| Build tool | Gradle 8.12 |
+| MCP server | modelcontextprotocol kotlin-sdk 0.8.3 |
+| Embedded HTTP server | Ktor 3.1.3 (CIO + SSE + content negotiation) |
+| Native interop | JNA 5.15 (macOS shell `PATH` resolution) |
+| Logging | Logback Classic 1.5.15 (via SLF4J) |
+| Code formatting | Spotless 8.2.1 + ktlint |
+| Build tool | Gradle 8.12, JDK 21 toolchain |
+| Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
 
 ## CI
 
