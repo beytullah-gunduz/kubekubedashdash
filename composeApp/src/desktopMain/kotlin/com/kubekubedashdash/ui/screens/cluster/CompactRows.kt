@@ -60,7 +60,9 @@ internal fun CompactNodeRow(node: NodeInfo, onClick: () -> Unit) {
             node.age,
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(52.dp),
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -97,7 +99,9 @@ internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
             pod.age,
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(52.dp),
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -140,7 +144,9 @@ internal fun CompactEventRow(event: EventInfo, onClick: () -> Unit) {
             event.lastSeen,
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(52.dp),
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
