@@ -973,11 +973,12 @@ fun formatCpuCores(millis: Long): String = when {
     else -> "${millis}m"
 }
 
-fun formatAge(timestamp: String?): String {
+fun formatAge(timestamp: String?, now: Instant = Instant.now()): String {
     if (timestamp.isNullOrBlank()) return ""
     return try {
         val created = Instant.parse(timestamp)
-        val dur = Duration.between(created, Instant.now())
+        val dur = Duration.between(created, now)
+        if (dur.isNegative) return "0s"
         when {
             dur.toDays() > 365 -> "${dur.toDays() / 365}y${(dur.toDays() % 365) / 30}mo"
             dur.toDays() > 30 -> "${dur.toDays() / 30}mo${dur.toDays() % 30}d"
