@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.VerticalDragHandle
@@ -35,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -52,6 +55,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
@@ -108,33 +112,42 @@ fun App(
             ?: return@KubeDashTheme
         val sessionVm = activeSession.viewModel
 
-        val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
-        val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
+        // Title-bar-scoped reads (always reflect the active session)
         val selectedNamespace by sessionVm.selectedNamespace.collectAsState()
         val selectedContext by sessionVm.selectedContext.collectAsState()
         val namespaces by sessionVm.namespaces.collectAsState()
         val isConnected by sessionVm.isConnected.collectAsState()
         val searchQuery by sessionVm.searchQuery.collectAsState()
 
-        val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
-        val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
-            scaffoldDirective = defaultDirective,
-            adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
+        // Pager state mirrors workspace.activeSessionId. Tab clicks / drag-drop
+        // / close events drive activeSessionId externally and the LaunchedEffect
+        // animates the pager toward that page; user swipes on the pager flip
+        // the direction by calling workspace.setActive once the page settles.
+        val activeIndex = sessions.indexOf(activeSession).coerceAtLeast(0)
+        val pagerState = rememberPagerState(
+            initialPage = activeIndex,
+            pageCount = { sessions.size },
         )
 
-        LaunchedEffect(Unit) {
-            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, Screen.Main.Connecting)
-        }
-        LaunchedEffect(currentScreen) {
-            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentScreen)
+        LaunchedEffect(activeIndex) {
+            if (pagerState.currentPage != activeIndex) {
+                pagerState.animateScrollToPage(activeIndex)
+            }
         }
 
-        // CompositionLocalProvider routes every viewModel { … } lookup inside the
-        // content tree to the active session's ViewModelStore — switching tabs
-        // therefore swaps to a fresh set of screen ViewModels that read the right
-        // session's ReactiveKubeClient instead of the previously-active tab's.
-        // LocalReactiveKubeClient is what those screens/VMs actually read from;
-        // it's window-scoped so each window's screens use their own connection.
+        LaunchedEffect(pagerState, sessions) {
+            snapshotFlow { pagerState.settledPage }.collect { idx ->
+                sessions.getOrNull(idx)?.let { settled ->
+                    if (settled.id != activeSessionId) workspace.setActive(settled.id)
+                }
+            }
+        }
+
+        // Outer CompositionLocalProvider gives the active session's clients to
+        // everything that lives at the App scope: the title bar, the tab
+        // strip, and the modals (cluster selector, EKS discovery, prerequisites).
+        // SessionPaneContent re-provides locals keyed to *its* page's session,
+        // so non-active pager pages still see their own ReactiveKubeClient.
         CompositionLocalProvider(
             LocalViewModelStoreOwner provides activeSession,
             LocalReactiveKubeClient provides activeSession.reactiveClient,
@@ -228,65 +241,16 @@ fun App(
                         }
                     }
 
-                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        ListDetailPaneScaffold(
-                            paneExpansionDragHandle = { state ->
-                                val interactionSource = remember { MutableInteractionSource() }
-                                VerticalDragHandle(
-                                    modifier = Modifier.paneExpansionDraggable(
-                                        state,
-                                        LocalMinimumInteractiveComponentSize.current,
-                                        interactionSource,
-                                    ),
-                                    interactionSource = interactionSource,
-                                )
-                            },
-                            directive = navigator.scaffoldDirective,
-                            scaffoldState = navigator.scaffoldState,
-                            listPane = {
-                                AnimatedPane {
-                                    Sidebar(
-                                        currentScreen = currentScreen,
-                                        selectedContext = selectedContext,
-                                        isConnected = isConnected,
-                                        onNavigate = { sessionVm.navigate(it) },
-                                        onClusterSelectorClick = { workspace.showClusterSelector() },
-                                    )
-                                }
-                            },
-                            detailPane = {
-                                AnimatedPane {
-                                    ContentRouter(
-                                        screen = currentScreen,
-                                        searchQuery = searchQuery,
-                                        onNavigate = sessionVm::navigate,
-                                        onSelectCluster = { workspace.showClusterSelector() },
-                                        onDiscoverEks = { workspace.showEksDiscovery() },
-                                    )
-                                }
-                            },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        key = { idx -> sessions[idx].id },
+                    ) { page ->
+                        SessionPaneContent(
+                            session = sessions[page],
+                            onSelectCluster = { workspace.showClusterSelector() },
+                            onDiscoverEks = { workspace.showEksDiscovery() },
                         )
-
-                        var extraPaneWidth by remember { mutableFloatStateOf(800f) }
-
-                        AnimatedVisibility(
-                            visible = extraPaneScreen != null,
-                            enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
-                            exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
-                        ) {
-                            Row(modifier = Modifier.fillMaxHeight()) {
-                                com.kubekubedashdash.ui.components.ResizeHandle { delta ->
-                                    extraPaneWidth = (extraPaneWidth - delta).coerceIn(400f, 1200f)
-                                }
-                                ExtraPaneRouter(
-                                    screen = extraPaneScreen,
-                                    onNavigate = sessionVm::navigate,
-                                    onClose = { sessionVm.closeExtraPane() },
-                                    modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -332,6 +296,108 @@ fun App(
                             appViewModel.onEksImportComplete()
                         },
                         launchedFromClusterSelector = showClusterSelector,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Per-session content area: sidebar + ContentRouter + optional ExtraPane.
+ * Each [HorizontalPager] page composes its own copy of this so adjacent
+ * cluster sessions render in parallel during a swipe. The
+ * [CompositionLocalProvider] routes every `viewModel { … }` lookup, plus
+ * any read of [LocalReactiveKubeClient], to *this* page's session — keeping
+ * state isolated per cluster.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+@Composable
+private fun SessionPaneContent(
+    session: ClusterSession,
+    onSelectCluster: () -> Unit,
+    onDiscoverEks: () -> Unit,
+) {
+    val sessionVm = session.viewModel
+    val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
+    val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
+    val selectedContext by sessionVm.selectedContext.collectAsState()
+    val isConnected by sessionVm.isConnected.collectAsState()
+    val searchQuery by sessionVm.searchQuery.collectAsState()
+
+    val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
+    val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
+        scaffoldDirective = defaultDirective,
+        adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
+    )
+
+    LaunchedEffect(Unit) {
+        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, Screen.Main.Connecting)
+    }
+    LaunchedEffect(currentScreen) {
+        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentScreen)
+    }
+
+    CompositionLocalProvider(
+        LocalViewModelStoreOwner provides session,
+        LocalReactiveKubeClient provides session.reactiveClient,
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            ListDetailPaneScaffold(
+                paneExpansionDragHandle = { state ->
+                    val interactionSource = remember { MutableInteractionSource() }
+                    VerticalDragHandle(
+                        modifier = Modifier.paneExpansionDraggable(
+                            state,
+                            LocalMinimumInteractiveComponentSize.current,
+                            interactionSource,
+                        ),
+                        interactionSource = interactionSource,
+                    )
+                },
+                directive = navigator.scaffoldDirective,
+                scaffoldState = navigator.scaffoldState,
+                listPane = {
+                    AnimatedPane {
+                        Sidebar(
+                            currentScreen = currentScreen,
+                            selectedContext = selectedContext,
+                            isConnected = isConnected,
+                            onNavigate = { sessionVm.navigate(it) },
+                            onClusterSelectorClick = onSelectCluster,
+                        )
+                    }
+                },
+                detailPane = {
+                    AnimatedPane {
+                        ContentRouter(
+                            screen = currentScreen,
+                            searchQuery = searchQuery,
+                            onNavigate = sessionVm::navigate,
+                            onSelectCluster = onSelectCluster,
+                            onDiscoverEks = onDiscoverEks,
+                        )
+                    }
+                },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+
+            var extraPaneWidth by remember { mutableFloatStateOf(800f) }
+
+            AnimatedVisibility(
+                visible = extraPaneScreen != null,
+                enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
+            ) {
+                Row(modifier = Modifier.fillMaxHeight()) {
+                    com.kubekubedashdash.ui.components.ResizeHandle { delta ->
+                        extraPaneWidth = (extraPaneWidth - delta).coerceIn(400f, 1200f)
+                    }
+                    ExtraPaneRouter(
+                        screen = extraPaneScreen,
+                        onNavigate = sessionVm::navigate,
+                        onClose = { sessionVm.closeExtraPane() },
+                        modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
                     )
                 }
             }
