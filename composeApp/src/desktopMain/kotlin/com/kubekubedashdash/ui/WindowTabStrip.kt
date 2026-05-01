@@ -3,12 +3,16 @@ package com.kubekubedashdash.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -98,27 +102,40 @@ fun WindowTabStrip(
                 .background(targetBg)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            sessions.forEachIndexed { index, session ->
-                val ctx = contexts[index]
-                key(session.id) {
-                    ClusterChip(
-                        label = labels[index],
-                        color = ClusterColor.fromContext(ctx),
-                        initial = clusterInitial(ctx),
-                        isActive = session.id == activeSessionId,
-                        isConnected = connectedFlags[index],
-                        isConnecting = connectingFlags[index],
-                        showActiveIndicator = true,
-                        onClick = { onSelectSession(session.id) },
-                        onClose = { onCloseSession(session.id) },
-                        onDragMove = { x, y -> onDragMoveSession(session.id, x, y) },
-                        onDragRelease = { x, y -> onDragReleaseSession(session.id, x, y) },
-                        onDragCancelled = { onDragCancelled(session.id) },
-                    )
+            // The chip strip scrolls horizontally so that opening many tabs
+            // never pushes the trailing "+" off-screen and never makes a
+            // chip unreachable when the window is narrow. On macOS this
+            // picks up trackpad horizontal scroll natively.
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                sessions.forEachIndexed { index, session ->
+                    val ctx = contexts[index]
+                    key(session.id) {
+                        ClusterChip(
+                            label = labels[index],
+                            color = ClusterColor.fromContext(ctx),
+                            initial = clusterInitial(ctx),
+                            isActive = session.id == activeSessionId,
+                            isConnected = connectedFlags[index],
+                            isConnecting = connectingFlags[index],
+                            showActiveIndicator = true,
+                            onClick = { onSelectSession(session.id) },
+                            onClose = { onCloseSession(session.id) },
+                            onDragMove = { x, y -> onDragMoveSession(session.id, x, y) },
+                            onDragRelease = { x, y -> onDragReleaseSession(session.id, x, y) },
+                            onDragCancelled = { onDragCancelled(session.id) },
+                        )
+                    }
                 }
             }
+
+            Spacer(Modifier.width(4.dp))
 
             Box(
                 modifier = Modifier
