@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,7 +38,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +65,7 @@ import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -96,7 +101,7 @@ fun ResourceDetailPanel(
     extraTabs: List<ExtraTab> = emptyList(),
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
-    LaunchedEffect(name, namespace) { activeTab = 0 }
+    val scope = rememberCoroutineScope()
 
     data class TabDef(val label: String, val icon: DrawableResource, val badgeCount: Int? = null, val isLoading: Boolean = false)
     val tabs = buildList {
@@ -105,6 +110,16 @@ fun ResourceDetailPanel(
         add(TabDef("YAML", Res.drawable.code_filled))
     }
     val yamlIndex = tabs.lastIndex
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+
+    LaunchedEffect(name, namespace) {
+        activeTab = 0
+        pagerState.scrollToPage(0)
+    }
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { activeTab = it }
+    }
 
     Surface(modifier = modifier, color = KdSurface) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -154,7 +169,10 @@ fun ResourceDetailPanel(
                 tabs.forEachIndexed { index, tab ->
                     Tab(
                         selected = index == activeTab,
-                        onClick = { activeTab = index },
+                        onClick = {
+                            activeTab = index
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        },
                         selectedContentColor = KdPrimary,
                         unselectedContentColor = KdTextSecondary,
                     ) {
@@ -186,10 +204,15 @@ fun ResourceDetailPanel(
                 }
             }
 
-            when {
-                activeTab == 0 -> GenericOverviewTab(fields, labels)
-                activeTab == yamlIndex -> GenericYamlTab(kind, name, namespace)
-                else -> extraTabs[activeTab - 1].content()
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                when {
+                    page == 0 -> GenericOverviewTab(fields, labels)
+                    page == yamlIndex -> GenericYamlTab(kind, name, namespace)
+                    else -> extraTabs[page - 1].content()
+                }
             }
         }
     }
