@@ -61,6 +61,7 @@ class SessionViewModel(
     init {
         observeConnectionHealth()
         observeNamespaces()
+        observeClusterInfoHealth()
     }
 
     private fun observeNamespaces() {
@@ -81,6 +82,32 @@ class SessionViewModel(
                     _connectionError.value = error
                     _currentScreen.value = Screen.Main.ConnectionError(error, 10)
                     scheduleRetry()
+                }
+            }
+        }
+    }
+
+    // Project clusterInfo's polling state onto the tab-ring's _isConnected
+    // flag so the ring tracks actual reachability (red within one polling
+    // tick after the cluster dies), not just the 3-failure connectionError
+    // threshold which only governs navigation. Loading is intentionally
+    // ignored — connectToCluster() owns _isConnecting, and Loading also
+    // fires on the first subscription emission and on every connection-
+    // version bump from connect()/scheduleRetry(), so reacting to it would
+    // race those explicit writes.
+    private fun observeClusterInfoHealth() {
+        scope.launch {
+            reactiveClient.clusterInfo.collect { state ->
+                when (state) {
+                    is ResourceState.Success -> {
+                        if (!_isConnected.value) _isConnected.value = true
+                    }
+
+                    is ResourceState.Error -> {
+                        if (_isConnected.value) _isConnected.value = false
+                    }
+
+                    is ResourceState.Loading -> Unit
                 }
             }
         }

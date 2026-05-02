@@ -101,6 +101,11 @@ private const val MIN_SPINNER_VISIBLE_MS: Long = 1100L
 // into a ring (or unwraps back into a partial arc) rather than snapping.
 private const val ARC_TRANSITION_MS = 400
 
+// Slow breath applied to the disconnected steady-state ring so the red
+// state is unmistakable at a glance. One direction = DISCONNECTED_PULSE_MS;
+// full breath cycle = 2× that with RepeatMode.Reverse.
+private const val DISCONNECTED_PULSE_MS = 1400
+
 private val LABEL_MAX_WIDTH = 180.dp
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
@@ -384,6 +389,25 @@ private fun ClusterAvatar(
         label = "clusterArcTrackAlpha",
     )
 
+    // Steady-disconnected breath. Only active when the ring is settled on
+    // red — never overlaps showSpinner (the rotating arc owns its own
+    // animation) and never runs during the anti-flash hold.
+    val pulseAlpha = if (isConnected == false && !showSpinner) {
+        val pulseTransition = rememberInfiniteTransition(label = "clusterPulse")
+        val a by pulseTransition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = DISCONNECTED_PULSE_MS, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "clusterPulseAlpha",
+        )
+        a
+    } else {
+        1f
+    }
+
     Box(
         modifier = Modifier.size(20.dp),
         contentAlignment = Alignment.Center,
@@ -424,7 +448,7 @@ private fun ClusterAvatar(
                     )
                 }
                 drawArc(
-                    color = animatedArcColor,
+                    color = animatedArcColor.copy(alpha = animatedArcColor.alpha * pulseAlpha),
                     startAngle = arcRotation - 90f,
                     sweepAngle = animatedSweep,
                     useCenter = false,
