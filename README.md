@@ -4,6 +4,8 @@ A desktop Kubernetes cluster dashboard built with Jetpack Compose Multiplatform.
 
 ![KubeKubeDashDash overview](docs/screenshots/01-cluster-overview.png)
 
+![Multiple clusters open in parallel tabs](docs/screenshots/99-multi-tab.png)
+
 ## Features
 
 ### Cluster management
@@ -11,6 +13,13 @@ A desktop Kubernetes cluster dashboard built with Jetpack Compose Multiplatform.
 - Switch between kubeconfig contexts from the sidebar
 - Filter all views by namespace or browse across all namespaces
 - Cluster overview with pod status breakdown, node count, and namespace count
+- **Multiple cluster workspaces** — open several clusters at once. Each tab in the window connects to an independent cluster context, and you can open additional windows for side-by-side comparisons. Each workspace maintains its own connection state, selected namespace, and navigation position.
+
+### Multi-cluster workspaces
+
+- **Tab strip** — each tab shows a color-coded cluster chip with a live connection-status ring: a rotating arc while connecting, a pulsing red ring when disconnected, and a solid ring when healthy
+- **Multiple windows** — open additional OS windows, each running as an independent workspace with its own tab strip, navigation state, and selected namespace
+- Tabs and windows are fully isolated — scrolling, selection, and navigation do not bleed across
 
 ### Resource browsing
 
@@ -70,15 +79,28 @@ If all checks pass the modal is dismissed automatically. If any required check f
 A built-in wizard finds EKS clusters in your AWS account and adds them to your kubeconfig. Available from:
 
 - The system check modal when no kubeconfig is found (the **Discover EKS Clusters** button)
-- Settings → **Cluster Discovery → AWS EKS** at any time
+- The **Settings** dialog (gear icon in the title bar) → Cluster discovery → AWS EKS at any time
 
 The flow lets you pick an AWS profile, choose a region scope (default region only, common regions, or all enabled regions), and select which clusters to import. Each import calls `aws eks update-kubeconfig --profile <name>`, which embeds `AWS_PROFILE` into the kubeconfig user exec block — so the profile binding travels with the cluster entry and `aws eks get-token` always uses the right profile at connection time. The bound profile is shown in the cluster selector for every EKS context.
 
 If `~/.kube/config` does not exist, the directory and file are created on demand. The feature requires the AWS CLI v2 to be installed and on `PATH`.
 
+### Settings
+
+Settings are opened via the gear icon (⚙) in the title bar:
+
+- **Appearance** — Light, Dark, or System (follows OS) theme
+- **Tab behaviour** — when closing the active tab, focus moves to the left neighbor, the first tab, or the most-recently-visited tab
+- **MCP server** — enable/disable the embedded MCP server and configure its port (default 3001)
+- **Cluster discovery** — AWS EKS wizard
+- **Demo cluster simulator** — pause/resume, adjust node and pod counts, or stop the simulator
+- **Diagnostics** — open the application log file
+
 ### UI
 
-- Dark theme (Material 3)
+- Light, Dark, and System (follows OS) themes (Material 3)
+- Collapsible sidebar — toggle from the title bar; state is persisted across sessions
+- macOS window tiling — supports half-screen and other Sonoma tiling arrangements
 - Resizable detail panels that auto-adapt to available space
 - Cross-resource navigation (e.g. node → pod)
 - Status badges with color coding (Running, Pending, Failed, etc.)
@@ -93,6 +115,10 @@ If `~/.kube/config` does not exist, the directory and file are created on demand
 - **Metrics Server** (optional) — required for CPU/memory usage data on the Pods screen
 
 The application checks for these at startup and reports any missing prerequisites.
+
+## Demo cluster
+
+If you don't have a Kubernetes cluster handy, the application ships with a built-in demo cluster simulator. Select **Demo Cluster** in the cluster picker to explore all screens with synthetic resources (nodes, pods, deployments, jobs, and live-updating metrics). The simulator can be paused, scaled, and stopped from Settings → Demo cluster simulator.
 
 ## Running
 
