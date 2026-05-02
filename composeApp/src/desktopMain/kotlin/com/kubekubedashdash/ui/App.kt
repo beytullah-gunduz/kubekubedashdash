@@ -348,6 +348,8 @@ fun App(
                             )
 
                             WorkspaceTab.Logs -> LogsPaneContent()
+
+                            WorkspaceTab.AllClusters -> Box(Modifier.fillMaxSize()) // placeholder; replaced in Epic 3
                         }
                     }
                 }

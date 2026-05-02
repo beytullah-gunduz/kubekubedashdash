@@ -111,22 +111,24 @@ object WorkspaceManager {
                 session.viewModel.connectToCluster(ctx)
             }
         }
+        reconcileAllClustersTab()
     }
 
     /**
-     * Close a tab by its key. Cluster tabs dispose their session; the Logs tab
-     * just leaves the list. Empty workspace cascades to window close per
-     * Decision 2 of `.docs/multi-cluster-plan.md`.
+     * Close a tab by its key. Cluster tabs dispose their session; the Logs and
+     * AllClusters tabs have no resources to free. Empty workspace cascades to
+     * window close per Decision 2 of `.docs/multi-cluster-plan.md`.
      */
     fun closeTab(workspace: Workspace, tabKey: String) {
         val behavior = PreferenceRepository.closeTabFocus
         when (val removed = workspace.removeTab(tabKey, behavior)) {
             is WorkspaceTab.Cluster -> removed.session.close()
-            WorkspaceTab.Logs, null -> { /* no resources to free */ }
+            WorkspaceTab.Logs, WorkspaceTab.AllClusters, null -> { /* no resources to free */ }
         }
         if (workspace.tabs.value.isEmpty()) {
             closeWorkspace(workspace.id)
         }
+        reconcileAllClustersTab()
     }
 
     /**
@@ -161,7 +163,7 @@ object WorkspaceManager {
     }
 
     /**
-     * Drag-end dispatcher for any tab type (cluster or Logs). Mirrors
+     * Drag-end dispatcher for any tab type (cluster, Logs, or AllClusters). Mirrors
      * [handleChipRelease] but works with any [WorkspaceTab]. Merge drops
      * are always allowed; tear-out is refused when the source has only one
      * tab (same rule as [tearOutSession]).
@@ -180,6 +182,7 @@ object WorkspaceManager {
             when (tab) {
                 is WorkspaceTab.Logs -> target.openLogsTab()
                 is WorkspaceTab.Cluster -> target.addSession(tab.session, makeActive = true)
+                WorkspaceTab.AllClusters -> target.ensureAllClustersTabAt(0)
             }
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         } else if (source.tabs.value.size > 1) {
@@ -190,11 +193,13 @@ object WorkspaceManager {
             when (tab) {
                 is WorkspaceTab.Logs -> newWorkspace.openLogsTab()
                 is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
+                WorkspaceTab.AllClusters -> newWorkspace.ensureAllClustersTabAt(0)
             }
             _workspaces.value = _workspaces.value + newWorkspace
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         }
         // single-tab window dropped over empty space → no-op, use title bar to move
+        reconcileAllClustersTab()
     }
 
     /**
@@ -206,6 +211,7 @@ object WorkspaceManager {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
         workspace.tabs.value.filterIsInstance<WorkspaceTab.Cluster>().forEach { it.session.close() }
         _workspaces.value = _workspaces.value.filterNot { it.id == workspaceId }
+        reconcileAllClustersTab()
     }
 
     /**
@@ -236,6 +242,7 @@ object WorkspaceManager {
         if (source.tabs.value.isEmpty()) {
             closeWorkspace(source.id)
         }
+        reconcileAllClustersTab()
         return newWorkspace.id
     }
 
@@ -261,6 +268,7 @@ object WorkspaceManager {
         if (source.tabs.value.isEmpty()) {
             closeWorkspace(source.id)
         }
+        reconcileAllClustersTab()
         return true
     }
 
@@ -320,6 +328,41 @@ object WorkspaceManager {
      */
     fun cancelDrag() {
         _dragTarget.value = null
+    }
+
+    /**
+     * Ensure the singleton AllClusters tab is present in exactly one workspace
+     * when totalClusters ≥ 2, and absent from all workspaces otherwise.
+     *
+     * Re-entrancy guard prevents infinite recursion when empty-workspace cleanup
+     * inside this method calls [closeWorkspace], which also calls this function.
+     */
+    private var reconciling = false
+
+    private fun reconcileAllClustersTab() {
+        if (reconciling) return
+        reconciling = true
+        try {
+            val totalClusters = _workspaces.value.sumOf { ws ->
+                ws.tabs.value.count { it is WorkspaceTab.Cluster }
+            }
+            if (totalClusters >= 2) {
+                val already = _workspaces.value.firstOrNull { ws ->
+                    ws.tabs.value.any { it is WorkspaceTab.AllClusters }
+                }
+                if (already == null) {
+                    _workspaces.value.first().ensureAllClustersTabAt(0)
+                }
+            } else {
+                _workspaces.value.forEach { it.removeAllClustersTab() }
+                // Close any workspaces that only held AllClusters and are now empty
+                _workspaces.value
+                    .filter { it.tabs.value.isEmpty() }
+                    .forEach { ws -> closeWorkspace(ws.id) }
+            }
+        } finally {
+            reconciling = false
+        }
     }
 
     private fun findDropTargetWorkspace(

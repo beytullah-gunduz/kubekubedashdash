@@ -220,6 +220,10 @@ fun WindowTabStrip(
                                 onDragCancelled = { onDragCancelledTab() },
                             )
                         }
+
+                        is WorkspaceTab.AllClusters -> {
+                            // TODO Epic 2: AllClustersChip(...)
+                        }
                     }
                 }
             }

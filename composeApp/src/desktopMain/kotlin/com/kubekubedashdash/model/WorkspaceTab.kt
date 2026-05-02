@@ -10,4 +10,8 @@ sealed class WorkspaceTab {
     data object Logs : WorkspaceTab() {
         override val key: String = "logs"
     }
+
+    data object AllClusters : WorkspaceTab() {
+        override val key: String = "all-clusters"
+    }
 }

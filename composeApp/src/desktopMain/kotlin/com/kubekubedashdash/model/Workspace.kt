@@ -180,6 +180,25 @@ class Workspace(
     }
 
     /**
+     * Insert an AllClusters tab at [index] (clamped to [0, size]) if one is not
+     * already present. Does NOT change the active tab — spec: not auto-activated.
+     */
+    internal fun ensureAllClustersTabAt(index: Int = 0) {
+        if (_tabs.value.any { it is WorkspaceTab.AllClusters }) return
+        val clamped = index.coerceIn(0, _tabs.value.size)
+        _tabs.value = _tabs.value.toMutableList().also { it.add(clamped, WorkspaceTab.AllClusters) }
+    }
+
+    /** Remove the AllClusters tab if present. Activates the next tab if it was active. */
+    internal fun removeAllClustersTab() {
+        val key = WorkspaceTab.AllClusters.key
+        _tabs.value = _tabs.value.filterNot { it.key == key }
+        if (_activeTabKey.value == key) {
+            _activeTabKey.value = _tabs.value.firstOrNull()?.key
+        }
+    }
+
+    /**
      * Append a Logs tab and activate it, or — if a Logs tab already exists —
      * just activate the existing one. Singleton: at most one Logs tab per window.
      */
