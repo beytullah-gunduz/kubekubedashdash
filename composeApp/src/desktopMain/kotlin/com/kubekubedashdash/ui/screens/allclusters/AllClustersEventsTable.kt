@@ -13,11 +13,12 @@ import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.screens.events.EventColumn
+import com.kubekubedashdash.ui.screens.events.EventTypeIcon
 
 /**
  * Aggregated events table for the AllClusters view. Identical column set to the
  * single-cluster [com.kubekubedashdash.ui.screens.events.EventTable] except a
- * "Cluster" column is inserted immediately before the Namespace column so users
+ * "Cluster" column is inserted immediately before the Node column so users
  * can see which cluster each event originated from.
  */
 @Composable
@@ -28,7 +29,7 @@ internal fun AllClustersEventsTable(events: List<EventInfo>) {
         val allColumns = listOf(
             EventColumn(
                 def = ColumnDef(header = "Type", width = 50.dp),
-                cell = { ev -> CellData(ev.type) },
+                cell = { ev -> CellData(text = ev.type, content = { EventTypeIcon(ev.type) }) },
             ),
             EventColumn(
                 def = ColumnDef("Reason", width = 150.dp),
@@ -53,16 +54,16 @@ internal fun AllClustersEventsTable(events: List<EventInfo>) {
                 cell = { ev -> CellData(ev.lastSeen, sortValue = ev.lastSeenTimestamp) },
                 minTableWidth = 950.dp,
             ),
-            EventColumn(
-                def = ColumnDef("Node", weight = 1f),
-                cell = { ev -> CellData(ev.node.ifEmpty { "-" }) },
-                minTableWidth = 800.dp,
-            ),
-            // Cluster column inserted before Namespace
+            // Cluster column inserted before Node
             EventColumn(
                 def = ColumnDef("Cluster", width = 140.dp),
                 cell = { ev -> CellData(ev.cluster ?: "—") },
                 minTableWidth = 650.dp,
+            ),
+            EventColumn(
+                def = ColumnDef("Node", weight = 1f),
+                cell = { ev -> CellData(ev.node.ifEmpty { "-" }) },
+                minTableWidth = 800.dp,
             ),
             EventColumn(
                 def = ColumnDef("Namespace", width = 100.dp),

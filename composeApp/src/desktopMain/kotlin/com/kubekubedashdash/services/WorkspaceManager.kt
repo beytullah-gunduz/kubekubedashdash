@@ -247,6 +247,31 @@ object WorkspaceManager {
     }
 
     /**
+     * Activate the cluster tab for [sessionId] in whichever workspace currently
+     * holds it. If that workspace's window is in the background or minimized,
+     * raise it to the front so the user actually sees the activation.
+     *
+     * Returns true if a matching session was found and activated.
+     */
+    fun activateClusterTab(sessionId: SessionId): Boolean {
+        val workspace = _workspaces.value.firstOrNull { ws ->
+            ws.tabs.value.any { it is WorkspaceTab.Cluster && it.session.id == sessionId }
+        } ?: return false
+        val tabKey = "cluster:${sessionId.value}"
+        workspace.setActive(tabKey)
+        workspace.awtWindow?.let { win ->
+            (win as? java.awt.Frame)?.let { frame ->
+                if ((frame.extendedState and java.awt.Frame.ICONIFIED) != 0) {
+                    frame.extendedState = frame.extendedState and java.awt.Frame.ICONIFIED.inv()
+                }
+            }
+            win.toFront()
+            win.requestFocus()
+        }
+        return true
+    }
+
+    /**
      * Move [sessionId] from its current workspace into [toWorkspaceId], appending
      * it to the destination's tab list and making it active. The session keeps
      * its connection, informers, and ViewModelStore, so the user's place in the

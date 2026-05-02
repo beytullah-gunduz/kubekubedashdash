@@ -89,6 +89,14 @@ class Workspace(
     private val _dropZoneScreenBounds = MutableStateFlow<Rect?>(null)
     val dropZoneScreenBounds: StateFlow<Rect?> = _dropZoneScreenBounds.asStateFlow()
 
+    /**
+     * AWT window backing this workspace. Set from [com.kubekubedashdash.ui.App]
+     * via `DisposableEffect` and used by [com.kubekubedashdash.services.WorkspaceManager.activateClusterTab]
+     * to bring the window to front when navigating to a cluster tab from another window.
+     * Null while the window has not yet attached or after it has been destroyed.
+     */
+    var awtWindow: java.awt.Window? = null
+
     /** Snapshot accessor — the active cluster session at this instant, or null if empty or Logs tab active. */
     val activeSession: ClusterSession?
         get() {

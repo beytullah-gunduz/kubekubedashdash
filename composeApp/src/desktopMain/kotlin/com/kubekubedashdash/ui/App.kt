@@ -38,6 +38,7 @@ import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -136,6 +137,11 @@ fun App(
         val isDropTarget = dragTarget == workspace.id
         val density = LocalDensity.current
         val awtWindow = windowScope.window
+
+        DisposableEffect(workspace, awtWindow) {
+            workspace.awtWindow = awtWindow
+            onDispose { if (workspace.awtWindow === awtWindow) workspace.awtWindow = null }
+        }
 
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()

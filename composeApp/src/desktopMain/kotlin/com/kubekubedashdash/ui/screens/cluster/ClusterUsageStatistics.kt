@@ -52,7 +52,7 @@ import com.kubekubedashdash.util.formatMemorySize
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
-internal fun ClusterUsageStatistics(
+fun ClusterUsageStatistics(
     clusterInfo: ClusterInfo,
     usage: ResourceUsageSummary?,
     cpuHistory: List<Float>,

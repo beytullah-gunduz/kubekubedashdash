@@ -188,7 +188,7 @@ internal fun EventTable(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EventTypeIcon(type: String) {
+internal fun EventTypeIcon(type: String) {
     val (icon: DrawableResource, tint: Color) = when (type) {
         "Warning" -> Res.drawable.warning_filled to KdWarning
         "Error" -> Res.drawable.error_filled to KdError

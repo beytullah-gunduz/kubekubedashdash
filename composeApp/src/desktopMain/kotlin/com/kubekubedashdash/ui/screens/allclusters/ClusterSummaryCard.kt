@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,11 +35,14 @@ import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewMode
 internal fun ClusterSummaryCard(
     summary: AllClustersViewModel.ClusterSummary,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     val clusterColor = ClusterColor.fromContext(summary.contextName)
 
     Card(
-        modifier = modifier.width(220.dp),
+        modifier = modifier
+            .width(220.dp)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
