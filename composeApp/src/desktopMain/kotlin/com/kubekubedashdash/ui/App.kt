@@ -41,6 +41,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -425,13 +426,16 @@ private fun SessionPaneContent(
         adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
     )
 
+    val density = LocalDensity.current
     val collapsedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(56.dp) }
     val expandedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(280.dp) }
-    val expansionState = rememberPaneExpansionState(
-        anchors = listOf(collapsedAnchor, expandedAnchor),
-        initialAnchoredIndex = if (sidebarCollapsed) 0 else 1,
-    )
-    LaunchedEffect(sidebarCollapsed) {
+    val expansionState = key(density) {
+        rememberPaneExpansionState(
+            anchors = listOf(collapsedAnchor, expandedAnchor),
+            initialAnchoredIndex = if (sidebarCollapsed) 0 else 1,
+        )
+    }
+    LaunchedEffect(sidebarCollapsed, density) {
         expansionState.animateTo(if (sidebarCollapsed) collapsedAnchor else expandedAnchor)
     }
 
