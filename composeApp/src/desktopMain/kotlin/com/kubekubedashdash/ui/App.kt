@@ -32,7 +32,9 @@ import androidx.compose.material3.adaptive.layout.AnimatedPane
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldDefaults
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
+import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -61,6 +63,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
@@ -119,6 +122,9 @@ fun App(
 ) {
     KubeDashTheme {
         val appViewModel = AppViewModel.instance
+
+        val sidebarCollapsed by PreferenceRepository.sidebarCollapsed()
+            .collectAsState(initial = PreferenceRepository.sidebarCollapsed)
 
         val tabs by workspace.tabs.collectAsState()
         val activeTabKey by workspace.activeTabKey.collectAsState()
@@ -223,6 +229,10 @@ fun App(
                                 selectedNamespace = selectedNamespace,
                                 namespaces = namespaces,
                                 onNamespaceChange = { titleVm?.setSelectedNamespace(it) },
+                                sidebarCollapsed = sidebarCollapsed,
+                                onToggleSidebar = {
+                                    PreferenceRepository.sidebarCollapsed = !sidebarCollapsed
+                                },
                                 chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
                                     @Composable {
                                         val ctx = selectedContext
@@ -327,6 +337,7 @@ fun App(
                         when (val tab = tabs[page]) {
                             is WorkspaceTab.Cluster -> SessionPaneContent(
                                 session = tab.session,
+                                sidebarCollapsed = sidebarCollapsed,
                                 onSelectCluster = { workspace.showClusterSelector() },
                                 onDiscoverEks = { workspace.showEksDiscovery() },
                                 onOpenLogsTab = { workspace.openLogsTab() },
@@ -398,6 +409,7 @@ fun App(
 @Composable
 private fun SessionPaneContent(
     session: ClusterSession,
+    sidebarCollapsed: Boolean,
     onSelectCluster: () -> Unit,
     onDiscoverEks: () -> Unit,
     onOpenLogsTab: () -> Unit,
@@ -413,6 +425,16 @@ private fun SessionPaneContent(
         adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
     )
 
+    val collapsedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(56.dp) }
+    val expandedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(280.dp) }
+    val expansionState = rememberPaneExpansionState(
+        anchors = listOf(collapsedAnchor, expandedAnchor),
+        initialAnchoredIndex = if (sidebarCollapsed) 0 else 1,
+    )
+    LaunchedEffect(sidebarCollapsed) {
+        expansionState.animateTo(if (sidebarCollapsed) collapsedAnchor else expandedAnchor)
+    }
+
     LaunchedEffect(Unit) {
         navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, Screen.Main.Connecting)
     }
@@ -426,16 +448,21 @@ private fun SessionPaneContent(
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
             ListDetailPaneScaffold(
-                paneExpansionDragHandle = { state ->
-                    val interactionSource = remember { MutableInteractionSource() }
-                    VerticalDragHandle(
-                        modifier = Modifier.paneExpansionDraggable(
-                            state,
-                            LocalMinimumInteractiveComponentSize.current,
-                            interactionSource,
-                        ),
-                        interactionSource = interactionSource,
-                    )
+                paneExpansionState = expansionState,
+                paneExpansionDragHandle = if (sidebarCollapsed) {
+                    null
+                } else {
+                    { state ->
+                        val interactionSource = remember { MutableInteractionSource() }
+                        VerticalDragHandle(
+                            modifier = Modifier.paneExpansionDraggable(
+                                state,
+                                LocalMinimumInteractiveComponentSize.current,
+                                interactionSource,
+                            ),
+                            interactionSource = interactionSource,
+                        )
+                    }
                 },
                 directive = navigator.scaffoldDirective,
                 scaffoldState = navigator.scaffoldState,
@@ -444,6 +471,7 @@ private fun SessionPaneContent(
                         Sidebar(
                             currentScreen = currentScreen,
                             onNavigate = { sessionVm.navigate(it) },
+                            collapsed = sidebarCollapsed,
                         )
                     }
                 },

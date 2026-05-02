@@ -3,8 +3,11 @@ package com.kubekubedashdash.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -26,6 +29,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +44,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
@@ -49,6 +54,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSidebarBg
 import com.kubekubedashdash.KdSuccess
+import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
@@ -85,6 +91,7 @@ import org.jetbrains.compose.resources.painterResource
 fun Sidebar(
     currentScreen: Screen,
     onNavigate: (Screen) -> Unit,
+    collapsed: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -98,52 +105,52 @@ fun Sidebar(
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 4.dp),
         ) {
-            SidebarItem(Res.drawable.dashboard_filled, "Cluster", currentScreen is Screen.Main.ClusterOverview) {
+            SidebarItem(Res.drawable.dashboard_filled, "Cluster", currentScreen is Screen.Main.ClusterOverview, collapsed) {
                 onNavigate(Screen.Main.ClusterOverview)
             }
-            SidebarItem(Res.drawable.dns_filled, "Nodes", currentScreen is Screen.Main.Nodes) {
+            SidebarItem(Res.drawable.dns_filled, "Nodes", currentScreen is Screen.Main.Nodes, collapsed) {
                 onNavigate(Screen.Main.Nodes())
             }
-            SidebarItem(Res.drawable.folder_special_filled, "Namespaces", currentScreen is Screen.Main.Namespaces) {
+            SidebarItem(Res.drawable.folder_special_filled, "Namespaces", currentScreen is Screen.Main.Namespaces, collapsed) {
                 onNavigate(Screen.Main.Namespaces)
             }
-            SidebarItem(Res.drawable.notifications_filled, "Events", currentScreen is Screen.Main.Events) {
+            SidebarItem(Res.drawable.notifications_filled, "Events", currentScreen is Screen.Main.Events, collapsed) {
                 onNavigate(Screen.Main.Events())
             }
 
-            SidebarSection("Workloads") {
-                SidebarItem(Res.drawable.view_in_ar_filled, "Pods", currentScreen is Screen.Main.Pods) { onNavigate(Screen.Main.Pods()) }
-                SidebarItem(Res.drawable.layers_filled, "Deployments", currentScreen is Screen.Main.Deployments) { onNavigate(Screen.Main.Deployments) }
-                SidebarItem(Res.drawable.storage_filled, "StatefulSets", currentScreen is Screen.Main.StatefulSets) { onNavigate(Screen.Main.StatefulSets) }
-                SidebarItem(Res.drawable.dynamic_feed_filled, "DaemonSets", currentScreen is Screen.Main.DaemonSets) { onNavigate(Screen.Main.DaemonSets) }
-                SidebarItem(Res.drawable.content_copy_filled, "ReplicaSets", currentScreen is Screen.Main.ReplicaSets) { onNavigate(Screen.Main.ReplicaSets) }
-                SidebarItem(Res.drawable.work_filled, "Jobs", currentScreen is Screen.Main.Jobs) { onNavigate(Screen.Main.Jobs) }
-                SidebarItem(Res.drawable.schedule_filled, "CronJobs", currentScreen is Screen.Main.CronJobs) { onNavigate(Screen.Main.CronJobs) }
+            SidebarSection("Workloads", collapsed) {
+                SidebarItem(Res.drawable.view_in_ar_filled, "Pods", currentScreen is Screen.Main.Pods, collapsed) { onNavigate(Screen.Main.Pods()) }
+                SidebarItem(Res.drawable.layers_filled, "Deployments", currentScreen is Screen.Main.Deployments, collapsed) { onNavigate(Screen.Main.Deployments) }
+                SidebarItem(Res.drawable.storage_filled, "StatefulSets", currentScreen is Screen.Main.StatefulSets, collapsed) { onNavigate(Screen.Main.StatefulSets) }
+                SidebarItem(Res.drawable.dynamic_feed_filled, "DaemonSets", currentScreen is Screen.Main.DaemonSets, collapsed) { onNavigate(Screen.Main.DaemonSets) }
+                SidebarItem(Res.drawable.content_copy_filled, "ReplicaSets", currentScreen is Screen.Main.ReplicaSets, collapsed) { onNavigate(Screen.Main.ReplicaSets) }
+                SidebarItem(Res.drawable.work_filled, "Jobs", currentScreen is Screen.Main.Jobs, collapsed) { onNavigate(Screen.Main.Jobs) }
+                SidebarItem(Res.drawable.schedule_filled, "CronJobs", currentScreen is Screen.Main.CronJobs, collapsed) { onNavigate(Screen.Main.CronJobs) }
             }
 
-            SidebarSection("Config") {
-                SidebarItem(Res.drawable.description_filled, "ConfigMaps", currentScreen is Screen.Main.ConfigMaps) { onNavigate(Screen.Main.ConfigMaps) }
-                SidebarItem(Res.drawable.lock_filled, "Secrets", currentScreen is Screen.Main.Secrets) { onNavigate(Screen.Main.Secrets) }
+            SidebarSection("Config", collapsed) {
+                SidebarItem(Res.drawable.description_filled, "ConfigMaps", currentScreen is Screen.Main.ConfigMaps, collapsed) { onNavigate(Screen.Main.ConfigMaps) }
+                SidebarItem(Res.drawable.lock_filled, "Secrets", currentScreen is Screen.Main.Secrets, collapsed) { onNavigate(Screen.Main.Secrets) }
             }
 
-            SidebarSection("Network") {
-                SidebarItem(Res.drawable.cloud_filled, "Services", currentScreen is Screen.Main.Services) { onNavigate(Screen.Main.Services) }
-                SidebarItem(Res.drawable.language_filled, "Ingresses", currentScreen is Screen.Main.Ingresses) { onNavigate(Screen.Main.Ingresses) }
-                SidebarItem(Res.drawable.settings_ethernet_filled, "Endpoints", currentScreen is Screen.Main.Endpoints) { onNavigate(Screen.Main.Endpoints) }
-                SidebarItem(Res.drawable.security_filled, "Network Policies", currentScreen is Screen.Main.NetworkPolicies) { onNavigate(Screen.Main.NetworkPolicies) }
+            SidebarSection("Network", collapsed) {
+                SidebarItem(Res.drawable.cloud_filled, "Services", currentScreen is Screen.Main.Services, collapsed) { onNavigate(Screen.Main.Services) }
+                SidebarItem(Res.drawable.language_filled, "Ingresses", currentScreen is Screen.Main.Ingresses, collapsed) { onNavigate(Screen.Main.Ingresses) }
+                SidebarItem(Res.drawable.settings_ethernet_filled, "Endpoints", currentScreen is Screen.Main.Endpoints, collapsed) { onNavigate(Screen.Main.Endpoints) }
+                SidebarItem(Res.drawable.security_filled, "Network Policies", currentScreen is Screen.Main.NetworkPolicies, collapsed) { onNavigate(Screen.Main.NetworkPolicies) }
             }
 
-            SidebarSection("Storage") {
-                SidebarItem(Res.drawable.save_filled, "Persistent Volumes", currentScreen is Screen.Main.PersistentVolumes) { onNavigate(Screen.Main.PersistentVolumes) }
-                SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims) { onNavigate(Screen.Main.PersistentVolumeClaims) }
-                SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses) { onNavigate(Screen.Main.StorageClasses) }
+            SidebarSection("Storage", collapsed) {
+                SidebarItem(Res.drawable.save_filled, "Persistent Volumes", currentScreen is Screen.Main.PersistentVolumes, collapsed) { onNavigate(Screen.Main.PersistentVolumes) }
+                SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims, collapsed) { onNavigate(Screen.Main.PersistentVolumeClaims) }
+                SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses, collapsed) { onNavigate(Screen.Main.StorageClasses) }
             }
         }
 
         HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            SidebarItem(Res.drawable.settings_filled, "Settings", currentScreen is Screen.Main.Settings) {
+            SidebarItem(Res.drawable.settings_filled, "Settings", currentScreen is Screen.Main.Settings, collapsed) {
                 onNavigate(Screen.Main.Settings)
             }
         }
@@ -156,6 +163,7 @@ fun SidebarItem(
     icon: DrawableResource,
     label: String,
     selected: Boolean,
+    collapsed: Boolean = false,
     onClick: () -> Unit,
 ) {
     var hovered by remember { mutableStateOf(false) }
@@ -165,65 +173,107 @@ fun SidebarItem(
         else -> Color.Transparent
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(bg)
-            .clickable(onClick = onClick)
-            .onPointerEvent(PointerEventType.Enter) { hovered = true }
-            .onPointerEvent(PointerEventType.Exit) { hovered = false }
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painterResource(icon),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = if (selected) KdPrimary else KdTextSecondary,
+    val row: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .padding(horizontal = if (collapsed) 4.dp else 8.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(bg)
+                .clickable(onClick = onClick)
+                .onPointerEvent(PointerEventType.Enter) { hovered = true }
+                .onPointerEvent(PointerEventType.Exit) { hovered = false }
+                .padding(horizontal = if (collapsed) 0.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
+        ) {
+            Icon(
+                painterResource(icon),
+                contentDescription = if (collapsed) label else null,
+                modifier = Modifier.size(16.dp),
+                tint = if (selected) KdPrimary else KdTextSecondary,
+            )
+            if (!collapsed) {
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (selected) KdTextPrimary else KdTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+
+    if (collapsed) {
+        TooltipArea(
+            tooltip = { SidebarItemTooltip(label) },
+            tooltipPlacement = TooltipPlacement.ComponentRect(
+                anchor = Alignment.CenterEnd,
+                alignment = Alignment.CenterEnd,
+                offset = DpOffset(8.dp, 0.dp),
+            ),
+            content = row,
         )
-        Spacer(Modifier.width(10.dp))
+    } else {
+        row()
+    }
+}
+
+@Composable
+private fun SidebarItemTooltip(text: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = KdSurface,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp,
+    ) {
         Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) KdTextPrimary else KdTextSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = KdTextPrimary,
         )
     }
 }
 
 @Composable
-fun SidebarSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+fun SidebarSection(
+    title: String,
+    collapsed: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     var expanded by remember { mutableStateOf(true) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 18.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                painterResource(if (expanded) Res.drawable.expand_more_filled else Res.drawable.chevron_right_filled),
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = KdTextSecondary,
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                title.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = KdTextSecondary,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp,
-            )
+        if (!collapsed) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 18.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painterResource(if (expanded) Res.drawable.expand_more_filled else Res.drawable.chevron_right_filled),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = KdTextSecondary,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    title.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp,
+                )
+            }
         }
 
-        AnimatedVisibility(visible = expanded) {
+        AnimatedVisibility(visible = collapsed || expanded) {
             Column(content = content)
         }
     }

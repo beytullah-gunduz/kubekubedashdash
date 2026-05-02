@@ -66,6 +66,8 @@ import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.folder_special_filled
+import com.kubekubedashdash.resources.left_panel_close
+import com.kubekubedashdash.resources.left_panel_open
 import com.kubekubedashdash.resources.search_filled
 import org.jetbrains.compose.resources.painterResource
 
@@ -88,6 +90,8 @@ fun WindowScope.TitleBar(
     selectedNamespace: String,
     namespaces: List<String>,
     onNamespaceChange: (String) -> Unit,
+    sidebarCollapsed: Boolean,
+    onToggleSidebar: () -> Unit,
     chipSlot: (@Composable () -> Unit)? = null,
 ) {
     val toggleMaximize = {
@@ -156,6 +160,9 @@ fun WindowScope.TitleBar(
                 Spacer(Modifier.width(12.dp))
             }
 
+            SidebarToggleButton(sidebarCollapsed, onToggleSidebar)
+            Spacer(Modifier.width(4.dp))
+
             if (chipSlot != null) {
                 chipSlot()
             } else {
@@ -197,6 +204,39 @@ fun WindowScope.TitleBar(
         WindowDraggableArea {
             rowContent()
         }
+    }
+}
+
+@Composable
+private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
+    val icon = if (collapsed) Res.drawable.left_panel_open else Res.drawable.left_panel_close
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Main)
+                        if (event.type == PointerEventType.Press) {
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                }
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = if (collapsed) "Expand sidebar" else "Collapse sidebar",
+            modifier = Modifier.size(16.dp),
+            tint = KdTextSecondary,
+        )
     }
 }
 

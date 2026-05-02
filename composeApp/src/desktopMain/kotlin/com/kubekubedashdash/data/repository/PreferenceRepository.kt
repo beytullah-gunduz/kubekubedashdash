@@ -23,6 +23,7 @@ object PreferenceRepository {
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
+    private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
     private val DEMO_NODES_MIN by lazy { intPreferencesKey("demo_nodes_min") }
     private val DEMO_NODES_MAX by lazy { intPreferencesKey("demo_nodes_max") }
     private val DEMO_PODS_MIN by lazy { intPreferencesKey("demo_pods_min") }
@@ -94,6 +95,20 @@ object PreferenceRepository {
 
     private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() }
         ?: CloseTabFocus.LEFT_NEIGHBOR
+
+    var sidebarCollapsed: Boolean
+        get() = runBlocking { dataStore.data.firstOrNull()?.get(SIDEBAR_COLLAPSED) ?: false }
+        set(value) {
+            runBlocking {
+                dataStore.edit {
+                    it[SIDEBAR_COLLAPSED] = value
+                }
+            }
+        }
+
+    fun sidebarCollapsed(): Flow<Boolean> = dataStore.data.map {
+        it[SIDEBAR_COLLAPSED] ?: false
+    }
 
     var demoTargets: DemoClusterSimulator.Targets
         get() = runBlocking {
