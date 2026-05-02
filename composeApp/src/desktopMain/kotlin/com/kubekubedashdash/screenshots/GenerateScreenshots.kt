@@ -186,6 +186,16 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
             log.info("captured {}", slug)
         }
 
+        log.info("Capturing settings dialog over cluster overview")
+        sessionVm.navigate(Screen.Main.ClusterOverview)
+        delay(900L)
+        initialWorkspace.showSettings()
+        delay(900L)
+        captureWindow(initialWorkspace.id, outDir.resolve("21-settings.png"))
+        initialWorkspace.dismissSettings()
+        delay(300L)
+        log.info("captured 21-settings")
+
         log.info("Building light/dark theme comparison")
         sessionVm.navigate(Screen.Main.ClusterOverview)
         delay(900)

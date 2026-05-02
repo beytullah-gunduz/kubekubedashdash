@@ -73,6 +73,9 @@ class Workspace(
     private val _showEksDiscovery = MutableStateFlow(false)
     val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
 
+    private val _showSettings = MutableStateFlow(false)
+    val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
+
     /**
      * Screen-space rectangle of this window's chip-drop zone — the chip slot in
      * the title bar at N=1 or the [com.kubekubedashdash.ui.WindowTabStrip] row
@@ -204,6 +207,14 @@ class Workspace(
 
     fun dismissEksDiscovery() {
         _showEksDiscovery.value = false
+    }
+
+    fun showSettings() {
+        _showSettings.value = true
+    }
+
+    fun dismissSettings() {
+        _showSettings.value = false
     }
 
     fun updateDropZoneScreenBounds(bounds: Rect?) {

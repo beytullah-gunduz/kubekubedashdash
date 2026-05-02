@@ -43,7 +43,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -197,7 +196,7 @@ fun App(
             }
         }
 
-        var settingsOpen by remember { mutableStateOf(false) }
+        val settingsOpen by workspace.showSettings.collectAsState()
 
         // Provide the title session's locals at App scope for modals and the
         // title bar. SessionPaneContent re-provides per-page locals so each
@@ -237,7 +236,7 @@ fun App(
                                 onToggleSidebar = {
                                     PreferenceRepository.sidebarCollapsed = !sidebarCollapsed
                                 },
-                                onOpenSettings = { settingsOpen = true },
+                                onOpenSettings = { workspace.showSettings() },
                                 chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
                                     @Composable {
                                         val ctx = selectedContext
@@ -400,13 +399,13 @@ fun App(
 
                 if (settingsOpen) {
                     SettingsDialog(
-                        onDismiss = { settingsOpen = false },
+                        onDismiss = { workspace.dismissSettings() },
                         onDiscoverEks = {
-                            settingsOpen = false
+                            workspace.dismissSettings()
                             workspace.showEksDiscovery()
                         },
                         onOpenLogsTab = {
-                            settingsOpen = false
+                            workspace.dismissSettings()
                             workspace.openLogsTab()
                         },
                     )
