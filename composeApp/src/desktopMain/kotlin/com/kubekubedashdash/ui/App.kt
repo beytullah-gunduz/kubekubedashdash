@@ -78,6 +78,7 @@ import com.kubekubedashdash.ui.modals.PrerequisitesModal
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
 import com.kubekubedashdash.ui.screens.ResourceDetailScreen
+import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.cluster.ClusterOverviewScreen
 import com.kubekubedashdash.ui.screens.deployments.DeploymentDetailScreen
 import com.kubekubedashdash.ui.screens.deployments.DeploymentsScreen
@@ -349,7 +350,7 @@ fun App(
 
                             WorkspaceTab.Logs -> LogsPaneContent()
 
-                            WorkspaceTab.AllClusters -> Box(Modifier.fillMaxSize()) // placeholder; replaced in Epic 3
+                            WorkspaceTab.AllClusters -> AllClustersScreen()
                         }
                     }
                 }

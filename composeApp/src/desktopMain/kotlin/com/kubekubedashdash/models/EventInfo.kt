@@ -17,4 +17,5 @@ data class EventInfo(
     val lastSeenTimestamp: String = "",
     val namespace: String,
     val node: String = "",
+    val cluster: String? = null,
 )

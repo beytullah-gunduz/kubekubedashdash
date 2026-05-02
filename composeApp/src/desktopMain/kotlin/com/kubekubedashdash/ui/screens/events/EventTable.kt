@@ -282,7 +282,7 @@ private fun ColumnFilterDropdown(
     }
 }
 
-private data class EventColumn(
+internal data class EventColumn(
     val def: ColumnDef,
     val cell: (EventInfo) -> CellData,
     val minTableWidth: Dp? = null,
