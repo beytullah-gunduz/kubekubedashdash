@@ -222,7 +222,20 @@ fun WindowTabStrip(
                         }
 
                         is WorkspaceTab.AllClusters -> {
-                            // TODO Epic 2: AllClustersChip(...)
+                            val clusterCount = tabs.count { it is WorkspaceTab.Cluster }
+                            AllClustersChip(
+                                modifier = chipModifier,
+                                isActive = tab.key == activeTabKey,
+                                onClick = { onSelectTab(tab.key) },
+                                onClose = if (clusterCount >= 2) {
+                                    null
+                                } else {
+                                    { onCloseTab(tab.key) }
+                                },
+                                onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
+                                onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
+                                onDragCancelled = { onDragCancelledTab() },
+                            )
                         }
                     }
                 }
