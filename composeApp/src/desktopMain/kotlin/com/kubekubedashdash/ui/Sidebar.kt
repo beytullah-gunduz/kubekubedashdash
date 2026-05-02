@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -78,7 +77,6 @@ import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.resources.schedule_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
-import com.kubekubedashdash.resources.settings_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
@@ -144,14 +142,6 @@ fun Sidebar(
                 SidebarItem(Res.drawable.save_filled, "Persistent Volumes", currentScreen is Screen.Main.PersistentVolumes, collapsed) { onNavigate(Screen.Main.PersistentVolumes) }
                 SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims, collapsed) { onNavigate(Screen.Main.PersistentVolumeClaims) }
                 SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses, collapsed) { onNavigate(Screen.Main.StorageClasses) }
-            }
-        }
-
-        HorizontalDivider(color = KdBorder, thickness = 1.dp)
-
-        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            SidebarItem(Res.drawable.settings_filled, "Settings", currentScreen is Screen.Main.Settings, collapsed) {
-                onNavigate(Screen.Main.Settings)
             }
         }
     }

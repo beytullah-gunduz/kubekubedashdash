@@ -177,14 +177,11 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
             "18-persistent-volumes" to Screen.Main.PersistentVolumes,
             "19-persistent-volume-claims" to Screen.Main.PersistentVolumeClaims,
             "20-storage-classes" to Screen.Main.StorageClasses,
-            "21-settings" to Screen.Main.Settings,
         )
 
         for ((slug, screen) in screens) {
             sessionVm.navigate(screen)
-            // Settings has a heavier first-paint than the resource screens.
-            val settle = if (screen is Screen.Main.Settings) 1800L else 900L
-            delay(settle)
+            delay(900L)
             captureWindow(initialWorkspace.id, outDir.resolve("$slug.png"))
             log.info("captured {}", slug)
         }

@@ -43,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -94,7 +95,7 @@ import com.kubekubedashdash.ui.screens.pods.PodDetailPanel
 import com.kubekubedashdash.ui.screens.pods.PodsScreen
 import com.kubekubedashdash.ui.screens.services.ServiceDetailScreen
 import com.kubekubedashdash.ui.screens.services.ServicesScreen
-import com.kubekubedashdash.ui.screens.settings.SettingsScreen
+import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
@@ -196,6 +197,8 @@ fun App(
             }
         }
 
+        var settingsOpen by remember { mutableStateOf(false) }
+
         // Provide the title session's locals at App scope for modals and the
         // title bar. SessionPaneContent re-provides per-page locals so each
         // cluster page sees its own session. LogsPaneContent needs neither.
@@ -234,6 +237,7 @@ fun App(
                                 onToggleSidebar = {
                                     PreferenceRepository.sidebarCollapsed = !sidebarCollapsed
                                 },
+                                onOpenSettings = { settingsOpen = true },
                                 chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
                                     @Composable {
                                         val ctx = selectedContext
@@ -391,6 +395,20 @@ fun App(
                             appViewModel.onEksImportComplete()
                         },
                         launchedFromClusterSelector = showClusterSelector,
+                    )
+                }
+
+                if (settingsOpen) {
+                    SettingsDialog(
+                        onDismiss = { settingsOpen = false },
+                        onDiscoverEks = {
+                            settingsOpen = false
+                            workspace.showEksDiscovery()
+                        },
+                        onOpenLogsTab = {
+                            settingsOpen = false
+                            workspace.openLogsTab()
+                        },
                     )
                 }
             }
@@ -562,7 +580,6 @@ fun ContentRouter(
             is Screen.Main.PersistentVolumes -> GenericResourceScreen("PersistentVolume", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.persistentVolumes)
             is Screen.Main.PersistentVolumeClaims -> GenericResourceScreen("PersistentVolumeClaim", searchQuery, sourceFlow = reactiveClient.persistentVolumeClaims)
             is Screen.Main.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.storageClasses)
-            is Screen.Main.Settings -> SettingsScreen(onDiscoverEks = onDiscoverEks, onOpenLogsTab = onOpenLogsTab)
             else -> {}
         }
     }

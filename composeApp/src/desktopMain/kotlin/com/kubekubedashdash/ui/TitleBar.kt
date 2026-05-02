@@ -69,6 +69,7 @@ import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
 import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.resources.settings_filled
 import org.jetbrains.compose.resources.painterResource
 
 private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
@@ -92,6 +93,7 @@ fun WindowScope.TitleBar(
     onNamespaceChange: (String) -> Unit,
     sidebarCollapsed: Boolean,
     onToggleSidebar: () -> Unit,
+    onOpenSettings: () -> Unit,
     chipSlot: (@Composable () -> Unit)? = null,
 ) {
     val toggleMaximize = {
@@ -184,6 +186,9 @@ fun WindowScope.TitleBar(
 
             CompactNamespaceSelector(selectedNamespace, namespaces, onNamespaceChange)
 
+            Spacer(Modifier.width(8.dp))
+            SettingsButton(onClick = onOpenSettings)
+
             if (!isMacOS) {
                 Spacer(Modifier.width(8.dp))
                 WindowsControls(
@@ -234,6 +239,38 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
         Icon(
             painterResource(icon),
             contentDescription = if (collapsed) "Expand sidebar" else "Collapse sidebar",
+            modifier = Modifier.size(16.dp),
+            tint = KdTextSecondary,
+        )
+    }
+}
+
+@Composable
+private fun SettingsButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Main)
+                        if (event.type == PointerEventType.Press) {
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                }
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(Res.drawable.settings_filled),
+            contentDescription = "Settings",
             modifier = Modifier.size(16.dp),
             tint = KdTextSecondary,
         )
