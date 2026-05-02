@@ -409,11 +409,11 @@ private fun ClusterAvatar(
     }
 
     Box(
-        modifier = Modifier.size(20.dp),
+        modifier = Modifier.size(24.dp),
         contentAlignment = Alignment.Center,
     ) {
         // Cluster-color fill, intentionally smaller than the avatar's outer
-        // 20 dp footprint so there's a ~0.5 dp transparent gap between the
+        // 24 dp footprint so there's a ~3.75 dp transparent gap between the
         // fill's edge and the ring's inner edge. Without it, a green-tinted
         // cluster color blends into the connected-green ring (and likewise
         // for any cluster whose color happens to match a state color),
