@@ -20,6 +20,7 @@ import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
+import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
@@ -239,6 +240,12 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(900)
         captureWindow(initialWorkspace.id, outDir.resolve("99-multi-tab.png"))
         log.info("captured multi-tab")
+
+        log.info("Capturing All Clusters tab")
+        initialWorkspace.setActive(WorkspaceTab.AllClusters.key)
+        delay(1200L)
+        captureWindow(initialWorkspace.id, outDir.resolve("22-all-clusters.png"))
+        log.info("captured all-clusters")
 
         log.info("Building multi-window showcase (2 windows)")
         WorkspaceManager.openCluster(
