@@ -68,8 +68,14 @@ class ReactiveKubeClient(
 
     fun connect(context: String? = null): Result<String> = connectionManager.connect(context)
 
-    fun connectMock(): Result<String> = try {
-        val handle = MockClusterProvider.acquire()
+    /**
+     * Connect to a mock cluster instance. `label = null` mints a fresh instance
+     * (the picker path — every "Demo Cluster" pick creates an independent mock).
+     * A non-null label reattaches to an existing instance, or recreates one with
+     * that label if the previous server has already been torn down.
+     */
+    fun connectMock(label: String? = null): Result<String> = try {
+        val handle = if (label == null) MockClusterProvider.acquireNewInstance() else MockClusterProvider.acquire(label)
         connectionManager.connectWithMockHandle(handle)
     } catch (e: Exception) {
         Result.failure(e)

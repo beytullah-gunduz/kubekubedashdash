@@ -63,6 +63,7 @@ import io.fabric8.kubernetes.api.model.Duration as FabricDuration
 
 class MockClusterHandle internal constructor(
     val client: KubernetesClient,
+    val label: String,
 ) : Closeable {
     private val closed = AtomicBoolean(false)
 
@@ -75,15 +76,26 @@ class MockClusterHandle internal constructor(
 
 object MockClusterProvider {
 
+    /**
+     * Picker-entry / template label. Picking this from the cluster selector means
+     * "give me a brand-new mock instance"; the actual live tab's context name is
+     * a unique `"$MOCK_LABEL_PREFIX #N"` minted by [acquireNewInstance].
+     */
     const val MOCK_CONTEXT_NAME = "demo-cluster (mock)"
+    private const val MOCK_LABEL_PREFIX = "demo-cluster (mock)"
 
     private val log = LoggerFactory.getLogger(MockClusterProvider::class.java)
     private val lock = Any()
 
+    private data class MockInstance(
+        val label: String,
+        val server: KubernetesMockServer,
+        val simulator: DemoClusterSimulator,
+        val handles: MutableSet<MockClusterHandle> = mutableSetOf(),
+    )
+
     // Guarded by `lock`.
-    private var mockServer: KubernetesMockServer? = null
-    private val handles = mutableSetOf<MockClusterHandle>()
-    private var simulator: DemoClusterSimulator? = null
+    private val instances = mutableMapOf<String, MockInstance>()
 
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
@@ -91,34 +103,71 @@ object MockClusterProvider {
     private val _connectedTabCount = MutableStateFlow(0)
     val connectedTabCount: StateFlow<Int> = _connectedTabCount.asStateFlow()
 
-    fun acquire(): MockClusterHandle = synchronized(lock) {
-        val server = mockServer ?: bootServer()
-        val client = server.createClient()
-        val handle = MockClusterHandle(client)
-        handles += handle
-        _connectedTabCount.value = handles.size
-        log.info("Mock cluster acquired (refCount={})", handles.size)
-        handle
+    fun isMockContext(ctx: String): Boolean = ctx == MOCK_CONTEXT_NAME || ctx.startsWith("$MOCK_LABEL_PREFIX #")
+
+    /**
+     * Mint a fresh mock instance with a lowest-unused-N label and acquire a handle
+     * to it. Atomic — label minting and instance creation happen under the lock so
+     * two concurrent picks can't collide on the same N.
+     */
+    fun acquireNewInstance(): MockClusterHandle = synchronized(lock) {
+        val label = generateUnusedLabel()
+        val instance = bootInstance(label)
+        instances[label] = instance
+        addHandle(instance)
+    }
+
+    /**
+     * Reattach to an existing mock instance by label, or create one if missing
+     * (e.g. retry path that outlived its original instance).
+     */
+    fun acquire(label: String): MockClusterHandle = synchronized(lock) {
+        val instance = instances[label] ?: bootInstance(label).also { instances[label] = it }
+        addHandle(instance)
     }
 
     internal fun releaseInternal(handle: MockClusterHandle): Unit = synchronized(lock) {
-        if (!handles.remove(handle)) return
+        val instance = instances[handle.label] ?: return
+        if (!instance.handles.remove(handle)) return
         runCatching { handle.client.close() }
-        _connectedTabCount.value = handles.size
-        log.info("Mock cluster released (refCount={})", handles.size)
-        if (handles.isEmpty()) shutdownServer()
+        log.info("Mock cluster '{}' released (refCount={})", handle.label, instance.handles.size)
+        if (instance.handles.isEmpty()) {
+            tearDownInstance(instance)
+            instances.remove(handle.label)
+        }
+        refreshAggregateFlows()
     }
 
     /** Hard kill — only for the "Kill mock server" button in Settings. */
     fun forceShutdown() = synchronized(lock) {
-        log.warn("Mock cluster force-shutdown requested (refCount was {})", handles.size)
-        shutdownServer()
+        log.warn("Mock cluster force-shutdown requested ({} instances)", instances.size)
+        instances.values.toList().forEach { tearDownInstance(it) }
+        instances.clear()
+        refreshAggregateFlows()
     }
 
-    fun simulatorOrNull(): DemoClusterSimulator? = synchronized(lock) { simulator }
+    /** Live simulators across all instances, for the Settings panel's broadcast controls. */
+    fun simulators(): List<DemoClusterSimulator> = synchronized(lock) {
+        instances.values.map { it.simulator }
+    }
 
-    private fun bootServer(): KubernetesMockServer {
-        log.info("Starting mock Kubernetes server")
+    private fun generateUnusedLabel(): String {
+        var n = 1
+        while ("$MOCK_LABEL_PREFIX #$n" in instances) n++
+        return "$MOCK_LABEL_PREFIX #$n"
+    }
+
+    private fun addHandle(instance: MockInstance): MockClusterHandle {
+        val client = instance.server.createClient()
+        val handle = MockClusterHandle(client, instance.label)
+        instance.handles += handle
+        refreshAggregateFlows()
+        log.info("Mock cluster '{}' acquired (refCount={})", instance.label, instance.handles.size)
+        return handle
+    }
+
+    private fun bootInstance(label: String): MockInstance {
+        log.info("Starting mock Kubernetes server '{}'", label)
         val server = KubernetesMockServer(
             Context(),
             MockWebServer(),
@@ -127,7 +176,6 @@ object MockClusterProvider {
             false,
         )
         server.init()
-        mockServer = server
         val seedClient = server.createClient()
         try {
             seedResources(seedClient)
@@ -135,21 +183,20 @@ object MockClusterProvider {
             seedClient.close()
         }
         val targets = PreferenceRepository.demoTargets
-        simulator = DemoClusterSimulator(server.createClient(), targets).also { it.start() }
-        _isRunning.value = true
-        log.info("Mock Kubernetes server started")
-        return server
+        val simulator = DemoClusterSimulator(server.createClient(), targets).also { it.start() }
+        log.info("Mock Kubernetes server '{}' started", label)
+        return MockInstance(label, server, simulator)
     }
 
-    private fun shutdownServer() {
-        simulator?.stop()
-        simulator = null
-        mockServer?.let {
-            log.info("Stopping mock Kubernetes server")
-            runCatching { it.destroy() }
-        }
-        mockServer = null
-        _isRunning.value = false
+    private fun tearDownInstance(instance: MockInstance) {
+        log.info("Stopping mock Kubernetes server '{}'", instance.label)
+        runCatching { instance.simulator.stop() }
+        runCatching { instance.server.destroy() }
+    }
+
+    private fun refreshAggregateFlows() {
+        _isRunning.value = instances.isNotEmpty()
+        _connectedTabCount.value = instances.values.sumOf { it.handles.size }
     }
 
     // ── Time helpers (internal so DemoClusterSimulator can share them) ────────

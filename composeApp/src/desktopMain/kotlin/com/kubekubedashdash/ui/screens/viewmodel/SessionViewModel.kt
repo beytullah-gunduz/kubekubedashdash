@@ -153,14 +153,24 @@ class SessionViewModel(
         _connectionError.value = null
         _currentScreen.value = Screen.Main.Connecting
         scope.launch(Dispatchers.IO) {
-            val isMock = ctx == MockClusterProvider.MOCK_CONTEXT_NAME
+            val isMock = MockClusterProvider.isMockContext(ctx)
             val result = if (isMock) {
-                reactiveClient.connectMock()
+                // Bare prefix means "mint a new mock" (picker path); a `#N` label
+                // means reattach (e.g. retry of an existing session).
+                val mockLabel = if (ctx == MockClusterProvider.MOCK_CONTEXT_NAME) null else ctx
+                reactiveClient.connectMock(mockLabel)
             } else {
                 reactiveClient.connect(ctx)
             }
             result.fold(
                 onSuccess = {
+                    if (isMock) {
+                        // Replace the picker's bare "demo-cluster (mock)" intent
+                        // with the unique "...#N" the provider actually minted, so
+                        // the chip text, color, and All Clusters aggregation key
+                        // off the live label.
+                        _selectedContext.value = reactiveClient.getCurrentContext()
+                    }
                     _isConnected.value = true
                     _connectionError.value = null
                     _currentScreen.value = Screen.Main.ClusterOverview

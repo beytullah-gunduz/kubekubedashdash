@@ -82,12 +82,15 @@ private data class ParsedContext(
 )
 
 private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
-    if (ctx == MockClusterProvider.MOCK_CONTEXT_NAME) {
+    if (MockClusterProvider.isMockContext(ctx)) {
+        // Bare prefix (picker template) → "Demo Cluster"; live "$prefix #N" → "Demo Cluster #N".
+        val suffix = ctx.removePrefix(MockClusterProvider.MOCK_CONTEXT_NAME).trim()
+        val displayName = if (suffix.isEmpty()) "Demo Cluster" else "Demo Cluster $suffix"
         return ParsedContext(
             rawName = ctx,
             isEks = false,
             isMock = true,
-            clusterName = "Demo Cluster",
+            clusterName = displayName,
         )
     }
     val match = eksPattern.matchEntire(ctx)
@@ -242,9 +245,13 @@ fun ClusterSelectorModal(
                             .padding(vertical = 8.dp),
                     ) {
                         items(contexts, key = { it }) { ctx ->
-                            val isSelected = ctx == selectedContext
                             val awsProfile = bindings[ctx]?.awsProfile
                             val parsed = remember(ctx, awsProfile) { parseContext(ctx, awsProfile) }
+                            // Light up the "Demo Cluster" picker row whenever any mock
+                            // instance ("…#N") is the active session — otherwise the
+                            // bare-prefix entry would never match a live label.
+                            val isSelected = ctx == selectedContext ||
+                                (parsed.isMock && MockClusterProvider.isMockContext(selectedContext))
                             var hovered by remember { mutableStateOf(false) }
                             val bg = when {
                                 isSelected -> KdSelected

@@ -63,6 +63,13 @@ class SettingsScreenViewModel : ViewModel() {
     }
 
     // ── Demo cluster simulator ─────────────────────────────────────────────────
+    //
+    // With per-tab mock instances, controls in this panel apply *globally* to every
+    // live simulator. Pause toggles all of them; target sliders update all of them
+    // and persist as the default for newly-minted instances. The "any paused" /
+    // "any running" derivation is intentional: it surfaces a non-default state on
+    // even one instance so the Settings switch stays consistent with what the user
+    // sees in any open tab.
 
     val mockIsRunning: StateFlow<Boolean> = MockClusterProvider.isRunning
     val mockConnectedTabs: StateFlow<Int> = MockClusterProvider.connectedTabCount
@@ -73,23 +80,22 @@ class SettingsScreenViewModel : ViewModel() {
     private val _mockTargets = MutableStateFlow(PreferenceRepository.demoTargets)
     val mockTargets: StateFlow<DemoClusterSimulator.Targets> = _mockTargets.asStateFlow()
 
-    val mockPaused: StateFlow<Boolean>
-        get() = MockClusterProvider.simulatorOrNull()?.paused ?: _defaultPaused
-
-    private val _defaultPaused = MutableStateFlow(false)
+    private val _mockPaused = MutableStateFlow(false)
+    val mockPaused: StateFlow<Boolean> = _mockPaused.asStateFlow()
 
     fun setMockPaused(p: Boolean) {
-        MockClusterProvider.simulatorOrNull()?.setPaused(p)
+        _mockPaused.value = p
+        MockClusterProvider.simulators().forEach { it.setPaused(p) }
     }
 
     fun setMockTargets(t: DemoClusterSimulator.Targets) {
         _mockTargets.value = t
-        MockClusterProvider.simulatorOrNull()?.setTargets(t)
+        MockClusterProvider.simulators().forEach { it.setTargets(t) }
         viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.demoTargets = t }
     }
 
     fun stopAllMockResources() {
-        MockClusterProvider.simulatorOrNull()?.stopAll()
+        MockClusterProvider.simulators().forEach { it.stopAll() }
     }
 
     fun killMockServer() {

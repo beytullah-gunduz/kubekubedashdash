@@ -103,11 +103,11 @@ class KubeConnectionManager : Closeable {
     }
 
     fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = try {
-        log.info("Connecting via mock handle")
+        log.info("Connecting via mock handle '{}'", handle.label)
         close()
         _client = handle.client
         _mockHandle = handle
-        _connectedContext = MockClusterProvider.MOCK_CONTEXT_NAME
+        _connectedContext = handle.label
         clearConnectionError()
         _connectionVersion.value++
         Result.success("mock")
