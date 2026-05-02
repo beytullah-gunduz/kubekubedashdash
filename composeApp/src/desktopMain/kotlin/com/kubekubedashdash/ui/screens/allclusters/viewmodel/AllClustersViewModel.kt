@@ -63,7 +63,12 @@ class AllClustersViewModel private constructor() : ViewModel() {
                         tab.session.reactiveClient.events,
                     ) { ctx, state ->
                         val events = (state as? ResourceState.Success)?.data ?: emptyList()
-                        events.map { it.copy(cluster = ctx.ifBlank { "?" }) }
+                        events.map {
+                            it.copy(
+                                cluster = ctx.ifBlank { "?" },
+                                sessionId = tab.session.id.value,
+                            )
+                        }
                     }
                 },
             ) { arrays -> arrays.flatMap { it }.sortedByDescending { it.lastSeenTimestamp } }

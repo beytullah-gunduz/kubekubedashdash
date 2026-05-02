@@ -83,11 +83,11 @@ internal fun AllClustersEventsTable(events: List<EventInfo>) {
                 else -> null
             }
             TableRow(
-                // Composite key: events from different clusters can share a UID
-                // (most easily when the same mock cluster is opened in multiple
-                // tabs). Without the cluster prefix the LazyColumn throws a
-                // duplicate-key crash on render.
-                id = "${ev.cluster.orEmpty()}:${ev.uid}",
+                // Composite key uses sessionId (not cluster name) because two
+                // sessions can connect to the same context — they share the
+                // cluster name AND the UIDs, so cluster-name alone doesn't
+                // disambiguate. sessionId is unique per session.
+                id = "${ev.sessionId.orEmpty()}:${ev.uid}",
                 cells = visibleColumns.map { it.cell(ev) },
                 backgroundColor = rowBg,
             )

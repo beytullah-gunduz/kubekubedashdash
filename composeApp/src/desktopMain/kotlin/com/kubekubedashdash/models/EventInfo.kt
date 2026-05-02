@@ -18,4 +18,5 @@ data class EventInfo(
     val namespace: String,
     val node: String = "",
     val cluster: String? = null,
+    val sessionId: String? = null,
 )
