@@ -83,7 +83,11 @@ internal fun AllClustersEventsTable(events: List<EventInfo>) {
                 else -> null
             }
             TableRow(
-                id = ev.uid,
+                // Composite key: events from different clusters can share a UID
+                // (most easily when the same mock cluster is opened in multiple
+                // tabs). Without the cluster prefix the LazyColumn throws a
+                // duplicate-key crash on render.
+                id = "${ev.cluster.orEmpty()}:${ev.uid}",
                 cells = visibleColumns.map { it.cell(ev) },
                 backgroundColor = rowBg,
             )
