@@ -34,7 +34,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
-import com.kubekubedashdash.resources.mediation
+import com.kubekubedashdash.resources.hub
 import org.jetbrains.compose.resources.painterResource
 import java.awt.MouseInfo
 import kotlin.math.sqrt
@@ -44,7 +44,7 @@ private const val ALL_CLUSTERS_DRAG_THRESHOLD_PX = 30.0
 /**
  * Tab-strip chip for the AllClusters (utility) tab. Mirrors the layout of [LogsChip] —
  * same height, same active underline, same drag-to-new-window gesture — with a circular
- * avatar (static ring + mediation icon) that visually echoes [ClusterChip].
+ * avatar (static ring + hub icon) that visually echoes [ClusterChip].
  *
  * [onClose] is nullable: when null (≥2 cluster tabs in this window) the close × is hidden
  * and middle-click is a no-op, preventing accidental dismissal of the centralized view.
@@ -135,12 +135,12 @@ fun AllClustersChip(
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Static circular avatar: stroked ring + centered mediation icon
+        // Static circular avatar: stroked ring + centered hub icon
         Box(
             modifier = Modifier
                 .size(24.dp)
                 .drawBehind {
-                    val strokePx = 1.5.dp.toPx()
+                    val strokePx = 2.5.dp.toPx()
                     val radius = (size.minDimension / 2f) - strokePx / 2f
                     drawCircle(
                         color = ringAndIconColor,
@@ -151,7 +151,7 @@ fun AllClustersChip(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painter = painterResource(Res.drawable.mediation),
+                painter = painterResource(Res.drawable.hub),
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
                 tint = ringAndIconColor,
