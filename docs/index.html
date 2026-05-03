@@ -14,7 +14,7 @@
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
-        <div class="top-bar">
+        <div class="top-bar is-hidden">
             <a href="https://github.com/beytullah-gunduz/kubekubedashdash/releases" target="_blank" rel="noopener" aria-label="Download latest release">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
                     <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z"/>
@@ -35,12 +35,10 @@
             <div class="container">
                 <h1>KubeKubeDashDash</h1>
                 <p class="tagline">
-                    A desktop dashboard for Kubernetes — multi-window,
-                    multi-tab, reactive.
+                    A desktop dashboard for Kubernetes — multi-window, multi-tab, reactive.
                 </p>
                 <p class="meta">
-                    Built with Kotlin Multiplatform + Compose Desktop · Connects
-                    via kubeconfig contexts
+                    Built with Kotlin Multiplatform + Compose Desktop · Connects via kubeconfig contexts
                 </p>
                 <div class="hero-cta">
                     <a href="https://github.com/beytullah-gunduz/kubekubedashdash/releases" target="_blank" rel="noopener" class="btn-primary">
@@ -60,6 +58,7 @@
         <main class="container">
             <section class="showcase">
                 <h2>Cluster overview</h2>
+                <p>See your cluster's health at a glance — CPU and memory usage, node count, running pods, and a live event stream all on one screen.</p>
                 <figure>
                     <img
                         src="screenshots/01-cluster-overview.png"
@@ -71,8 +70,7 @@
             <section class="showcase">
                 <h2>Light &amp; dark themes</h2>
                 <p>
-                    Pick dark, light, or follow the system — every screen,
-                    panel, and chart adapts.
+                    Pick dark, light, or follow the system — every screen, panel, and chart adapts.
                 </p>
                 <figure>
                     <img
@@ -80,8 +78,7 @@
                         alt="Cluster overview rendered in dark and light themes side by side"
                     />
                     <figcaption>
-                        The same Cluster Overview, dark on the left and light on
-                        the right.
+                        The same Cluster Overview, dark on the left and light on the right.
                     </figcaption>
                 </figure>
             </section>
@@ -89,9 +86,7 @@
             <section class="showcase">
                 <h2>Many windows, many tabs</h2>
                 <p>
-                    Each cluster gets its own tab. Drag a tab between windows to
-                    reorganize, or tear one off into a new window — the
-                    connection moves with it.
+                    Each cluster gets its own tab. Drag a tab between windows to reorganize, or tear one off into a new window — the connection moves with it.
                 </p>
                 <div class="grid two">
                     <figure>
@@ -133,6 +128,7 @@
 
             <section class="showcase">
                 <h2>Workloads</h2>
+                <p>Browse every workload across all namespaces, inspect replica counts and pod statuses, and drill into individual resources for full details.</p>
                 <div class="grid two">
                     <figure>
                         <img src="screenshots/05-pods.png" alt="Pods" />
@@ -158,6 +154,7 @@
 
             <section class="showcase">
                 <h2>Cluster &amp; nodes</h2>
+                <p>Check node conditions and allocatable resources, navigate namespaces, and watch cluster events as they happen.</p>
                 <div class="grid three">
                     <figure>
                         <img src="screenshots/02-nodes.png" alt="Nodes" />
@@ -179,6 +176,7 @@
 
             <section class="showcase">
                 <h2>Config &amp; secrets</h2>
+                <p>Inspect ConfigMaps and Secrets across all namespaces and browse their keys and values without leaving the dashboard.</p>
                 <div class="grid three">
                     <figure>
                         <img
@@ -196,6 +194,7 @@
 
             <section class="showcase">
                 <h2>Networking</h2>
+                <p>Map out your cluster's network layer — browse Services, Ingresses, Endpoints, and Network Policies in a consistent interface.</p>
                 <figure>
                     <img src="screenshots/14-services.png" alt="Services" />
                     <figcaption>Services</figcaption>
@@ -210,6 +209,7 @@
 
             <section class="showcase">
                 <h2>Storage</h2>
+                <p>Track the lifecycle of your persistent volumes and claims — see capacity, access modes, and binding status across storage classes.</p>
                 <div class="grid three">
                     <figure>
                         <img
@@ -237,6 +237,7 @@
 
             <section class="showcase">
                 <h2>Settings</h2>
+                <p>Switch themes, manage kubeconfig contexts, and configure app preferences — all without touching the command line.</p>
                 <figure>
                     <img src="screenshots/21-settings.png" alt="Settings" />
                 </figure>
@@ -246,7 +247,7 @@
         <footer>
             <div class="container">
                 <p>
-                    Screenshots generated locally against a built-in mock
+                    Screenshots generated against a built-in mock
                     cluster for demo purpose
                 </p>
             </div>
@@ -286,15 +287,14 @@
                 const bar = document.querySelector(".sticky-bar");
                 const topBar = document.querySelector(".top-bar");
 
-                window.addEventListener(
-                    "scroll",
-                    function () {
-                        const past = window.scrollY > hero.offsetHeight - 52;
-                        bar.classList.toggle("is-visible", past);
-                        topBar.classList.toggle("is-hidden", !past);
-                    },
-                    { passive: true },
-                );
+                function update() {
+                    const past = window.scrollY > hero.offsetHeight - 52;
+                    bar.classList.toggle("is-visible", past);
+                    topBar.classList.toggle("is-hidden", !past);
+                }
+
+                window.addEventListener("scroll", update, { passive: true });
+                update();
             })();
         </script>
 
