@@ -148,11 +148,12 @@ private fun SettingsSection(
             .then(
                 if (onLayoutTop != null) {
                     Modifier.onGloballyPositioned { coords ->
-                        // positionInParent shifts as the parent scrolls; add the
-                        // current scroll offset back to recover the absolute layout
-                        // offset of the section, so the nav rail can animate-scroll
-                        // back to it. The caller threads `scrollState.value` in via
-                        // the closure it passes here.
+                        // The immediate parent here is the inner Column inside
+                        // the verticalScroll viewport. That Column doesn't move
+                        // when the user scrolls — only the verticalScroll node's
+                        // placement of it does — so positionInParent.y is the
+                        // section's static layout offset, exactly the value
+                        // animateScrollTo wants. No scroll-offset adjustment.
                         onLayoutTop(coords.positionInParent().y.toInt())
                     }
                 } else {
@@ -425,7 +426,7 @@ fun SettingsScreen(
                     ) {
                         SettingsSection(
                             title = "Appearance",
-                            onLayoutTop = { y -> sectionOffsets["Appearance"] = y + scrollState.value },
+                            onLayoutTop = { y -> sectionOffsets["Appearance"] = y },
                         ) {
                             Text(
                                 "Theme",
@@ -468,7 +469,7 @@ fun SettingsScreen(
 
                         SettingsSection(
                             title = "Tab behavior",
-                            onLayoutTop = { y -> sectionOffsets["Tab behavior"] = y + scrollState.value },
+                            onLayoutTop = { y -> sectionOffsets["Tab behavior"] = y },
                         ) {
                             Text(
                                 "When closing the active tab, focus:",
@@ -540,7 +541,7 @@ fun SettingsScreen(
 
                         SettingsSection(
                             title = "Integrations",
-                            onLayoutTop = { y -> sectionOffsets["Integrations"] = y + scrollState.value },
+                            onLayoutTop = { y -> sectionOffsets["Integrations"] = y },
                         ) {
                             Text(
                                 "MCP Server",
@@ -603,7 +604,7 @@ fun SettingsScreen(
 
                         SettingsSection(
                             title = "Cluster discovery",
-                            onLayoutTop = { y -> sectionOffsets["Cluster discovery"] = y + scrollState.value },
+                            onLayoutTop = { y -> sectionOffsets["Cluster discovery"] = y },
                         ) {
                             Text(
                                 "AWS EKS",
@@ -648,7 +649,7 @@ fun SettingsScreen(
                             Spacer(Modifier.height(16.dp))
                             SettingsSection(
                                 title = "Demo cluster simulator",
-                                onLayoutTop = { y -> sectionOffsets["Demo cluster simulator"] = y + scrollState.value },
+                                onLayoutTop = { y -> sectionOffsets["Demo cluster simulator"] = y },
                             ) {
                                 DemoClusterSimulatorSection(viewModel)
                             }
@@ -658,7 +659,7 @@ fun SettingsScreen(
 
                         SettingsSection(
                             title = "Diagnostics",
-                            onLayoutTop = { y -> sectionOffsets["Diagnostics"] = y + scrollState.value },
+                            onLayoutTop = { y -> sectionOffsets["Diagnostics"] = y },
                         ) {
                             Text(
                                 "Application logs",
@@ -692,7 +693,7 @@ fun SettingsScreen(
 
                         SettingsSection(
                             title = "About",
-                            onLayoutTop = { y -> sectionOffsets["About"] = y + scrollState.value },
+                            onLayoutTop = { y -> sectionOffsets["About"] = y },
                         ) {
                             Text(
                                 "Application info",
