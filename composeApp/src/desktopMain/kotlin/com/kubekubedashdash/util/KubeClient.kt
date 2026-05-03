@@ -897,6 +897,9 @@ class KubeClient(
     fun getClusterInfo(namespace: String?): ClusterInfo {
         log.debug("Fetching cluster info namespace={}", namespace ?: "all")
         val v = client.kubernetesVersion
+        val major = v?.major.orEmpty()
+        val minor = v?.minor.orEmpty()
+        val versionStr = if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
         val nodes = client.nodes().list().items
         val namespaces = client.namespaces().list().items
         val pods = if (namespace != null) {
@@ -916,7 +919,7 @@ class KubeClient(
         }
         return ClusterInfo(
             name = getCurrentContext(), server = getClusterServer(),
-            version = "${v.major}.${v.minor}",
+            version = versionStr,
             nodesCount = nodes.size, namespacesCount = namespaces.size,
             podsCount = pods.size, deploymentsCount = deps.size, servicesCount = svcs.size,
             runningPods = pods.count { it.status?.phase == "Running" },

@@ -844,9 +844,11 @@ class ReactiveKubeClient(
         fetch = { ns ->
             val version = try {
                 val v = k8s.kubernetesVersion
-                "${v.major}.${v.minor}"
+                val major = v?.major.orEmpty()
+                val minor = v?.minor.orEmpty()
+                if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
             } catch (_: Exception) {
-                "mock"
+                ""
             }
             val nodeItems = k8s.nodes().list().items
             val nsItems = k8s.namespaces().list().items

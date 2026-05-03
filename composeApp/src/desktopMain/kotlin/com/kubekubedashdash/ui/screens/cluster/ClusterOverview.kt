@@ -138,9 +138,13 @@ private fun ClusterHeader(info: ClusterInfo) {
     Spacer(Modifier.height(4.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(info.name, style = MaterialTheme.typography.bodyMedium, color = KdPrimary)
-        Spacer(Modifier.width(12.dp))
-        Text("v${info.version}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
-        Spacer(Modifier.width(12.dp))
-        Text(info.server, style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+        if (info.version.isNotBlank()) {
+            Spacer(Modifier.width(12.dp))
+            Text("v${info.version}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+        }
+        if (info.server.isNotBlank()) {
+            Spacer(Modifier.width(12.dp))
+            Text(info.server, style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+        }
     }
 }
