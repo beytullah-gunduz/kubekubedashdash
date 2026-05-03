@@ -38,6 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdPrimary
@@ -221,27 +224,40 @@ fun ResourceTable(
 private fun TableRowItem(
     row: TableRow,
     columns: List<ColumnDef>,
-    isEven: Boolean,
+    @Suppress("UNUSED_PARAMETER") isEven: Boolean,
     isSelected: Boolean = false,
     onClick: (() -> Unit)?,
 ) {
     var hovered by remember { mutableStateOf(false) }
+    // Switched from zebra striping to a hairline border between rows.
+    // The previous striping used 30% KdSurfaceVariant which read as
+    // near-solid on dark theme and inconsistent on light, so the rows
+    // had no clear separation either way.
     val baseBg = when {
         isSelected -> KdSelected
         hovered -> KdHover
-        isEven -> Color.Transparent
-        else -> KdSurfaceVariant.copy(alpha = 0.3f)
+        else -> Color.Transparent
     }
     val bg = if (row.backgroundColor != null && !isSelected && !hovered) {
         row.backgroundColor
     } else {
         baseBg
     }
+    val separatorColor = KdBorder.copy(alpha = 0.6f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg)
+            .drawBehind {
+                val strokeWidth = 1f
+                drawLine(
+                    color = separatorColor,
+                    start = Offset(0f, size.height - strokeWidth / 2),
+                    end = Offset(size.width, size.height - strokeWidth / 2),
+                    strokeWidth = strokeWidth,
+                )
+            }
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .onPointerEvent(PointerEventType.Enter) { hovered = true }
             .onPointerEvent(PointerEventType.Exit) { hovered = false }

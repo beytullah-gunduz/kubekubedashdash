@@ -164,7 +164,7 @@ fun SidebarItem(
     }
 
     val row: @Composable () -> Unit = {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(32.dp)
@@ -173,26 +173,44 @@ fun SidebarItem(
                 .background(bg)
                 .clickable(onClick = onClick)
                 .onPointerEvent(PointerEventType.Enter) { hovered = true }
-                .onPointerEvent(PointerEventType.Exit) { hovered = false }
-                .padding(horizontal = if (collapsed) 0.dp else 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
+                .onPointerEvent(PointerEventType.Exit) { hovered = false },
         ) {
-            Icon(
-                painterResource(icon),
-                contentDescription = if (collapsed) label else null,
-                modifier = Modifier.size(16.dp),
-                tint = if (selected) KdPrimary else KdTextSecondary,
-            )
-            if (!collapsed) {
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (selected) KdTextPrimary else KdTextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            // Selection indicator: a 3 dp primary bar hugging the leading
+            // edge of the row. Visible in both collapsed and expanded modes
+            // so the active page is identifiable at a glance.
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .height(18.dp)
+                        .width(3.dp)
+                        .clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
+                        .background(KdPrimary),
                 )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (collapsed) 0.dp else 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
+            ) {
+                Icon(
+                    painterResource(icon),
+                    contentDescription = if (collapsed) label else null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (selected) KdPrimary else KdTextSecondary,
+                )
+                if (!collapsed) {
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (selected) KdTextPrimary else KdTextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

@@ -47,12 +47,21 @@ object ThemeManager {
 
 private val KdBackgroundDark = Color(0xFF1E2124)
 private val KdSidebarBgDark = Color(0xFF161819)
-private val KdSurfaceDark = Color(0xFF252A31)
-private val KdSurfaceVariantDark = Color(0xFF2C3038)
+
+// KdSurfaceDark sits on top of KdBackgroundDark (e.g. cards on the cluster
+// overview). The previous #252A31 was only ~7 lightness units above the
+// background, making cards almost float; #2A3038 widens the gap so Surface,
+// SurfaceVariant, and Background each have a visible step.
+private val KdSurfaceDark = Color(0xFF2A3038)
+private val KdSurfaceVariantDark = Color(0xFF323845)
 private val KdTextPrimaryDark = Color(0xFFC8D1DC)
 private val KdTextSecondaryDark = Color(0xFF6B7280)
-private val KdBorderDark = Color(0xFF2E3440)
-private val KdHoverDark = Color(0xFF2A2F36)
+
+// More visible border on dark — the old #2E3440 was indistinguishable from
+// the surface so card outlines never registered. #3A4150 shows a soft
+// hairline without competing with the content.
+private val KdBorderDark = Color(0xFF3A4150)
+private val KdHoverDark = Color(0xFF333944)
 private val KdSelectedDark = Color(0xFF1A3A5C)
 
 private val KdBackgroundLight = Color(0xFFF8FAFC)
@@ -73,10 +82,25 @@ val KdPrimary = Color(0xFF3D90CE)
 val KdOnPrimary = Color.White
 val KdTextPrimary: Color get() = if (ThemeManager.isDarkTheme) KdTextPrimaryDark else KdTextPrimaryLight
 val KdTextSecondary: Color get() = if (ThemeManager.isDarkTheme) KdTextSecondaryDark else KdTextSecondaryLight
-val KdSuccess = Color(0xFF48C744)
-val KdWarning = Color(0xFFE8A030)
-val KdError = Color(0xFFE54343)
-val KdInfo = Color(0xFF3D90CE)
+
+// Status colors. The dark variants stay vivid (good contrast on near-black);
+// the light variants are darkened so they still meet WCAG AA on white card
+// backgrounds. The previous single value (e.g. KdSuccess #48C744) on
+// KdSurfaceLight #FFFFFF only reached ~2.4:1, well below the 4.5:1 bar for
+// normal text.
+private val KdSuccessDark = Color(0xFF48C744)
+private val KdSuccessLight = Color(0xFF2E7D32)
+private val KdWarningDark = Color(0xFFE8A030)
+private val KdWarningLight = Color(0xFFB26A00)
+private val KdErrorDark = Color(0xFFE54343)
+private val KdErrorLight = Color(0xFFC62828)
+private val KdInfoDark = Color(0xFF3D90CE)
+private val KdInfoLight = Color(0xFF1E73B8)
+
+val KdSuccess: Color get() = if (ThemeManager.isDarkTheme) KdSuccessDark else KdSuccessLight
+val KdWarning: Color get() = if (ThemeManager.isDarkTheme) KdWarningDark else KdWarningLight
+val KdError: Color get() = if (ThemeManager.isDarkTheme) KdErrorDark else KdErrorLight
+val KdInfo: Color get() = if (ThemeManager.isDarkTheme) KdInfoDark else KdInfoLight
 val KdBorder: Color get() = if (ThemeManager.isDarkTheme) KdBorderDark else KdBorderLight
 val KdHover: Color get() = if (ThemeManager.isDarkTheme) KdHoverDark else KdHoverLight
 val KdSelected: Color get() = if (ThemeManager.isDarkTheme) KdSelectedDark else KdSelectedLight
@@ -91,7 +115,7 @@ private val DarkColorScheme = darkColorScheme(
     onBackground = KdTextPrimaryDark,
     onSurface = KdTextPrimaryDark,
     onSurfaceVariant = KdTextSecondaryDark,
-    error = Color(0xFFE54343),
+    error = KdErrorDark,
     outline = KdBorderDark,
     outlineVariant = KdBorderDark,
 )
@@ -106,10 +130,15 @@ private val LightColorScheme = lightColorScheme(
     onBackground = KdTextPrimaryLight,
     onSurface = KdTextPrimaryLight,
     onSurfaceVariant = KdTextSecondaryLight,
-    error = Color(0xFFE54343),
+    error = KdErrorLight,
     outline = KdBorderLight,
     outlineVariant = KdBorderLight,
 )
+
+// "tnum" = OpenType tabular-numerals feature. Forces digits to a fixed
+// advance width so columns of CPU / Memory / Pods / IPs / ports / ages
+// align across rows without ad-hoc Modifier.width(...) per cell.
+private const val TABULAR_NUMS = "\"tnum\" 1"
 
 private val AppTypography = Typography(
     headlineLarge = TextStyle(
@@ -147,36 +176,42 @@ private val AppTypography = Typography(
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
+        fontFeatureSettings = TABULAR_NUMS,
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
         lineHeight = 18.sp,
+        fontFeatureSettings = TABULAR_NUMS,
     ),
     bodySmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
+        fontFeatureSettings = TABULAR_NUMS,
     ),
     labelLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
+        fontFeatureSettings = TABULAR_NUMS,
     ),
     labelMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 16.sp,
+        fontFeatureSettings = TABULAR_NUMS,
     ),
     labelSmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
         fontSize = 10.sp,
         lineHeight = 14.sp,
+        fontFeatureSettings = TABULAR_NUMS,
     ),
 )
 
