@@ -25,6 +25,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
 import kotlinx.coroutines.flow.first
 
@@ -49,6 +50,7 @@ fun NodesScreen(
     val staleNodes by viewModel.staleNodes.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
 
     LaunchedEffect(selectNodeName) {
         viewModel.setParams(selectNodeName)
@@ -67,11 +69,17 @@ fun NodesScreen(
 
         is ResourceState.Success -> {
             val allNodes = s.data + staleNodes.values.toList()
+            val availableStatuses = remember(allNodes) {
+                allNodes.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
+            }
+            val activeStatusFilter = statusFilter
             val filtered = allNodes.filter { node ->
-                searchQuery.isBlank() ||
+                val passesSearch = searchQuery.isBlank() ||
                     node.name.contains(searchQuery, ignoreCase = true) ||
                     node.roles.contains(searchQuery, ignoreCase = true) ||
                     node.status.contains(searchQuery, ignoreCase = true)
+                val passesStatus = activeStatusFilter == null || node.status in activeStatusFilter
+                passesSearch && passesStatus
             }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -94,7 +102,22 @@ fun NodesScreen(
                             onToggle = { statsExpanded = !statsExpanded },
                         )
                     }
-                    ResourceCountHeader(filtered.size, "Nodes")
+                    ResourceCountHeader(
+                        count = filtered.size,
+                        kind = "Nodes",
+                        actions = {
+                            StatusFilterMenu(
+                                available = availableStatuses,
+                                selected = activeStatusFilter ?: availableStatuses,
+                                onToggle = { value ->
+                                    val current = activeStatusFilter ?: availableStatuses
+                                    statusFilter = if (value in current) current - value else current + value
+                                },
+                                onSelectAll = { statusFilter = null },
+                                onSelectNone = { statusFilter = emptySet() },
+                            )
+                        },
+                    )
                     NodeTable(
                         nodes = filtered,
                         selectedUid = selectedNodeUid,

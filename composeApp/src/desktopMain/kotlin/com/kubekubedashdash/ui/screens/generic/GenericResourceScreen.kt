@@ -14,7 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +27,7 @@ import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
@@ -57,6 +60,7 @@ fun GenericResourceScreen(
     val state by viewModel.state.collectAsState()
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
+    var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()
@@ -64,16 +68,42 @@ fun GenericResourceScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
+            val availableStatuses = remember(s.data) {
+                s.data.mapNotNull { it.status }.filter { it.isNotBlank() }.toSortedSet()
+            }
+            val activeStatusFilter = statusFilter
             val filtered = s.data.filter { r ->
-                searchQuery.isBlank() ||
+                val passesSearch = searchQuery.isBlank() ||
                     r.name.contains(searchQuery, ignoreCase = true) ||
                     (r.namespace?.contains(searchQuery, ignoreCase = true) ?: false) ||
                     (r.status?.contains(searchQuery, ignoreCase = true) ?: false)
+                val passesStatus = activeStatusFilter == null ||
+                    (r.status != null && r.status in activeStatusFilter)
+                passesSearch && passesStatus
             }
 
             Row(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    ResourceCountHeader(filtered.size, pluralizeKind(kind))
+                    ResourceCountHeader(
+                        count = filtered.size,
+                        kind = pluralizeKind(kind),
+                        actions = if (availableStatuses.isNotEmpty()) {
+                            {
+                                StatusFilterMenu(
+                                    available = availableStatuses,
+                                    selected = activeStatusFilter ?: availableStatuses,
+                                    onToggle = { value ->
+                                        val current = activeStatusFilter ?: availableStatuses
+                                        statusFilter = if (value in current) current - value else current + value
+                                    },
+                                    onSelectAll = { statusFilter = null },
+                                    onSelectNone = { statusFilter = emptySet() },
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    )
                     GenericTable(
                         resources = filtered,
                         namespacedKind = namespacedKind,

@@ -26,6 +26,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.flow.first
 
@@ -42,6 +43,9 @@ fun PodsScreen(
     val stalePods by viewModel.stalePods.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedPodUid by rememberSaveable { mutableStateOf<String?>(null) }
+    // null sentinel = "no filter applied" (show every status that appears).
+    // A non-null Set is the explicit allowlist after the user touched the menu.
+    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
 
     LaunchedEffect(selectPodUid) {
         viewModel.setParams(selectPodUid)
@@ -69,12 +73,18 @@ fun PodsScreen(
             if (this is ResourceState.Success) {
                 val s = this
                 val allPods = s.data + stalePods.values
+                val availableStatuses = remember(allPods) {
+                    allPods.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
+                }
+                val activeStatusFilter = statusFilter
                 val filtered = allPods.filter { pod ->
-                    searchQuery.isBlank() ||
+                    val passesSearch = searchQuery.isBlank() ||
                         pod.name.contains(searchQuery, ignoreCase = true) ||
                         pod.namespace.contains(searchQuery, ignoreCase = true) ||
                         pod.status.contains(searchQuery, ignoreCase = true) ||
                         pod.node.contains(searchQuery, ignoreCase = true)
+                    val passesStatus = activeStatusFilter == null || pod.status in activeStatusFilter
+                    passesSearch && passesStatus
                 }
 
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -92,7 +102,22 @@ fun PodsScreen(
                                 onToggle = { statsExpanded = !statsExpanded },
                             )
                         }
-                        ResourceCountHeader(filtered.size, "Pods")
+                        ResourceCountHeader(
+                            count = filtered.size,
+                            kind = "Pods",
+                            actions = {
+                                StatusFilterMenu(
+                                    available = availableStatuses,
+                                    selected = activeStatusFilter ?: availableStatuses,
+                                    onToggle = { value ->
+                                        val current = activeStatusFilter ?: availableStatuses
+                                        statusFilter = if (value in current) current - value else current + value
+                                    },
+                                    onSelectAll = { statusFilter = null },
+                                    onSelectNone = { statusFilter = emptySet() },
+                                )
+                            },
+                        )
                         PodTable(
                             pods = filtered,
                             selectedUid = selectedPodUid,

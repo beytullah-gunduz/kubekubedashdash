@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -311,8 +312,17 @@ private fun OverflowTooltipText(
     }
 }
 
+/**
+ * Page-list header: kind title + count chip, optionally with trailing
+ * actions on the right (filters, refresh, etc.). Lives directly above
+ * the resource table.
+ */
 @Composable
-fun ResourceCountHeader(count: Int, kind: String) {
+fun ResourceCountHeader(
+    count: Int,
+    kind: String,
+    actions: (@Composable RowScope.() -> Unit)? = null,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -333,6 +343,10 @@ fun ResourceCountHeader(count: Int, kind: String) {
                 style = MaterialTheme.typography.labelMedium,
                 color = KdPrimary,
             )
+        }
+        if (actions != null) {
+            Spacer(Modifier.weight(1f))
+            actions()
         }
     }
 }
