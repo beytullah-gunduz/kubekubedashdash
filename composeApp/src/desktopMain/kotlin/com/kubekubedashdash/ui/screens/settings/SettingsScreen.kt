@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,12 +17,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +57,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
@@ -249,6 +255,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
 fun SettingsScreen(
     onDiscoverEks: () -> Unit = {},
     onOpenLogsTab: () -> Unit = {},
+    onClose: () -> Unit = {},
     viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
 ) {
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
@@ -256,255 +263,283 @@ fun SettingsScreen(
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isReady = true }
     val mockRunning by viewModel.mockIsRunning.collectAsState()
+    val scrollState = rememberScrollState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (!isReady) return@Box
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(32.dp),
-        ) {
-            Text(
-                "Settings",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
 
-            Spacer(Modifier.height(24.dp))
-
-            SettingsSection("Appearance") {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Sticky header — title + close button stay anchored above the
+            // scrollable content so users on a long modal don't have to scroll
+            // back up to find them.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 32.dp, end = 16.dp, top = 24.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    "Theme",
-                    style = MaterialTheme.typography.titleMedium,
+                    "Settings",
+                    style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Choose dark, light, or follow your system appearance",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = KdTextSecondary,
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ThemePreviewCard(
-                        label = "Dark",
-                        selected = viewModel.themeMode == ThemeMode.DARK,
-                        primaryColors = DarkPreviewColors,
-                        onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
-                    )
-                    ThemePreviewCard(
-                        label = "Light",
-                        selected = viewModel.themeMode == ThemeMode.LIGHT,
-                        primaryColors = LightPreviewColors,
-                        onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                    )
-                    ThemePreviewCard(
-                        label = "System",
-                        selected = viewModel.themeMode == ThemeMode.SYSTEM,
-                        primaryColors = DarkPreviewColors,
-                        secondaryColors = LightPreviewColors,
-                        onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                IconButton(onClick = onClose) {
+                    Icon(
+                        painterResource(Res.drawable.close),
+                        contentDescription = "Close settings",
+                        modifier = Modifier.size(20.dp),
+                        tint = KdTextSecondary,
                     )
                 }
             }
+            HorizontalDivider(color = KdBorder)
 
-            Spacer(Modifier.height(16.dp))
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 32.dp, vertical = 24.dp),
+                ) {
+                    SettingsSection("Appearance") {
+                        Text(
+                            "Theme",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Choose dark, light, or follow your system appearance",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextSecondary,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            ThemePreviewCard(
+                                label = "Dark",
+                                selected = viewModel.themeMode == ThemeMode.DARK,
+                                primaryColors = DarkPreviewColors,
+                                onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
+                            )
+                            ThemePreviewCard(
+                                label = "Light",
+                                selected = viewModel.themeMode == ThemeMode.LIGHT,
+                                primaryColors = LightPreviewColors,
+                                onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
+                            )
+                            ThemePreviewCard(
+                                label = "System",
+                                selected = viewModel.themeMode == ThemeMode.SYSTEM,
+                                primaryColors = DarkPreviewColors,
+                                secondaryColors = LightPreviewColors,
+                                onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                            )
+                        }
+                    }
 
-            val closeTabFocus by viewModel.closeTabFocus.collectAsState()
+                    Spacer(Modifier.height(16.dp))
 
-            SettingsSection("Tab behavior") {
-                Text(
-                    "When closing the active tab, focus:",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Spacer(Modifier.height(12.dp))
+                    val closeTabFocus by viewModel.closeTabFocus.collectAsState()
 
-                val tabFocusOptions = listOf(
-                    CloseTabFocus.FIRST to "First tab",
-                    CloseTabFocus.LEFT_NEIGHBOR to "Left neighbor",
-                    CloseTabFocus.PREVIOUS_ACTIVE to "Last used",
-                )
+                    SettingsSection("Tab behavior") {
+                        Text(
+                            "When closing the active tab, focus:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(Modifier.height(12.dp))
 
-                FullWidthSingleChoiceSegmentedButtonRow {
-                    tabFocusOptions.forEachIndexed { index, (value, label) ->
-                        SegmentedButton(
-                            selected = closeTabFocus == value,
-                            onClick = { viewModel.setCloseTabFocus(value) },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = tabFocusOptions.size,
-                            ),
+                        val tabFocusOptions = listOf(
+                            CloseTabFocus.FIRST to "First tab",
+                            CloseTabFocus.LEFT_NEIGHBOR to "Left neighbor",
+                            CloseTabFocus.PREVIOUS_ACTIVE to "Last used",
+                        )
+
+                        FullWidthSingleChoiceSegmentedButtonRow {
+                            tabFocusOptions.forEachIndexed { index, (value, label) ->
+                                SegmentedButton(
+                                    selected = closeTabFocus == value,
+                                    onClick = { viewModel.setCloseTabFocus(value) },
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = index,
+                                        count = tabFocusOptions.size,
+                                    ),
+                                ) {
+                                    Text(label, maxLines = 1, softWrap = false)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    SettingsSection("Integrations") {
+                        Text(
+                            "MCP Server",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Expose all Kubernetes resources via the Model Context Protocol (MCP) for AI tools",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextSecondary,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text(label, maxLines = 1, softWrap = false)
+                            Switch(
+                                checked = viewModel.isMcpServerEnabled,
+                                onCheckedChange = { viewModel.toggleMcpServer(it) },
+                            )
+                            Text(
+                                if (viewModel.isMcpServerEnabled) {
+                                    "Running on http://127.0.0.1:${viewModel.mcpServerPort}"
+                                } else {
+                                    "Disabled"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (viewModel.isMcpServerEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                "Port",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            OutlinedTextField(
+                                value = viewModel.mcpServerPort.toString(),
+                                onValueChange = { text ->
+                                    text.toIntOrNull()?.let { port ->
+                                        if (port in 1..65535) {
+                                            viewModel.updateMcpServerPort(port)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.width(120.dp),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    SettingsSection("Cluster discovery") {
+                        Text(
+                            "AWS EKS",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Find EKS clusters in your AWS account and add them to your kubeconfig.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextSecondary,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = onDiscoverEks,
+                                enabled = awsCliAvailable,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, KdBorder),
+                            ) {
+                                Icon(
+                                    painterResource(Res.drawable.cloud_filled),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = if (awsCliAvailable) KdPrimary else KdTextSecondary,
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Discover EKS Clusters", color = KdTextPrimary)
+                            }
+                            if (!awsCliAvailable) {
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    "Requires AWS CLI on PATH",
+                                    color = KdTextSecondary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+
+                    if (mockRunning) {
+                        Spacer(Modifier.height(16.dp))
+                        SettingsSection("Demo cluster simulator") {
+                            DemoClusterSimulatorSection(viewModel)
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    SettingsSection("Diagnostics") {
+                        Text(
+                            "Application logs",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Open the in-app log viewer in a new tab to inspect application events.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextSecondary,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = onOpenLogsTab,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, KdBorder),
+                        ) {
+                            Icon(
+                                painterResource(Res.drawable.description_filled),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = KdPrimary,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Open application logs", color = KdTextPrimary)
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    SettingsSection("About") {
+                        Text(
+                            "Application info",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "View version and application details",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextSecondary,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { showAboutModal = true },
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, KdBorder),
+                        ) {
+                            Text("About KubeKubeDashDash", color = KdTextPrimary)
                         }
                     }
                 }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSection("Integrations") {
-                Text(
-                    "MCP Server",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(scrollState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Expose all Kubernetes resources via the Model Context Protocol (MCP) for AI tools",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = KdTextSecondary,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Switch(
-                        checked = viewModel.isMcpServerEnabled,
-                        onCheckedChange = { viewModel.toggleMcpServer(it) },
-                    )
-                    Text(
-                        if (viewModel.isMcpServerEnabled) {
-                            "Running on http://127.0.0.1:${viewModel.mcpServerPort}"
-                        } else {
-                            "Disabled"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (viewModel.isMcpServerEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        "Port",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = KdTextSecondary,
-                    )
-                    OutlinedTextField(
-                        value = viewModel.mcpServerPort.toString(),
-                        onValueChange = { text ->
-                            text.toIntOrNull()?.let { port ->
-                                if (port in 1..65535) {
-                                    viewModel.updateMcpServerPort(port)
-                                }
-                            }
-                        },
-                        modifier = Modifier.width(120.dp),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSection("Cluster discovery") {
-                Text(
-                    "AWS EKS",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Find EKS clusters in your AWS account and add them to your kubeconfig.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = KdTextSecondary,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(
-                        onClick = onDiscoverEks,
-                        enabled = awsCliAvailable,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, KdBorder),
-                    ) {
-                        Icon(
-                            painterResource(Res.drawable.cloud_filled),
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = if (awsCliAvailable) KdPrimary else KdTextSecondary,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Discover EKS Clusters", color = KdTextPrimary)
-                    }
-                    if (!awsCliAvailable) {
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "Requires AWS CLI on PATH",
-                            color = KdTextSecondary,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
-            }
-
-            if (mockRunning) {
-                Spacer(Modifier.height(16.dp))
-                SettingsSection("Demo cluster simulator") {
-                    DemoClusterSimulatorSection(viewModel)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSection("Diagnostics") {
-                Text(
-                    "Application logs",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Open the in-app log viewer in a new tab to inspect application events.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = KdTextSecondary,
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = onOpenLogsTab,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, KdBorder),
-                ) {
-                    Icon(
-                        painterResource(Res.drawable.description_filled),
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = KdPrimary,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text("Open application logs", color = KdTextPrimary)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSection("About") {
-                Text(
-                    "Application info",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "View version and application details",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = KdTextSecondary,
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { showAboutModal = true },
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, KdBorder),
-                ) {
-                    Text("About KubeKubeDashDash", color = KdTextPrimary)
-                }
             }
         }
 

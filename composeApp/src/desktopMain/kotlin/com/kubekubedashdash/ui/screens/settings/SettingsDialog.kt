@@ -79,6 +79,7 @@ fun SettingsDialog(
             SettingsScreen(
                 onDiscoverEks = onDiscoverEks,
                 onOpenLogsTab = onOpenLogsTab,
+                onClose = onDismiss,
             )
         }
     }
