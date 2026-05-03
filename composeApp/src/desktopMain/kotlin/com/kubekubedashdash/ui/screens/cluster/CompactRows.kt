@@ -27,7 +27,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.info
 import com.kubekubedashdash.resources.warning_filled
-import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.components.StatusCell
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -44,14 +44,10 @@ internal fun CompactNodeRow(node: NodeInfo, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
-        Text(
-            node.status,
-            style = MaterialTheme.typography.labelSmall,
-            color = statusColor(node.status),
+        StatusCell(
+            status = node.status,
             modifier = Modifier.width(70.dp),
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelSmall,
         )
         Text(
             node.pods,
@@ -86,14 +82,10 @@ internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
-        Text(
-            pod.status,
-            style = MaterialTheme.typography.labelSmall,
-            color = statusColor(pod.status),
+        StatusCell(
+            status = pod.status,
             modifier = Modifier.width(100.dp),
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelSmall,
         )
         Text(
             pod.namespace,

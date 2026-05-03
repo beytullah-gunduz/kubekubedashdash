@@ -11,8 +11,8 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
-import com.kubekubedashdash.ui.components.statusColor
 
 private class NsColumn(
     val header: String,
@@ -23,7 +23,10 @@ private class NsColumn(
 
 private val nsColumns = listOf(
     NsColumn("Name", 2.5f, 0.dp) { CellData(it.name, KdPrimary) },
-    NsColumn("Status", 1.0f, 0.dp) { CellData(it.status ?: "", it.status?.let { statusColor(it) }) },
+    NsColumn("Status", 1.0f, 0.dp) { ns ->
+        val s = ns.status.orEmpty()
+        CellData(text = s, sortValue = s, content = { StatusCell(s) })
+    },
     NsColumn("Age", 0.7f, 0.dp) { CellData(it.age) },
 )
 

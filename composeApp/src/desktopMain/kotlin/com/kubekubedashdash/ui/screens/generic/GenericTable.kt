@@ -11,8 +11,8 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
-import com.kubekubedashdash.ui.components.statusColor
 
 private class GenericColumn(
     val header: String,
@@ -39,7 +39,8 @@ internal fun GenericTable(
         if (hasStatus) {
             add(
                 GenericColumn("Status", 0.8f, 0.dp) { r ->
-                    CellData(r.status ?: "", r.status?.let { statusColor(it) })
+                    val s = r.status.orEmpty()
+                    CellData(text = s, sortValue = s, content = { StatusCell(s) })
                 },
             )
         }

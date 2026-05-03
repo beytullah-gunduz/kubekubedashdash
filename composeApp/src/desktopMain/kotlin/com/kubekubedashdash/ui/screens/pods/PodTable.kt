@@ -13,8 +13,8 @@ import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
-import com.kubekubedashdash.ui.components.statusColor
 
 private class PodColumn(
     val header: String,
@@ -26,7 +26,9 @@ private class PodColumn(
 private val podColumns = listOf(
     PodColumn("Name", 2.5f, 0.dp) { CellData(it.name, KdPrimary) },
     PodColumn("Namespace", 1.2f, 400.dp) { CellData(it.namespace) },
-    PodColumn("Status", 1.0f, 0.dp) { CellData(it.status, statusColor(it.status)) },
+    PodColumn("Status", 1.0f, 0.dp) { pod ->
+        CellData(text = pod.status, sortValue = pod.status, content = { StatusCell(pod.status) })
+    },
     PodColumn("Ready", 0.6f, 300.dp) { CellData(it.ready) },
     PodColumn("Restarts", 0.7f, 500.dp) { pod ->
         CellData(

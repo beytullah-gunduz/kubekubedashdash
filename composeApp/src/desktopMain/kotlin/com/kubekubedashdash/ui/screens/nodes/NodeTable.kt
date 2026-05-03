@@ -11,8 +11,8 @@ import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
-import com.kubekubedashdash.ui.components.statusColor
 
 private class NodeColumn(
     val header: String,
@@ -23,7 +23,9 @@ private class NodeColumn(
 
 private val nodeColumns = listOf(
     NodeColumn("Name", 2.0f, 0.dp) { CellData(it.name, KdPrimary) },
-    NodeColumn("Status", 0.8f, 0.dp) { CellData(it.status, statusColor(it.status)) },
+    NodeColumn("Status", 0.8f, 0.dp) { node ->
+        CellData(text = node.status, sortValue = node.status, content = { StatusCell(node.status) })
+    },
     NodeColumn("Roles", 1.0f, 350.dp) { CellData(it.roles) },
     NodeColumn("Version", 1.0f, 450.dp) { CellData(it.version) },
     NodeColumn("CPU", 0.6f, 550.dp) { CellData(it.cpu) },
