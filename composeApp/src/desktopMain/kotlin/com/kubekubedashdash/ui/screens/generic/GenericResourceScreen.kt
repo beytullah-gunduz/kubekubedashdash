@@ -31,6 +31,21 @@ import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
 import kotlinx.coroutines.flow.StateFlow
 
+/**
+ * English plural for a Kubernetes Kind. Handles the cases that "+s" gets wrong
+ * for the kinds this app exposes (Ingress, NetworkPolicy, StorageClass).
+ */
+private fun pluralizeKind(kind: String): String = when {
+    kind.endsWith("y", ignoreCase = true) -> kind.dropLast(1) + "ies"
+
+    kind.endsWith("s", ignoreCase = true) ||
+        kind.endsWith("x", ignoreCase = true) ||
+        kind.endsWith("ch", ignoreCase = true) ||
+        kind.endsWith("sh", ignoreCase = true) -> kind + "es"
+
+    else -> kind + "s"
+}
+
 @Composable
 fun GenericResourceScreen(
     kind: String,
@@ -58,7 +73,7 @@ fun GenericResourceScreen(
 
             Row(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    ResourceCountHeader(filtered.size, kind + "s")
+                    ResourceCountHeader(filtered.size, pluralizeKind(kind))
                     GenericTable(
                         resources = filtered,
                         namespacedKind = namespacedKind,
