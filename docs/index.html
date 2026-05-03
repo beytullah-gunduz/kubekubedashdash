@@ -29,6 +29,8 @@
             </a>
         </div>
 
+        <div class="sticky-bar" aria-hidden="true">KubeKubeDashDash</div>
+
         <header class="hero">
             <div class="container">
                 <h1>KubeKubeDashDash</h1>
@@ -38,7 +40,7 @@
                 </p>
                 <p class="meta">
                     Built with Kotlin Multiplatform + Compose Desktop · Connects
-                    via kubeconfig contexts · Live demo cluster baked in
+                    via kubeconfig contexts
                 </p>
             </div>
         </header>
@@ -265,6 +267,24 @@
             </button>
             <img class="lightbox-image" alt="" />
         </div>
+
+        <script>
+            (function () {
+                const hero = document.querySelector(".hero");
+                const bar = document.querySelector(".sticky-bar");
+
+                window.addEventListener(
+                    "scroll",
+                    function () {
+                        bar.classList.toggle(
+                            "is-visible",
+                            window.scrollY > hero.offsetHeight - 52,
+                        );
+                    },
+                    { passive: true },
+                );
+            })();
+        </script>
 
         <script>
             (function () {

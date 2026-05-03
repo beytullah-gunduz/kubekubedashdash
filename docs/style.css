@@ -58,6 +58,7 @@ code {
 }
 
 .hero {
+  margin-bottom: 20px;
   padding: 96px 0 56px;
   text-align: center;
   background:
@@ -85,6 +86,36 @@ code {
   color: var(--fg-muted);
   margin: 0 auto;
   max-width: 720px;
+}
+
+.sticky-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 17, 22, 0.88);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  opacity: 0;
+  transform: translateY(-52px);
+  transition: opacity 0.22s ease, transform 0.28s ease;
+  pointer-events: none;
+}
+
+.sticky-bar.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 main {
