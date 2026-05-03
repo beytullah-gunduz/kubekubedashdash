@@ -71,14 +71,14 @@ private fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit) {
             node.nodeName,
             style = MaterialTheme.typography.bodySmall,
             color = KdTextPrimary,
-            modifier = Modifier.width(140.dp),
+            modifier = Modifier.weight(0.5f),
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
         Spacer(Modifier.width(8.dp))
         Box(
             modifier = Modifier
-                .weight(1f)
+                .weight(0.5f)
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(KdSurfaceVariant.copy(alpha = 0.4f)),

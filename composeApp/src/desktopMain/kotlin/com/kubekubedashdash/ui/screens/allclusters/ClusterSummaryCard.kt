@@ -22,10 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
@@ -68,7 +70,7 @@ internal fun ClusterSummaryCard(
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.StartEllipsis,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -125,4 +127,20 @@ private fun StatRow(
             color = valueColor ?: MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+@Preview
+@Composable
+private fun ClusterSummaryCardPreview() {
+    ClusterSummaryCard(
+        summary = AllClustersViewModel.ClusterSummary(
+            sessionId = SessionId("preview-session"),
+            contextName = "arn:aws:eks:eu-west-1:000000000000:cluster/example-cluster",
+            isConnected = true,
+            isConnecting = false,
+            nodeCount = 3,
+            namespaceCount = 5,
+            recentErrorCount = 2,
+        ),
+    )
 }
