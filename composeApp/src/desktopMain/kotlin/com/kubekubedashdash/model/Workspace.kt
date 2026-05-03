@@ -30,6 +30,25 @@ enum class CloseTabFocus {
 }
 
 /**
+ * When the multi-tab strip is shown.
+ *
+ * Stored in [com.kubekubedashdash.data.repository.PreferenceRepository.tabStripVisibility]
+ * as the enum's `name`. Default ([AUTO]) preserves the original compact behavior — most
+ * users keep a single cluster open most of the time, so the inline title-bar chip + "+"
+ * is enough on its own. Power users who want the strip always visible can flip to
+ * [ALWAYS] in Settings.
+ */
+enum class TabStripVisibility {
+    /** Show the strip when there are ≥2 tabs or any non-cluster tab; otherwise use
+     *  the inline title-bar cluster chip + "+" affordance. */
+    AUTO,
+
+    /** Show the strip even with a single cluster tab. The inline title-bar chip is
+     *  hidden in this mode to avoid two competing affordances. */
+    ALWAYS,
+}
+
+/**
  * One OS window's worth of tabs. A workspace holds an ordered list of
  * [WorkspaceTab]s (rendered as a strip when N≥2 or any non-cluster tab is open)
  * and tracks which one is currently active.

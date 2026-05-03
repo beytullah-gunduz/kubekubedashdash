@@ -75,6 +75,7 @@ import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
@@ -239,6 +240,8 @@ fun App(
 
         val sidebarCollapsed by PreferenceRepository.sidebarCollapsed()
             .collectAsState(initial = PreferenceRepository.sidebarCollapsed)
+        val tabStripVisibility by PreferenceRepository.tabStripVisibility()
+            .collectAsState(initial = PreferenceRepository.tabStripVisibility)
 
         val tabs by workspace.tabs.collectAsState()
         val activeTabKey by workspace.activeTabKey.collectAsState()
@@ -347,9 +350,14 @@ fun App(
                     // isMultiTab: show the strip when there are ≥2 tabs, OR
                     // when any non-cluster tab (Logs) is present — so the user
                     // always sees the strip and its + button even with a single
-                    // cluster tab alongside the Logs tab.
+                    // cluster tab alongside the Logs tab. The user can also
+                    // force the strip on regardless via the Tab strip preference
+                    // (see §6.1 in .docs/gui-audit-2026-05-03.md).
                     val hasNonClusterTab = tabs.any { it !is WorkspaceTab.Cluster }
-                    val isMultiTab = tabs.size >= 2 || hasNonClusterTab
+                    val isMultiTab =
+                        tabs.size >= 2 ||
+                            hasNonClusterTab ||
+                            tabStripVisibility == TabStripVisibility.ALWAYS
 
                     // The drop zone for chip-on-chip merge is the union of the
                     // title bar and (when present) the tab strip.

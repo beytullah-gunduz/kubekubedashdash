@@ -66,6 +66,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
@@ -472,6 +473,43 @@ fun SettingsScreen(
                                         shape = SegmentedButtonDefaults.itemShape(
                                             index = index,
                                             count = tabFocusOptions.size,
+                                        ),
+                                    ) {
+                                        Text(label, maxLines = 1, softWrap = false)
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(20.dp))
+
+                            val tabStripVisibility by viewModel.tabStripVisibility.collectAsState()
+
+                            Text(
+                                "Tab strip",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Whether to show the tab strip when only one cluster is open.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+
+                            val tabStripOptions = listOf(
+                                TabStripVisibility.AUTO to "Compact (only with multiple tabs)",
+                                TabStripVisibility.ALWAYS to "Always show",
+                            )
+
+                            FullWidthSingleChoiceSegmentedButtonRow {
+                                tabStripOptions.forEachIndexed { index, (value, label) ->
+                                    SegmentedButton(
+                                        selected = tabStripVisibility == value,
+                                        onClick = { viewModel.setTabStripVisibility(value) },
+                                        shape = SegmentedButtonDefaults.itemShape(
+                                            index = index,
+                                            count = tabStripOptions.size,
                                         ),
                                     ) {
                                         Text(label, maxLines = 1, softWrap = false)

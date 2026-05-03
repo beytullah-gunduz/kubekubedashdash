@@ -10,6 +10,7 @@ import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +61,14 @@ class SettingsScreenViewModel : ViewModel() {
     fun setCloseTabFocus(value: CloseTabFocus) {
         PreferenceRepository.closeTabFocus = value
         _closeTabFocus.value = value
+    }
+
+    private val _tabStripVisibility = MutableStateFlow(PreferenceRepository.tabStripVisibility)
+    val tabStripVisibility: StateFlow<TabStripVisibility> = _tabStripVisibility.asStateFlow()
+
+    fun setTabStripVisibility(value: TabStripVisibility) {
+        PreferenceRepository.tabStripVisibility = value
+        _tabStripVisibility.value = value
     }
 
     // ── Demo cluster simulator ─────────────────────────────────────────────────

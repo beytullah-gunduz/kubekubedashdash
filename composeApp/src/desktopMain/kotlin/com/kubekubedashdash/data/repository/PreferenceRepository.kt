@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.util.DemoClusterSimulator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -23,6 +24,7 @@ object PreferenceRepository {
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
+    private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
     private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
     private val DEMO_NODES_MIN by lazy { intPreferencesKey("demo_nodes_min") }
     private val DEMO_NODES_MAX by lazy { intPreferencesKey("demo_nodes_max") }
@@ -95,6 +97,26 @@ object PreferenceRepository {
 
     private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() }
         ?: CloseTabFocus.LEFT_NEIGHBOR
+
+    var tabStripVisibility: TabStripVisibility
+        get() = runBlocking {
+            val raw = dataStore.data.firstOrNull()?.get(TAB_STRIP_VISIBILITY)
+            decodeTabStripVisibility(raw)
+        }
+        set(value) {
+            runBlocking {
+                dataStore.edit {
+                    it[TAB_STRIP_VISIBILITY] = value.name
+                }
+            }
+        }
+
+    fun tabStripVisibility(): Flow<TabStripVisibility> = dataStore.data.map {
+        decodeTabStripVisibility(it[TAB_STRIP_VISIBILITY])
+    }
+
+    private fun decodeTabStripVisibility(raw: String?): TabStripVisibility = raw?.let { runCatching { TabStripVisibility.valueOf(it) }.getOrNull() }
+        ?: TabStripVisibility.AUTO
 
     var sidebarCollapsed: Boolean
         get() = runBlocking { dataStore.data.firstOrNull()?.get(SIDEBAR_COLLAPSED) ?: false }
