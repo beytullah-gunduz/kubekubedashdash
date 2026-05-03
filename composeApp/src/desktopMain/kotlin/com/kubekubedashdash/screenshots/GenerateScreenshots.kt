@@ -96,7 +96,7 @@ fun main() {
         workspaces.forEach { workspace ->
             key(workspace.id) {
                 val windowState = rememberWindowState(
-                    size = DpSize(1440.dp, 900.dp),
+                    size = DpSize(1440.dp, 960.dp),
                     position = workspace.initialPosition ?: WindowPosition.PlatformDefault,
                 )
                 Window(
@@ -151,7 +151,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         )
         val sessionVm = initialWorkspace.activeSession!!.viewModel
         sessionVm.isConnected.first { it }
-        delay(10_000) // let informers populate and demo simulator warm up before first capture
+        delay(20_000) // let informers populate and demo simulator warm up before first capture
 
         val screens: List<Pair<String, Screen>> = listOf(
             "01-cluster-overview" to Screen.Main.ClusterOverview,
@@ -178,24 +178,24 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
 
         for ((slug, screen) in screens) {
             sessionVm.navigate(screen)
-            delay(900L)
+            delay(5000L)
             captureWindow(initialWorkspace.id, outDir.resolve("$slug.png"))
             log.info("captured {}", slug)
         }
 
         log.info("Capturing settings dialog over cluster overview")
         sessionVm.navigate(Screen.Main.ClusterOverview)
-        delay(900L)
+        delay(5000L)
         initialWorkspace.showSettings()
-        delay(900L)
+        delay(5000L)
         captureWindow(initialWorkspace.id, outDir.resolve("21-settings.png"))
         initialWorkspace.dismissSettings()
-        delay(300L)
+        delay(5000L)
         log.info("captured 21-settings")
 
         log.info("Building light/dark theme comparison")
         sessionVm.navigate(Screen.Main.ClusterOverview)
-        delay(900)
+        delay(5000L)
         ThemeManager.setMode(ThemeMode.DARK)
         delay(700)
         val themeDark = outDir.resolve("99-theme-dark.png")
@@ -239,7 +239,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
 
         log.info("Capturing All Clusters tab")
         initialWorkspace.setActive(WorkspaceTab.AllClusters.key)
-        delay(5_000L)
+        delay(10_000L)
         captureWindow(initialWorkspace.id, outDir.resolve("22-all-clusters.png"))
         log.info("captured all-clusters")
 
@@ -254,9 +254,9 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         watchdogs += autoDismissModalsForever(this, secondWorkspace)
         val secondVm = secondWorkspace.activeSession!!.viewModel
         secondVm.isConnected.first { it }
-        delay(1500)
+        delay(5000)
         secondVm.navigate(Screen.Main.Nodes())
-        delay(900)
+        delay(5800)
 
         val w1 = windowsByWorkspace.value.getValue(initialWorkspace.id)
         val w2 = windowsByWorkspace.value.getValue(secondWorkspace.id)
@@ -266,13 +266,13 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         // Park the second window off-screen, place the first on-screen, capture.
         moveWindow(w2, -4000, 0)
         moveWindow(w1, 60, 80)
-        delay(500)
+        delay(5000)
         captureWindow(initialWorkspace.id, leftPath)
 
         // Swap: park the first off-screen, bring the second on-screen, capture.
         moveWindow(w1, -4000, 0)
         moveWindow(w2, 60, 80)
-        delay(500)
+        delay(5000)
         captureWindow(secondWorkspace.id, rightPath)
 
         compositeMultiWindow(leftPath, rightPath, outDir.resolve("99-multi-window.png"))
