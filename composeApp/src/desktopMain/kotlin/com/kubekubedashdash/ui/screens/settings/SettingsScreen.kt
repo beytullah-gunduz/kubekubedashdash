@@ -421,7 +421,7 @@ fun SettingsScreen(
                                 color = KdTextSecondary,
                             )
                             Spacer(Modifier.height(16.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.CenterHorizontally)) {
                                 ThemePreviewCard(
                                     label = "Dark",
                                     selected = viewModel.themeMode == ThemeMode.DARK,
