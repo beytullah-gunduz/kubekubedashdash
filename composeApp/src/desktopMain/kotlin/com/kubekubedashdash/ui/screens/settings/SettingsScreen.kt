@@ -43,13 +43,13 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +73,7 @@ import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -332,9 +333,8 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Each SettingsSection registers its absolute layout y-offset here as it's
-    // measured. The nav rail uses these to (a) know where to scroll on click,
-    // and (b) compute which section is currently in view.
+    // Each SettingsSection registers its absolute layout y-offset here as
+    // it's measured. The nav rail uses these to scroll on click.
     val sectionOffsets = remember { mutableStateMapOf<String, Int>() }
     val sectionTitles = buildList {
         add("Appearance")
@@ -345,18 +345,36 @@ fun SettingsScreen(
         add("Diagnostics")
         add("About")
     }
-    val activeSection by remember(sectionTitles) {
-        derivedStateOf {
-            // The "active" section is the deepest one whose top has scrolled
-            // past a small dead-zone at the top of the viewport. Falls back
-            // to the first section before the user has scrolled.
-            sectionTitles.lastOrNull { (sectionOffsets[it] ?: Int.MAX_VALUE) <= scrollState.value + 24 }
-                ?: sectionTitles.firstOrNull()
-        }
+
+    // V1: highlight only follows the click. We deliberately don't track
+    // "currently visible" while scrolling because syncing scroll-to-highlight
+    // is fiddly across re-layout (Demo cluster simulator appearing/dis-
+    // appearing, modal resize) and added little value. Instead, the highlight
+    // sticks after a click, and any *user-initiated* scroll afterward clears
+    // it. The `ignoreScrollUpdates` flag is true while the click's own
+    // animateScrollTo is running, so the animation's own scroll changes
+    // don't immediately wipe the highlight we just set.
+    var activeSection by remember { mutableStateOf<String?>(null) }
+    var ignoreScrollUpdates by remember { mutableStateOf(false) }
+
+    LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.value }
+            .drop(1)
+            .collect {
+                if (!ignoreScrollUpdates) activeSection = null
+            }
     }
+
     fun jumpTo(section: String) {
-        sectionOffsets[section]?.let { offset ->
-            coroutineScope.launch { scrollState.animateScrollTo(offset) }
+        val offset = sectionOffsets[section] ?: return
+        activeSection = section
+        coroutineScope.launch {
+            ignoreScrollUpdates = true
+            try {
+                scrollState.animateScrollTo(offset)
+            } finally {
+                ignoreScrollUpdates = false
+            }
         }
     }
 
