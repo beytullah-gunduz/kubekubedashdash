@@ -63,7 +63,7 @@ fun SettingsDialog(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(min = 560.dp, max = 720.dp)
+                .widthIn(min = 650.dp, max = 820.dp)
                 .fillMaxWidth(0.9f)
                 .fillMaxHeight(0.85f)
                 .clickable(
