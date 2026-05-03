@@ -59,6 +59,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.resources.Res
@@ -434,7 +435,7 @@ private fun EventOverviewTab(
                                         Text(
                                             text = line,
                                             style = MaterialTheme.typography.bodySmall.copy(
-                                                fontFamily = FontFamily.Monospace,
+                                                fontFamily = kdMonoFamily(),
                                                 fontSize = 10.sp,
                                                 lineHeight = 14.sp,
                                             ),

@@ -9,13 +9,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.inter_medium
+import com.kubekubedashdash.resources.inter_regular
+import com.kubekubedashdash.resources.inter_semibold
+import com.kubekubedashdash.resources.jetbrains_mono_regular
+import org.jetbrains.compose.resources.Font
 
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
@@ -140,74 +148,102 @@ private val LightColorScheme = lightColorScheme(
 // align across rows without ad-hoc Modifier.width(...) per cell.
 private const val TABULAR_NUMS = "\"tnum\" 1"
 
-private val AppTypography = Typography(
+/**
+ * Bundled UI font: Inter (Regular / Medium / SemiBold). OFL 1.1, see
+ * `composeResources/font/inter-LICENSE.txt`. Replaces the platform-default
+ * `FontFamily.SansSerif` so the same metrics ship on macOS, Windows, and
+ * Linux.
+ */
+@Composable
+fun kdSansFamily(): FontFamily {
+    val regular = Font(Res.font.inter_regular, weight = FontWeight.Normal, style = FontStyle.Normal)
+    val medium = Font(Res.font.inter_medium, weight = FontWeight.Medium, style = FontStyle.Normal)
+    val semibold = Font(Res.font.inter_semibold, weight = FontWeight.SemiBold, style = FontStyle.Normal)
+    return remember(regular, medium, semibold) {
+        FontFamily(regular, medium, semibold)
+    }
+}
+
+/**
+ * Bundled monospace font: JetBrains Mono Regular. OFL 1.1, see
+ * `composeResources/font/jetbrains-mono-OFL.txt`. Pair with [kdSansFamily]
+ * for code-shaped surfaces (YAML pane, log viewer, prerequisites modal).
+ */
+@Composable
+fun kdMonoFamily(): FontFamily {
+    val regular = Font(Res.font.jetbrains_mono_regular, weight = FontWeight.Normal, style = FontStyle.Normal)
+    return remember(regular) { FontFamily(regular) }
+}
+
+@Composable
+private fun appTypography(sans: FontFamily): Typography = Typography(
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.SemiBold,
         fontSize = 28.sp,
         lineHeight = 36.sp,
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 28.sp,
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp,
         lineHeight = 24.sp,
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 22.sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
     ),
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         fontFeatureSettings = TABULAR_NUMS,
     ),
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         fontFeatureSettings = TABULAR_NUMS,
     ),
     bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         fontFeatureSettings = TABULAR_NUMS,
     ),
     labelLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         fontFeatureSettings = TABULAR_NUMS,
     ),
     labelMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 16.sp,
         fontFeatureSettings = TABULAR_NUMS,
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = sans,
         fontWeight = FontWeight.Medium,
         fontSize = 10.sp,
         lineHeight = 14.sp,
@@ -222,9 +258,10 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
         ThemeManager.applySystemDarkTheme(systemIsDark)
     }
     val colorScheme = if (ThemeManager.isDarkTheme) DarkColorScheme else LightColorScheme
+    val typography = appTypography(sans = kdSansFamily())
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = AppTypography,
+        typography = typography,
         content = content,
     )
 }

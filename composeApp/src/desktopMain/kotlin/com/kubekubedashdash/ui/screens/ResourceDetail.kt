@@ -47,6 +47,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.close_filled
@@ -177,7 +178,7 @@ fun ResourceDetailScreen(
                             Text(
                                 "${index + 1}",
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = kdMonoFamily(),
                                     fontSize = 12.sp,
                                     lineHeight = 18.sp,
                                 ),
@@ -199,7 +200,7 @@ fun ResourceDetailScreen(
                                 Text(
                                     text = highlightYamlLine(line),
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace,
+                                        fontFamily = kdMonoFamily(),
                                         fontSize = 12.sp,
                                         lineHeight = 18.sp,
                                     ),

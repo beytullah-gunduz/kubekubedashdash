@@ -42,6 +42,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.close_filled
@@ -132,7 +133,7 @@ fun LogViewerScreen(
                 modifier = Modifier.weight(1f).height(34.dp),
                 textStyle = MaterialTheme.typography.bodySmall.copy(
                     color = KdTextPrimary,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = kdMonoFamily(),
                 ),
                 shape = RoundedCornerShape(6.dp),
                 colors = OutlinedTextFieldDefaults.colors(

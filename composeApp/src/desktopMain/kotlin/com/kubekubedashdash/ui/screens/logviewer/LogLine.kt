@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdMonoFamily
 
 @Composable
 internal fun LogLine(line: String, highlight: String, wrap: Boolean) {
@@ -28,7 +29,7 @@ internal fun LogLine(line: String, highlight: String, wrap: Boolean) {
     Text(
         text = line,
         style = MaterialTheme.typography.bodySmall.copy(
-            fontFamily = FontFamily.Monospace,
+            fontFamily = kdMonoFamily(),
             fontSize = 11.sp,
             lineHeight = 16.sp,
         ),

@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
@@ -447,7 +448,7 @@ private fun GraphYamlPanel(
                                 "${i + 1}",
                                 modifier = Modifier.width(36.dp),
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = kdMonoFamily(),
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp,
                                 ),
@@ -456,7 +457,7 @@ private fun GraphYamlPanel(
                             Text(
                                 text = highlightYamlLine(lines[i]),
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = kdMonoFamily(),
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp,
                                 ),

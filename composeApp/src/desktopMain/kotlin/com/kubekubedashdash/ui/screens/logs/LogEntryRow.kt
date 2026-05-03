@@ -16,6 +16,7 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.logging.AppLogEntry
 
 @Composable
@@ -29,7 +30,7 @@ internal fun LogEntryRow(entry: AppLogEntry) {
         Text(
             entry.formattedMessage,
             style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
+                fontFamily = kdMonoFamily(),
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
             ),

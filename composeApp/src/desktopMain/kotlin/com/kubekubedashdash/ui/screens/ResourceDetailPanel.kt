@@ -55,6 +55,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
@@ -307,7 +308,7 @@ internal fun GenericYamlTab(kind: String, name: String, namespace: String?) {
                             "${i + 1}",
                             modifier = Modifier.width(36.dp),
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = kdMonoFamily(),
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp,
                             ),
@@ -316,7 +317,7 @@ internal fun GenericYamlTab(kind: String, name: String, namespace: String?) {
                         Text(
                             text = highlightYamlLine(lines[i]),
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = kdMonoFamily(),
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp,
                             ),

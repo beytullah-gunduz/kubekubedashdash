@@ -68,6 +68,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
@@ -477,7 +478,7 @@ private fun YamlTab(pod: PodInfo) {
                             "${i + 1}",
                             modifier = Modifier.width(36.dp),
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = kdMonoFamily(),
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp,
                             ),
@@ -486,7 +487,7 @@ private fun YamlTab(pod: PodInfo) {
                         Text(
                             text = highlightYamlLine(lines[i]),
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = kdMonoFamily(),
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp,
                             ),
@@ -552,7 +553,7 @@ private fun LogsTab(pod: PodInfo) {
                 singleLine = true,
                 modifier = Modifier.weight(1f).height(32.dp),
                 textStyle = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = kdMonoFamily(),
                     color = KdTextPrimary,
                 ),
                 shape = RoundedCornerShape(6.dp),
@@ -603,7 +604,7 @@ private fun LogsTab(pod: PodInfo) {
                             Text(
                                 line,
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = kdMonoFamily(),
                                     fontSize = 10.sp,
                                     lineHeight = 14.sp,
                                 ),

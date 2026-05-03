@@ -60,6 +60,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
@@ -277,7 +278,7 @@ private fun LogOutputPanel() {
                         Text(
                             entry.formattedMessage,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = kdMonoFamily(),
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp,
                             ),
