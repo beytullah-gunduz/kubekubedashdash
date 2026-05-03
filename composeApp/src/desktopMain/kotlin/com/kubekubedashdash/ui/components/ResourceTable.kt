@@ -1,6 +1,8 @@
 package com.kubekubedashdash.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,13 +38,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
+import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
@@ -222,12 +227,10 @@ private fun TableRowItem(
                 if (cell?.content != null) {
                     cell.content.invoke()
                 } else {
-                    Text(
+                    OverflowTooltipText(
                         text = cell?.text ?: "",
                         style = MaterialTheme.typography.bodySmall,
                         color = cell?.color ?: KdTextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -260,6 +263,51 @@ fun ResourceErrorMessage(message: String) {
             Spacer(Modifier.height(8.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = KdTextSecondary)
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun OverflowTooltipText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+) {
+    var overflowed by remember(text) { mutableStateOf(false) }
+
+    val label = @Composable {
+        Text(
+            text = text,
+            style = style,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result -> overflowed = result.hasVisualOverflow },
+        )
+    }
+
+    if (overflowed && text.isNotEmpty()) {
+        TooltipArea(
+            tooltip = {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = KdSurface,
+                    shadowElevation = 4.dp,
+                    tonalElevation = 2.dp,
+                ) {
+                    Text(
+                        text = text,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KdTextPrimary,
+                    )
+                }
+            },
+            tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
+            content = label,
+        )
+    } else {
+        label()
     }
 }
 
