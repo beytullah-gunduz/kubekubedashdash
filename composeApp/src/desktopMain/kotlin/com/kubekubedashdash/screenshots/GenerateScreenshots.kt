@@ -151,11 +151,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         )
         val sessionVm = initialWorkspace.activeSession!!.viewModel
         sessionVm.isConnected.first { it }
-        delay(2000) // let informers populate before the first capture
-        // Extra 1s warm-up: gives the demo simulator's mutation loops a moment to
-        // settle and the new seed resources (StatefulSets, CronJobs, PVs, etc.)
-        // time to flow through the reactive client.
-        delay(1000)
+        delay(10_000) // let informers populate and demo simulator warm up before first capture
 
         val screens: List<Pair<String, Screen>> = listOf(
             "01-cluster-overview" to Screen.Main.ClusterOverview,
@@ -243,7 +239,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
 
         log.info("Capturing All Clusters tab")
         initialWorkspace.setActive(WorkspaceTab.AllClusters.key)
-        delay(1200L)
+        delay(5_000L)
         captureWindow(initialWorkspace.id, outDir.resolve("22-all-clusters.png"))
         log.info("captured all-clusters")
 
