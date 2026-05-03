@@ -52,7 +52,7 @@ fun main() {
         workspaces.forEach { workspace ->
             key(workspace.id) {
                 val windowState = rememberWindowState(
-                    size = DpSize(1440.dp, 980.dp),
+                    size = DpSize(1440.dp, 960.dp),
                     position = workspace.initialPosition ?: WindowPosition.PlatformDefault,
                 )
                 Window(
