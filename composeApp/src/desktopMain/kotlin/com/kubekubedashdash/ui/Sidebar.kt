@@ -190,7 +190,7 @@ fun SidebarItem(
             }
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .matchParentSize()
                     .padding(horizontal = if (collapsed) 0.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
