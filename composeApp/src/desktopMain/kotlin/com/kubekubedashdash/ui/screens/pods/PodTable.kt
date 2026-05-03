@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
@@ -13,6 +15,7 @@ import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 
@@ -53,11 +56,29 @@ internal fun PodTable(
     selectedUid: String? = null,
     onPodClick: (PodInfo) -> Unit,
 ) {
+    val clipboard = LocalClipboardManager.current
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = podColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = pods.map { pod ->
-            TableRow(id = pod.uid, cells = visible.map { it.cell(pod) })
+            TableRow(
+                id = pod.uid,
+                cells = visible.map { it.cell(pod) },
+                actions = listOf(
+                    RowAction("Copy name") {
+                        clipboard.setText(AnnotatedString(pod.name))
+                    },
+                    RowAction("Copy kubectl get") {
+                        clipboard.setText(AnnotatedString("kubectl get pod ${pod.name} -n ${pod.namespace}"))
+                    },
+                    RowAction("Copy kubectl describe") {
+                        clipboard.setText(AnnotatedString("kubectl describe pod ${pod.name} -n ${pod.namespace}"))
+                    },
+                    RowAction("Copy kubectl logs") {
+                        clipboard.setText(AnnotatedString("kubectl logs ${pod.name} -n ${pod.namespace}"))
+                    },
+                ),
+            )
         }
 
         ResourceTable(

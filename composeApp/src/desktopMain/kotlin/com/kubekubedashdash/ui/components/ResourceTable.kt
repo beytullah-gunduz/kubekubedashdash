@@ -1,5 +1,7 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
@@ -75,7 +77,17 @@ data class TableRow(
     val id: String,
     val cells: List<CellData>,
     val backgroundColor: Color? = null,
+    /**
+     * Right-click / Ctrl-click menu items for this row. When non-empty,
+     * `ResourceTable` wraps the row in a [ContextMenuArea]. Keep this list
+     * short — typically 2–4 items — and start with the safe ones (copy
+     * name, copy a `kubectl` command). Mutations belong in their own pass.
+     */
+    val actions: List<RowAction> = emptyList(),
 )
+
+/** A single entry in a row's right-click menu. */
+data class RowAction(val label: String, val onSelect: () -> Unit)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -168,17 +180,31 @@ fun ResourceTable(
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(state = lazyListState, modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(sortedRows, key = { _, row -> row.id }) { index, row ->
-                        TableRowItem(
-                            row = row,
-                            columns = columns,
-                            isEven = index % 2 == 0,
-                            isSelected = row.id == selectedRowId,
-                            onClick = if (onRowClick != null) {
-                                { onRowClick(row) }
-                            } else {
-                                null
-                            },
-                        )
+                        val rowItem: @Composable () -> Unit = {
+                            TableRowItem(
+                                row = row,
+                                columns = columns,
+                                isEven = index % 2 == 0,
+                                isSelected = row.id == selectedRowId,
+                                onClick = if (onRowClick != null) {
+                                    { onRowClick(row) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                        if (row.actions.isEmpty()) {
+                            rowItem()
+                        } else {
+                            ContextMenuArea(
+                                items = {
+                                    row.actions.map { action ->
+                                        ContextMenuItem(action.label, action.onSelect)
+                                    }
+                                },
+                                content = rowItem,
+                            )
+                        }
                     }
                 }
                 VerticalScrollbar(

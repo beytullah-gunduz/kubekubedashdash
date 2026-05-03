@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
@@ -11,6 +13,7 @@ import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 
@@ -41,11 +44,26 @@ internal fun NodeTable(
     selectedUid: String? = null,
     onClick: (NodeInfo) -> Unit,
 ) {
+    val clipboard = LocalClipboardManager.current
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nodeColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = nodes.map { node ->
-            TableRow(id = node.uid, cells = visible.map { it.cell(node) })
+            TableRow(
+                id = node.uid,
+                cells = visible.map { it.cell(node) },
+                actions = listOf(
+                    RowAction("Copy name") {
+                        clipboard.setText(AnnotatedString(node.name))
+                    },
+                    RowAction("Copy kubectl get") {
+                        clipboard.setText(AnnotatedString("kubectl get node ${node.name}"))
+                    },
+                    RowAction("Copy kubectl describe") {
+                        clipboard.setText(AnnotatedString("kubectl describe node ${node.name}"))
+                    },
+                ),
+            )
         }
 
         ResourceTable(
