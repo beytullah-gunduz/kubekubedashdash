@@ -88,6 +88,54 @@ code {
   max-width: 720px;
 }
 
+.hero-cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #0e1116;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 24px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-elev);
+  border-color: #2a3442;
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
 .sticky-bar {
   position: fixed;
   top: 0;
@@ -219,6 +267,12 @@ figcaption {
   display: flex;
   align-items: center;
   gap: 8px;
+  transition: opacity 0.22s ease;
+}
+
+.top-bar.is-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .top-bar a {
