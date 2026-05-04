@@ -384,7 +384,7 @@ fun ResourceCountHeader(
                 color = KdPrimary.copy(alpha = 0.15f),
             ) {
                 Text(
-                    "$count",
+                    formatCount(count),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = KdPrimary,
@@ -398,3 +398,5 @@ fun ResourceCountHeader(
         HorizontalDivider(color = KdBorder, thickness = 1.dp)
     }
 }
+
+private fun formatCount(n: Int): String = "%,d".format(n)
