@@ -24,8 +24,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.article_filled
+import com.kubekubedashdash.resources.dns_filled
+import com.kubekubedashdash.resources.dynamic_feed_filled
+import com.kubekubedashdash.resources.language_filled
+import com.kubekubedashdash.resources.list_filled
+import com.kubekubedashdash.resources.lock_filled
+import com.kubekubedashdash.resources.security_filled
+import com.kubekubedashdash.resources.settings_ethernet_filled
+import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
+import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -37,6 +48,7 @@ import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
 import kotlinx.coroutines.flow.StateFlow
+import org.jetbrains.compose.resources.DrawableResource
 
 /**
  * English plural for a Kubernetes Kind. Handles the cases that "+s" gets wrong
@@ -51,6 +63,19 @@ private fun pluralizeKind(kind: String): String = when {
         kind.endsWith("sh", ignoreCase = true) -> kind + "es"
 
     else -> kind + "s"
+}
+
+private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
+    "configmap" -> Res.drawable.article_filled
+    "secret" -> Res.drawable.lock_filled
+    "ingress" -> Res.drawable.language_filled
+    "networkpolicy" -> Res.drawable.security_filled
+    "persistentvolume", "persistentvolumeclaim" -> Res.drawable.storage_filled
+    "storageclass" -> Res.drawable.storage_filled
+    "endpoint", "endpoints" -> Res.drawable.settings_ethernet_filled
+    "deployment" -> Res.drawable.dynamic_feed_filled
+    "service" -> Res.drawable.dns_filled
+    else -> Res.drawable.list_filled
 }
 
 @Composable
@@ -111,12 +136,19 @@ fun GenericResourceScreen(
                             null
                         },
                     )
-                    GenericTable(
-                        resources = filtered,
-                        namespacedKind = namespacedKind,
-                        selectedUid = selected?.uid,
-                        onClick = { res -> viewModel.selectItem(res) },
-                    )
+                    if (filtered.isEmpty()) {
+                        EmptyState(
+                            icon = kindIcon(kind),
+                            kind = pluralizeKind(kind),
+                        )
+                    } else {
+                        GenericTable(
+                            resources = filtered,
+                            namespacedKind = namespacedKind,
+                            selectedUid = selected?.uid,
+                            onClick = { res -> viewModel.selectItem(res) },
+                        )
+                    }
                 }
 
                 AnimatedVisibility(
