@@ -368,15 +368,22 @@ fun App(
                 modifier = Modifier
                     .fillMaxSize()
                     .onPreviewKeyEvent { event ->
-                        // Cmd+K (mac) / Ctrl+K (other): toggle the command palette.
-                        if (event.type == KeyEventType.KeyDown &&
-                            event.key == Key.K &&
-                            (event.isMetaPressed || event.isCtrlPressed)
-                        ) {
-                            paletteOpen = !paletteOpen
-                            true
-                        } else {
-                            false
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        val metaOrCtrl = event.isMetaPressed || event.isCtrlPressed
+                        when {
+                            // Cmd+K / Ctrl+K: toggle command palette.
+                            event.key == Key.K && metaOrCtrl -> {
+                                paletteOpen = !paletteOpen
+                                true
+                            }
+
+                            // Cmd+, / Ctrl+,: open Settings (macOS standard).
+                            event.key == Key.Comma && metaOrCtrl -> {
+                                workspace.showSettings()
+                                true
+                            }
+
+                            else -> false
                         }
                     },
             ) {
