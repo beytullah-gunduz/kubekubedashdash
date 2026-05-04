@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.list_filled
@@ -191,7 +192,7 @@ internal fun AllClustersEventsFilterBar(
                 Text(
                     "Search object, message, reason…",
                     style = MaterialTheme.typography.bodySmall,
-                    color = KdTextSecondary,
+                    color = KdTextPlaceholder,
                 )
             },
             leadingIcon = {
@@ -199,7 +200,7 @@ internal fun AllClustersEventsFilterBar(
                     painterResource(Res.drawable.search_filled),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = KdTextSecondary,
+                    tint = KdTextPlaceholder,
                 )
             },
             singleLine = true,

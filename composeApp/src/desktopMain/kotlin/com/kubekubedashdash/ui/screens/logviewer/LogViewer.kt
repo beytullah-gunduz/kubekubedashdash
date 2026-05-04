@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdMonoFamily
@@ -127,8 +128,8 @@ fun LogViewerScreen(
             OutlinedTextField(
                 value = filterText,
                 onValueChange = { viewModel.setFilterText(it) },
-                placeholder = { Text("Filter logs...", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary) },
-                leadingIcon = { Icon(painterResource(Res.drawable.filter_list_filled), null, Modifier.size(16.dp), tint = KdTextSecondary) },
+                placeholder = { Text("Filter logs...", style = MaterialTheme.typography.bodySmall, color = KdTextPlaceholder) },
+                leadingIcon = { Icon(painterResource(Res.drawable.filter_list_filled), null, Modifier.size(16.dp), tint = KdTextPlaceholder) },
                 singleLine = true,
                 modifier = Modifier.weight(1f).height(34.dp),
                 textStyle = MaterialTheme.typography.bodySmall.copy(

@@ -59,6 +59,7 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
@@ -286,10 +287,10 @@ private fun CompactSearchField(
         value = searchQuery,
         onValueChange = onSearchChange,
         placeholder = {
-            Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+            Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextPlaceholder)
         },
         leadingIcon = {
-            Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextSecondary)
+            Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextPlaceholder)
         },
         trailingIcon = {
             if (searchQuery.isNotEmpty()) {
