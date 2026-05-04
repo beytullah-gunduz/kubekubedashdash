@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -23,10 +24,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalConnectionError
+import com.kubekubedashdash.ui.LocalIsConnected
+import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
-import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
@@ -63,7 +67,7 @@ fun GenericResourceScreen(
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
 
     when (val s = state) {
-        is ResourceState.Loading -> ResourceLoadingIndicator()
+        is ResourceState.Loading -> SkeletonRows()
 
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
@@ -87,6 +91,9 @@ fun GenericResourceScreen(
                     ResourceCountHeader(
                         count = filtered.size,
                         kind = pluralizeKind(kind),
+                        liveDot = {
+                            LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                        },
                         actions = if (availableStatuses.isNotEmpty()) {
                             {
                                 StatusFilterMenu(

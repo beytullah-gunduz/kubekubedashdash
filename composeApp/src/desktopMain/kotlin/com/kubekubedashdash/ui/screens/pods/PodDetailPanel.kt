@@ -416,7 +416,7 @@ private fun ContainerCard(container: ContainerInfo) {
     Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor(container.state)))
+                StatusBadge(container.state)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     container.name,
@@ -427,7 +427,14 @@ private fun ContainerCard(container: ContainerInfo) {
             }
             Spacer(Modifier.height(8.dp))
             InfoRow("Image", container.image)
-            InfoRow("State", container.state, statusColor(container.state))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("State", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                StatusBadge(container.state)
+            }
             InfoRow(
                 "Ready",
                 if (container.ready) "Yes" else "No",

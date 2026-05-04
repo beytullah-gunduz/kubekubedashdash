@@ -478,8 +478,6 @@ private fun NodePodItem(pod: PodInfo, onClick: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor(pod.status)))
-            Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     pod.name,
@@ -493,7 +491,7 @@ private fun NodePodItem(pod: PodInfo, onClick: () -> Unit) {
                 ) {
                     Text(pod.namespace, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                     Text("·", color = KdTextSecondary)
-                    Text(pod.status, style = MaterialTheme.typography.labelSmall, color = statusColor(pod.status))
+                    StatusBadge(pod.status)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {

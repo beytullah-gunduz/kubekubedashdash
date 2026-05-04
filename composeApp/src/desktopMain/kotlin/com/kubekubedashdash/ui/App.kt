@@ -136,9 +136,13 @@ import org.jetbrains.compose.resources.painterResource
 @Composable
 private fun MaybeProvideSessionLocals(session: ClusterSession?, content: @Composable () -> Unit) {
     if (session != null) {
+        val isConnected by session.viewModel.isConnected.collectAsState()
+        val connectionError by session.viewModel.connectionError.collectAsState()
         CompositionLocalProvider(
             LocalViewModelStoreOwner provides session,
             LocalReactiveKubeClient provides session.reactiveClient,
+            LocalIsConnected provides isConnected,
+            LocalConnectionError provides connectionError,
         ) { content() }
     } else {
         content()
@@ -634,6 +638,8 @@ private fun SessionPaneContent(
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
+    val sessionIsConnected by sessionVm.isConnected.collectAsState()
+    val sessionConnectionError by sessionVm.connectionError.collectAsState()
 
     val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
     val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
@@ -664,6 +670,8 @@ private fun SessionPaneContent(
     CompositionLocalProvider(
         LocalViewModelStoreOwner provides session,
         LocalReactiveKubeClient provides session.reactiveClient,
+        LocalIsConnected provides sessionIsConnected,
+        LocalConnectionError provides sessionConnectionError,
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
             ListDetailPaneScaffold(

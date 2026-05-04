@@ -8,6 +8,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,10 +22,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalConnectionError
+import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
-import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
 import kotlinx.coroutines.flow.first
@@ -63,7 +67,7 @@ fun NodesScreen(
     }
 
     when (val s = state) {
-        is ResourceState.Loading -> ResourceLoadingIndicator()
+        is ResourceState.Loading -> SkeletonRows()
 
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
@@ -105,6 +109,9 @@ fun NodesScreen(
                     ResourceCountHeader(
                         count = filtered.size,
                         kind = "Nodes",
+                        liveDot = {
+                            LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                        },
                         actions = {
                             StatusFilterMenu(
                                 available = availableStatuses,

@@ -48,6 +48,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,7 @@ import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.settings_filled
+import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
 
 private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
@@ -219,6 +222,7 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .size(28.dp)
             .clip(RoundedCornerShape(4.dp))
+            .kdFocusRing()
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -251,6 +255,7 @@ private fun SettingsButton(onClick: () -> Unit) {
         modifier = Modifier
             .size(28.dp)
             .clip(RoundedCornerShape(4.dp))
+            .kdFocusRing()
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -294,7 +299,7 @@ private fun CompactSearchField(
         trailingIcon = {
             if (searchQuery.isNotEmpty()) {
                 IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp)) {
-                    Icon(painterResource(Res.drawable.close_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
+                    Icon(painterResource(Res.drawable.close_filled), "Clear search", Modifier.size(12.dp), tint = KdTextSecondary)
                 }
             }
         },
@@ -335,7 +340,7 @@ private fun CompactNamespaceSelector(
             Spacer(Modifier.width(4.dp))
             Text(selectedNamespace, style = MaterialTheme.typography.labelSmall)
             Spacer(Modifier.width(2.dp))
-            Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(12.dp))
+            Icon(painterResource(Res.drawable.expand_more_filled), "Show namespaces", Modifier.size(12.dp))
         }
 
         DropdownMenu(
@@ -418,11 +423,18 @@ private fun MacButton(
     showSymbol: Boolean,
     onClick: () -> Unit,
 ) {
+    val label = when (symbol) {
+        MacButtonSymbol.CLOSE -> "Close window"
+        MacButtonSymbol.MINIMIZE -> "Minimize window"
+        MacButtonSymbol.MAXIMIZE -> "Maximize window"
+    }
     Box(
         modifier = Modifier
             .size(12.dp)
             .clip(CircleShape)
             .background(color)
+            .semantics { contentDescription = label }
+            .kdFocusRing()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -502,7 +514,8 @@ private fun WinButton(
             )
             .fillMaxHeight()
             .width(46.dp)
-            .background(if (isHovered) hoverBg else Color.Transparent),
+            .background(if (isHovered) hoverBg else Color.Transparent)
+            .kdFocusRing(),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(10.dp)) {

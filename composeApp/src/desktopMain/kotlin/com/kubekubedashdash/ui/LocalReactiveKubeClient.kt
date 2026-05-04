@@ -17,3 +17,6 @@ import com.kubekubedashdash.util.ReactiveKubeClient
 val LocalReactiveKubeClient = staticCompositionLocalOf<ReactiveKubeClient> {
     error("No ReactiveKubeClient — wrap content in CompositionLocalProvider with the active session's reactiveClient")
 }
+
+val LocalIsConnected = staticCompositionLocalOf { false }
+val LocalConnectionError = staticCompositionLocalOf<String?> { null }

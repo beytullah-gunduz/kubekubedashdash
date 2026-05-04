@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.namespaces
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -9,13 +10,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.LocalConnectionError
+import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
-import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenViewModel
 
 @Composable
@@ -29,7 +34,7 @@ fun NamespacesScreen(
     var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
 
     when (val s = state) {
-        is ResourceState.Loading -> ResourceLoadingIndicator()
+        is ResourceState.Loading -> SkeletonRows()
 
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
@@ -41,7 +46,13 @@ fun NamespacesScreen(
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                ResourceCountHeader(filtered.size, "Namespaces")
+                ResourceCountHeader(
+                    count = filtered.size,
+                    kind = "Namespaces",
+                    liveDot = {
+                        LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                    },
+                )
                 NamespaceTable(
                     namespaces = filtered,
                     selectedUid = selectedUid,

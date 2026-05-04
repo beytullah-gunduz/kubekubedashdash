@@ -361,8 +361,6 @@ private fun EventOverviewTab(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor(podInfo.status)))
-                            Spacer(Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     podInfo.name,
@@ -377,7 +375,7 @@ private fun EventOverviewTab(
                                 ) {
                                     Text(podInfo.namespace, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                                     Text("·", color = KdTextSecondary)
-                                    Text(podInfo.status, style = MaterialTheme.typography.labelSmall, color = statusColor(podInfo.status))
+                                    StatusBadge(podInfo.status)
                                 }
                             }
                             Column(horizontalAlignment = Alignment.End) {

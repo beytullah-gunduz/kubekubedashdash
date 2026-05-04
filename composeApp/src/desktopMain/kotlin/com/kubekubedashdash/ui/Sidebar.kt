@@ -81,6 +81,7 @@ import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
+import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -170,6 +171,7 @@ fun SidebarItem(
                 .height(32.dp)
                 .padding(horizontal = if (collapsed) 4.dp else 8.dp)
                 .clip(RoundedCornerShape(6.dp))
+                .kdFocusRing()
                 .background(bg)
                 .clickable(onClick = onClick)
                 .onPointerEvent(PointerEventType.Enter) { hovered = true }
@@ -266,7 +268,7 @@ fun SidebarSection(
             ) {
                 Icon(
                     painterResource(if (expanded) Res.drawable.expand_more_filled else Res.drawable.chevron_right_filled),
-                    contentDescription = null,
+                    contentDescription = if (expanded) "Collapse section" else "Expand section",
                     modifier = Modifier.size(14.dp),
                     tint = KdTextSecondary,
                 )

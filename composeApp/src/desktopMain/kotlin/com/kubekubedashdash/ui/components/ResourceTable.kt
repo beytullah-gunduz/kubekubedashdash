@@ -1,5 +1,11 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -8,6 +14,7 @@ import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,10 +32,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.TextStyle
@@ -152,7 +162,7 @@ fun ResourceTable(
                     if (sortColumn == index) {
                         Icon(
                             painterResource(if (sortAscending) Res.drawable.arrow_upward_filled else Res.drawable.arrow_downward_filled),
-                            contentDescription = null,
+                            contentDescription = if (sortAscending) "Sorted ascending" else "Sorted descending",
                             modifier = Modifier.size(12.dp).padding(start = 2.dp),
                             tint = KdPrimary,
                         )
@@ -182,7 +192,7 @@ fun ResourceTable(
                 }
             }
             Box(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(state = lazyListState, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(state = lazyListState, modifier = Modifier.fillMaxSize().kdFocusRing()) {
                     itemsIndexed(sortedRows, key = { _, row -> row.id }) { index, row ->
                         val rowItem: @Composable () -> Unit = {
                             TableRowItem(
@@ -297,7 +307,39 @@ fun ResourceLoadingIndicator() {
 }
 
 @Composable
-fun ResourceErrorMessage(message: String) {
+fun SkeletonRows(rowCount: Int = 6) {
+    val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "alpha",
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        repeat(rowCount) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(0.4f).height(12.dp).background(KdSurfaceVariant.copy(alpha = alpha)))
+                Box(Modifier.weight(0.15f).height(12.dp).background(KdSurfaceVariant.copy(alpha = alpha)))
+                Box(Modifier.weight(0.15f).height(12.dp).background(KdSurfaceVariant.copy(alpha = alpha)))
+                Box(Modifier.weight(0.1f).height(12.dp).background(KdSurfaceVariant.copy(alpha = alpha)))
+                Box(Modifier.weight(0.2f).height(12.dp).background(KdSurfaceVariant.copy(alpha = alpha)))
+            }
+        }
+    }
+}
+
+@Composable
+fun ResourceErrorMessage(message: String, onRetry: (() -> Unit)? = null) {
+    val copyToClipboard = rememberCopyToClipboard()
     Box(
         modifier = Modifier.fillMaxSize().padding(32.dp),
         contentAlignment = Alignment.Center,
@@ -306,6 +348,25 @@ fun ResourceErrorMessage(message: String) {
             Text("Error", style = MaterialTheme.typography.titleMedium, color = KdError)
             Spacer(Modifier.height(8.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = KdTextSecondary)
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onRetry != null) {
+                    OutlinedButton(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
+                        border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = SolidColor(KdBorder)),
+                    ) {
+                        Text("Retry", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                OutlinedButton(
+                    onClick = { copyToClipboard(message) },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
+                    border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = SolidColor(KdBorder)),
+                ) {
+                    Text("Copy error", style = MaterialTheme.typography.labelMedium)
+                }
+            }
         }
     }
 }
@@ -364,6 +425,7 @@ private fun OverflowTooltipText(
 fun ResourceCountHeader(
     count: Int,
     kind: String,
+    liveDot: @Composable () -> Unit = {},
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Column {
@@ -378,6 +440,7 @@ fun ResourceCountHeader(
                 style = MaterialTheme.typography.titleMedium,
                 color = KdTextPrimary,
             )
+            liveDot()
             Spacer(Modifier.width(8.dp))
             Surface(
                 shape = RoundedCornerShape(10.dp),
