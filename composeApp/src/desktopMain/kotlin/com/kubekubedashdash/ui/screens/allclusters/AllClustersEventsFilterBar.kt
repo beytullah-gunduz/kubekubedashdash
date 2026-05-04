@@ -51,6 +51,7 @@ internal fun AllClustersEventsFilterBar(
     availableNamespaces: Set<String>,
     availableReasons: Set<String>,
     onUpdateFilters: ((EventTriageFilters) -> EventTriageFilters) -> Unit,
+    presetMenuSlot: @Composable () -> Unit = {},
 ) {
     var showTypeFilter by remember { mutableStateOf(false) }
     var showClusterFilter by remember { mutableStateOf(false) }
@@ -204,6 +205,11 @@ internal fun AllClustersEventsFilterBar(
             selected = filters.timeWindow,
             onSelect = { tw -> onUpdateFilters { f -> f.copy(timeWindow = tw) } },
         )
+
+        Spacer(Modifier.width(4.dp))
+
+        // Saved filter presets menu
+        presetMenuSlot()
 
         Spacer(Modifier.width(4.dp))
 

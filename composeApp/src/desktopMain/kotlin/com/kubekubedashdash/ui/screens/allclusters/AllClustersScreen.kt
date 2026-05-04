@@ -40,6 +40,7 @@ fun AllClustersScreen() {
     val availableClusters by viewModel.availableClusters.collectAsState()
     val availableNamespaces by viewModel.availableNamespaces.collectAsState()
     val availableReasons by viewModel.availableReasons.collectAsState()
+    val presets by viewModel.presets.collectAsState()
 
     var statsExpanded by remember { mutableStateOf(true) }
 
@@ -94,6 +95,14 @@ fun AllClustersScreen() {
             availableNamespaces = availableNamespaces,
             availableReasons = availableReasons,
             onUpdateFilters = viewModel::updateFilters,
+            presetMenuSlot = {
+                AllClustersPresetMenu(
+                    presets = presets,
+                    onApplyPreset = viewModel::applyPreset,
+                    onDeletePreset = viewModel::deletePreset,
+                    onSavePreset = viewModel::saveCurrentAsPreset,
+                )
+            },
         )
         AllClustersEventsTable(
             events = filteredEvents,
