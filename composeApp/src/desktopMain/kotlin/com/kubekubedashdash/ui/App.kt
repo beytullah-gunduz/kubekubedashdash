@@ -147,8 +147,9 @@ private fun MaybeProvideSessionLocals(session: ClusterSession?, content: @Compos
 
 /**
  * Collects palette entries for the active cluster session — sidebar
- * destinations, cluster tabs (for switching), plus pods and nodes already
- * cached on the reactive client. Returns a list shaped for [CommandPalette].
+ * destinations, cluster tabs (for switching), namespaces, plus pods and nodes
+ * already cached on the reactive client. Returns a list shaped for
+ * [CommandPalette].
  */
 @Composable
 private fun rememberPaletteEntries(
@@ -156,6 +157,7 @@ private fun rememberPaletteEntries(
     tabs: List<WorkspaceTab>,
     onNavigate: (Screen) -> Unit,
     onActivateTab: (tabKey: String) -> Unit,
+    onSelectNamespace: (String) -> Unit,
 ): List<PaletteEntry> {
     val screenEntries = remember(onNavigate) {
         listOf(
@@ -182,6 +184,8 @@ private fun rememberPaletteEntries(
         )
     }
 
+    val vm = activeSession?.viewModel
+    val namespacesState = vm?.namespaces?.collectAsState()
     val client = activeSession?.reactiveClient
     val podsState = client?.pods?.collectAsState()
     val nodesState = client?.nodes?.collectAsState()
@@ -215,6 +219,18 @@ private fun rememberPaletteEntries(
         }
     }
 
+    val namespaceEntries = remember(namespacesState?.value, onSelectNamespace) {
+        (namespacesState?.value ?: emptyList()).map { ns ->
+            PaletteEntry(
+                label = ns,
+                sublabel = "namespace",
+                category = "Namespaces",
+                icon = Res.drawable.folder_special_filled,
+                onActivate = { onSelectNamespace(ns) },
+            )
+        }
+    }
+
     val clusterEntries = remember(tabs, onActivateTab) {
         tabs.filterIsInstance<WorkspaceTab.Cluster>().mapNotNull { tab ->
             val ctx = tab.session.connectionManager.getCurrentContext().ifBlank { return@mapNotNull null }
@@ -228,7 +244,7 @@ private fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + clusterEntries + resourceEntries
+    return screenEntries + clusterEntries + namespaceEntries + resourceEntries
 }
 
 private fun paletteScreen(
@@ -341,6 +357,7 @@ fun App(
             tabs = tabs,
             onNavigate = { target -> sessionForPalette?.viewModel?.navigate(target) },
             onActivateTab = { key -> workspace.setActive(key) },
+            onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setSelectedNamespace(ns) },
         )
 
         // Provide the title session's locals at App scope for modals and the
