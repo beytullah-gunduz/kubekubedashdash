@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -365,30 +366,35 @@ fun ResourceCountHeader(
     kind: String,
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            kind,
-            style = MaterialTheme.typography.titleMedium,
-            color = KdTextPrimary,
-        )
-        Spacer(Modifier.width(8.dp))
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = KdPrimary.copy(alpha = 0.15f),
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "$count",
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = KdPrimary,
+                kind,
+                style = MaterialTheme.typography.titleMedium,
+                color = KdTextPrimary,
             )
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = KdPrimary.copy(alpha = 0.15f),
+            ) {
+                Text(
+                    "$count",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = KdPrimary,
+                )
+            }
+            if (actions != null) {
+                Spacer(Modifier.weight(1f))
+                actions()
+            }
         }
-        if (actions != null) {
-            Spacer(Modifier.weight(1f))
-            actions()
-        }
+        HorizontalDivider(color = KdBorder, thickness = 1.dp)
     }
 }
