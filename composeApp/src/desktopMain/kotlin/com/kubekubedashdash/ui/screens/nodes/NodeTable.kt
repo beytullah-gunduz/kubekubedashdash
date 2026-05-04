@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
@@ -16,6 +14,7 @@ import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 
 private class NodeColumn(
     val header: String,
@@ -44,7 +43,7 @@ internal fun NodeTable(
     selectedUid: String? = null,
     onClick: (NodeInfo) -> Unit,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nodeColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
@@ -54,13 +53,13 @@ internal fun NodeTable(
                 cells = visible.map { it.cell(node) },
                 actions = listOf(
                     RowAction("Copy name") {
-                        clipboard.setText(AnnotatedString(node.name))
+                        copyToClipboard(node.name)
                     },
                     RowAction("Copy kubectl get") {
-                        clipboard.setText(AnnotatedString("kubectl get node ${node.name}"))
+                        copyToClipboard("kubectl get node ${node.name}")
                     },
                     RowAction("Copy kubectl describe") {
-                        clipboard.setText(AnnotatedString("kubectl describe node ${node.name}"))
+                        copyToClipboard("kubectl describe node ${node.name}")
                     },
                 ),
             )

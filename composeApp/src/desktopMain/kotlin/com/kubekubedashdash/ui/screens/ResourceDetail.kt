@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -54,6 +53,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
@@ -69,7 +69,7 @@ fun ResourceDetailScreen(
     val reactiveClient = LocalReactiveKubeClient.current
     var yaml by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
-    val clipboardManager = LocalClipboardManager.current
+    val copyToClipboard = rememberCopyToClipboard()
 
     LaunchedEffect(kind, name, namespace) {
         loading = true
@@ -135,7 +135,7 @@ fun ResourceDetailScreen(
             }
 
             OutlinedButton(
-                onClick = { yaml?.let { clipboardManager.setText(AnnotatedString(it)) } },
+                onClick = { yaml?.let { copyToClipboard(it) } },
                 shape = RoundedCornerShape(6.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
                 border = ButtonDefaults.outlinedButtonBorder(true).copy(

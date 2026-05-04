@@ -32,8 +32,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,6 +50,7 @@ import com.kubekubedashdash.resources.vertical_align_bottom_filled
 import com.kubekubedashdash.resources.wrap_text_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.screens.logviewer.viewmodel.LogViewerScreenViewModel
 import org.jetbrains.compose.resources.painterResource
 
@@ -70,7 +69,7 @@ fun LogViewerScreen(
     val filterText by viewModel.filterText.collectAsState()
     val wrapLines by viewModel.wrapLines.collectAsState()
     val listState = rememberLazyListState()
-    val clipboardManager = LocalClipboardManager.current
+    val copyToClipboard = rememberCopyToClipboard()
 
     LaunchedEffect(podName, namespace, containerName) {
         viewModel.setStreamParams(podName, namespace, containerName)
@@ -168,7 +167,7 @@ fun LogViewerScreen(
             }
 
             IconButton(onClick = {
-                clipboardManager.setText(AnnotatedString(logLines.joinToString("\n")))
+                copyToClipboard(logLines.joinToString("\n"))
             }) {
                 Icon(painterResource(Res.drawable.content_copy_filled), "Copy logs", Modifier.size(18.dp), tint = KdTextSecondary)
             }

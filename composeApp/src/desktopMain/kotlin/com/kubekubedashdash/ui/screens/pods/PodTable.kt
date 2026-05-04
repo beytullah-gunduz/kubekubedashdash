@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
@@ -18,6 +16,7 @@ import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 
 private class PodColumn(
     val header: String,
@@ -56,7 +55,7 @@ internal fun PodTable(
     selectedUid: String? = null,
     onPodClick: (PodInfo) -> Unit,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = podColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
@@ -66,16 +65,16 @@ internal fun PodTable(
                 cells = visible.map { it.cell(pod) },
                 actions = listOf(
                     RowAction("Copy name") {
-                        clipboard.setText(AnnotatedString(pod.name))
+                        copyToClipboard(pod.name)
                     },
                     RowAction("Copy kubectl get") {
-                        clipboard.setText(AnnotatedString("kubectl get pod ${pod.name} -n ${pod.namespace}"))
+                        copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}")
                     },
                     RowAction("Copy kubectl describe") {
-                        clipboard.setText(AnnotatedString("kubectl describe pod ${pod.name} -n ${pod.namespace}"))
+                        copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}")
                     },
                     RowAction("Copy kubectl logs") {
-                        clipboard.setText(AnnotatedString("kubectl logs ${pod.name} -n ${pod.namespace}"))
+                        copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}")
                     },
                 ),
             )

@@ -53,8 +53,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,6 +71,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentResourceGraphViewModel
 import com.kubekubedashdash.ui.screens.highlightYamlLine
 import kotlinx.coroutines.Dispatchers
@@ -402,7 +401,7 @@ private fun GraphYamlPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val copyToClipboard = rememberCopyToClipboard()
     val kindCol = kindColor(node.kind)
 
     Surface(
@@ -427,7 +426,7 @@ private fun GraphYamlPanel(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { yaml?.let { clipboardManager.setText(AnnotatedString(it)) } }) {
+                IconButton(onClick = { yaml?.let { copyToClipboard(it) } }) {
                     Icon(painterResource(Res.drawable.content_copy_filled), "Copy", Modifier.size(14.dp), tint = KdTextSecondary)
                 }
                 IconButton(onClick = onClose) {
