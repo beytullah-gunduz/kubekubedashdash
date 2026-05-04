@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +42,7 @@ fun AllClustersScreen() {
     val availableNamespaces by viewModel.availableNamespaces.collectAsState()
     val availableReasons by viewModel.availableReasons.collectAsState()
     val presets by viewModel.presets.collectAsState()
+    val heatmapData by viewModel.heatmapData.collectAsState()
 
     var statsExpanded by remember { mutableStateOf(true) }
 
@@ -103,7 +105,15 @@ fun AllClustersScreen() {
                     onSavePreset = viewModel::saveCurrentAsPreset,
                 )
             },
+            heatmapVisible = filters.heatmapVisible,
+            onToggleHeatmap = { viewModel.updateFilters { f -> f.copy(heatmapVisible = !f.heatmapVisible) } },
         )
+        AnimatedVisibility(visible = filters.heatmapVisible) {
+            AllClustersReasonHeatmap(
+                data = heatmapData,
+                onCellClick = { cluster, reason -> viewModel.onHeatmapCellClick(cluster, reason) },
+            )
+        }
         AllClustersEventsTable(
             events = filteredEvents,
             groupedEvents = groupedEvents,

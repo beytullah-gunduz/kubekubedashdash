@@ -38,6 +38,7 @@ import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.ui.components.ColumnFilterDropdown
@@ -52,6 +53,8 @@ internal fun AllClustersEventsFilterBar(
     availableReasons: Set<String>,
     onUpdateFilters: ((EventTriageFilters) -> EventTriageFilters) -> Unit,
     presetMenuSlot: @Composable () -> Unit = {},
+    heatmapVisible: Boolean = false,
+    onToggleHeatmap: () -> Unit = {},
 ) {
     var showTypeFilter by remember { mutableStateOf(false) }
     var showClusterFilter by remember { mutableStateOf(false) }
@@ -218,6 +221,15 @@ internal fun AllClustersEventsFilterBar(
             mode = filters.mode,
             onToggle = { onUpdateFilters { f -> f.copy(mode = if (f.mode == ViewMode.GROUPED) ViewMode.RAW else ViewMode.GROUPED) } },
         )
+
+        // Heatmap toggle (only shown when multiple clusters are available)
+        if (availableClusters.size > 1) {
+            Spacer(Modifier.width(4.dp))
+            HeatmapToggle(
+                active = heatmapVisible,
+                onToggle = onToggleHeatmap,
+            )
+        }
     }
 }
 
@@ -374,6 +386,37 @@ private fun ViewModeToggle(
             text = if (mode == ViewMode.GROUPED) "Grouped" else "Raw",
             style = MaterialTheme.typography.labelSmall,
             color = if (mode == ViewMode.GROUPED) KdPrimary else KdTextSecondary,
+        )
+    }
+}
+
+@Composable
+private fun HeatmapToggle(
+    active: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .border(1.dp, if (active) KdPrimary else KdBorder, RoundedCornerShape(4.dp))
+            .background(
+                if (active) KdPrimary.copy(alpha = 0.08f) else Color.Transparent,
+                shape = RoundedCornerShape(4.dp),
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            painterResource(Res.drawable.dashboard_filled),
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = if (active) KdPrimary else KdTextSecondary,
+        )
+        Text(
+            text = "Heatmap",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (active) KdPrimary else KdTextSecondary,
         )
     }
 }
