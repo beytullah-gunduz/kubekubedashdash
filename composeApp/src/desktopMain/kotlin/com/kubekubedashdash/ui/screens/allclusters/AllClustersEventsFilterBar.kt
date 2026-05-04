@@ -189,15 +189,14 @@ internal fun AllClustersEventsFilterBar(
             }
         }
 
-        // Free-text search.
-        // BasicTextField + OutlinedTextFieldDefaults.DecorationBox lets us shrink
-        // contentPadding so the placeholder fits inside the 40dp filter-bar height
-        // (M3's high-level OutlinedTextField hardcodes ~16dp top/bottom padding,
-        // which clips bodySmall in this height).
+        // Free-text search. Sized to match the surrounding filter chips
+        // (~28dp). BasicTextField + DecorationBox lets us pass a small
+        // contentPadding; M3's high-level OutlinedTextField bakes in ~16dp
+        // vertical padding which would clip bodySmall at this height.
         SearchTextField(
             value = filters.searchText,
             onValueChange = { text -> onUpdateFilters { f -> f.copy(searchText = text) } },
-            modifier = Modifier.weight(1f).height(40.dp),
+            modifier = Modifier.weight(1f).height(28.dp),
         )
 
         // Time window segmented control
@@ -260,7 +259,7 @@ private fun SearchTextField(
                     )
                 },
                 colors = colors,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 container = {
                     OutlinedTextFieldDefaults.Container(
                         enabled = true,
