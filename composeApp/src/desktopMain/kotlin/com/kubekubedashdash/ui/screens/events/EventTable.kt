@@ -3,18 +3,11 @@ package com.kubekubedashdash.ui.screens.events
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -24,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -39,11 +31,11 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.error_filled
-import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.info
 import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
+import com.kubekubedashdash.ui.components.ColumnFilterDropdown
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.TableRow
 import org.jetbrains.compose.resources.DrawableResource
@@ -219,66 +211,6 @@ internal fun EventTypeIcon(type: String) {
             modifier = Modifier.size(16.dp),
             tint = tint,
         )
-    }
-}
-
-@Composable
-private fun ColumnFilterDropdown(
-    expanded: Boolean,
-    active: Boolean,
-    onToggle: () -> Unit,
-    onDismiss: () -> Unit,
-    availableValues: Set<String>,
-    selectedValues: Set<String>,
-    onToggleValue: (String) -> Unit,
-    onSelectAll: () -> Unit,
-    onSelectNone: () -> Unit,
-) {
-    Box {
-        Icon(
-            painterResource(Res.drawable.filter_list_filled),
-            contentDescription = "Filter",
-            modifier = Modifier
-                .size(14.dp)
-                .padding(start = 2.dp)
-                .clickable(onClick = onToggle),
-            tint = if (active) KdPrimary else KdTextSecondary,
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismiss,
-        ) {
-            Row(modifier = Modifier.padding(horizontal = 12.dp)) {
-                Text(
-                    "All",
-                    color = KdPrimary,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.clickable(onClick = onSelectAll).padding(8.dp),
-                )
-                Text(
-                    "None",
-                    color = KdPrimary,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.clickable(onClick = onSelectNone).padding(8.dp),
-                )
-            }
-            HorizontalDivider()
-            availableValues.sorted().forEach { value ->
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = value in selectedValues,
-                                onCheckedChange = { onToggleValue(value) },
-                                colors = CheckboxDefaults.colors(checkedColor = KdPrimary),
-                            )
-                            Text(value)
-                        }
-                    },
-                    onClick = { onToggleValue(value) },
-                )
-            }
-        }
     }
 }
 

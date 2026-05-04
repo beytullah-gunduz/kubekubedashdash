@@ -65,6 +65,11 @@ private val KdSurfaceVariantDark = Color(0xFF323845)
 private val KdTextPrimaryDark = Color(0xFFC8D1DC)
 private val KdTextSecondaryDark = Color(0xFF8B95A1)
 
+// Brighter than KdTextSecondary so placeholder/hint text stays readable
+// against KdSurface and KdSurfaceVariant. Light value matches secondary
+// because light-mode contrast is already sufficient.
+private val KdTextPlaceholderDark = Color(0xFF94A3B8)
+
 // More visible border on dark — the old #2E3440 was indistinguishable from
 // the surface so card outlines never registered. #3A4150 shows a soft
 // hairline without competing with the content.
@@ -78,6 +83,7 @@ private val KdSurfaceLight = Color(0xFFFFFFFF)
 private val KdSurfaceVariantLight = Color(0xFFF1F5F9)
 private val KdTextPrimaryLight = Color(0xFF1E293B)
 private val KdTextSecondaryLight = Color(0xFF64748B)
+private val KdTextPlaceholderLight = Color(0xFF64748B)
 private val KdBorderLight = Color(0xFFE2E8F0)
 private val KdHoverLight = Color(0xFFF1F5F9)
 private val KdSelectedLight = Color(0xFFDBEAFE)
@@ -90,6 +96,7 @@ val KdPrimary = Color(0xFF3D90CE)
 val KdOnPrimary = Color.White
 val KdTextPrimary: Color get() = if (ThemeManager.isDarkTheme) KdTextPrimaryDark else KdTextPrimaryLight
 val KdTextSecondary: Color get() = if (ThemeManager.isDarkTheme) KdTextSecondaryDark else KdTextSecondaryLight
+val KdTextPlaceholder: Color get() = if (ThemeManager.isDarkTheme) KdTextPlaceholderDark else KdTextPlaceholderLight
 
 // Status colors. The dark variants stay vivid (good contrast on near-black);
 // the light variants are darkened so they still meet WCAG AA on white card

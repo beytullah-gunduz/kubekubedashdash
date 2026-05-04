@@ -19,16 +19,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +52,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +63,7 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
@@ -282,38 +285,62 @@ private fun SettingsButton(onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CompactSearchField(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
 ) {
-    OutlinedTextField(
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdPrimary,
+        unfocusedBorderColor = KdBorder,
+        cursorColor = KdPrimary,
+        focusedContainerColor = KdSurfaceVariant,
+        unfocusedContainerColor = KdSurfaceVariant,
+    )
+    BasicTextField(
         value = searchQuery,
         onValueChange = onSearchChange,
-        placeholder = {
-            Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-        },
-        leadingIcon = {
-            Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextSecondary)
-        },
-        trailingIcon = {
-            if (searchQuery.isNotEmpty()) {
-                IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp)) {
-                    Icon(painterResource(Res.drawable.close_filled), "Clear search", Modifier.size(12.dp), tint = KdTextSecondary)
-                }
-            }
-        },
         singleLine = true,
-        modifier = Modifier.width(200.dp).height(if (isMacOS) 30.dp else 32.dp),
         textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
-        shape = RoundedCornerShape(4.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = KdPrimary,
-            unfocusedBorderColor = KdBorder,
-            cursorColor = KdPrimary,
-            focusedContainerColor = KdSurfaceVariant,
-            unfocusedContainerColor = KdSurfaceVariant,
-        ),
+        cursorBrush = SolidColor(KdPrimary),
+        interactionSource = interactionSource,
+        modifier = Modifier.width(200.dp).height(if (isMacOS) 30.dp else 32.dp),
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = searchQuery,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextPlaceholder)
+                },
+                leadingIcon = {
+                    Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextPlaceholder)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp)) {
+                            Icon(painterResource(Res.drawable.close_filled), "Clear search", Modifier.size(12.dp), tint = KdTextSecondary)
+                        }
+                    }
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        shape = RoundedCornerShape(4.dp),
+                    )
+                },
+            )
+        },
     )
 }
 
