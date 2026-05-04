@@ -121,8 +121,9 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Chevron spacer
-            Box(modifier = Modifier.width(24.dp))
+            // Chevron spacer (matches the 16dp icon in GroupHeaderRow so column
+            // headers align with the data cells underneath)
+            Box(modifier = Modifier.width(16.dp))
             GroupedColumnHeader("Type", Modifier.width(50.dp))
             GroupedColumnHeader("Reason", Modifier.width(150.dp))
             if (tableWidth >= 800.dp) GroupedColumnHeader("Object", Modifier.weight(1.5f))
@@ -181,23 +182,28 @@ private fun GroupHeaderRow(
 ) {
     val bg = rowBackground(group.key.type)
     val borderColor = KdBorder.copy(alpha = 0.6f)
+    val isSingleMember = group.members.size == 1
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg ?: androidx.compose.ui.graphics.Color.Transparent)
-            .clickable(onClick = onClick)
+            .let { if (isSingleMember) it else it.clickable(onClick = onClick) }
             .padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            painterResource(Res.drawable.chevron_right_filled),
-            contentDescription = if (isExpanded) "Collapse" else "Expand",
-            modifier = Modifier
-                .size(16.dp)
-                .rotate(if (isExpanded) 90f else 0f),
-            tint = KdTextSecondary,
-        )
+        if (isSingleMember) {
+            Box(modifier = Modifier.size(16.dp))
+        } else {
+            Icon(
+                painterResource(Res.drawable.chevron_right_filled),
+                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(if (isExpanded) 90f else 0f),
+                tint = KdTextSecondary,
+            )
+        }
 
         Box(modifier = Modifier.width(50.dp)) {
             EventTypeIcon(group.key.type)
@@ -225,10 +231,12 @@ private fun GroupHeaderRow(
         }
         if (tableWidth >= 650.dp) {
             Box(modifier = Modifier.weight(1f)) {
+                val omitCount = isSingleMember && group.perClusterCounts.size == 1
                 val summary = group.perClusterCounts.entries
                     .sortedByDescending { it.value }
                     .joinToString(", ") { (cluster, count) ->
-                        "${cluster.substringAfterLast("/").take(12)} ($count)"
+                        val name = cluster.substringAfterLast("/").take(12)
+                        if (omitCount) name else "$name ($count)"
                     }
                 CellText(summary)
             }
