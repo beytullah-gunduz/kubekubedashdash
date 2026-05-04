@@ -240,7 +240,7 @@ private fun SearchBar(
         Box(modifier = Modifier.weight(1f)) {
             if (query.isEmpty()) {
                 Text(
-                    "Jump to a screen, pod, or node…",
+                    "Jump to a screen, cluster, pod, or node…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = KdTextSecondary,
                 )

@@ -88,6 +88,7 @@ import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.resources.folder_special_filled
+import com.kubekubedashdash.resources.hub
 import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.list_filled
@@ -146,13 +147,15 @@ private fun MaybeProvideSessionLocals(session: ClusterSession?, content: @Compos
 
 /**
  * Collects palette entries for the active cluster session — sidebar
- * destinations plus pods and nodes already cached on the reactive client.
- * Returns a list shaped for [CommandPalette].
+ * destinations, cluster tabs (for switching), plus pods and nodes already
+ * cached on the reactive client. Returns a list shaped for [CommandPalette].
  */
 @Composable
 private fun rememberPaletteEntries(
     activeSession: ClusterSession?,
+    tabs: List<WorkspaceTab>,
     onNavigate: (Screen) -> Unit,
+    onActivateTab: (tabKey: String) -> Unit,
 ): List<PaletteEntry> {
     val screenEntries = remember(onNavigate) {
         listOf(
@@ -212,7 +215,20 @@ private fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + resourceEntries
+    val clusterEntries = remember(tabs, onActivateTab) {
+        tabs.filterIsInstance<WorkspaceTab.Cluster>().mapNotNull { tab ->
+            val ctx = tab.session.connectionManager.getCurrentContext().ifBlank { return@mapNotNull null }
+            PaletteEntry(
+                label = ctx,
+                sublabel = "switch cluster",
+                category = "Clusters",
+                icon = Res.drawable.hub,
+                onActivate = { onActivateTab(tab.key) },
+            )
+        }
+    }
+
+    return screenEntries + clusterEntries + resourceEntries
 }
 
 private fun paletteScreen(
@@ -320,9 +336,12 @@ fun App(
         val settingsOpen by workspace.showSettings.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
         val sessionForPalette = activeSession ?: titleSession
-        val paletteEntries = rememberPaletteEntries(sessionForPalette) { target ->
-            sessionForPalette?.viewModel?.navigate(target)
-        }
+        val paletteEntries = rememberPaletteEntries(
+            activeSession = sessionForPalette,
+            tabs = tabs,
+            onNavigate = { target -> sessionForPalette?.viewModel?.navigate(target) },
+            onActivateTab = { key -> workspace.setActive(key) },
+        )
 
         // Provide the title session's locals at App scope for modals and the
         // title bar. SessionPaneContent re-provides per-page locals so each
