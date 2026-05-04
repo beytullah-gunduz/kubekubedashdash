@@ -3,8 +3,10 @@ package com.kubekubedashdash.ui.screens.allclusters
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,9 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,11 +28,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
+import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.list_filled
@@ -184,32 +189,15 @@ internal fun AllClustersEventsFilterBar(
             }
         }
 
-        // Free-text search
-        OutlinedTextField(
+        // Free-text search.
+        // BasicTextField + OutlinedTextFieldDefaults.DecorationBox lets us shrink
+        // contentPadding so the placeholder fits inside the 40dp filter-bar height
+        // (M3's high-level OutlinedTextField hardcodes ~16dp top/bottom padding,
+        // which clips bodySmall in this height).
+        SearchTextField(
             value = filters.searchText,
             onValueChange = { text -> onUpdateFilters { f -> f.copy(searchText = text) } },
-            placeholder = {
-                Text(
-                    "Search object, message, reason…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = KdTextPlaceholder,
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    painterResource(Res.drawable.search_filled),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = KdTextPlaceholder,
-                )
-            },
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f).height(40.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = KdPrimary,
-                unfocusedBorderColor = KdBorder,
-            ),
         )
 
         // Time window segmented control
@@ -226,6 +214,64 @@ internal fun AllClustersEventsFilterBar(
             onToggle = { onUpdateFilters { f -> f.copy(mode = if (f.mode == ViewMode.GROUPED) ViewMode.RAW else ViewMode.GROUPED) } },
         )
     }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdPrimary,
+        unfocusedBorderColor = KdBorder,
+    )
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
+        cursorBrush = SolidColor(KdPrimary),
+        interactionSource = interactionSource,
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = value,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text(
+                        "Search object, message, reason…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KdTextPlaceholder,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        painterResource(Res.drawable.search_filled),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = KdTextPlaceholder,
+                    )
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                    )
+                },
+            )
+        },
+    )
 }
 
 @Composable
