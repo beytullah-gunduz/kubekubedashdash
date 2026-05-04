@@ -43,6 +43,7 @@ import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.Sparkline
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.screens.events.EventColumn
 import com.kubekubedashdash.ui.screens.events.EventTypeIcon
@@ -209,6 +210,13 @@ private fun GroupHeaderRow(
             EventTypeIcon(group.key.type)
         }
         Box(modifier = Modifier.width(150.dp)) {
+            if (!isSingleMember) {
+                Sparkline(
+                    buckets = group.bucketHistogram,
+                    modifier = Modifier.matchParentSize(),
+                    color = KdPrimary,
+                )
+            }
             CellText(group.key.reason)
         }
         if (tableWidth >= 800.dp) {
