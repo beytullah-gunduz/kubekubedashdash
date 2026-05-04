@@ -10,21 +10,29 @@ import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.ui.screens.allclusters.EventGroup
+import com.kubekubedashdash.ui.screens.allclusters.EventTriageFilters
+import com.kubekubedashdash.ui.screens.allclusters.GroupKey
+import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class AllClustersViewModel private constructor() : ViewModel() {
 
     companion object {
@@ -74,6 +82,81 @@ class AllClustersViewModel private constructor() : ViewModel() {
             ) { arrays -> arrays.flatMap { it }.sortedByDescending { it.lastSeenTimestamp } }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // ── Filter state ─────────────────────────────────────────────────────────────
+
+    private val _filters = MutableStateFlow(EventTriageFilters())
+    val filters: StateFlow<EventTriageFilters> = _filters.asStateFlow()
+
+    fun updateFilters(update: (EventTriageFilters) -> EventTriageFilters) {
+        _filters.update(update)
+    }
+
+    fun resetFilters() {
+        _filters.value = EventTriageFilters()
+    }
+
+    /**
+     * Available cluster names derived from the current loaded events — used to
+     * populate the cluster filter dropdown.
+     */
+    val availableClusters: StateFlow<Set<String>> = aggregatedEvents
+        .map { events -> events.mapNotNull { it.cluster }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /**
+     * Available namespaces derived from the current loaded events.
+     */
+    val availableNamespaces: StateFlow<Set<String>> = aggregatedEvents
+        .map { events -> events.map { it.namespace }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /**
+     * Available reasons derived post-time-window, pre-other-filters (per spec decision #9).
+     * The search text is debounced separately; reasons use raw filter state.
+     */
+    val availableReasons: StateFlow<Set<String>> = combine(aggregatedEvents, _filters) { events, f ->
+        val cutoff = Instant.now().minusSeconds(f.timeWindow.minutes * 60)
+        events
+            .filter { ev -> ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true }
+            .map { it.reason }
+            .toSet()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /**
+     * Debounced search text to avoid recomputing on every keystroke.
+     */
+    private val debouncedSearch = _filters
+        .map { it.searchText }
+        .debounce(180)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    /** Events after applying all active filters. */
+    val filteredEvents: StateFlow<List<EventInfo>> = combine(
+        aggregatedEvents,
+        _filters,
+        debouncedSearch,
+    ) { events, f, search ->
+        val cutoff = Instant.now().minusSeconds(f.timeWindow.minutes * 60)
+        val effectiveClusters = f.clusters.ifEmpty { null }
+        val effectiveNamespaces = f.namespaces.ifEmpty { null }
+        val effectiveReasons = f.reasons.ifEmpty { null }
+        events.filter { ev ->
+            (f.types.isEmpty() || ev.type in f.types) &&
+                (effectiveClusters == null || ev.cluster in effectiveClusters) &&
+                (effectiveNamespaces == null || ev.namespace in effectiveNamespaces) &&
+                (effectiveReasons == null || ev.reason in effectiveReasons) &&
+                (ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true) &&
+                (search.isBlank() || matchesSearch(ev, search))
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Grouped events sorted by totalCount desc, ties broken by lastSeenInstant desc. */
+    val groupedEvents: StateFlow<List<EventGroup>> = filteredEvents
+        .map { events -> buildGroups(events) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // ── Cluster summaries ─────────────────────────────────────────────────────────
 
     /** One summary card per open cluster session. */
     val clusterSummaries: StateFlow<List<ClusterSummary>> = clusterTabsFlow()
@@ -209,5 +292,40 @@ class AllClustersViewModel private constructor() : ViewModel() {
                 _podsHistory.value = (_podsHistory.value + frac).takeLast(20)
             }
         }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────────
+
+    private fun parseInstantOrNull(ts: String): Instant? = try {
+        Instant.parse(ts)
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun matchesSearch(ev: EventInfo, query: String): Boolean {
+        val q = query.lowercase()
+        return ev.objectRef.lowercase().contains(q) ||
+            ev.message.lowercase().contains(q) ||
+            ev.reason.lowercase().contains(q)
+    }
+
+    private fun buildGroups(events: List<EventInfo>): List<EventGroup> {
+        val grouped = events.groupBy { GroupKey(it.type, it.reason, it.objectRef) }
+        return grouped.map { (key, members) ->
+            val latest = members.maxByOrNull { parseInstantOrNull(it.lastSeenTimestamp) ?: Instant.MIN }
+            val lastSeenInstant = latest?.let { parseInstantOrNull(it.lastSeenTimestamp) } ?: Instant.MIN
+            val perCluster = members
+                .groupBy { it.cluster ?: "?" }
+                .mapValues { (_, evs) -> evs.sumOf { it.count } }
+            EventGroup(
+                key = key,
+                totalCount = members.sumOf { it.count },
+                lastSeen = latest?.lastSeen ?: "",
+                lastSeenInstant = lastSeenInstant,
+                latestMessage = latest?.message ?: "",
+                perClusterCounts = perCluster,
+                members = members,
+            )
+        }.sortedWith(compareByDescending<EventGroup> { it.totalCount }.thenByDescending { it.lastSeenInstant })
     }
 }

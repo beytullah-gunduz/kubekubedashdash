@@ -33,7 +33,13 @@ fun AllClustersScreen() {
     val topNodes by viewModel.topNodesAcrossAllClusters.collectAsState()
     val summariesRaw by viewModel.clusterSummaries.collectAsState()
     val summaries = summariesRaw.sortedByDescending { it.recentErrorCount }
-    val events by viewModel.aggregatedEvents.collectAsState()
+
+    val filters by viewModel.filters.collectAsState()
+    val filteredEvents by viewModel.filteredEvents.collectAsState()
+    val groupedEvents by viewModel.groupedEvents.collectAsState()
+    val availableClusters by viewModel.availableClusters.collectAsState()
+    val availableNamespaces by viewModel.availableNamespaces.collectAsState()
+    val availableReasons by viewModel.availableReasons.collectAsState()
 
     var statsExpanded by remember { mutableStateOf(true) }
 
@@ -69,10 +75,32 @@ fun AllClustersScreen() {
                     summary = summary,
                     modifier = Modifier.animateItem(),
                     onClick = { WorkspaceManager.activateClusterTab(summary.sessionId) },
+                    onErrorChipClick = {
+                        viewModel.updateFilters { f ->
+                            f.copy(
+                                clusters = setOf(summary.contextName),
+                                types = setOf("Warning", "Error"),
+                            )
+                        }
+                    },
                 )
             }
         }
-        Spacer(Modifier.height(16.dp))
-        AllClustersEventsTable(events = events)
+        Spacer(Modifier.height(8.dp))
+        AllClustersEventsFilterBar(
+            filters = filters,
+            availableTypes = setOf("Normal", "Warning", "Error"),
+            availableClusters = availableClusters,
+            availableNamespaces = availableNamespaces,
+            availableReasons = availableReasons,
+            onUpdateFilters = viewModel::updateFilters,
+        )
+        AllClustersEventsTable(
+            events = filteredEvents,
+            groupedEvents = groupedEvents,
+            mode = filters.mode,
+            hasActiveFilters = !filters.isDefault,
+            onClearFilters = viewModel::resetFilters,
+        )
     }
 }

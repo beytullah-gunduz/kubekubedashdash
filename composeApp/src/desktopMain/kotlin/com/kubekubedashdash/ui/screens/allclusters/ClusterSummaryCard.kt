@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,7 @@ internal fun ClusterSummaryCard(
     summary: AllClustersViewModel.ClusterSummary,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    onErrorChipClick: (() -> Unit)? = null,
 ) {
     val clusterColor = ClusterColor.fromContext(summary.contextName)
 
@@ -99,6 +101,7 @@ internal fun ClusterSummaryCard(
                     label = "Errors / Warnings",
                     value = summary.recentErrorCount.toString(),
                     valueColor = if (summary.recentErrorCount > 0) KdWarning else null,
+                    onValueClick = if (summary.recentErrorCount > 0) onErrorChipClick else null,
                 )
             }
         }
@@ -110,6 +113,7 @@ private fun StatRow(
     label: String,
     value: String,
     valueColor: androidx.compose.ui.graphics.Color? = null,
+    onValueClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -125,6 +129,11 @@ private fun StatRow(
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+            modifier = if (onValueClick != null) {
+                Modifier.clickable(role = Role.Button, onClick = onValueClick)
+            } else {
+                Modifier
+            },
         )
     }
 }
