@@ -54,6 +54,7 @@ internal fun PodTable(
     pods: List<PodInfo>,
     selectedUid: String? = null,
     onPodClick: (PodInfo) -> Unit,
+    onViewLogs: ((PodInfo) -> Unit)? = null,
 ) {
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -63,20 +64,13 @@ internal fun PodTable(
             TableRow(
                 id = pod.uid,
                 cells = visible.map { it.cell(pod) },
-                actions = listOf(
-                    RowAction("Copy name") {
-                        copyToClipboard(pod.name)
-                    },
-                    RowAction("Copy kubectl get") {
-                        copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}")
-                    },
-                    RowAction("Copy kubectl describe") {
-                        copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}")
-                    },
-                    RowAction("Copy kubectl logs") {
-                        copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}")
-                    },
-                ),
+                actions = buildList {
+                    if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
+                    add(RowAction("Copy name") { copyToClipboard(pod.name) })
+                    add(RowAction("Copy kubectl get") { copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}") })
+                    add(RowAction("Copy kubectl describe") { copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}") })
+                    add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}") })
+                },
             )
         }
 

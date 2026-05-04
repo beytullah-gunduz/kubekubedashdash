@@ -143,6 +143,7 @@ fun PodsScreen(
                                 selectedPodUid = pod.uid
                                 onNavigate(Screen.Detail.PodDetail(pod))
                             },
+                            onViewLogs = { pod -> onNavigate(Screen.Detail.PodLogs(pod.name, pod.namespace)) },
                         )
                     }
                 }
