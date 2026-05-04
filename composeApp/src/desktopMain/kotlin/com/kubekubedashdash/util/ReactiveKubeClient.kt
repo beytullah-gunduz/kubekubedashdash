@@ -462,10 +462,18 @@ class ReactiveKubeClient(
                 val np = if (p.nodePort != null && p.nodePort > 0) ":${p.nodePort}" else ""
                 "${p.port}$np/${p.protocol}"
             } ?: ""
+            val externalIPs = if (svc.spec?.type == "LoadBalancer") {
+                svc.status?.loadBalancer?.ingress
+                    ?.mapNotNull { it.ip?.ifBlank { null } ?: it.hostname }
+                    ?.joinToString(", ").orEmpty()
+            } else {
+                svc.spec?.externalIPs?.joinToString(", ").orEmpty()
+            }
             ServiceInfo(
                 uid = svc.metadata.uid ?: "", name = svc.metadata.name,
                 namespace = svc.metadata.namespace ?: "",
                 type = svc.spec?.type ?: "", clusterIP = svc.spec?.clusterIP ?: "",
+                externalIPs = externalIPs,
                 ports = ports, age = formatAge(svc.metadata.creationTimestamp),
                 selector = svc.spec?.selector ?: emptyMap(),
                 labels = svc.metadata.labels ?: emptyMap(),

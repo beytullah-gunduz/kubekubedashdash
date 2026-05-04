@@ -9,6 +9,7 @@ data class ServiceInfo(
     val namespace: String,
     val type: String,
     val clusterIP: String,
+    val externalIPs: String = "",
     val ports: String,
     val age: String,
     val selector: Map<String, String>,

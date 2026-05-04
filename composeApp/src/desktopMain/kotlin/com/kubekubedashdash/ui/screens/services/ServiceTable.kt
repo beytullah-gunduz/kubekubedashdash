@@ -35,7 +35,8 @@ private val svcColumns = listOf(
     SvcColumn("Namespace", 1.2f, 400.dp) { CellData(it.namespace) },
     SvcColumn("Type", 0.8f, 0.dp) { CellData(it.type, serviceTypeColor(it.type)) },
     SvcColumn("Cluster IP", 1.2f, 550.dp) { CellData(it.clusterIP) },
-    SvcColumn("Ports", 1.5f, 650.dp) { CellData(it.ports) },
+    SvcColumn("External", 1.5f, 700.dp) { CellData(it.externalIPs.ifBlank { "—" }) },
+    SvcColumn("Ports", 1.5f, 850.dp) { CellData(it.ports) },
     SvcColumn("Age", 0.7f, 0.dp) { CellData(it.age) },
 )
 
