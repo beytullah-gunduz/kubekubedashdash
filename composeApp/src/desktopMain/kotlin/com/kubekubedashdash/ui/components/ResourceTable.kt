@@ -35,6 +35,8 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -355,6 +357,28 @@ private fun TableRowItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = cell?.color ?: KdTextPrimary,
                     )
+                }
+            }
+        }
+        if (row.actions.isNotEmpty()) {
+            var menuExpanded by remember { mutableStateOf(false) }
+            Box {
+                Text(
+                    text = "⋮",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = KdTextSecondary.copy(alpha = if (hovered || menuExpanded) 1f else 0.3f),
+                    modifier = Modifier.padding(horizontal = 4.dp).clickable { menuExpanded = true },
+                )
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    row.actions.forEach { action ->
+                        DropdownMenuItem(
+                            text = { Text(action.label, style = MaterialTheme.typography.bodySmall) },
+                            onClick = {
+                                menuExpanded = false
+                                action.onSelect()
+                            },
+                        )
+                    }
                 }
             }
         }
