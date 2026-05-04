@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,7 +53,11 @@ internal fun <T> RecentResourceCard(
                 color = KdTextPrimary,
                 fontWeight = FontWeight.SemiBold,
             )
-            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 10.dp, bottom = 10.dp),
+                color = KdBorder.copy(alpha = 0.6f),
+                thickness = 1.dp,
+            )
             when {
                 slice.loading -> Box(
                     modifier = Modifier.fillMaxWidth().height(80.dp),
