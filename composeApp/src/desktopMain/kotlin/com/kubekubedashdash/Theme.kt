@@ -63,7 +63,7 @@ private val KdSidebarBgDark = Color(0xFF161819)
 private val KdSurfaceDark = Color(0xFF2A3038)
 private val KdSurfaceVariantDark = Color(0xFF323845)
 private val KdTextPrimaryDark = Color(0xFFC8D1DC)
-private val KdTextSecondaryDark = Color(0xFF6B7280)
+private val KdTextSecondaryDark = Color(0xFF8B95A1)
 
 // More visible border on dark — the old #2E3440 was indistinguishable from
 // the surface so card outlines never registered. #3A4150 shows a soft
