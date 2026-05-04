@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.allclusters.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.ClusterInfo
@@ -12,8 +13,11 @@ import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.screens.allclusters.EventGroup
 import com.kubekubedashdash.ui.screens.allclusters.EventTriageFilters
+import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.ui.screens.allclusters.GroupKey
+import com.kubekubedashdash.ui.screens.allclusters.TimeWindow
 import com.kubekubedashdash.ui.screens.allclusters.ViewMode
+import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +35,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class AllClustersViewModel private constructor() : ViewModel() {
@@ -190,6 +195,69 @@ class AllClustersViewModel private constructor() : ViewModel() {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    // ── Preset state ──────────────────────────────────────────────────────────────
+
+    private val _userPresets = MutableStateFlow<List<EventTriagePreset>>(emptyList())
+
+    /**
+     * Combined list: built-ins (recomputed whenever [clusterSummaries] changes)
+     * followed by user-saved presets.
+     */
+    val presets: StateFlow<List<EventTriagePreset>> = combine(_userPresets, clusterSummaries) { user, summaries ->
+        buildBuiltIns(summaries) + user
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), buildBuiltIns(emptyList()))
+
+    /**
+     * Apply a preset by id. Built-in "this-cluster-only" is recomputed at
+     * call-time from the current [clusterSummaries].
+     */
+    fun applyPreset(id: String) {
+        val preset = presets.value.firstOrNull { it.id == id } ?: return
+        if (id == "this-cluster-only") {
+            val summaries = clusterSummaries.value
+            val target = summaries.firstOrNull { it.recentErrorCount > 0 }?.contextName
+                ?: summaries.firstOrNull()?.contextName
+            if (target.isNullOrEmpty()) return
+            _filters.value = EventTriageFilters(
+                types = setOf("Warning", "Error"),
+                clusters = setOf(target),
+                namespaces = emptySet(),
+                reasons = emptySet(),
+                searchText = "",
+                timeWindow = TimeWindow.LAST_1H,
+                mode = ViewMode.GROUPED,
+            )
+        } else {
+            _filters.value = preset.filters
+        }
+    }
+
+    /**
+     * Save the current filters as a new user preset with the given [name].
+     * Name is trimmed and capped at 40 characters.
+     */
+    fun saveCurrentAsPreset(name: String) {
+        val trimmed = name.trim().take(40)
+        if (trimmed.isEmpty()) return
+        val preset = EventTriagePreset(
+            id = UUID.randomUUID().toString(),
+            name = trimmed,
+            filters = _filters.value,
+        )
+        _userPresets.value = _userPresets.value + preset
+        PreferenceRepository.customPresets = _userPresets.value
+    }
+
+    /**
+     * Delete a user preset by id. Built-in presets ("critical-only",
+     * "this-cluster-only") are silently ignored.
+     */
+    fun deletePreset(id: String) {
+        if (id == "critical-only" || id == "this-cluster-only") return
+        _userPresets.value = _userPresets.value.filterNot { it.id == id }
+        PreferenceRepository.customPresets = _userPresets.value
+    }
+
     // ── Aggregated stats card data ────────────────────────────────────────────────
 
     private val _cpuHistory = MutableStateFlow<List<Float>>(emptyList())
@@ -290,6 +358,11 @@ class AllClustersViewModel private constructor() : ViewModel() {
                 if (cap > 0) count.toFloat() / cap else 0f
             }.collect { frac ->
                 _podsHistory.value = (_podsHistory.value + frac).takeLast(20)
+            }
+        }
+        viewModelScope.launch {
+            PreferenceRepository.customPresets().collect { persisted ->
+                _userPresets.value = persisted
             }
         }
     }

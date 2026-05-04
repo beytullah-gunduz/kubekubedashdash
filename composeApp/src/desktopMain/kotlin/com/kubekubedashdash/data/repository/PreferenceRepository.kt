@@ -10,14 +10,20 @@ import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
+import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 object PreferenceRepository {
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
@@ -30,6 +36,7 @@ object PreferenceRepository {
     private val DEMO_NODES_MAX by lazy { intPreferencesKey("demo_nodes_max") }
     private val DEMO_PODS_MIN by lazy { intPreferencesKey("demo_pods_min") }
     private val DEMO_PODS_MAX by lazy { intPreferencesKey("demo_pods_max") }
+    private val EVENT_TRIAGE_PRESETS by lazy { stringPreferencesKey("event_triage_presets") }
 
     var themeMode: ThemeMode
         get() = runBlocking {
@@ -152,4 +159,32 @@ object PreferenceRepository {
                 }
             }
         }
+
+    var customPresets: List<EventTriagePreset>
+        get() = runBlocking {
+            val raw = dataStore.data.firstOrNull()?.get(EVENT_TRIAGE_PRESETS)
+            decodePresets(raw)
+        }
+        set(value) {
+            runBlocking {
+                dataStore.edit {
+                    it[EVENT_TRIAGE_PRESETS] = json.encodeToString(value)
+                }
+            }
+        }
+
+    fun customPresets(): Flow<List<EventTriagePreset>> = dataStore.data.map { prefs ->
+        decodePresets(prefs[EVENT_TRIAGE_PRESETS])
+    }
+
+    private fun decodePresets(raw: String?): List<EventTriagePreset> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            json.decodeFromString<List<EventTriagePreset>>(raw)
+        } catch (_: SerializationException) {
+            emptyList()
+        } catch (_: IllegalArgumentException) {
+            emptyList()
+        }
+    }
 }

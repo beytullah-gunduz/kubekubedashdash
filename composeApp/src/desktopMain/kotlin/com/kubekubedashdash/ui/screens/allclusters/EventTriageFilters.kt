@@ -1,13 +1,18 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class TimeWindow(val label: String, val minutes: Long) {
     LAST_15M("15m", 15),
     LAST_1H("1h", 60),
     LAST_24H("24h", 1440),
 }
 
+@Serializable
 enum class ViewMode { RAW, GROUPED }
 
+@Serializable
 data class EventTriageFilters(
     val types: Set<String> = setOf("Warning", "Error"),
     val clusters: Set<String> = emptySet(),
