@@ -1,0 +1,127 @@
+package com.kubekubedashdash.ui.components
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.filter_list_filled
+import org.jetbrains.compose.resources.painterResource
+
+fun parseLabelSelector(query: String): Map<String, String> {
+    if (query.isBlank()) return emptyMap()
+    return query.split(",")
+        .mapNotNull { part ->
+            val eq = part.indexOf('=')
+            if (eq <= 0) null else part.substring(0, eq).trim() to part.substring(eq + 1).trim()
+        }
+        .toMap()
+}
+
+fun matchesLabelSelector(labels: Map<String, String>, selector: Map<String, String>): Boolean = selector.all { (k, v) -> labels[k] == v }
+
+@Composable
+fun LabelSelectorChip(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val active = query.isNotBlank()
+    val matchCount = remember(query) { parseLabelSelector(query).size }
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (active) KdPrimary.copy(alpha = 0.15f) else KdSurfaceVariant,
+            modifier = Modifier.clickable { expanded = !expanded },
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painterResource(Res.drawable.filter_list_filled),
+                    contentDescription = "Filter by labels",
+                    modifier = Modifier.size(14.dp),
+                    tint = if (active) KdPrimary else KdTextSecondary,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (active) "Labels: $matchCount" else "Labels",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (active) KdPrimary else KdTextSecondary,
+                )
+                if (active) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        painterResource(Res.drawable.close_filled),
+                        contentDescription = "Clear label filter",
+                        modifier = Modifier.size(12.dp).clickable { onQueryChange("") },
+                        tint = KdPrimary,
+                    )
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .widthIn(min = 220.dp, max = 300.dp),
+            ) {
+                Text(
+                    "Filter by labels",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    placeholder = {
+                        Text("app=nginx, tier=backend", style = MaterialTheme.typography.bodySmall)
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Comma-separated key=value pairs",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
+}

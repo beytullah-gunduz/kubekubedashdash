@@ -26,11 +26,14 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
+import com.kubekubedashdash.ui.components.matchesLabelSelector
+import com.kubekubedashdash.ui.components.parseLabelSelector
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.flow.first
 
@@ -50,6 +53,7 @@ fun PodsScreen(
     // null sentinel = "no filter applied" (show every status that appears).
     // A non-null Set is the explicit allowlist after the user touched the menu.
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
+    var labelQuery by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(selectPodUid) {
         viewModel.setParams(selectPodUid)
@@ -81,6 +85,7 @@ fun PodsScreen(
                     allPods.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
                 }
                 val activeStatusFilter = statusFilter
+                val labelSelector = remember(labelQuery) { parseLabelSelector(labelQuery) }
                 val filtered = allPods.filter { pod ->
                     val passesSearch = searchQuery.isBlank() ||
                         pod.name.contains(searchQuery, ignoreCase = true) ||
@@ -88,7 +93,8 @@ fun PodsScreen(
                         pod.status.contains(searchQuery, ignoreCase = true) ||
                         pod.node.contains(searchQuery, ignoreCase = true)
                     val passesStatus = activeStatusFilter == null || pod.status in activeStatusFilter
-                    passesSearch && passesStatus
+                    val passesLabels = labelSelector.isEmpty() || matchesLabelSelector(pod.labels, labelSelector)
+                    passesSearch && passesStatus && passesLabels
                 }
 
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -113,6 +119,11 @@ fun PodsScreen(
                                 LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                             },
                             actions = {
+                                LabelSelectorChip(
+                                    query = labelQuery,
+                                    onQueryChange = { labelQuery = it },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
                                 StatusFilterMenu(
                                     available = availableStatuses,
                                     selected = activeStatusFilter ?: availableStatuses,

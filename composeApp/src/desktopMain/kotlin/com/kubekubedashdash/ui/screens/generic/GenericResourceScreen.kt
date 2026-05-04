@@ -37,12 +37,15 @@ import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.components.EmptyState
+import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
+import com.kubekubedashdash.ui.components.matchesLabelSelector
+import com.kubekubedashdash.ui.components.parseLabelSelector
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
@@ -90,6 +93,7 @@ fun GenericResourceScreen(
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
+    var labelQuery by rememberSaveable(kind) { mutableStateOf("") }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -101,6 +105,7 @@ fun GenericResourceScreen(
                 s.data.mapNotNull { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
             val activeStatusFilter = statusFilter
+            val labelSelector = remember(labelQuery) { parseLabelSelector(labelQuery) }
             val filtered = s.data.filter { r ->
                 val passesSearch = searchQuery.isBlank() ||
                     r.name.contains(searchQuery, ignoreCase = true) ||
@@ -108,7 +113,8 @@ fun GenericResourceScreen(
                     (r.status?.contains(searchQuery, ignoreCase = true) ?: false)
                 val passesStatus = activeStatusFilter == null ||
                     (r.status != null && r.status in activeStatusFilter)
-                passesSearch && passesStatus
+                val passesLabels = labelSelector.isEmpty() || matchesLabelSelector(r.labels, labelSelector)
+                passesSearch && passesStatus && passesLabels
             }
 
             Row(modifier = Modifier.fillMaxSize()) {
@@ -119,8 +125,13 @@ fun GenericResourceScreen(
                         liveDot = {
                             LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                         },
-                        actions = if (availableStatuses.isNotEmpty()) {
-                            {
+                        actions = {
+                            LabelSelectorChip(
+                                query = labelQuery,
+                                onQueryChange = { labelQuery = it },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            if (availableStatuses.isNotEmpty()) {
                                 StatusFilterMenu(
                                     available = availableStatuses,
                                     selected = activeStatusFilter ?: availableStatuses,
@@ -132,8 +143,6 @@ fun GenericResourceScreen(
                                     onSelectNone = { statusFilter = emptySet() },
                                 )
                             }
-                        } else {
-                            null
                         },
                     )
                     if (filtered.isEmpty()) {
