@@ -108,7 +108,7 @@ fun WindowScope.TitleBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(38.dp)
+                .height(if (isMacOS) 38.dp else 42.dp)
                 .background(KdSurface)
                 .pointerInput(Unit) {
                     var lastPressTime = 0L
@@ -299,7 +299,7 @@ private fun CompactSearchField(
             }
         },
         singleLine = true,
-        modifier = Modifier.width(200.dp).height(30.dp),
+        modifier = Modifier.width(200.dp).height(if (isMacOS) 30.dp else 32.dp),
         textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
         shape = RoundedCornerShape(4.dp),
         colors = OutlinedTextFieldDefaults.colors(
