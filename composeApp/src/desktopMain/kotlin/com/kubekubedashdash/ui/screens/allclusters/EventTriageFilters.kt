@@ -21,6 +21,7 @@ data class EventTriageFilters(
     val searchText: String = "",
     val timeWindow: TimeWindow = TimeWindow.LAST_1H,
     val mode: ViewMode = ViewMode.GROUPED,
+    val heatmapVisible: Boolean = false,
 ) {
     val isDefault: Boolean
         get() = types == setOf("Warning", "Error") &&
@@ -28,5 +29,6 @@ data class EventTriageFilters(
             namespaces.isEmpty() &&
             reasons.isEmpty() &&
             searchText.isEmpty() &&
-            timeWindow == TimeWindow.LAST_1H
+            timeWindow == TimeWindow.LAST_1H &&
+            !heatmapVisible
 }

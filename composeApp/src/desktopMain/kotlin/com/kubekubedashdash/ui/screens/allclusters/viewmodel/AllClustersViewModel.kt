@@ -15,6 +15,7 @@ import com.kubekubedashdash.ui.screens.allclusters.EventGroup
 import com.kubekubedashdash.ui.screens.allclusters.EventTriageFilters
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.ui.screens.allclusters.GroupKey
+import com.kubekubedashdash.ui.screens.allclusters.HeatmapData
 import com.kubekubedashdash.ui.screens.allclusters.TimeWindow
 import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
@@ -160,6 +161,59 @@ class AllClustersViewModel private constructor() : ViewModel() {
     val groupedEvents: StateFlow<List<EventGroup>> = combine(filteredEvents, _filters) { events, filters ->
         buildGroups(events, filters.timeWindow)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Heatmap data: cluster × reason matrix. Applies time-window, type, and namespace
+     * filters but intentionally ignores cluster/reason filters so all clusters/reasons
+     * are visible in the heatmap regardless of active selection.
+     */
+    val heatmapData: StateFlow<HeatmapData> = combine(aggregatedEvents, _filters) { events, f ->
+        val cutoff = Instant.now().minusSeconds(f.timeWindow.minutes * 60)
+        val effectiveNamespaces = f.namespaces.ifEmpty { null }
+
+        // Apply time-window, types, and namespaces — but NOT clusters or reasons.
+        val filtered = events.filter { ev ->
+            (f.types.isEmpty() || ev.type in f.types) &&
+                (effectiveNamespaces == null || ev.namespace in effectiveNamespaces) &&
+                (ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true)
+        }
+
+        if (filtered.isEmpty()) return@combine HeatmapData(emptyList(), emptyList(), emptyMap())
+
+        // Build cluster → reason → count map.
+        val cellMap = mutableMapOf<Pair<String, String>, Int>()
+        for (ev in filtered) {
+            val cluster = ev.cluster ?: "?"
+            val reason = ev.reason
+            val key = cluster to reason
+            cellMap[key] = (cellMap[key] ?: 0) + ev.count
+        }
+
+        // Top 12 reasons globally, sorted by total count desc, then alphabetically.
+        val reasonTotals = cellMap
+            .entries
+            .groupBy { it.key.second }
+            .mapValues { (_, entries) -> entries.sumOf { it.value } }
+        val top12Reasons = reasonTotals
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .take(12)
+            .map { it.key }
+
+        // Sorted cluster list.
+        val clusters = filtered.mapNotNull { it.cluster }.toSortedSet().toList()
+
+        HeatmapData(
+            clusters = clusters,
+            reasons = top12Reasons,
+            cells = cellMap,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HeatmapData(emptyList(), emptyList(), emptyMap()))
+
+    /** Clicking a heatmap cell narrows the cluster and reason filters. */
+    fun onHeatmapCellClick(cluster: String, reason: String) {
+        updateFilters { f -> f.copy(clusters = setOf(cluster), reasons = setOf(reason)) }
+    }
 
     // ── Cluster summaries ─────────────────────────────────────────────────────────
 
