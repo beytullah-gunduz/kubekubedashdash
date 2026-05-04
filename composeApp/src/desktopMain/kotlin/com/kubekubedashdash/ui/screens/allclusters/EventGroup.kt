@@ -17,4 +17,6 @@ data class EventGroup(
     val latestMessage: String,
     val perClusterCounts: Map<String, Int>,
     val members: List<EventInfo>,
+    /** 12-bucket histogram of member events over the active time window. */
+    val bucketHistogram: List<Int> = emptyList(),
 )

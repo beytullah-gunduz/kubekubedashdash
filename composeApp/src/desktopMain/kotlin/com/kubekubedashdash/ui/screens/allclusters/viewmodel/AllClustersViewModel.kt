@@ -157,9 +157,9 @@ class AllClustersViewModel private constructor() : ViewModel() {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Grouped events sorted by totalCount desc, ties broken by lastSeenInstant desc. */
-    val groupedEvents: StateFlow<List<EventGroup>> = filteredEvents
-        .map { events -> buildGroups(events) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val groupedEvents: StateFlow<List<EventGroup>> = combine(filteredEvents, _filters) { events, filters ->
+        buildGroups(events, filters.timeWindow)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ── Cluster summaries ─────────────────────────────────────────────────────────
 
@@ -382,7 +382,13 @@ class AllClustersViewModel private constructor() : ViewModel() {
             ev.reason.lowercase().contains(q)
     }
 
-    private fun buildGroups(events: List<EventInfo>): List<EventGroup> {
+    private fun buildGroups(events: List<EventInfo>, window: TimeWindow): List<EventGroup> {
+        val bucketCount = 12
+        // bucketWidth in seconds: total window seconds divided by bucket count
+        val bucketWidthSeconds = window.minutes * 60L / bucketCount
+        val now = Instant.now()
+        val windowStart = now.minusSeconds(window.minutes * 60L)
+
         val grouped = events.groupBy { GroupKey(it.type, it.reason, it.objectRef) }
         return grouped.map { (key, members) ->
             val latest = members.maxByOrNull { parseInstantOrNull(it.lastSeenTimestamp) ?: Instant.MIN }
@@ -390,6 +396,18 @@ class AllClustersViewModel private constructor() : ViewModel() {
             val perCluster = members
                 .groupBy { it.cluster ?: "?" }
                 .mapValues { (_, evs) -> evs.sumOf { it.count } }
+
+            // Compute 12-bucket histogram bucketed by lastSeenTimestamp of each member.
+            // We bucket by occurrence (1 per member), not by EventInfo.count, because
+            // k8s already aggregated repeats into count — we have no per-occurrence timestamps.
+            val histogram = MutableList(bucketCount) { 0 }
+            members.forEach { ev ->
+                val eventInstant = parseInstantOrNull(ev.lastSeenTimestamp) ?: return@forEach
+                val offsetSeconds = eventInstant.epochSecond - windowStart.epochSecond
+                val bucketIndex = (offsetSeconds / bucketWidthSeconds).toInt().coerceIn(0, bucketCount - 1)
+                histogram[bucketIndex]++
+            }
+
             EventGroup(
                 key = key,
                 totalCount = members.sumOf { it.count },
@@ -398,6 +416,7 @@ class AllClustersViewModel private constructor() : ViewModel() {
                 latestMessage = latest?.message ?: "",
                 perClusterCounts = perCluster,
                 members = members,
+                bucketHistogram = histogram,
             )
         }.sortedWith(compareByDescending<EventGroup> { it.totalCount }.thenByDescending { it.lastSeenInstant })
     }
