@@ -14,6 +14,7 @@ import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,13 +46,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.TextStyle
@@ -71,6 +80,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
 import com.kubekubedashdash.resources.arrow_upward_filled
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 data class ColumnDef(
@@ -128,6 +138,13 @@ fun ResourceTable(
             }
             if (sortAscending) sorted else sorted.reversed()
         }
+    }
+
+    var keyboardIndex by remember(sortedRows) { mutableStateOf(-1) }
+    val coroutineScope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(sortedRows.isNotEmpty()) {
+        if (sortedRows.isNotEmpty()) runCatching { focusRequester.requestFocus() }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -192,16 +209,68 @@ fun ResourceTable(
                 }
             }
             Box(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(state = lazyListState, modifier = Modifier.fillMaxSize().kdFocusRing()) {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .focusRequester(focusRequester)
+                        .focusable()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            when (event.key) {
+                                Key.DirectionDown -> {
+                                    keyboardIndex = if (keyboardIndex < 0) {
+                                        0
+                                    } else {
+                                        (keyboardIndex + 1).coerceAtMost(sortedRows.lastIndex)
+                                    }
+                                    coroutineScope.launch { lazyListState.animateScrollToItem(keyboardIndex) }
+                                    true
+                                }
+
+                                Key.DirectionUp -> {
+                                    if (keyboardIndex > 0) {
+                                        keyboardIndex -= 1
+                                    } else if (keyboardIndex < 0) {
+                                        keyboardIndex = 0
+                                    }
+                                    coroutineScope.launch { lazyListState.animateScrollToItem(maxOf(0, keyboardIndex)) }
+                                    true
+                                }
+
+                                Key.Enter -> {
+                                    if (keyboardIndex >= 0 && onRowClick != null) {
+                                        onRowClick(sortedRows[keyboardIndex])
+                                        keyboardIndex = -1
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+
+                                Key.Escape -> {
+                                    val consumed = keyboardIndex >= 0
+                                    keyboardIndex = -1
+                                    consumed
+                                }
+
+                                else -> false
+                            }
+                        }
+                        .kdFocusRing(),
+                ) {
                     itemsIndexed(sortedRows, key = { _, row -> row.id }) { index, row ->
                         val rowItem: @Composable () -> Unit = {
                             TableRowItem(
                                 row = row,
                                 columns = columns,
                                 isEven = index % 2 == 0,
-                                isSelected = row.id == selectedRowId,
+                                isSelected = row.id == selectedRowId || index == keyboardIndex,
                                 onClick = if (onRowClick != null) {
-                                    { onRowClick(row) }
+                                    {
+                                        keyboardIndex = -1
+                                        onRowClick(row)
+                                    }
                                 } else {
                                     null
                                 },
