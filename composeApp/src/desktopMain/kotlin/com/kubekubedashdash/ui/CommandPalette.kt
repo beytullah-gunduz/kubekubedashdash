@@ -91,19 +91,31 @@ fun CommandPalette(
     val listState = rememberLazyListState()
     var selected by remember { mutableStateOf(0) }
 
-    // Filter + cap per category. Keeps the palette legible when a cluster has
-    // hundreds of pods — a search is the way to find a deep one.
+    // Fuzzy-filter + sort by score + cap per category. When query is empty all
+    // entries pass. When non-empty, entries are scored by fuzzyScore against
+    // label and sublabel; non-matching entries are dropped, and within each
+    // category the best-scoring (fewest gaps) entries surface first.
     val visible by remember(entries, query) {
         derivedStateOf {
             val q = query.trim()
-            val matched = entries.filter { entry ->
-                q.isEmpty() ||
-                    entry.label.contains(q, ignoreCase = true) ||
-                    (entry.sublabel?.contains(q, ignoreCase = true) ?: false)
+            if (q.isEmpty()) {
+                entries.groupBy { it.category }
+                    .flatMap { (_, items) -> items.take(perCategoryCap) }
+            } else {
+                entries.mapNotNull { entry ->
+                    val s = minOf(
+                        fuzzyScore(q, entry.label) ?: Int.MAX_VALUE,
+                        entry.sublabel?.let { fuzzyScore(q, it) } ?: Int.MAX_VALUE,
+                    )
+                    if (s < Int.MAX_VALUE) entry to s else null
+                }
+                    .groupBy { (entry, _) -> entry.category }
+                    .flatMap { (_, scored) ->
+                        scored.sortedBy { (_, score) -> score }
+                            .take(perCategoryCap)
+                            .map { (entry, _) -> entry }
+                    }
             }
-            matched
-                .groupBy { it.category }
-                .flatMap { (_, items) -> items.take(perCategoryCap) }
         }
     }
 
@@ -374,4 +386,27 @@ private fun HintKey(label: String) {
             )
         }
     }
+}
+
+/**
+ * Subsequence fuzzy scorer. Returns the number of gaps between matched
+ * characters (lower = better match), or null if [query] is not a subsequence
+ * of [text]. Case-insensitive.
+ *
+ * Example: "kbsy" scores 3 against "kube-system" (k|ube-|b|olt… wait —
+ * k·ube-·b· e-·s·y·stem → 3 gaps), and null against "kube-proxy" (no 'y').
+ */
+private fun fuzzyScore(query: String, text: String): Int? {
+    val q = query.lowercase()
+    val t = text.lowercase()
+    var qi = 0
+    var gaps = 0
+    for (ci in t.indices) {
+        if (qi < q.length && t[ci] == q[qi]) {
+            qi++
+        } else if (qi > 0) {
+            gaps++
+        }
+    }
+    return if (qi == q.length) gaps else null
 }
