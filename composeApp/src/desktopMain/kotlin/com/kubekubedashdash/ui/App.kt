@@ -127,6 +127,7 @@ import com.kubekubedashdash.ui.screens.pods.PodsScreen
 import com.kubekubedashdash.ui.screens.services.ServiceDetailScreen
 import com.kubekubedashdash.ui.screens.services.ServicesScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
+import com.kubekubedashdash.ui.screens.topology.ClusterTopologyScreen
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
@@ -765,6 +766,7 @@ fun ContentRouter(
             is Screen.Main.Connecting -> ConnectingScreen()
             is Screen.Main.ConnectionError -> ConnectionErrorScreen(target.error, target.retryCountdown)
             is Screen.Main.ClusterOverview -> ClusterOverviewScreen(onNavigate)
+            is Screen.Main.ClusterTopology -> ClusterTopologyScreen(onNavigate)
             is Screen.Main.Nodes -> NodesScreen(searchQuery, onNavigate, target.selectNodeName)
             is Screen.Main.Namespaces -> NamespacesScreen(searchQuery, onNavigate)
             is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)

@@ -18,6 +18,10 @@ fun kindColor(kind: String): Color = when (kind) {
     "PVC" -> Color(0xFF8D6E63)
     "ServiceAccount" -> Color(0xFF78909C)
     "HPA" -> Color(0xFFFFCA28)
+    "External" -> Color(0xFF9E9E9E)
+    "WorkloadGroup" -> Color(0xFF3D90CE)
+    "Warning" -> Color(0xFFFFCA28)
+    "PersistentVolumeClaim" -> Color(0xFF8D6E63)
     else -> Color(0xFF6B7280)
 }
 

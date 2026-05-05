@@ -69,6 +69,7 @@ import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.resources.folder_special_filled
+import com.kubekubedashdash.resources.graph_3_24
 import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.list_filled
@@ -107,6 +108,9 @@ fun Sidebar(
         ) {
             SidebarItem(Res.drawable.dashboard_filled, "Cluster", currentScreen is Screen.Main.ClusterOverview, collapsed) {
                 onNavigate(Screen.Main.ClusterOverview)
+            }
+            SidebarItem(Res.drawable.graph_3_24, "Topology", currentScreen is Screen.Main.ClusterTopology, collapsed) {
+                onNavigate(Screen.Main.ClusterTopology)
             }
             SidebarItem(Res.drawable.dns_filled, "Nodes", currentScreen is Screen.Main.Nodes, collapsed) {
                 onNavigate(Screen.Main.Nodes())

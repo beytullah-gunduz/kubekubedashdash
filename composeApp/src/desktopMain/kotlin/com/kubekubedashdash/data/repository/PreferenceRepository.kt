@@ -45,6 +45,7 @@ object PreferenceRepository {
     private val EVENT_TRIAGE_PRESETS by lazy { stringPreferencesKey("event_triage_presets") }
     private val PINNED_RESOURCES by lazy { stringPreferencesKey("pinned_resources") }
     private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
+    private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -88,6 +89,9 @@ object PreferenceRepository {
     private val _clusterColorOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
     val clusterColorOverrides: StateFlow<Map<String, String>> = _clusterColorOverrides.asStateFlow()
 
+    private val _topologyPacketAnimationEnabled = MutableStateFlow(true)
+    val topologyPacketAnimationEnabled: StateFlow<Boolean> = _topologyPacketAnimationEnabled.asStateFlow()
+
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
@@ -114,6 +118,7 @@ object PreferenceRepository {
                     ?.split(",")?.filter { it.isNotBlank() }?.toSet()
                     ?: emptySet()
                 _clusterColorOverrides.value = decodeColorOverrides(p[CLUSTER_COLOR_OVERRIDES])
+                _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
             }
         }
     }
@@ -134,6 +139,7 @@ object PreferenceRepository {
         ioScope.launch { dataStore.edit { it[MCP_SERVER_PORT] = value } }
     }
 
+<<<<<<< HEAD
     fun setMcpLocalhostOnly(value: Boolean) {
         _mcpLocalhostOnly.value = value
         ioScope.launch { dataStore.edit { it[MCP_LOCALHOST_ONLY] = value } }
@@ -151,6 +157,11 @@ object PreferenceRepository {
                 if (value.isNullOrBlank()) it.remove(LAST_AWS_PROFILE) else it[LAST_AWS_PROFILE] = value
             }
         }
+    }
+
+    fun setTopologyPacketAnimationEnabled(value: Boolean) {
+        _topologyPacketAnimationEnabled.value = value
+        ioScope.launch { dataStore.edit { it[TOPOLOGY_PACKET_ANIMATION_ENABLED] = value } }
     }
 
     fun setCloseTabFocus(value: CloseTabFocus) {

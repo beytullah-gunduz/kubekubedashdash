@@ -34,6 +34,8 @@ sealed class Screen(val title: String) {
         data object PersistentVolumeClaims : Main("Persistent Volume Claims")
         data object StorageClasses : Main("Storage Classes")
 
+        data object ClusterTopology : Main("Topology")
+
         data object Connecting : Main("Connecting")
         data class ConnectionError(val error: String?, val retryCountdown: Int) : Main("Connection Error")
     }

@@ -33,6 +33,7 @@ private fun kindHelpText(kind: String): String = when (kind.lowercase()) {
     "persistentvolumeclaim", "persistentvolumeclaims" -> "Persistent volume claims request storage for pods."
     "storageclass", "storageclasses" -> "Storage classes describe the available storage profiles."
     "endpoint", "endpoints" -> "Endpoints list the IP addresses backing a Service."
+    "topology" -> "No traffic graph available — this namespace has no workloads with routable connections."
     else -> "No resources found in the current namespace."
 }
 
