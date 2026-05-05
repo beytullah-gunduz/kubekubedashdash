@@ -54,8 +54,8 @@ object McpServerManager {
             stop()
         }
 
-        val localhostOnly = PreferenceRepository.mcpLocalhostOnly
-        _requireAuth = PreferenceRepository.mcpRequireAuth
+        val localhostOnly = PreferenceRepository.mcpLocalhostOnly.value
+        _requireAuth = PreferenceRepository.mcpRequireAuth.value
         val bindHost = if (localhostOnly) "127.0.0.1" else "0.0.0.0"
 
         _bearerToken = if (_requireAuth) {

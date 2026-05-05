@@ -12,19 +12,23 @@ import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 object PreferenceRepository {
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
-
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val json = Json { ignoreUnknownKeys = true }
 
+    // ── Preference keys ───────────────────────────────────────────────────────
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
@@ -39,200 +43,156 @@ object PreferenceRepository {
     private val DEMO_PODS_MIN by lazy { intPreferencesKey("demo_pods_min") }
     private val DEMO_PODS_MAX by lazy { intPreferencesKey("demo_pods_max") }
     private val EVENT_TRIAGE_PRESETS by lazy { stringPreferencesKey("event_triage_presets") }
-
-    var themeMode: ThemeMode
-        get() = runBlocking {
-            val name = dataStore.data.firstOrNull()?.get(THEME_MODE) ?: return@runBlocking ThemeMode.SYSTEM
-            runCatching { ThemeMode.valueOf(name) }.getOrDefault(ThemeMode.SYSTEM)
-        }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[THEME_MODE] = value.name
-                }
-            }
-        }
-
-    var mcpServerEnabled: Boolean
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_SERVER_ENABLED) ?: false }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[MCP_SERVER_ENABLED] = value
-                }
-            }
-        }
-
-    fun mcpServerEnabled(): Flow<Boolean> = dataStore.data.map {
-        it[MCP_SERVER_ENABLED] ?: false
-    }
-
-    var mcpLocalhostOnly: Boolean
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_LOCALHOST_ONLY) ?: true }
-        set(value) {
-            runBlocking { dataStore.edit { it[MCP_LOCALHOST_ONLY] = value } }
-        }
-
-    fun mcpLocalhostOnly(): Flow<Boolean> = dataStore.data.map { it[MCP_LOCALHOST_ONLY] ?: true }
-
-    var mcpRequireAuth: Boolean
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_REQUIRE_AUTH) ?: true }
-        set(value) {
-            runBlocking { dataStore.edit { it[MCP_REQUIRE_AUTH] = value } }
-        }
-
-    fun mcpRequireAuth(): Flow<Boolean> = dataStore.data.map { it[MCP_REQUIRE_AUTH] ?: true }
-
-    var mcpServerPort: Int
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_SERVER_PORT) ?: 3001 }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[MCP_SERVER_PORT] = value
-                }
-            }
-        }
-
-    var lastAwsProfile: String?
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(LAST_AWS_PROFILE) }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    if (value.isNullOrBlank()) it.remove(LAST_AWS_PROFILE) else it[LAST_AWS_PROFILE] = value
-                }
-            }
-        }
-
-    var closeTabFocus: CloseTabFocus
-        get() = runBlocking {
-            val raw = dataStore.data.firstOrNull()?.get(CLOSE_TAB_FOCUS)
-            decodeCloseTabFocus(raw)
-        }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[CLOSE_TAB_FOCUS] = value.name
-                }
-            }
-        }
-
-    fun closeTabFocus(): Flow<CloseTabFocus> = dataStore.data.map {
-        decodeCloseTabFocus(it[CLOSE_TAB_FOCUS])
-    }
-
-    private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() }
-        ?: CloseTabFocus.LEFT_NEIGHBOR
-
-    var tabStripVisibility: TabStripVisibility
-        get() = runBlocking {
-            val raw = dataStore.data.firstOrNull()?.get(TAB_STRIP_VISIBILITY)
-            decodeTabStripVisibility(raw)
-        }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[TAB_STRIP_VISIBILITY] = value.name
-                }
-            }
-        }
-
-    fun tabStripVisibility(): Flow<TabStripVisibility> = dataStore.data.map {
-        decodeTabStripVisibility(it[TAB_STRIP_VISIBILITY])
-    }
-
-    private fun decodeTabStripVisibility(raw: String?): TabStripVisibility = raw?.let { runCatching { TabStripVisibility.valueOf(it) }.getOrNull() }
-        ?: TabStripVisibility.AUTO
-
-    var sidebarCollapsed: Boolean
-        get() = runBlocking { dataStore.data.firstOrNull()?.get(SIDEBAR_COLLAPSED) ?: false }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[SIDEBAR_COLLAPSED] = value
-                }
-            }
-        }
-
-    fun sidebarCollapsed(): Flow<Boolean> = dataStore.data.map {
-        it[SIDEBAR_COLLAPSED] ?: false
-    }
-
-    var demoTargets: DemoClusterSimulator.Targets
-        get() = runBlocking {
-            val p = dataStore.data.firstOrNull()
-            DemoClusterSimulator.Targets(
-                nodesMin = p?.get(DEMO_NODES_MIN) ?: 30,
-                nodesMax = p?.get(DEMO_NODES_MAX) ?: 100,
-                podsMin = p?.get(DEMO_PODS_MIN) ?: 300,
-                podsMax = p?.get(DEMO_PODS_MAX) ?: 1000,
-            )
-        }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[DEMO_NODES_MIN] = value.nodesMin
-                    it[DEMO_NODES_MAX] = value.nodesMax
-                    it[DEMO_PODS_MIN] = value.podsMin
-                    it[DEMO_PODS_MAX] = value.podsMax
-                }
-            }
-        }
-
-    var customPresets: List<EventTriagePreset>
-        get() = runBlocking {
-            val raw = dataStore.data.firstOrNull()?.get(EVENT_TRIAGE_PRESETS)
-            decodePresets(raw)
-        }
-        set(value) {
-            runBlocking {
-                dataStore.edit {
-                    it[EVENT_TRIAGE_PRESETS] = json.encodeToString(value)
-                }
-            }
-        }
-
-    fun customPresets(): Flow<List<EventTriagePreset>> = dataStore.data.map { prefs ->
-        decodePresets(prefs[EVENT_TRIAGE_PRESETS])
-    }
-
-    private fun decodePresets(raw: String?): List<EventTriagePreset> {
-        if (raw.isNullOrBlank()) return emptyList()
-        return try {
-            json.decodeFromString<List<EventTriagePreset>>(raw)
-        } catch (_: SerializationException) {
-            emptyList()
-        } catch (_: IllegalArgumentException) {
-            emptyList()
-        }
-    }
-
     private val PINNED_RESOURCES by lazy { stringPreferencesKey("pinned_resources") }
+    private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
 
-    fun pinnedResources(): Flow<Set<String>> = dataStore.data.map { prefs ->
-        prefs[PINNED_RESOURCES]?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+    // ── Hot-cached StateFlows ─────────────────────────────────────────────────
+    private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    private val _mcpServerEnabled = MutableStateFlow(false)
+    val mcpServerEnabled: StateFlow<Boolean> = _mcpServerEnabled.asStateFlow()
+
+    private val _mcpServerPort = MutableStateFlow(3001)
+    val mcpServerPort: StateFlow<Int> = _mcpServerPort.asStateFlow()
+
+    private val _mcpLocalhostOnly = MutableStateFlow(true)
+    val mcpLocalhostOnly: StateFlow<Boolean> = _mcpLocalhostOnly.asStateFlow()
+
+    private val _mcpRequireAuth = MutableStateFlow(true)
+    val mcpRequireAuth: StateFlow<Boolean> = _mcpRequireAuth.asStateFlow()
+
+    private val _lastAwsProfile = MutableStateFlow<String?>(null)
+    val lastAwsProfile: StateFlow<String?> = _lastAwsProfile.asStateFlow()
+
+    private val _closeTabFocus = MutableStateFlow(CloseTabFocus.LEFT_NEIGHBOR)
+    val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
+
+    private val _tabStripVisibility = MutableStateFlow(TabStripVisibility.AUTO)
+    val tabStripVisibility: StateFlow<TabStripVisibility> = _tabStripVisibility.asStateFlow()
+
+    private val _sidebarCollapsed = MutableStateFlow(false)
+    val sidebarCollapsed: StateFlow<Boolean> = _sidebarCollapsed.asStateFlow()
+
+    private val _demoTargets = MutableStateFlow(
+        DemoClusterSimulator.Targets(nodesMin = 30, nodesMax = 100, podsMin = 300, podsMax = 1000),
+    )
+    val demoTargets: StateFlow<DemoClusterSimulator.Targets> = _demoTargets.asStateFlow()
+
+    private val _customPresets = MutableStateFlow<List<EventTriagePreset>>(emptyList())
+    val customPresets: StateFlow<List<EventTriagePreset>> = _customPresets.asStateFlow()
+
+    private val _pinnedResources = MutableStateFlow<Set<String>>(emptySet())
+    val pinnedResources: StateFlow<Set<String>> = _pinnedResources.asStateFlow()
+
+    private val _clusterColorOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
+    val clusterColorOverrides: StateFlow<Map<String, String>> = _clusterColorOverrides.asStateFlow()
+
+    // ── Seed all flows from DataStore on startup ──────────────────────────────
+    init {
+        ioScope.launch {
+            dataStore.data.collect { p ->
+                _themeMode.value = p[THEME_MODE]
+                    ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
+                    ?: ThemeMode.SYSTEM
+                _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
+                _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
+                _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
+                _mcpRequireAuth.value = p[MCP_REQUIRE_AUTH] ?: true
+                _lastAwsProfile.value = p[LAST_AWS_PROFILE]
+                _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
+                _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
+                _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
+                _demoTargets.value = DemoClusterSimulator.Targets(
+                    nodesMin = p[DEMO_NODES_MIN] ?: 30,
+                    nodesMax = p[DEMO_NODES_MAX] ?: 100,
+                    podsMin = p[DEMO_PODS_MIN] ?: 300,
+                    podsMax = p[DEMO_PODS_MAX] ?: 1000,
+                )
+                _customPresets.value = decodePresets(p[EVENT_TRIAGE_PRESETS])
+                _pinnedResources.value = p[PINNED_RESOURCES]
+                    ?.split(",")?.filter { it.isNotBlank() }?.toSet()
+                    ?: emptySet()
+                _clusterColorOverrides.value = decodeColorOverrides(p[CLUSTER_COLOR_OVERRIDES])
+            }
+        }
+    }
+
+    // ── Setters ───────────────────────────────────────────────────────────────
+    fun setThemeMode(value: ThemeMode) {
+        _themeMode.value = value
+        ioScope.launch { dataStore.edit { it[THEME_MODE] = value.name } }
+    }
+
+    fun setMcpServerEnabled(value: Boolean) {
+        _mcpServerEnabled.value = value
+        ioScope.launch { dataStore.edit { it[MCP_SERVER_ENABLED] = value } }
+    }
+
+    fun setMcpServerPort(value: Int) {
+        _mcpServerPort.value = value
+        ioScope.launch { dataStore.edit { it[MCP_SERVER_PORT] = value } }
+    }
+
+    fun setMcpLocalhostOnly(value: Boolean) {
+        _mcpLocalhostOnly.value = value
+        ioScope.launch { dataStore.edit { it[MCP_LOCALHOST_ONLY] = value } }
+    }
+
+    fun setMcpRequireAuth(value: Boolean) {
+        _mcpRequireAuth.value = value
+        ioScope.launch { dataStore.edit { it[MCP_REQUIRE_AUTH] = value } }
+    }
+
+    fun setLastAwsProfile(value: String?) {
+        _lastAwsProfile.value = value
+        ioScope.launch {
+            dataStore.edit {
+                if (value.isNullOrBlank()) it.remove(LAST_AWS_PROFILE) else it[LAST_AWS_PROFILE] = value
+            }
+        }
+    }
+
+    fun setCloseTabFocus(value: CloseTabFocus) {
+        _closeTabFocus.value = value
+        ioScope.launch { dataStore.edit { it[CLOSE_TAB_FOCUS] = value.name } }
+    }
+
+    fun setTabStripVisibility(value: TabStripVisibility) {
+        _tabStripVisibility.value = value
+        ioScope.launch { dataStore.edit { it[TAB_STRIP_VISIBILITY] = value.name } }
+    }
+
+    fun setSidebarCollapsed(value: Boolean) {
+        _sidebarCollapsed.value = value
+        ioScope.launch { dataStore.edit { it[SIDEBAR_COLLAPSED] = value } }
+    }
+
+    fun setDemoTargets(value: DemoClusterSimulator.Targets) {
+        _demoTargets.value = value
+        ioScope.launch {
+            dataStore.edit {
+                it[DEMO_NODES_MIN] = value.nodesMin
+                it[DEMO_NODES_MAX] = value.nodesMax
+                it[DEMO_PODS_MIN] = value.podsMin
+                it[DEMO_PODS_MAX] = value.podsMax
+            }
+        }
+    }
+
+    fun setCustomPresets(value: List<EventTriagePreset>) {
+        _customPresets.value = value
+        ioScope.launch { dataStore.edit { it[EVENT_TRIAGE_PRESETS] = json.encodeToString(value) } }
     }
 
     suspend fun togglePinned(id: String) {
         dataStore.edit { prefs ->
-            val current = prefs[PINNED_RESOURCES]?.split(",")?.filter { it.isNotBlank() }?.toMutableSet() ?: mutableSetOf()
+            val current = prefs[PINNED_RESOURCES]
+                ?.split(",")?.filter { it.isNotBlank() }?.toMutableSet()
+                ?: mutableSetOf()
             if (id in current) current.remove(id) else current.add(id)
             prefs[PINNED_RESOURCES] = current.joinToString(",")
         }
-    }
-
-    private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
-
-    private fun decodeColorOverrides(raw: String?): Map<String, String> {
-        if (raw.isNullOrBlank()) return emptyMap()
-        return try {
-            json.decodeFromString<Map<String, String>>(raw)
-        } catch (_: Exception) {
-            emptyMap()
-        }
-    }
-
-    fun clusterColorOverrides(): Flow<Map<String, String>> = dataStore.data.map { prefs ->
-        decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES])
     }
 
     suspend fun setClusterColor(context: String, hex: String) {
@@ -248,6 +208,31 @@ object PreferenceRepository {
             val current = decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
             current.remove(context)
             prefs[CLUSTER_COLOR_OVERRIDES] = json.encodeToString(current)
+        }
+    }
+
+    // ── Decoders ──────────────────────────────────────────────────────────────
+    private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() } ?: CloseTabFocus.LEFT_NEIGHBOR
+
+    private fun decodeTabStripVisibility(raw: String?): TabStripVisibility = raw?.let { runCatching { TabStripVisibility.valueOf(it) }.getOrNull() } ?: TabStripVisibility.AUTO
+
+    private fun decodePresets(raw: String?): List<EventTriagePreset> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            json.decodeFromString<List<EventTriagePreset>>(raw)
+        } catch (_: SerializationException) {
+            emptyList()
+        } catch (_: IllegalArgumentException) {
+            emptyList()
+        }
+    }
+
+    private fun decodeColorOverrides(raw: String?): Map<String, String> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            json.decodeFromString<Map<String, String>>(raw)
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
 }

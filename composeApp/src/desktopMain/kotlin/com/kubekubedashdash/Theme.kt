@@ -28,7 +28,7 @@ import org.jetbrains.compose.resources.Font
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
 object ThemeManager {
-    private var _mode by mutableStateOf(PreferenceRepository.themeMode)
+    private var _mode by mutableStateOf(PreferenceRepository.themeMode.value)
     private var _isDarkTheme by mutableStateOf(_mode != ThemeMode.LIGHT)
 
     val mode: ThemeMode get() = _mode
@@ -38,7 +38,7 @@ object ThemeManager {
 
     fun setMode(newMode: ThemeMode) {
         _mode = newMode
-        PreferenceRepository.themeMode = newMode
+        PreferenceRepository.setThemeMode(newMode)
         when (newMode) {
             ThemeMode.LIGHT -> _isDarkTheme = false
             ThemeMode.DARK -> _isDarkTheme = true

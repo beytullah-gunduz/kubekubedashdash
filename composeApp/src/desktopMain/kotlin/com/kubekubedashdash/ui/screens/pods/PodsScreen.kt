@@ -57,7 +57,7 @@ fun PodsScreen(
     // A non-null Set is the explicit allowlist after the user touched the menu.
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
     var labelQuery by rememberSaveable { mutableStateOf("") }
-    val pinnedIds by PreferenceRepository.pinnedResources().collectAsState(initial = emptySet())
+    val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(selectPodUid) {

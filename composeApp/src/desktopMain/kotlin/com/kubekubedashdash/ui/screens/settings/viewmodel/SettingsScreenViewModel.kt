@@ -15,10 +15,8 @@ import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsScreenViewModel : ViewModel() {
@@ -47,7 +45,7 @@ class SettingsScreenViewModel : ViewModel() {
     fun toggleMcpServer(enabled: Boolean) {
         isMcpServerEnabled = enabled
         viewModelScope.launch(Dispatchers.IO) {
-            PreferenceRepository.mcpServerEnabled = enabled
+            PreferenceRepository.setMcpServerEnabled(enabled)
             if (enabled) {
                 McpServerManager.start(mcpServerPort)
                 mcpBearerToken = McpServerManager.bearerToken
@@ -61,7 +59,7 @@ class SettingsScreenViewModel : ViewModel() {
     fun updateMcpServerPort(port: Int) {
         mcpServerPort = port
         viewModelScope.launch(Dispatchers.IO) {
-            PreferenceRepository.mcpServerPort = port
+            PreferenceRepository.setMcpServerPort(port)
             if (isMcpServerEnabled) {
                 McpServerManager.start(port)
                 mcpBearerToken = McpServerManager.bearerToken
@@ -71,27 +69,27 @@ class SettingsScreenViewModel : ViewModel() {
 
     fun updateMcpLocalhostOnly(v: Boolean) {
         mcpLocalhostOnly = v
-        viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.mcpLocalhostOnly = v }
+        PreferenceRepository.setMcpLocalhostOnly(v)
     }
 
     fun updateMcpRequireAuth(v: Boolean) {
         mcpRequireAuth = v
-        viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.mcpRequireAuth = v }
+        PreferenceRepository.setMcpRequireAuth(v)
     }
 
-    private val _closeTabFocus = MutableStateFlow(PreferenceRepository.closeTabFocus)
+    private val _closeTabFocus = MutableStateFlow(PreferenceRepository.closeTabFocus.value)
     val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
 
     fun setCloseTabFocus(value: CloseTabFocus) {
-        PreferenceRepository.closeTabFocus = value
+        PreferenceRepository.setCloseTabFocus(value)
         _closeTabFocus.value = value
     }
 
-    private val _tabStripVisibility = MutableStateFlow(PreferenceRepository.tabStripVisibility)
+    private val _tabStripVisibility = MutableStateFlow(PreferenceRepository.tabStripVisibility.value)
     val tabStripVisibility: StateFlow<TabStripVisibility> = _tabStripVisibility.asStateFlow()
 
     fun setTabStripVisibility(value: TabStripVisibility) {
-        PreferenceRepository.tabStripVisibility = value
+        PreferenceRepository.setTabStripVisibility(value)
         _tabStripVisibility.value = value
     }
 
@@ -110,7 +108,7 @@ class SettingsScreenViewModel : ViewModel() {
     // Single source of truth for mock targets. Seeded from preferences so the Settings
     // screen shows the saved values even before the simulator boots, and updated
     // synchronously by setMockTargets so slider drags reflect immediately.
-    private val _mockTargets = MutableStateFlow(PreferenceRepository.demoTargets)
+    private val _mockTargets = MutableStateFlow(PreferenceRepository.demoTargets.value)
     val mockTargets: StateFlow<DemoClusterSimulator.Targets> = _mockTargets.asStateFlow()
 
     private val _mockPaused = MutableStateFlow(false)
@@ -124,7 +122,7 @@ class SettingsScreenViewModel : ViewModel() {
     fun setMockTargets(t: DemoClusterSimulator.Targets) {
         _mockTargets.value = t
         MockClusterProvider.simulators().forEach { it.setTargets(t) }
-        viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.demoTargets = t }
+        PreferenceRepository.setDemoTargets(t)
     }
 
     fun stopAllMockResources() {
@@ -137,9 +135,7 @@ class SettingsScreenViewModel : ViewModel() {
 
     // ── Cluster color overrides ────────────────────────────────────────────────
 
-    val clusterColorOverrides: StateFlow<Map<String, String>> =
-        PreferenceRepository.clusterColorOverrides()
-            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    val clusterColorOverrides: StateFlow<Map<String, String>> = PreferenceRepository.clusterColorOverrides
 
     fun setClusterColor(context: String, hex: String) {
         viewModelScope.launch { PreferenceRepository.setClusterColor(context, hex) }
@@ -151,10 +147,10 @@ class SettingsScreenViewModel : ViewModel() {
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            mcpServerPort = PreferenceRepository.mcpServerPort
-            mcpLocalhostOnly = PreferenceRepository.mcpLocalhostOnly
-            mcpRequireAuth = PreferenceRepository.mcpRequireAuth
-            val enabled = PreferenceRepository.mcpServerEnabled
+            mcpServerPort = PreferenceRepository.mcpServerPort.value
+            mcpLocalhostOnly = PreferenceRepository.mcpLocalhostOnly.value
+            mcpRequireAuth = PreferenceRepository.mcpRequireAuth.value
+            val enabled = PreferenceRepository.mcpServerEnabled.value
             if (enabled && !McpServerManager.isRunning) {
                 McpServerManager.start(mcpServerPort)
             }

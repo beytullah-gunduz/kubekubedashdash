@@ -44,7 +44,7 @@ internal fun ClusterSummaryCard(
     onClick: (() -> Unit)? = null,
     onErrorChipClick: (() -> Unit)? = null,
 ) {
-    val colorOverrides by PreferenceRepository.clusterColorOverrides().collectAsState(initial = emptyMap())
+    val colorOverrides by PreferenceRepository.clusterColorOverrides.collectAsState()
     val clusterColor = ClusterColor.effectiveColor(summary.contextName, colorOverrides)
 
     Card(

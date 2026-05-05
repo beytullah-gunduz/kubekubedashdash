@@ -104,7 +104,7 @@ class EksDiscoveryViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val list = AwsProfileReader.listProfiles()
             _profiles.value = list
-            val preselect = PreferenceRepository.lastAwsProfile?.takeIf { name ->
+            val preselect = PreferenceRepository.lastAwsProfile.value?.takeIf { name ->
                 list.any { it.name == name }
             } ?: list.firstOrNull()?.name
             _selectedProfile.value = preselect
@@ -127,7 +127,7 @@ class EksDiscoveryViewModel(
     fun proceedFromProfile() {
         val profile = _selectedProfile.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            PreferenceRepository.lastAwsProfile = profile
+            PreferenceRepository.setLastAwsProfile(profile)
         }
         _step.value = EksDiscoveryStep.PICK_REGIONS
     }

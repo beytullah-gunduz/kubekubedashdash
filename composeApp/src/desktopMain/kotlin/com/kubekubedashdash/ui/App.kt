@@ -274,10 +274,8 @@ fun App(
     KubeDashTheme {
         val appViewModel = AppViewModel.instance
 
-        val sidebarCollapsed by PreferenceRepository.sidebarCollapsed()
-            .collectAsState(initial = PreferenceRepository.sidebarCollapsed)
-        val tabStripVisibility by PreferenceRepository.tabStripVisibility()
-            .collectAsState(initial = PreferenceRepository.tabStripVisibility)
+        val sidebarCollapsed by PreferenceRepository.sidebarCollapsed.collectAsState()
+        val tabStripVisibility by PreferenceRepository.tabStripVisibility.collectAsState()
 
         val tabs by workspace.tabs.collectAsState()
         val activeTabKey by workspace.activeTabKey.collectAsState()
@@ -296,7 +294,7 @@ fun App(
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
-        val clusterColorOverrides by PreferenceRepository.clusterColorOverrides().collectAsState(initial = emptyMap())
+        val clusterColorOverrides by PreferenceRepository.clusterColorOverrides.collectAsState()
 
         // Nothing to show until bootstrap populates the tab list.
         if (tabs.isEmpty()) return@KubeDashTheme
@@ -428,7 +426,7 @@ fun App(
                                 onNamespaceChange = { titleVm?.setSelectedNamespace(it) },
                                 sidebarCollapsed = sidebarCollapsed,
                                 onToggleSidebar = {
-                                    PreferenceRepository.sidebarCollapsed = !sidebarCollapsed
+                                    PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
                                 },
                                 onOpenSettings = { workspace.showSettings() },
                                 chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {

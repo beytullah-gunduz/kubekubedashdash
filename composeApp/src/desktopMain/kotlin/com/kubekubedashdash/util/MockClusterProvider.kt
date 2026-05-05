@@ -182,7 +182,7 @@ object MockClusterProvider {
         } finally {
             seedClient.close()
         }
-        val targets = PreferenceRepository.demoTargets
+        val targets = PreferenceRepository.demoTargets.value
         val simulator = DemoClusterSimulator(server.createClient(), targets).also { it.start() }
         log.info("Mock Kubernetes server '{}' started", label)
         return MockInstance(label, server, simulator)

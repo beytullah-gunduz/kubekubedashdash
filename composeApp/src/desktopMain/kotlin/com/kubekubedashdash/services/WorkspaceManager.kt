@@ -120,7 +120,7 @@ object WorkspaceManager {
      * window close per Decision 2 of `.docs/multi-cluster-plan.md`.
      */
     fun closeTab(workspace: Workspace, tabKey: String) {
-        val behavior = PreferenceRepository.closeTabFocus
+        val behavior = PreferenceRepository.closeTabFocus.value
         when (val removed = workspace.removeTab(tabKey, behavior)) {
             is WorkspaceTab.Cluster -> removed.session.close()
             WorkspaceTab.Logs, WorkspaceTab.AllClusters, null -> { /* no resources to free */ }

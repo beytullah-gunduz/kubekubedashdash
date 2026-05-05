@@ -85,7 +85,7 @@ fun WindowTabStrip(
     onDragCancelledTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val clusterColorOverrides by PreferenceRepository.clusterColorOverrides().collectAsState(initial = emptyMap())
+    val clusterColorOverrides by PreferenceRepository.clusterColorOverrides.collectAsState()
     val clusterTabs = tabs.filterIsInstance<WorkspaceTab.Cluster>()
 
     val contexts: List<String> = clusterTabs.map { ct ->

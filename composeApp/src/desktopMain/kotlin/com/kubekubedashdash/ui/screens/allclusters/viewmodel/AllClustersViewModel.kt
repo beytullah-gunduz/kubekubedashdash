@@ -299,7 +299,7 @@ class AllClustersViewModel private constructor() : ViewModel() {
             filters = _filters.value,
         )
         _userPresets.value = _userPresets.value + preset
-        PreferenceRepository.customPresets = _userPresets.value
+        PreferenceRepository.setCustomPresets(_userPresets.value)
     }
 
     /**
@@ -309,7 +309,7 @@ class AllClustersViewModel private constructor() : ViewModel() {
     fun deletePreset(id: String) {
         if (id == "critical-only" || id == "this-cluster-only") return
         _userPresets.value = _userPresets.value.filterNot { it.id == id }
-        PreferenceRepository.customPresets = _userPresets.value
+        PreferenceRepository.setCustomPresets(_userPresets.value)
     }
 
     // ── Aggregated stats card data ────────────────────────────────────────────────
@@ -415,7 +415,7 @@ class AllClustersViewModel private constructor() : ViewModel() {
             }
         }
         viewModelScope.launch {
-            PreferenceRepository.customPresets().collect { persisted ->
+            PreferenceRepository.customPresets.collect { persisted ->
                 _userPresets.value = persisted
             }
         }
