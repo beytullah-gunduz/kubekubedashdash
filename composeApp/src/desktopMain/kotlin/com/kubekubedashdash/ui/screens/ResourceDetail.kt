@@ -64,6 +64,7 @@ fun ResourceDetailScreen(
     name: String,
     namespace: String?,
     onNavigate: (Screen) -> Unit,
+    onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onClose: (() -> Unit)? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
@@ -120,7 +121,7 @@ fun ResourceDetailScreen(
 
             if (kind.lowercase() == "pod" && namespace != null) {
                 OutlinedButton(
-                    onClick = { onNavigate(Screen.Detail.PodLogs(name, namespace)) },
+                    onClick = { onOpenLogs(name, namespace, null) },
                     shape = RoundedCornerShape(6.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
                     border = ButtonDefaults.outlinedButtonBorder(true).copy(

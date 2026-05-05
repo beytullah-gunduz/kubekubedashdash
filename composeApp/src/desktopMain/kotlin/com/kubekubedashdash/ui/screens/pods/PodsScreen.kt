@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 fun PodsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
+    onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     selectPodUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
@@ -152,7 +153,7 @@ fun PodsScreen(
                                 selectedPodUid = pod.uid
                                 onNavigate(Screen.Detail.PodDetail(pod))
                             },
-                            onViewLogs = { pod -> onNavigate(Screen.Detail.PodLogs(pod.name, pod.namespace)) },
+                            onViewLogs = { pod -> onOpenLogs(pod.name, pod.namespace, null) },
                             pinnedIds = pinnedIds,
                             onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
                         )

@@ -18,7 +18,6 @@ import com.kubekubedashdash.ui.screens.deployments.DeploymentsScreen
 import com.kubekubedashdash.ui.screens.events.EventDetailScreen
 import com.kubekubedashdash.ui.screens.events.EventsScreen
 import com.kubekubedashdash.ui.screens.generic.GenericResourceScreen
-import com.kubekubedashdash.ui.screens.logviewer.LogViewerScreen
 import com.kubekubedashdash.ui.screens.namespaces.NamespaceDetailScreen
 import com.kubekubedashdash.ui.screens.namespaces.NamespacesScreen
 import com.kubekubedashdash.ui.screens.nodes.NodeDetailPanel
@@ -37,6 +36,7 @@ fun ContentRouter(
     onSelectCluster: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
     onOpenLogsTab: () -> Unit = {},
+    onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
 
@@ -53,7 +53,7 @@ fun ContentRouter(
             is Screen.Main.Nodes -> NodesScreen(searchQuery, onNavigate, target.selectNodeName)
             is Screen.Main.Namespaces -> NamespacesScreen(searchQuery, onNavigate)
             is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)
-            is Screen.Main.Pods -> PodsScreen(searchQuery, onNavigate, target.selectPodUid)
+            is Screen.Main.Pods -> PodsScreen(searchQuery, onNavigate, onOpenLogs, target.selectPodUid)
             is Screen.Main.Deployments -> DeploymentsScreen(searchQuery, onNavigate)
             is Screen.Main.Services -> ServicesScreen(searchQuery, onNavigate)
             is Screen.Main.StatefulSets -> GenericResourceScreen("StatefulSet", searchQuery, sourceFlow = reactiveClient.statefulSets)
@@ -80,12 +80,13 @@ fun ExtraPaneRouter(
     onNavigate: (Screen) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
 ) {
     Box(modifier = modifier) {
         when (screen) {
-            is Screen.Detail.EventDetail -> EventDetailScreen(screen.event, onNavigate, onClose)
+            is Screen.Detail.EventDetail -> EventDetailScreen(screen.event, onNavigate, onOpenLogs, onClose)
 
-            is Screen.Detail.ResourceDetail -> ResourceDetailScreen(screen.kind, screen.name, screen.namespace, onNavigate, onClose)
+            is Screen.Detail.ResourceDetail -> ResourceDetailScreen(screen.kind, screen.name, screen.namespace, onNavigate, onOpenLogs, onClose)
 
             is Screen.Detail.PodDetail -> PodDetailPanel(
                 pod = screen.pod,
@@ -106,8 +107,6 @@ fun ExtraPaneRouter(
             is Screen.Detail.ServiceDetail -> ServiceDetailScreen(screen.service, onNavigate, onClose)
 
             is Screen.Detail.NamespaceDetail -> NamespaceDetailScreen(screen.namespace, onNavigate, onClose)
-
-            is Screen.Detail.PodLogs -> LogViewerScreen(screen.podName, screen.namespace, screen.containerName, onClose)
 
             else -> { /* nothing */ }
         }

@@ -56,6 +56,7 @@ internal fun SessionPaneContent(
     onSelectCluster: () -> Unit,
     onDiscoverEks: () -> Unit,
     onOpenLogsTab: () -> Unit,
+    onOpenLogs: (String, String, String?) -> Unit,
 ) {
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
@@ -134,6 +135,7 @@ internal fun SessionPaneContent(
                             onSelectCluster = onSelectCluster,
                             onDiscoverEks = onDiscoverEks,
                             onOpenLogsTab = onOpenLogsTab,
+                            onOpenLogs = onOpenLogs,
                         )
                     }
                 },
@@ -156,6 +158,7 @@ internal fun SessionPaneContent(
                         onNavigate = sessionVm::navigate,
                         onClose = { sessionVm.closeExtraPane() },
                         modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
+                        onOpenLogs = onOpenLogs,
                     )
                 }
             }

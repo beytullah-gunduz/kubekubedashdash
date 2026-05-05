@@ -86,6 +86,7 @@ private enum class EventDetailTab(val label: String, val icon: DrawableResource)
 fun EventDetailScreen(
     event: EventInfo,
     onNavigate: (Screen) -> Unit,
+    onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onClose: (() -> Unit)? = null,
 ) {
     val kubeClient = LocalReactiveKubeClient.current
@@ -245,6 +246,7 @@ fun EventDetailScreen(
                         podLogs = podLogs,
                         podLogsLoading = podLogsLoading,
                         onNavigate = onNavigate,
+                        onOpenLogs = onOpenLogs,
                     )
 
                     1 -> GenericYamlTab("Event", event.objectRef, event.namespace)
@@ -265,6 +267,7 @@ private fun EventOverviewTab(
     podLogs: String?,
     podLogsLoading: Boolean,
     onNavigate: (Screen) -> Unit,
+    onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(14.dp),
@@ -445,7 +448,7 @@ private fun EventOverviewTab(
                             if (podInfo != null) {
                                 Text(
                                     "View full logs →",
-                                    modifier = Modifier.clickable { onNavigate(Screen.Detail.PodLogs(event.objectName, event.namespace)) }.padding(vertical = 4.dp),
+                                    modifier = Modifier.clickable { onOpenLogs(event.objectName, event.namespace, null) }.padding(vertical = 4.dp),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = KdPrimary,
                                     textDecoration = TextDecoration.Underline,

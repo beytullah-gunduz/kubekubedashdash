@@ -53,6 +53,7 @@ import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
+import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -157,6 +158,14 @@ fun App(
         val settingsOpen by workspace.showSettings.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
         var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
+        val onOpenLogs: (String, String, String?) -> Unit = remember(activeSession) {
+            { pod, ns, container ->
+                activeSession?.let { session ->
+                    LogStreamRegistry.openOrFocus(session, pod, ns, container)
+                    if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
+                }
+            }
+        }
         val sessionForPalette = activeSession ?: titleSession
         val paletteEntries = rememberPaletteEntries(
             activeSession = sessionForPalette,
@@ -350,6 +359,7 @@ fun App(
                                 onSelectCluster = { workspace.showClusterSelector() },
                                 onDiscoverEks = { workspace.showEksDiscovery() },
                                 onOpenLogsTab = { workspace.openLogsTab() },
+                                onOpenLogs = onOpenLogs,
                             )
 
                             WorkspaceTab.Logs -> LogsPaneContent()

@@ -70,11 +70,5 @@ sealed class Screen(val title: String) {
         data class NamespaceDetail(
             val namespace: GenericResourceInfo,
         ) : Detail("Namespace: ${namespace.name}")
-
-        data class PodLogs(
-            val podName: String,
-            val namespace: String,
-            val containerName: String? = null,
-        ) : Detail("Logs: $podName")
     }
 }
