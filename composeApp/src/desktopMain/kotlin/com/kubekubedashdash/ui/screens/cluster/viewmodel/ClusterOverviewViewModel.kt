@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import java.time.Instant
 
 internal const val CLUSTER_OVERVIEW_RECENT_LIMIT = 10
@@ -54,8 +55,8 @@ class ClusterOverviewViewModel(
             if (u != null && u.metricsAvailable) {
                 val cpuF = if (u.cpuCapacityMillis > 0) u.cpuUsedMillis.toFloat() / u.cpuCapacityMillis else 0f
                 val memF = if (u.memoryCapacityBytes > 0) u.memoryUsedBytes.toFloat() / u.memoryCapacityBytes else 0f
-                _cpuHistory.value = (_cpuHistory.value + cpuF).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE)
-                _memHistory.value = (_memHistory.value + memF).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE)
+                _cpuHistory.update { (it + cpuF).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
+                _memHistory.update { (it + memF).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
             }
         }
         .map { s -> if (s is ResourceState.Success) s.data else null }
@@ -81,7 +82,7 @@ class ClusterOverviewViewModel(
             val cap = podsCapacity.value
             if (cap > 0) {
                 val frac = c.toFloat() / cap.toFloat()
-                _podsHistory.value = (_podsHistory.value + frac).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE)
+                _podsHistory.update { (it + frac).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 class NodesScreenViewModel(
@@ -65,8 +66,8 @@ class NodesScreenViewModel(
                 } else {
                     0f
                 }
-                _cpuHistory.value = (_cpuHistory.value + cpuF).takeLast(MAX_HISTORY_SIZE)
-                _memHistory.value = (_memHistory.value + memF).takeLast(MAX_HISTORY_SIZE)
+                _cpuHistory.update { (it + cpuF).takeLast(MAX_HISTORY_SIZE) }
+                _memHistory.update { (it + memF).takeLast(MAX_HISTORY_SIZE) }
             }
         }
         .map { state -> if (state is ResourceState.Success) state.data else null }
@@ -97,7 +98,7 @@ class NodesScreenViewModel(
         }
         .onEach { stats ->
             val frac = if (stats.capacity > 0) stats.count.toFloat() / stats.capacity.toFloat() else 0f
-            _podsHistory.value = (_podsHistory.value + frac).takeLast(MAX_HISTORY_SIZE)
+            _podsHistory.update { (it + frac).takeLast(MAX_HISTORY_SIZE) }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 

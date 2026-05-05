@@ -7,6 +7,7 @@ import io.fabric8.kubernetes.client.internal.KubeConfigUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.io.File
@@ -78,7 +79,7 @@ class KubeConnectionManager : Closeable {
         log.debug("connect step 4/4: fetch /version")
         val v = _client!!.kubernetesVersion
         log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, config.masterUrl)
-        _connectionVersion.value++
+        _connectionVersion.update { it + 1 }
         Result.success("${v.major}.${v.minor}")
     } catch (t: Throwable) {
         // Catch Throwable, not just Exception, so that NoClassDefFoundError /
@@ -95,7 +96,7 @@ class KubeConnectionManager : Closeable {
         _connectedContext = label
         clearConnectionError()
         log.info("Connected via pre-built client label={}", label)
-        _connectionVersion.value++
+        _connectionVersion.update { it + 1 }
         Result.success("mock")
     } catch (t: Throwable) {
         log.error("Failed to connect with pre-built client label={}", label, t)
@@ -109,7 +110,7 @@ class KubeConnectionManager : Closeable {
         _mockHandle = handle
         _connectedContext = handle.label
         clearConnectionError()
-        _connectionVersion.value++
+        _connectionVersion.update { it + 1 }
         Result.success("mock")
     } catch (t: Throwable) {
         log.error("Failed to connect via mock handle", t)

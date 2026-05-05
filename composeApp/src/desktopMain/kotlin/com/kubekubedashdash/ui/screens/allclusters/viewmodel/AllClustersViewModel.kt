@@ -374,8 +374,8 @@ class AllClustersViewModel private constructor() : ViewModel() {
             if (usage != null && usage.metricsAvailable) {
                 val cpuF = if (usage.cpuCapacityMillis > 0) usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis else 0f
                 val memF = if (usage.memoryCapacityBytes > 0) usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes else 0f
-                _cpuHistory.value = (_cpuHistory.value + cpuF).takeLast(20)
-                _memHistory.value = (_memHistory.value + memF).takeLast(20)
+                _cpuHistory.update { (it + cpuF).takeLast(20) }
+                _memHistory.update { (it + memF).takeLast(20) }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -411,7 +411,7 @@ class AllClustersViewModel private constructor() : ViewModel() {
                 val count = info?.podsCount ?: 0
                 if (cap > 0) count.toFloat() / cap else 0f
             }.collect { frac ->
-                _podsHistory.value = (_podsHistory.value + frac).takeLast(20)
+                _podsHistory.update { (it + frac).takeLast(20) }
             }
         }
         viewModelScope.launch {

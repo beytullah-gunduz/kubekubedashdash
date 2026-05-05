@@ -12,6 +12,7 @@ import com.kubekubedashdash.model.WorkspaceTab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Where a freshly-picked cluster lands when the user confirms it from the
@@ -107,7 +108,7 @@ object WorkspaceManager {
                 val newWorkspace = Workspace()
                 val session = ClusterSession()
                 newWorkspace.addSession(session, makeActive = true)
-                _workspaces.value = _workspaces.value + newWorkspace
+                _workspaces.update { it + newWorkspace }
                 session.viewModel.connectToCluster(ctx)
             }
         }
@@ -195,7 +196,7 @@ object WorkspaceManager {
                 is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
                 WorkspaceTab.AllClusters -> newWorkspace.ensureAllClustersTabAt(0)
             }
-            _workspaces.value = _workspaces.value + newWorkspace
+            _workspaces.update { it + newWorkspace }
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         }
         // single-tab window dropped over empty space → no-op, use title bar to move
@@ -210,7 +211,7 @@ object WorkspaceManager {
     fun closeWorkspace(workspaceId: WorkspaceId) {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
         workspace.tabs.value.filterIsInstance<WorkspaceTab.Cluster>().forEach { it.session.close() }
-        _workspaces.value = _workspaces.value.filterNot { it.id == workspaceId }
+        _workspaces.update { list -> list.filterNot { it.id == workspaceId } }
         reconcileAllClustersTab()
     }
 
@@ -238,7 +239,7 @@ object WorkspaceManager {
             initialPosition = WindowPosition.Absolute(atScreenX.dp, atScreenY.dp),
         )
         newWorkspace.addSession(session, makeActive = true)
-        _workspaces.value = _workspaces.value + newWorkspace
+        _workspaces.update { it + newWorkspace }
         if (source.tabs.value.isEmpty()) {
             closeWorkspace(source.id)
         }
@@ -362,7 +363,7 @@ object WorkspaceManager {
      * Re-entrancy guard prevents infinite recursion when empty-workspace cleanup
      * inside this method calls [closeWorkspace], which also calls this function.
      */
-    private var reconciling = false
+    @Volatile private var reconciling = false
 
     private fun reconcileAllClustersTab() {
         if (reconciling) return

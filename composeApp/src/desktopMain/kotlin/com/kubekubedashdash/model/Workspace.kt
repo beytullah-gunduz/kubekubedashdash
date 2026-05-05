@@ -72,6 +72,7 @@ class Workspace(
     private val _activeTabKey = MutableStateFlow<String?>(null)
     val activeTabKey: StateFlow<String?> = _activeTabKey.asStateFlow()
 
+    private val historyLock = Any()
     private val activationHistory = ArrayDeque<SessionId>()
     private val historyCapacity = 16
 
@@ -114,7 +115,7 @@ class Workspace(
      * to bring the window to front when navigating to a cluster tab from another window.
      * Null while the window has not yet attached or after it has been destroyed.
      */
-    var awtWindow: java.awt.Window? = null
+    @Volatile var awtWindow: java.awt.Window? = null
 
     /** Snapshot accessor — the active cluster session at this instant, or null if empty or Logs tab active. */
     val activeSession: ClusterSession?
@@ -128,10 +129,12 @@ class Workspace(
         if (key == null) return
         val tab = _tabs.value.firstOrNull { it.key == key } ?: return
         val session = (tab as? WorkspaceTab.Cluster)?.session ?: return
-        if (activationHistory.lastOrNull() == session.id) return
-        activationHistory.addLast(session.id)
-        while (activationHistory.size > historyCapacity) {
-            activationHistory.removeFirst()
+        synchronized(historyLock) {
+            if (activationHistory.lastOrNull() == session.id) return
+            activationHistory.addLast(session.id)
+            while (activationHistory.size > historyCapacity) {
+                activationHistory.removeFirst()
+            }
         }
     }
 
@@ -151,12 +154,13 @@ class Workspace(
         val closedIndex = _tabs.value.indexOf(tab)
         val newList = _tabs.value.filterNot { it.key == key }
         if (tab is WorkspaceTab.Cluster) {
-            activationHistory.removeAll { it == tab.session.id }
+            synchronized(historyLock) {
+                activationHistory.removeAll { it == tab.session.id }
+            }
         }
+        val newActive = if (_activeTabKey.value == key) computeNewActiveKey(closedIndex, newList, behavior) else _activeTabKey.value
+        if (newActive != _activeTabKey.value) _activeTabKey.value = newActive
         _tabs.value = newList
-        if (_activeTabKey.value == key) {
-            _activeTabKey.value = computeNewActiveKey(closedIndex, newList, behavior)
-        }
         return tab
     }
 
@@ -175,7 +179,7 @@ class Workspace(
             CloseTabFocus.PREVIOUS_ACTIVE -> {
                 val clusterTabs = newList.filterIsInstance<WorkspaceTab.Cluster>()
                 val livingIds = clusterTabs.mapTo(HashSet(clusterTabs.size)) { it.session.id }
-                val recoveredId = activationHistory.lastOrNull { it in livingIds }
+                val recoveredId = synchronized(historyLock) { activationHistory.lastOrNull { it in livingIds } }
                 val recoveredKey = recoveredId?.let { id ->
                     newList.firstOrNull { it is WorkspaceTab.Cluster && it.session.id == id }?.key
                 }
