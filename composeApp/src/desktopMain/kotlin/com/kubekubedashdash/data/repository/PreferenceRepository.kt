@@ -139,7 +139,6 @@ object PreferenceRepository {
         ioScope.launch { dataStore.edit { it[MCP_SERVER_PORT] = value } }
     }
 
-<<<<<<< HEAD
     fun setMcpLocalhostOnly(value: Boolean) {
         _mcpLocalhostOnly.value = value
         ioScope.launch { dataStore.edit { it[MCP_LOCALHOST_ONLY] = value } }

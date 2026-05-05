@@ -75,7 +75,7 @@ fun ClusterTopologyGraph(
     viewModel: ClusterTopologyViewModel,
     namespace: String,
 ) {
-    val packetAnimationEnabled by PreferenceRepository.topologyPacketAnimationEnabled().collectAsState(initial = true)
+    val packetAnimationEnabled by PreferenceRepository.topologyPacketAnimationEnabled.collectAsState()
     val truncatedNode = graph.nodes.find { it.id == "__truncated__" }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -95,7 +95,7 @@ fun ClusterTopologyGraph(
                     tint = KdTextSecondary,
                 )
             }
-            IconButton(onClick = { PreferenceRepository.topologyPacketAnimationEnabled = !packetAnimationEnabled }) {
+            IconButton(onClick = { PreferenceRepository.setTopologyPacketAnimationEnabled(!packetAnimationEnabled) }) {
                 Icon(
                     painterResource(Res.drawable.graph_3_24),
                     contentDescription = if (packetAnimationEnabled) "Packets on" else "Packets off",
