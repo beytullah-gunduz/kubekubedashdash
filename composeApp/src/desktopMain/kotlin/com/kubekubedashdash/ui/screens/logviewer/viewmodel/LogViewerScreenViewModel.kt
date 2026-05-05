@@ -49,12 +49,16 @@ class LogViewerScreenViewModel(
                 flowOf(emptyList())
             } else {
                 reactiveClient.streamPodLogs(pod, ns, container)
-                    .runningFold(emptyList<String>()) { acc, line -> acc + line }
+                    .runningFold(emptyList<String>()) { acc, line -> (acc + line).takeLast(MAX_BUFFERED_LINES) }
                     .onEach { if (it.isNotEmpty()) _loading.value = false }
             }
         }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    companion object {
+        private const val MAX_BUFFERED_LINES = 10_000
+    }
 
     fun setStreamParams(podName: String, namespace: String, containerName: String?) {
         _loading.value = true

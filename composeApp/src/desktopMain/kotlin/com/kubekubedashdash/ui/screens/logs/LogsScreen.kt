@@ -23,10 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +39,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.util.SystemDirectories
+import kotlinx.coroutines.flow.sample
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Desktop
 import java.io.File
@@ -53,21 +54,20 @@ private fun openLogsFolder() {
     }
 }
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun LogsScreen() {
     val entries by AppLogStore.entries.collectAsState()
     val listState = rememberLazyListState()
     var isReady by remember { mutableStateOf(false) }
-    var itemCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         isReady = true
-    }
-
-    LaunchedEffect(entries.size) {
-        if (entries.isNotEmpty() && isReady) {
-            listState.animateScrollToItem(entries.lastIndex)
-        }
+        snapshotFlow { entries.size }
+            .sample(200)
+            .collect { size ->
+                if (size > 0) listState.animateScrollToItem(size - 1)
+            }
     }
 
     if (!isReady) return

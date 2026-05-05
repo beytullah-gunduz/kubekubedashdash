@@ -403,7 +403,7 @@ class DemoClusterSimulator(
         )
     }
 
-    private fun doCleanExit(ns: String, name: String) {
+    private suspend fun doCleanExit(ns: String, name: String) {
         val app = name.substringBefore("-")
         runCatching {
             val existing = client.pods().inNamespace(ns).withName(name).get() ?: return
@@ -433,12 +433,12 @@ class DemoClusterSimulator(
             client.pods().inNamespace(ns).resource(updated).update()
         }
         // brief pause so the UI can show Succeeded before delete
-        Thread.sleep(random.nextLong(1_000, 3_001))
+        delay(random.nextLong(1_000, 3_001))
         runCatching { client.pods().inNamespace(ns).withName(name).delete() }
         log.debug("Pod clean-exited: {}/{}", ns, name)
     }
 
-    private fun doFailExit(ns: String, name: String) {
+    private suspend fun doFailExit(ns: String, name: String) {
         val app = name.substringBefore("-")
         runCatching {
             val existing = client.pods().inNamespace(ns).withName(name).get() ?: return
@@ -469,7 +469,7 @@ class DemoClusterSimulator(
         }
         emitEvent("Warning", "Failed", "Pod failed with exit code 137", "Pod", ns, name, "kubelet")
         // Stay visible for a while so the user sees the failed pod.
-        Thread.sleep(random.nextLong(30_000, 120_001))
+        delay(random.nextLong(30_000, 120_001))
         runCatching { client.pods().inNamespace(ns).withName(name).delete() }
         emitEvent("Normal", "Killing", "Stopping container $app", "Pod", ns, name, "kubelet")
         log.debug("Pod fail-exited: {}/{}", ns, name)
@@ -507,7 +507,7 @@ class DemoClusterSimulator(
         log.debug("Pod crash-tick: {}/{} restartCount={}", ns, name, restartCount)
     }
 
-    private fun doCrashFinal(ns: String, name: String, restartCount: Int) {
+    private suspend fun doCrashFinal(ns: String, name: String, restartCount: Int) {
         val app = name.substringBefore("-")
         runCatching {
             val existing = client.pods().inNamespace(ns).withName(name).get() ?: return
@@ -536,7 +536,7 @@ class DemoClusterSimulator(
                 .build()
             client.pods().inNamespace(ns).resource(updated).update()
         }
-        Thread.sleep(random.nextLong(30_000, 60_001))
+        delay(random.nextLong(30_000, 60_001))
         runCatching { client.pods().inNamespace(ns).withName(name).delete() }
         emitEvent("Normal", "Killing", "Stopping container $app", "Pod", ns, name, "kubelet")
         log.debug("Pod crash-final: {}/{}", ns, name)

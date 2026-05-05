@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -88,7 +89,7 @@ fun GenericResourceScreen(
     namespacedKind: Boolean = true,
     sourceFlow: StateFlow<ResourceState<List<GenericResourceInfo>>>,
 ) {
-    val viewModel = remember(kind, sourceFlow) { GenericResourceScreenViewModel(sourceFlow) }
+    val viewModel = viewModel(key = kind) { GenericResourceScreenViewModel(sourceFlow) }
     val state by viewModel.state.collectAsState()
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }

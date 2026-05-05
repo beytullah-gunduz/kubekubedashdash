@@ -36,6 +36,7 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -85,6 +86,7 @@ fun EksDiscoveryModal(
 ) {
     val reactiveClient = com.kubekubedashdash.ui.LocalReactiveKubeClient.current
     val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel(reactiveClient) }
+    LaunchedEffect(Unit) { viewModel.reset() }
     val step by viewModel.step.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()

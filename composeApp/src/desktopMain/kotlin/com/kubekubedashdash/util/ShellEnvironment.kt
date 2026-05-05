@@ -47,16 +47,6 @@ object ShellEnvironment {
         return found
     }
 
-    fun inheritShellPath() {
-        val path = augmentedPath
-        try {
-            setEnvironmentVariable("PATH", path)
-            log.debug("System.getenv(PATH) updated via reflection")
-        } catch (e: Exception) {
-            log.debug("Could not mutate System.getenv(PATH): {}", e.message)
-        }
-    }
-
     private fun scanForExecutable(command: String): String? {
         for (dir in augmentedPath.split(sep)) {
             val candidate = File(dir.trim(), command)
@@ -159,13 +149,5 @@ object ShellEnvironment {
             log.debug("shell PATH query failed: {}", e.message)
             return null
         }
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun setEnvironmentVariable(key: String, value: String) {
-        val env = System.getenv()
-        val field = env.javaClass.getDeclaredField("m")
-        field.isAccessible = true
-        (field.get(env) as MutableMap<String, String>)[key] = value
     }
 }

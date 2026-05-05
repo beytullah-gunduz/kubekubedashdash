@@ -66,55 +66,64 @@ class KubeConnectionManager : Closeable {
 
     // ── Connection lifecycle ────────────────────────────────────────────────────
 
-    fun connect(context: String? = null): Result<String> = try {
-        log.info("Connecting to cluster context={}", context ?: "<default>")
-        close()
-        log.debug("connect step 1/4: Config.autoConfigure")
-        val config = Config.autoConfigure(context)
-        log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", config.masterUrl)
-        _client = KubernetesClientBuilder().withConfig(config).build()
-        _connectedContext = context ?: config.currentContext?.name
-        log.debug("connect step 3/4: clearConnectionError")
-        clearConnectionError()
-        log.debug("connect step 4/4: fetch /version")
-        val v = _client!!.kubernetesVersion
-        log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, config.masterUrl)
-        _connectionVersion.update { it + 1 }
-        Result.success("${v.major}.${v.minor}")
-    } catch (t: Throwable) {
-        // Catch Throwable, not just Exception, so that NoClassDefFoundError /
-        // LinkageError / OutOfMemoryError surface in the log + UI instead of
-        // disappearing into the void and leaving the app stuck on the spinner.
-        log.error("Failed to connect to cluster context={}", context, t)
-        Result.failure(if (t is Exception) t else RuntimeException(t))
+    private val connectLock = Any()
+
+    fun connect(context: String? = null): Result<String> = synchronized(connectLock) {
+        try {
+            log.info("Connecting to cluster context={}", context ?: "<default>")
+            close()
+            log.debug("connect step 1/4: Config.autoConfigure")
+            val config = Config.autoConfigure(context)
+            log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", config.masterUrl)
+            val c = KubernetesClientBuilder().withConfig(config).build()
+            _client = c
+            _connectedContext = context ?: config.currentContext?.name
+            log.debug("connect step 3/4: clearConnectionError")
+            clearConnectionError()
+            log.debug("connect step 4/4: fetch /version")
+            val v = c.kubernetesVersion
+            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, config.masterUrl)
+            _connectionVersion.update { it + 1 }
+            Result.success("${v.major}.${v.minor}")
+        } catch (t: Throwable) {
+            // Catch Throwable, not just Exception, so that NoClassDefFoundError /
+            // LinkageError / OutOfMemoryError surface in the log + UI instead of
+            // disappearing into the void and leaving the app stuck on the spinner.
+            log.error("Failed to connect to cluster context={}", context, t)
+            Result.failure(if (t is Exception) t else RuntimeException(t))
+        }
     }
 
-    fun connectWithClient(client: KubernetesClient, label: String): Result<String> = try {
-        log.info("Connecting with pre-built client label={}", label)
-        close()
-        _client = client
-        _connectedContext = label
-        clearConnectionError()
-        log.info("Connected via pre-built client label={}", label)
-        _connectionVersion.update { it + 1 }
-        Result.success("mock")
-    } catch (t: Throwable) {
-        log.error("Failed to connect with pre-built client label={}", label, t)
-        Result.failure(if (t is Exception) t else RuntimeException(t))
+    fun connectWithClient(client: KubernetesClient, label: String): Result<String> = synchronized(connectLock) {
+        try {
+            log.info("Connecting with pre-built client label={}", label)
+            close()
+            _client = client
+            _connectedContext = label
+            clearConnectionError()
+            log.info("Connected via pre-built client label={}", label)
+            _connectionVersion.update { it + 1 }
+            Result.success("mock")
+        } catch (t: Throwable) {
+            log.error("Failed to connect with pre-built client label={}", label, t)
+            Result.failure(if (t is Exception) t else RuntimeException(t))
+        }
     }
 
-    fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = try {
-        log.info("Connecting via mock handle '{}'", handle.label)
-        close()
-        _client = handle.client
-        _mockHandle = handle
-        _connectedContext = handle.label
-        clearConnectionError()
-        _connectionVersion.update { it + 1 }
-        Result.success("mock")
-    } catch (t: Throwable) {
-        log.error("Failed to connect via mock handle", t)
-        Result.failure(if (t is Exception) t else RuntimeException(t))
+    fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = synchronized(connectLock) {
+        try {
+            log.info("Connecting via mock handle '{}'", handle.label)
+            close()
+            _client = handle.client
+            _mockHandle = handle
+            _connectedContext = handle.label
+            clearConnectionError()
+            _connectionVersion.update { it + 1 }
+            Result.success("mock")
+        } catch (t: Throwable) {
+            log.error("Failed to connect via mock handle", t)
+            Result.failure(if (t is Exception) t else RuntimeException(t))
+        }
     }
 
     fun getContexts(): List<String> = try {

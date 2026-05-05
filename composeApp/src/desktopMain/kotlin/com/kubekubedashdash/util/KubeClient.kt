@@ -799,10 +799,12 @@ class KubeClient(
         launch(Dispatchers.IO) {
             try {
                 watch.output.bufferedReader().use { reader ->
-                    reader.lineSequence().forEach { trySend(it) }
+                    for (line in reader.lineSequence()) send(line)
                 }
             } catch (e: Exception) {
-                log.debug("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
+                log.warn("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
+                trySend("[stream error: ${e.message}]")
+                close(e)
             }
         }
         awaitClose {

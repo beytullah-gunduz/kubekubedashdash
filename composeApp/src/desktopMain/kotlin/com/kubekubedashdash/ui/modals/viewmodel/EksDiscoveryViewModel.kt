@@ -284,11 +284,7 @@ class EksDiscoveryViewModel(
         _step.value = EksDiscoveryStep.PICK_PROFILE
     }
 
-    fun cancel() {
-        activeJob?.cancel()
-        activeJob = null
-        _busy.value = false
-    }
+    fun cancel() = reset()
 
     val anyImportSucceeded: Boolean
         get() = _importRows.value.any { it.state is ImportRowState.Done }

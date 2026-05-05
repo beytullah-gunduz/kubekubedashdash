@@ -126,15 +126,20 @@ object MockClusterProvider {
         addHandle(instance)
     }
 
-    internal fun releaseInternal(handle: MockClusterHandle): Unit = synchronized(lock) {
-        val instance = instances[handle.label] ?: return
-        if (!instance.handles.remove(handle)) return
-        runCatching { handle.client.close() }
-        log.info("Mock cluster '{}' released (refCount={})", handle.label, instance.handles.size)
-        if (instance.handles.isEmpty()) {
-            tearDownInstance(instance)
-            instances.remove(handle.label)
+    internal fun releaseInternal(handle: MockClusterHandle) {
+        val toTearDown: MockInstance? = synchronized(lock) {
+            val instance = instances[handle.label] ?: return
+            if (!instance.handles.remove(handle)) return
+            runCatching { handle.client.close() }
+            log.info("Mock cluster '{}' released (refCount={})", handle.label, instance.handles.size)
+            if (instance.handles.isEmpty()) {
+                instances.remove(handle.label)
+                instance
+            } else {
+                null
+            }
         }
+        if (toTearDown != null) tearDownInstance(toTearDown)
         refreshAggregateFlows()
     }
 

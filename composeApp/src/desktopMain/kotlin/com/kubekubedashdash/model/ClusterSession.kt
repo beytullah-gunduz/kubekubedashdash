@@ -28,13 +28,25 @@ class ClusterSession(
 ) : Closeable,
     ViewModelStoreOwner {
     override val viewModelStore: ViewModelStore = ViewModelStore()
-
     private val sessionScope = CoroutineScope(SupervisorJob())
 
-    val connectionManager: KubeConnectionManager = KubeConnectionManager()
-    val reactiveClient: ReactiveKubeClient = ReactiveKubeClient(sessionScope, connectionManager)
-    val client: KubeClient = KubeClient(connectionManager)
-    val viewModel: SessionViewModel = SessionViewModel(reactiveClient, sessionScope)
+    val connectionManager: KubeConnectionManager
+    val reactiveClient: ReactiveKubeClient
+    val client: KubeClient
+    val viewModel: SessionViewModel
+
+    init {
+        try {
+            connectionManager = KubeConnectionManager()
+            reactiveClient = ReactiveKubeClient(sessionScope, connectionManager)
+            client = KubeClient(connectionManager)
+            viewModel = SessionViewModel(reactiveClient, sessionScope)
+        } catch (t: Throwable) {
+            sessionScope.cancel()
+            runCatching { viewModelStore.clear() }
+            throw t
+        }
+    }
 
     val scope: CoroutineScope get() = sessionScope
 

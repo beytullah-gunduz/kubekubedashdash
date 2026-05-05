@@ -4,7 +4,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.res.useResource
@@ -16,7 +18,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
-import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
 import org.slf4j.LoggerFactory
 
@@ -34,8 +35,6 @@ fun main() {
         crashLogger.error("Uncaught exception in thread {}", thread.name, throwable)
     }
 
-    ShellEnvironment.inheritShellPath()
-
     application {
         val workspaces by WorkspaceManager.workspaces.collectAsState()
         val appIcon = remember { BitmapPainter(useResource("icon.png", ::loadImageBitmap)) }
@@ -45,8 +44,12 @@ fun main() {
         // window-close fires below); when the list is empty, no Window blocks
         // are emitted, but Compose's `application` block doesn't exit on its
         // own — so we trigger exitApplication() explicitly here.
-        LaunchedEffect(workspaces.isEmpty()) {
-            if (workspaces.isEmpty()) exitApplication()
+        // Guard: only exit if workspaces were non-empty at least once, so the app
+        // doesn't quit immediately at startup before WorkspaceManager finishes init.
+        var hasEverBeenNonEmpty by remember { mutableStateOf(false) }
+        LaunchedEffect(workspaces) {
+            if (workspaces.isNotEmpty()) hasEverBeenNonEmpty = true
+            if (hasEverBeenNonEmpty && workspaces.isEmpty()) exitApplication()
         }
 
         workspaces.forEach { workspace ->

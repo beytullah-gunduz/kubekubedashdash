@@ -110,14 +110,11 @@ val generateScreenshots by tasks.registering(JavaExec::class) {
     classpath(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("com.kubekubedashdash.screenshots.GenerateScreenshotsKt")
     workingDir = rootProject.rootDir
-    jvmArgs("--add-opens=java.base/java.util=ALL-UNNAMED")
 }
 
 compose.desktop {
     application {
         mainClass = "com.kubekubedashdash.MainKt"
-        jvmArgs += "--add-opens=java.base/java.util=ALL-UNNAMED"
-
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "KubeKubeDashDash"

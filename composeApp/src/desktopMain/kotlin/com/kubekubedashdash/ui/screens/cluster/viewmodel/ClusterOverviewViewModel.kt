@@ -76,16 +76,13 @@ class ClusterOverviewViewModel(
         .map { s -> if (s is ResourceState.Success) s.data.podsCount else 0 }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val podsLoaded: StateFlow<Boolean> = combine(podsCount, podsCapacity) { c, cap -> cap > 0 || c > 0 }
-        .onEach { _ ->
-            val c = podsCount.value
-            val cap = podsCapacity.value
-            if (cap > 0) {
-                val frac = c.toFloat() / cap.toFloat()
-                _podsHistory.update { (it + frac).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
-            }
+    val podsLoaded: StateFlow<Boolean> = combine(podsCount, podsCapacity) { c, cap ->
+        if (cap > 0) {
+            val frac = c.toFloat() / cap.toFloat()
+            _podsHistory.update { (it + frac).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        cap > 0 || c > 0
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val topNodesByPressure: StateFlow<List<NodeResourceUsage>> = reactiveClient.nodeUsages
         .map { byName ->

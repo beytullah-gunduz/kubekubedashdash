@@ -25,7 +25,6 @@ import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
 import com.kubekubedashdash.util.MockClusterProvider
-import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,8 +73,6 @@ fun main() {
     Thread.setDefaultUncaughtExceptionHandler { thread, t ->
         log.error("uncaught in {}", thread.name, t)
     }
-    ShellEnvironment.inheritShellPath()
-
     val outDir = File("docs/screenshots").also { it.mkdirs() }
     log.info("Writing screenshots to {}", outDir.absolutePath)
 

@@ -57,6 +57,7 @@ class SessionViewModel(
     val retryCountdown: StateFlow<Int> = _retryCountdown.asStateFlow()
 
     private var retryJob: Job? = null
+    private var connectJob: Job? = null
 
     init {
         observeConnectionHealth()
@@ -147,12 +148,13 @@ class SessionViewModel(
 
     fun connectToCluster(ctx: String) {
         retryJob?.cancel()
+        connectJob?.cancel()
         _retryCountdown.value = 0
         _selectedContext.value = ctx
         _isConnecting.value = true
         _connectionError.value = null
         _currentScreen.value = Screen.Main.Connecting
-        scope.launch(Dispatchers.IO) {
+        connectJob = scope.launch(Dispatchers.IO) {
             val isMock = MockClusterProvider.isMockContext(ctx)
             val result = if (isMock) {
                 // Bare prefix means "mint a new mock" (picker path); a `#N` label

@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
@@ -84,7 +85,7 @@ fun DeploymentResourceGraphTab(
     namespace: String,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
-    val viewModel = remember(reactiveClient) { DeploymentResourceGraphViewModel(reactiveClient) }
+    val viewModel = viewModel { DeploymentResourceGraphViewModel(reactiveClient) }
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
     val graph by viewModel.graph.collectAsState()

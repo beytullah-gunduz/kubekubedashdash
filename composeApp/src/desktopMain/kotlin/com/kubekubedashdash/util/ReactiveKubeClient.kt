@@ -158,7 +158,7 @@ class ReactiveKubeClient(
             }
         }
         .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
     private fun <R : HasMetadata, T> namespacedInformerFlow(
         inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
@@ -222,7 +222,7 @@ class ReactiveKubeClient(
             }
         }
         .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
     // ── Polling helpers (for non-watchable resources) ────────────────────────────
 
@@ -251,7 +251,7 @@ class ReactiveKubeClient(
             }
         }
         .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
     private fun <T> pollingStateFlow(
         intervalMs: Long = 5_000,
@@ -276,7 +276,7 @@ class ReactiveKubeClient(
             }
         }
         .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
     private fun <T> directPollingStateFlow(
         intervalMs: Long = 5_000,
@@ -297,7 +297,7 @@ class ReactiveKubeClient(
             }
         }
         .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), initial)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), initial)
 
     // ── Mapping: Pods ───────────────────────────────────────────────────────────
 
@@ -1020,10 +1020,12 @@ class ReactiveKubeClient(
         launch(Dispatchers.IO) {
             try {
                 watch.output.bufferedReader().use { reader ->
-                    reader.lineSequence().forEach { trySend(it) }
+                    for (line in reader.lineSequence()) send(line)
                 }
             } catch (e: Exception) {
-                log.debug("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
+                log.warn("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
+                trySend("[stream error: ${e.message}]")
+                close(e)
             }
         }
         awaitClose {
