@@ -367,7 +367,7 @@ fun App(
                             WorkspaceTab.AllClusters -> AllClustersScreen()
                         }
                     }
-                    if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(36.dp))
+                    if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(DrawerHeaderHeight))
                 }
 
                 val prereq = prerequisiteResult
@@ -437,9 +437,7 @@ fun App(
                 }
 
                 Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                    LogDrawer(state = drawerState, onStateChange = { drawerState = it }) {
-                        LogDrawerContent()
-                    }
+                    LogDrawer(state = drawerState, onStateChange = { drawerState = it })
                 }
             }
         }
