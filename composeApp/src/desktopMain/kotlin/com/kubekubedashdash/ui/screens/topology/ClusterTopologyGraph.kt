@@ -62,8 +62,8 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.graph_3_24
+import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
 import com.kubekubedashdash.ui.screens.topology.viewmodel.ClusterTopologyViewModel
@@ -89,7 +89,7 @@ fun ClusterTopologyGraph(
         ) {
             IconButton(onClick = { viewModel.load(namespace) }) {
                 Icon(
-                    painterResource(Res.drawable.close_filled),
+                    painterResource(Res.drawable.swap_horiz_filled),
                     contentDescription = "Refresh topology",
                     modifier = Modifier.size(16.dp),
                     tint = KdTextSecondary,
