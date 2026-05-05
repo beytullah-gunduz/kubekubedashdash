@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -22,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -153,6 +156,7 @@ fun App(
 
         val settingsOpen by workspace.showSettings.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
+        var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
         val sessionForPalette = activeSession ?: titleSession
         val paletteEntries = rememberPaletteEntries(
             activeSession = sessionForPalette,
@@ -182,6 +186,16 @@ fun App(
                             // Cmd+, / Ctrl+,: open Settings (macOS standard).
                             event.key == Key.Comma && metaOrCtrl -> {
                                 workspace.showSettings()
+                                true
+                            }
+
+                            // Cmd+J / Ctrl+J: toggle log drawer (mirrors browser devtools muscle memory).
+                            event.key == Key.J && metaOrCtrl -> {
+                                drawerState = when (drawerState) {
+                                    LogDrawerState.HIDDEN -> LogDrawerState.EXPANDED
+                                    LogDrawerState.COLLAPSED -> LogDrawerState.EXPANDED
+                                    LogDrawerState.EXPANDED -> LogDrawerState.HIDDEN
+                                }
                                 true
                             }
 
@@ -343,6 +357,7 @@ fun App(
                             WorkspaceTab.AllClusters -> AllClustersScreen()
                         }
                     }
+                    if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(36.dp))
                 }
 
                 val prereq = prerequisiteResult
@@ -409,6 +424,10 @@ fun App(
                         entries = paletteEntries,
                         onDismiss = { paletteOpen = false },
                     )
+                }
+
+                Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                    LogDrawer(state = drawerState, onStateChange = { drawerState = it })
                 }
             }
         }
