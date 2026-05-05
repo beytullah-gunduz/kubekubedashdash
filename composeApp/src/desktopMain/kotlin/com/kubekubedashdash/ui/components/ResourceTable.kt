@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -60,6 +61,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -133,6 +136,10 @@ fun ResourceTable(
     pinnable: Boolean = false,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
+    /** When true, renders a leading checkbox column. Selection state is managed internally. */
+    selectable: Boolean = false,
+    /** Notified whenever the checked-row set changes. Only fires when [selectable] is true. */
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
     var sortColumn by remember { mutableStateOf(defaultSortColumn) }
     var sortAscending by remember { mutableStateOf(defaultSortAscending) }
@@ -148,6 +155,12 @@ fun ResourceTable(
             if (sortAscending) sorted else sorted.reversed()
         }
     }
+
+    var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+    // Reset anchor when the row list changes so stale indexes don't produce wrong ranges.
+    var lastSelectedIndex by remember(sortedRows) { mutableStateOf(-1) }
+    // Tracks whether Shift is held so checkbox clicks can extend the selection range.
+    var isShiftHeld by remember { mutableStateOf(false) }
 
     var keyboardIndex by remember(sortedRows) { mutableStateOf(-1) }
     val coroutineScope = rememberCoroutineScope()
@@ -165,6 +178,19 @@ fun ResourceTable(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (selectable) {
+                val allSelected = sortedRows.isNotEmpty() && sortedRows.all { it.id in selectedIds }
+                Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) {
+                    Checkbox(
+                        checked = allSelected,
+                        onCheckedChange = { checked ->
+                            val newIds = if (checked) sortedRows.map { it.id }.toSet() else emptySet()
+                            selectedIds = newIds
+                            onSelectionChange?.invoke(newIds)
+                        },
+                    )
+                }
+            }
             if (pinnable) Spacer(Modifier.width(30.dp))
             columns.forEachIndexed { index, col ->
                 Row(
@@ -226,6 +252,11 @@ fun ResourceTable(
                         .focusRequester(focusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
+                            // Track Shift for range-select — handled before the KeyDown gate.
+                            if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight) {
+                                isShiftHeld = event.type == KeyEventType.KeyDown
+                                return@onPreviewKeyEvent false
+                            }
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 Key.DirectionDown -> {
@@ -264,6 +295,15 @@ fun ResourceTable(
                                     consumed
                                 }
 
+                                Key.A -> if (selectable && (event.isMetaPressed || event.isCtrlPressed)) {
+                                    val allIds = sortedRows.map { it.id }.toSet()
+                                    selectedIds = allIds
+                                    onSelectionChange?.invoke(allIds)
+                                    true
+                                } else {
+                                    false
+                                }
+
                                 else -> false
                             }
                         }
@@ -288,6 +328,25 @@ fun ResourceTable(
                                 isPinned = (row.pinId ?: row.id) in pinnedIds,
                                 onTogglePin = if (onTogglePin != null) {
                                     { onTogglePin(row.pinId ?: row.id) }
+                                } else {
+                                    null
+                                },
+                                selectable = selectable,
+                                isChecked = row.id in selectedIds,
+                                onSelectClick = if (selectable) {
+                                    {
+                                        val newIds = if (isShiftHeld && lastSelectedIndex >= 0) {
+                                            val start = minOf(lastSelectedIndex, index)
+                                            val end = maxOf(lastSelectedIndex, index)
+                                            val rangeIds = sortedRows.slice(start..end).map { it.id }.toSet()
+                                            if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
+                                        } else {
+                                            if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
+                                        }
+                                        selectedIds = newIds
+                                        lastSelectedIndex = index
+                                        onSelectionChange?.invoke(newIds)
+                                    }
                                 } else {
                                     null
                                 },
@@ -327,6 +386,9 @@ private fun TableRowItem(
     pinnable: Boolean = false,
     isPinned: Boolean = false,
     onTogglePin: (() -> Unit)? = null,
+    selectable: Boolean = false,
+    isChecked: Boolean = false,
+    onSelectClick: (() -> Unit)? = null,
 ) {
     var hovered by remember { mutableStateOf(false) }
     // Switched from zebra striping to a hairline border between rows.
@@ -364,6 +426,17 @@ private fun TableRowItem(
             .padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selectable) {
+            Box(
+                modifier = Modifier.width(30.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Checkbox(
+                    checked = isChecked,
+                    onCheckedChange = { onSelectClick?.invoke() },
+                )
+            }
+        }
         if (pinnable) {
             Box(
                 modifier = Modifier.width(30.dp).clickable(enabled = onTogglePin != null) { onTogglePin?.invoke() },
