@@ -1280,6 +1280,358 @@ class ReactiveKubeClient(
         return ResourceGraph(graphNodes, edges)
     }
 
+    // ── On-demand: Cluster Topology Graph ───────────────────────────────────────
+
+    fun getClusterTopologyGraph(namespace: String): ResourceGraph {
+        log.debug("Building cluster topology graph for namespace={}", namespace)
+        val graphNodes = mutableListOf<ResourceGraphNode>()
+        val edges = mutableListOf<ResourceGraphEdge>()
+        val addedNodeIds = mutableSetOf<String>()
+
+        fun addNode(node: ResourceGraphNode) {
+            if (addedNodeIds.add(node.id)) graphNodes.add(node)
+        }
+        fun addEdge(sourceId: String, targetId: String) {
+            edges.add(ResourceGraphEdge(sourceId, targetId))
+        }
+
+        val isAllNamespaces = namespace == "All Namespaces"
+
+        // Step 1: Ingresses
+        val ingresses = try {
+            if (isAllNamespaces) {
+                k8s.network().v1().ingresses().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.network().v1().ingresses().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch Ingresses for topology graph: {}", e.message)
+            emptyList()
+        }
+        // Map service name+namespace -> ingress id for later edge building
+        val ingressServiceEdges = mutableListOf<Triple<String, String, String>>() // (ingId, svcName, svcNs)
+        for (ing in ingresses) {
+            val ingUid = ing.metadata?.uid ?: continue
+            val ingId = "Ingress:$ingUid"
+            val ingNs = ing.metadata?.namespace ?: namespace
+            addNode(ResourceGraphNode(ingId, ing.metadata?.name ?: "", "Ingress", null))
+            ing.spec?.rules?.forEach { rule ->
+                rule.http?.paths?.forEach { path ->
+                    val svcName = path.backend?.service?.name ?: return@forEach
+                    ingressServiceEdges.add(Triple(ingId, svcName, ingNs))
+                }
+            }
+        }
+
+        // Step 2: Services + External nodes
+        val services = try {
+            if (isAllNamespaces) {
+                k8s.services().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.services().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch Services for topology graph: {}", e.message)
+            emptyList()
+        }
+        // Map svcName+ns -> svcId
+        val svcIdByNameNs = mutableMapOf<String, String>()
+        for (svc in services) {
+            val svcUid = svc.metadata?.uid ?: continue
+            val svcId = "Service:$svcUid"
+            val svcNs = svc.metadata?.namespace ?: ""
+            val svcName = svc.metadata?.name ?: ""
+            svcIdByNameNs["$svcName/$svcNs"] = svcId
+            addNode(ResourceGraphNode(svcId, svcName, "Service", svc.spec?.type))
+
+            // External nodes
+            val lbIngresses = svc.status?.loadBalancer?.ingress ?: emptyList()
+            for (lbIng in lbIngresses) {
+                val key = lbIng.ip?.takeIf { it.isNotBlank() } ?: lbIng.hostname?.takeIf { it.isNotBlank() } ?: continue
+                val extId = "External:$key"
+                addNode(ResourceGraphNode(extId, key, "External", null))
+                addEdge(extId, svcId)
+            }
+            val externalIPs = svc.spec?.externalIPs ?: emptyList()
+            for (ip in externalIPs) {
+                val extId = "External:$ip"
+                addNode(ResourceGraphNode(extId, ip, "External", null))
+                addEdge(extId, svcId)
+            }
+        }
+        // Connect ingress -> service edges
+        for ((ingId, svcName, svcNs) in ingressServiceEdges) {
+            val svcId = svcIdByNameNs["$svcName/$svcNs"] ?: continue
+            addEdge(ingId, svcId)
+        }
+
+        // Step 3: Pods -> WorkloadGroups
+        val allPods = try {
+            if (isAllNamespaces) {
+                k8s.pods().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.pods().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch Pods for topology graph: {}", e.message)
+            emptyList()
+        }
+        val allRS = try {
+            if (isAllNamespaces) {
+                k8s.apps().replicaSets().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.apps().replicaSets().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch ReplicaSets for topology graph: {}", e.message)
+            emptyList()
+        }
+        val allJobs = try {
+            if (isAllNamespaces) {
+                k8s.batch().v1().jobs().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.batch().v1().jobs().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch Jobs for topology graph: {}", e.message)
+            emptyList()
+        }
+        val allDeployments = try {
+            if (isAllNamespaces) {
+                k8s.apps().deployments().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.apps().deployments().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch Deployments for topology graph: {}", e.message)
+            emptyList()
+        }
+        val allStatefulSets = try {
+            if (isAllNamespaces) {
+                k8s.apps().statefulSets().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.apps().statefulSets().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch StatefulSets for topology graph: {}", e.message)
+            emptyList()
+        }
+        val allDaemonSets = try {
+            if (isAllNamespaces) {
+                k8s.apps().daemonSets().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.apps().daemonSets().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch DaemonSets for topology graph: {}", e.message)
+            emptyList()
+        }
+        val allCronJobs = try {
+            if (isAllNamespaces) {
+                k8s.batch().v1().cronjobs().inAnyNamespace().list().items ?: emptyList()
+            } else {
+                k8s.batch().v1().cronjobs().inNamespace(namespace).list().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to fetch CronJobs for topology graph: {}", e.message)
+            emptyList()
+        }
+
+        // Build lookup maps by UID
+        val rsByUid = allRS.associateBy { it.metadata?.uid }
+        val jobsByUid = allJobs.associateBy { it.metadata?.uid }
+        val deploymentsByUid = allDeployments.associateBy { it.metadata?.uid }
+        val statefulSetsByUid = allStatefulSets.associateBy { it.metadata?.uid }
+        val daemonSetsByUid = allDaemonSets.associateBy { it.metadata?.uid }
+        val cronJobsByUid = allCronJobs.associateBy { it.metadata?.uid }
+
+        data class RootWorkload(val uid: String, val kind: String, val name: String, val groupKey: String)
+
+        fun findRoot(pod: io.fabric8.kubernetes.api.model.Pod): RootWorkload? {
+            val ownerRef = pod.metadata?.ownerReferences?.firstOrNull() ?: return null
+            val podNs = pod.metadata?.namespace ?: ""
+            return when (ownerRef.kind) {
+                "ReplicaSet" -> {
+                    val rs = rsByUid[ownerRef.uid]
+                    val rsOwner = rs?.metadata?.ownerReferences?.firstOrNull()
+                    if (rsOwner?.kind == "Deployment") {
+                        val dep = deploymentsByUid[rsOwner.uid]
+                        if (dep != null) {
+                            RootWorkload(rsOwner.uid, "Deployment", dep.metadata?.name ?: rsOwner.name ?: "", "Deployment:${rsOwner.uid}")
+                        } else {
+                            val rsUid = ownerRef.uid ?: return null
+                            RootWorkload(rsUid, "ReplicaSet", rs?.metadata?.name ?: ownerRef.name ?: "", "ReplicaSet:$rsUid")
+                        }
+                    } else {
+                        val rsUid = ownerRef.uid ?: return null
+                        RootWorkload(rsUid, "ReplicaSet", rs?.metadata?.name ?: ownerRef.name ?: "", "ReplicaSet:$rsUid")
+                    }
+                }
+
+                "Job" -> {
+                    val job = jobsByUid[ownerRef.uid]
+                    val jobOwner = job?.metadata?.ownerReferences?.firstOrNull()
+                    if (jobOwner?.kind == "CronJob") {
+                        val cj = cronJobsByUid[jobOwner.uid]
+                        if (cj != null) {
+                            RootWorkload(jobOwner.uid, "CronJob", cj.metadata?.name ?: jobOwner.name ?: "", "CronJob:${jobOwner.uid}")
+                        } else {
+                            val jobUid = ownerRef.uid ?: return null
+                            RootWorkload(jobUid, "Job", job?.metadata?.name ?: ownerRef.name ?: "", "Job:$jobUid")
+                        }
+                    } else {
+                        val jobUid = ownerRef.uid ?: return null
+                        RootWorkload(jobUid, "Job", job?.metadata?.name ?: ownerRef.name ?: "", "Job:$jobUid")
+                    }
+                }
+
+                "StatefulSet" -> {
+                    val uid = ownerRef.uid ?: return null
+                    val ss = statefulSetsByUid[uid]
+                    RootWorkload(uid, "StatefulSet", ss?.metadata?.name ?: ownerRef.name ?: "", "StatefulSet:$uid")
+                }
+
+                "DaemonSet" -> {
+                    val uid = ownerRef.uid ?: return null
+                    val ds = daemonSetsByUid[uid]
+                    RootWorkload(uid, "DaemonSet", ds?.metadata?.name ?: ownerRef.name ?: "", "DaemonSet:$uid")
+                }
+
+                "Deployment" -> {
+                    val uid = ownerRef.uid ?: return null
+                    val dep = deploymentsByUid[uid]
+                    RootWorkload(uid, "Deployment", dep?.metadata?.name ?: ownerRef.name ?: "", "Deployment:$uid")
+                }
+
+                "CronJob" -> {
+                    val uid = ownerRef.uid ?: return null
+                    val cj = cronJobsByUid[uid]
+                    RootWorkload(uid, "CronJob", cj?.metadata?.name ?: ownerRef.name ?: "", "CronJob:$uid")
+                }
+
+                else -> null
+            }
+        }
+
+        // Group pods by root workload
+        // Key: groupId (e.g. "WorkloadGroup:Deployment:depUid" or "WorkloadGroup:Standalone:ns")
+        data class PodGroup(val root: RootWorkload?, val pods: MutableList<io.fabric8.kubernetes.api.model.Pod> = mutableListOf())
+        val groupsByKey = mutableMapOf<String, PodGroup>()
+
+        for (pod in allPods) {
+            val root = findRoot(pod)
+            val podNs = pod.metadata?.namespace ?: ""
+            val groupKey = if (root != null) {
+                "WorkloadGroup:${root.kind}:${root.uid}"
+            } else {
+                "WorkloadGroup:Standalone:$podNs"
+            }
+            groupsByKey.getOrPut(groupKey) { PodGroup(root) }.pods.add(pod)
+        }
+
+        // Add WorkloadGroup nodes
+        // Map groupId -> WorkloadGroup node id
+        val groupNodeId = mutableMapOf<String, String>() // groupKey -> nodeId
+        for ((groupKey, group) in groupsByKey) {
+            val pods = group.pods
+            val root = group.root
+            val readyCount = pods.count { pod ->
+                pod.status?.phase == "Running" &&
+                    (pod.status?.containerStatuses?.all { it.ready == true } ?: false)
+            }
+            val totalCount = pods.size
+            val statusStr = "$readyCount/$totalCount ready"
+            val rootKind = root?.kind ?: "Pod"
+            val rootUid = root?.uid ?: (pods.firstOrNull()?.metadata?.namespace ?: "unknown")
+            val nodeId = "WorkloadGroup:$rootKind:$rootUid"
+            val name = root?.name ?: "standalone"
+            groupNodeId[groupKey] = nodeId
+            addNode(ResourceGraphNode(nodeId, name, "WorkloadGroup", statusStr))
+        }
+
+        // Step 4: Service -> WorkloadGroup edges
+        for (svc in services) {
+            val selector = svc.spec?.selector ?: continue
+            if (selector.isEmpty()) continue
+            val svcNs = svc.metadata?.namespace ?: ""
+            val svcUid = svc.metadata?.uid ?: continue
+            val svcId = "Service:$svcUid"
+            val connectedGroups = mutableSetOf<String>()
+            for (pod in allPods) {
+                val podNs = pod.metadata?.namespace ?: ""
+                if (podNs != svcNs) continue
+                val podLabels = pod.metadata?.labels ?: emptyMap()
+                if (!selector.all { (k, v) -> podLabels[k] == v }) continue
+                // Find which group this pod belongs to
+                val root = findRoot(pod)
+                val groupKey = if (root != null) {
+                    "WorkloadGroup:${root.kind}:${root.uid}"
+                } else {
+                    "WorkloadGroup:Standalone:$podNs"
+                }
+                val groupId = groupNodeId[groupKey] ?: continue
+                connectedGroups.add(groupId)
+            }
+            for (groupId in connectedGroups) {
+                addEdge(svcId, groupId)
+            }
+        }
+
+        // Step 5: Mounts (volumes and service accounts per pod -> WorkloadGroup)
+        val addedMountEdges = mutableSetOf<String>()
+        for ((groupKey, group) in groupsByKey) {
+            val groupId = groupNodeId[groupKey] ?: continue
+            for (pod in group.pods) {
+                val spec = pod.spec ?: continue
+                spec.volumes?.forEach { vol ->
+                    vol.configMap?.name?.let { cmName ->
+                        val cmId = "ConfigMap:$cmName"
+                        addNode(ResourceGraphNode(cmId, cmName, "ConfigMap", null))
+                        val edgeKey = "$groupId->$cmId"
+                        if (addedMountEdges.add(edgeKey)) addEdge(groupId, cmId)
+                    }
+                    vol.secret?.secretName?.let { secretName ->
+                        val secretId = "Secret:$secretName"
+                        addNode(ResourceGraphNode(secretId, secretName, "Secret", null))
+                        val edgeKey = "$groupId->$secretId"
+                        if (addedMountEdges.add(edgeKey)) addEdge(groupId, secretId)
+                    }
+                    vol.persistentVolumeClaim?.claimName?.let { claimName ->
+                        val pvcId = "PersistentVolumeClaim:$claimName"
+                        addNode(ResourceGraphNode(pvcId, claimName, "PersistentVolumeClaim", null))
+                        val edgeKey = "$groupId->$pvcId"
+                        if (addedMountEdges.add(edgeKey)) addEdge(groupId, pvcId)
+                    }
+                }
+                val saName = spec.serviceAccountName?.takeIf { it.isNotBlank() && it != "default" }
+                if (saName != null) {
+                    val saId = "ServiceAccount:$saName"
+                    addNode(ResourceGraphNode(saId, saName, "ServiceAccount", null))
+                    val edgeKey = "$groupId->$saId"
+                    if (addedMountEdges.add(edgeKey)) addEdge(groupId, saId)
+                }
+            }
+        }
+
+        // Step 6: Scale guard
+        if (graphNodes.size > 200) {
+            val truncated = graphNodes.take(200).toMutableList()
+            truncated.add(
+                ResourceGraphNode(
+                    id = "__truncated__",
+                    name = "Graph truncated at 200 nodes",
+                    kind = "Warning",
+                    status = "Use namespace filter to zoom in",
+                ),
+            )
+            log.warn("Cluster topology graph truncated: {} nodes exceeded limit of 200", graphNodes.size)
+            return ResourceGraph(truncated, edges)
+        }
+
+        log.debug("Cluster topology graph built: {} nodes, {} edges", graphNodes.size, edges.size)
+        return ResourceGraph(graphNodes, edges)
+    }
+
     // ── Closeable ───────────────────────────────────────────────────────────────
 
     override fun close() {
