@@ -63,7 +63,7 @@ import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.graph_3_24
-import com.kubekubedashdash.resources.swap_horiz_filled
+import com.kubekubedashdash.resources.refresh_24
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
 import com.kubekubedashdash.ui.screens.topology.viewmodel.ClusterTopologyViewModel
@@ -89,7 +89,7 @@ fun ClusterTopologyGraph(
         ) {
             IconButton(onClick = { viewModel.load(namespace) }) {
                 Icon(
-                    painterResource(Res.drawable.swap_horiz_filled),
+                    painterResource(Res.drawable.refresh_24),
                     contentDescription = "Refresh topology",
                     modifier = Modifier.size(16.dp),
                     tint = KdTextSecondary,
@@ -240,6 +240,8 @@ private fun TopologyGraphContent(
                 p0 * (u * u * u) + p1 * (3f * u * u * t) + p2 * (3f * u * t * t) + p3 * (t * t * t)
             }
 
+            val nodeKindById = graph.nodes.associate { it.id to it.kind }
+            val maxColumn = ClusterTopologyViewModel.kindColumnOrder.values.max()
             val sortedEdges = graph.edges.sortedWith(compareBy({ it.sourceId }, { it.targetId }))
             sortedEdges.forEachIndexed { edgeIndex, edge ->
                 val from = nodeRects[edge.sourceId] ?: return@forEachIndexed
@@ -259,6 +261,7 @@ private fun TopologyGraphContent(
                 }
                 val strokeWidth = if (isHighlighted) 2.5f else 1.5f
                 val isDimmed = hasSelection && !isHighlighted
+                val targetIsDependency = (ClusterTopologyViewModel.kindColumnOrder[nodeKindById[edge.targetId]] ?: 0) >= maxColumn
 
                 // Horizontal S-curve: source center-right -> target center-left
                 val startX = from.right
@@ -284,20 +287,33 @@ private fun TopologyGraphContent(
                 )
 
                 if (!isDimmed) {
-                    val dashLen = if (isHighlighted) 10f else 8f
-                    val gapLen = if (isHighlighted) 10f else 12f
-                    drawPath(
-                        path,
-                        color = edgeColor,
-                        style = Stroke(
-                            width = strokeWidth,
-                            cap = StrokeCap.Round,
-                            pathEffect = PathEffect.dashPathEffect(
-                                floatArrayOf(dashLen, gapLen),
-                                phase = dashPhase,
+                    if (targetIsDependency) {
+                        // Static dotted line for mount/dependency edges — no animation
+                        drawPath(
+                            path,
+                            color = edgeColor.copy(alpha = 0.4f),
+                            style = Stroke(
+                                width = strokeWidth,
+                                cap = StrokeCap.Round,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 6f), phase = 0f),
                             ),
-                        ),
-                    )
+                        )
+                    } else {
+                        val dashLen = if (isHighlighted) 10f else 8f
+                        val gapLen = if (isHighlighted) 10f else 12f
+                        drawPath(
+                            path,
+                            color = edgeColor,
+                            style = Stroke(
+                                width = strokeWidth,
+                                cap = StrokeCap.Round,
+                                pathEffect = PathEffect.dashPathEffect(
+                                    floatArrayOf(dashLen, gapLen),
+                                    phase = dashPhase,
+                                ),
+                            ),
+                        )
+                    }
                 }
 
                 drawCircle(
@@ -306,8 +322,8 @@ private fun TopologyGraphContent(
                     center = endOffset,
                 )
 
-                // Packet animation
-                if (packetAnimationEnabled && !isDimmed) {
+                // Packet animation — skip dependency edges (target is in the last column)
+                if (packetAnimationEnabled && !isDimmed && !targetIsDependency) {
                     val edgePhase = (edgeIndex * 0.37f) % 1f
                     val t = (packetT + edgePhase) % 1f
                     val pos = cubicBezier(t, startOffset, cp1, cp2, endOffset)
@@ -327,7 +343,7 @@ private fun TopologyGraphContent(
                     indication = null,
                     onClick = { selectedNodeId = null },
                 ),
-            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            horizontalArrangement = Arrangement.spacedBy(60.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             columns.forEachIndexed { colIndex, colNodes ->
@@ -336,6 +352,7 @@ private fun TopologyGraphContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
+                        .width(250.dp)
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState()),
                 ) {
@@ -460,7 +477,7 @@ private fun GraphNodeCard(
 
     Surface(
         modifier = modifier
-            .widthIn(min = 120.dp, max = 180.dp)
+            .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         color = color.copy(alpha = if (selected) 0.15f else 0.08f),
@@ -518,7 +535,7 @@ private fun WorkloadGroupCard(
 
     Surface(
         modifier = modifier
-            .widthIn(min = 120.dp, max = 200.dp)
+            .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         color = color.copy(alpha = if (selected) 0.15f else 0.08f),
