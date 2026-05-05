@@ -1,8 +1,14 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -166,8 +172,8 @@ fun LogDrawer(
 
             AnimatedVisibility(
                 visible = state == LogDrawerState.EXPANDED,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it }),
+                enter = expandVertically() + slideInVertically(initialOffsetY = { it }),
+                exit = shrinkVertically() + slideOutVertically(targetOffsetY = { it }),
             ) {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(DrawerBodyHeight),
@@ -185,10 +191,17 @@ fun LogDrawer(
                         val streamList = streams.values.sortedBy { it.openedAt }
                         val displayedKey = focusedKey?.takeIf { it in streams }
                             ?: streamList.first().id.key
-                        DrawerLogPane(
-                            stream = streams.getValue(displayedKey),
+                        AnimatedContent(
+                            targetState = displayedKey,
+                            transitionSpec = { fadeIn() togetherWith fadeOut() },
+                            label = "log-tab-switch",
                             modifier = Modifier.fillMaxSize(),
-                        )
+                        ) { key ->
+                            DrawerLogPane(
+                                stream = streams.getValue(key),
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                 }
             }
