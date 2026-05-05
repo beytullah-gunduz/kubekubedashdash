@@ -14,6 +14,7 @@ data class AwsProfile(
 object AwsProfileReader {
 
     private val log = LoggerFactory.getLogger(AwsProfileReader::class.java)
+    private val PROFILE_NAME_REGEX = Regex("^[A-Za-z0-9_-]+$")
 
     fun listProfiles(): List<AwsProfile> {
         val home = System.getProperty("user.home")
@@ -28,7 +29,16 @@ object AwsProfileReader {
             }
         }
 
-        val names = (credentials.keys + configProfiles.keys).toSortedSet()
+        val names = (credentials.keys + configProfiles.keys)
+            .filter { name ->
+                if (PROFILE_NAME_REGEX.matches(name)) {
+                    true
+                } else {
+                    log.warn("Skipping AWS profile with disallowed characters: <redacted>")
+                    false
+                }
+            }
+            .toSortedSet()
         val merged = names.map { name ->
             val inCreds = credentials.containsKey(name)
             val inConfig = configProfiles.containsKey(name)

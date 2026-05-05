@@ -16,12 +16,7 @@ import com.kubekubedashdash.models.ServiceInfo
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.utils.Serialization
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.time.Duration
@@ -784,35 +779,6 @@ class KubeClient(
         "Error fetching logs: ${e.message}"
     }
 
-    fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
-        log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
-        val watch = try {
-            val op = client.pods().inNamespace(namespace).withName(name)
-            val withC = if (container != null) op.inContainer(container) else op
-            withC.tailingLines(100).watchLog()
-        } catch (e: Exception) {
-            log.error("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
-            trySend("Error: ${e.message}")
-            close()
-            return@callbackFlow
-        }
-        launch(Dispatchers.IO) {
-            try {
-                watch.output.bufferedReader().use { reader ->
-                    for (line in reader.lineSequence()) send(line)
-                }
-            } catch (e: Exception) {
-                log.warn("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
-                trySend("[stream error: ${e.message}]")
-                close(e)
-            }
-        }
-        awaitClose {
-            log.debug("Closing log stream pod={} namespace={}", name, namespace)
-            watch.close()
-        }
-    }
-
     // ── Delete ──────────────────────────────────────────────────────────────────
 
     fun deleteResource(kind: String, name: String, namespace: String?): Result<Unit> = try {
@@ -952,8 +918,14 @@ fun parseCpuToMillis(value: String): Long {
     if (value.isBlank() || value == "0") return 0
     return when {
         value.endsWith("n") -> value.removeSuffix("n").toLongOrNull()?.div(1_000_000) ?: 0
+
         value.endsWith("u") -> value.removeSuffix("u").toLongOrNull()?.div(1_000) ?: 0
-        value.endsWith("m") -> value.removeSuffix("m").toLongOrNull() ?: 0
+
+        value.endsWith("m") -> {
+            val n = value.removeSuffix("m")
+            n.toLongOrNull() ?: n.toDoubleOrNull()?.toLong() ?: 0L
+        }
+
         else -> (value.toDoubleOrNull()?.times(1000))?.toLong() ?: 0
     }
 }
@@ -988,6 +960,7 @@ fun formatCpuCores(millis: Long): String = when {
 
 private val ageLog = LoggerFactory.getLogger("com.kubekubedashdash.util.formatAge")
 
+// approximate: 365-day years, 30-day months
 fun formatAge(timestamp: String?, now: Instant = Instant.now()): String {
     if (timestamp.isNullOrBlank()) return ""
     return try {

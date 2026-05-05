@@ -182,6 +182,10 @@ object MockClusterProvider {
         )
         server.init()
         val seedClient = server.createClient()
+        val host = java.net.URL(seedClient.configuration.masterUrl).host
+        require(host in setOf("127.0.0.1", "localhost", "[::1]")) {
+            "Mock server must bind to loopback, got: $host"
+        }
         try {
             seedResources(seedClient)
         } finally {

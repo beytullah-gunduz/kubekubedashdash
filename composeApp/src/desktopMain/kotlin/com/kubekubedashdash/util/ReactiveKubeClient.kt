@@ -162,7 +162,7 @@ class ReactiveKubeClient(
 
     private fun <R : HasMetadata, T> namespacedInformerFlow(
         inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
-        mapper: (R) -> T,
+        mapper: (R) -> T?,
     ): StateFlow<ResourceState<List<T>>> = combine(_selectedNamespace, _connectionVersion) { ns, _ -> ns }
         .flatMapLatest { ns ->
             channelFlow {
@@ -195,7 +195,7 @@ class ReactiveKubeClient(
                             try {
                                 val items = informer.store.list()
                                 log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
-                                send(ResourceState.Success(items.map(mapper)))
+                                send(ResourceState.Success(items.mapNotNull(mapper)))
                                 reportSuccess()
                             } catch (e: Exception) {
                                 log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
@@ -206,7 +206,7 @@ class ReactiveKubeClient(
                     while (!informer.hasSynced()) delay(50)
                     val items = informer.store.list()
                     log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
-                    send(ResourceState.Success(items.map(mapper)))
+                    send(ResourceState.Success(items.mapNotNull(mapper)))
                     reportSuccess()
                     try {
                         awaitCancellation()
@@ -344,8 +344,9 @@ class ReactiveKubeClient(
 
     // ── Mapping: Events ─────────────────────────────────────────────────────────
 
-    private fun mapEvent(ev: io.fabric8.kubernetes.api.model.Event): EventInfo {
+    private fun mapEvent(ev: io.fabric8.kubernetes.api.model.Event): EventInfo? {
         val lastTs = ev.lastTimestamp ?: ev.metadata?.creationTimestamp ?: ""
+        if (lastTs.isBlank()) return null
         val objKind = ev.involvedObject?.kind ?: ""
         val objName = ev.involvedObject?.name ?: ""
         return EventInfo(
@@ -1092,7 +1093,7 @@ class ReactiveKubeClient(
         return k8s.v1().events().inAnyNamespace().list().items
             .filter { it.involvedObject?.kind == "Node" && it.involvedObject?.name == nodeName }
             .sortedByDescending { it.metadata?.creationTimestamp }
-            .map(::mapEvent)
+            .mapNotNull(::mapEvent)
             .also { log.debug("Found {} events for node={}", it.size, nodeName) }
     }
 
@@ -1101,7 +1102,7 @@ class ReactiveKubeClient(
         return k8s.v1().events().inAnyNamespace().list().items
             .filter { it.source?.host == nodeName }
             .sortedByDescending { it.metadata?.creationTimestamp }
-            .map(::mapEvent)
+            .mapNotNull(::mapEvent)
             .also { log.debug("Found {} events on node={}", it.size, nodeName) }
     }
 
@@ -1110,7 +1111,7 @@ class ReactiveKubeClient(
         return k8s.v1().events().inAnyNamespace().list().items
             .filter { it.involvedObject?.kind == kind && it.involvedObject?.name == name }
             .sortedByDescending { it.metadata?.creationTimestamp }
-            .map(::mapEvent)
+            .mapNotNull(::mapEvent)
             .also { log.debug("Found {} events for {}/{}", it.size, kind, name) }
     }
 

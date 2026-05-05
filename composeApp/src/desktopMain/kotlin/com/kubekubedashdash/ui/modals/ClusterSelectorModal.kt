@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,8 +63,11 @@ import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.util.ContextBinding
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.MockClusterProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 
 private val EksOrange = Color(0xFFFF9900)
@@ -126,10 +130,13 @@ fun ClusterSelectorModal(
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
-    val bindings = remember(contexts, reactiveClient) {
-        runCatching { reactiveClient.getContextBindings() }
-            .getOrElse { emptyList() }
-            .associateBy { it.name }
+    var bindings by remember { mutableStateOf(emptyMap<String, ContextBinding>()) }
+    LaunchedEffect(contexts, reactiveClient) {
+        bindings = withContext(Dispatchers.IO) {
+            runCatching { reactiveClient.getContextBindings() }
+                .getOrElse { emptyList() }
+                .associateBy { it.name }
+        }
     }
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
     Box(
