@@ -35,6 +35,12 @@ kotlin {
 
     sourceSets {
         val desktopMain by getting
+        val desktopTest by getting {
+            dependencies {
+                implementation(libs.ktor.server.test.host)
+                implementation(libs.kotlin.test)
+            }
+        }
 
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)

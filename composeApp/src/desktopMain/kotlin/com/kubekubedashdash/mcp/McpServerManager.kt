@@ -1,5 +1,6 @@
 package com.kubekubedashdash.mcp
 
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.services.KubeClientService
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -27,7 +28,23 @@ object McpServerManager {
 
     const val DEFAULT_PORT = 3001
 
+    private val MCP_YAML_ALLOWLIST = setOf(
+        "pod", "deployment", "service", "namespace",
+        "statefulset", "daemonset", "replicaset",
+        "job", "cronjob", "ingress",
+        "persistentvolume", "persistentvolumeclaim", "storageclass",
+        // Excluded: "secret" (data field is base64'd credentials),
+        //           "configmap" (frequently misused for credentials),
+        //           "node"      (kubelet bootstrap details).
+    )
+
     private var server: EmbeddedServer<*, *>? = null
+
+    private var _bearerToken: String? = null
+    val bearerToken: String? get() = _bearerToken
+
+    private var _requireAuth: Boolean = true
+    val requireAuth: Boolean get() = _requireAuth
 
     val isRunning: Boolean get() = server != null
 
@@ -37,18 +54,39 @@ object McpServerManager {
             stop()
         }
 
-        log.info("Starting MCP server on port {}", port)
+        val localhostOnly = PreferenceRepository.mcpLocalhostOnly
+        _requireAuth = PreferenceRepository.mcpRequireAuth
+        val bindHost = if (localhostOnly) "127.0.0.1" else "0.0.0.0"
+
+        _bearerToken = if (_requireAuth) {
+            java.security.SecureRandom.getInstanceStrong().let { sr ->
+                ByteArray(32).also { sr.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+            }
+        } else {
+            null
+        }
+
+        if (!localhostOnly && !_requireAuth) {
+            log.warn("MCP server starting with NEITHER localhost-only nor authentication. Open to LAN, no token required.")
+        }
+
+        log.info("Starting MCP server host={} port={} auth={} localhostOnly={}", bindHost, port, _requireAuth, localhostOnly)
+
         try {
             val mcpServer = createMcpServer()
-            val ktorServer = embeddedServer(CIO, host = "127.0.0.1", port = port) {
+            val capturedToken = _bearerToken
+            val capturedRequireAuth = _requireAuth
+            val ktorServer = embeddedServer(CIO, host = bindHost, port = port) {
+                installMcpAuth(localhostOnly, capturedRequireAuth, port, capturedToken)
                 mcp { mcpServer }
             }
             ktorServer.start(wait = false)
             server = ktorServer
-            log.info("MCP server started on http://127.0.0.1:{}/sse", port)
+            log.info("MCP server started on http://{}:{}/sse", bindHost, port)
         } catch (e: Exception) {
             log.error("Failed to start MCP server: {}", e.message, e)
             server = null
+            _bearerToken = null
         }
     }
 
@@ -61,13 +99,19 @@ object McpServerManager {
                 log.warn("Error stopping MCP server: {}", e.message)
             }
             server = null
+            _bearerToken = null
+            _requireAuth = true
             log.info("MCP server stopped")
         }
     }
 
-    private fun createMcpServer(): Server {
-        val kubeClient = KubeClientService.client
+    private fun resolveClient() = try {
+        KubeClientService.client
+    } catch (e: IllegalStateException) {
+        null
+    }
 
+    private fun createMcpServer(): Server {
         val mcpServer = Server(
             serverInfo = Implementation(
                 name = "kubedash",
@@ -84,10 +128,14 @@ object McpServerManager {
         // ── Resources ───────────────────────────────────────────────────────────
 
         registerResource(mcpServer, "kubedash://cluster/overview", "Cluster Overview", "Cluster overview information including node/pod counts and status") {
+            val kubeClient = resolveClient()
+                ?: return@registerResource """{"error":"No cluster connected. Open a cluster tab first."}"""
             json.encodeToString(kubeClient.getClusterInfo(namespace = null))
         }
 
         registerResource(mcpServer, "kubedash://resource-usage", "Resource Usage", "Cluster CPU and memory usage summary") {
+            val kubeClient = resolveClient()
+                ?: return@registerResource """{"error":"No cluster connected. Open a cluster tab first."}"""
             json.encodeToString(kubeClient.getResourceUsage(namespace = null))
         }
 
@@ -102,7 +150,7 @@ object McpServerManager {
                         "kind",
                         buildJsonObject {
                             put("type", "string")
-                            put("description", "Resource kind (e.g. Pod, Deployment, Service, Node, ConfigMap, Secret, etc.)")
+                            put("description", "Resource kind. Allowed: " + MCP_YAML_ALLOWLIST.sorted().joinToString(", "))
                         },
                     )
                     put(
@@ -116,14 +164,25 @@ object McpServerManager {
                         "namespace",
                         buildJsonObject {
                             put("type", "string")
-                            put("description", "Resource namespace (optional for cluster-scoped resources like Node)")
+                            put("description", "Resource namespace (optional for cluster-scoped resources)")
                         },
                     )
                 },
                 required = listOf("kind", "name"),
             ),
         ) { request ->
+            val kubeClient = resolveClient()
+                ?: return@addTool CallToolResult(
+                    content = listOf(TextContent(text = """{"error":"No cluster connected. Open a cluster tab first."}""")),
+                    isError = true,
+                )
             val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
+            if (kind.lowercase() !in MCP_YAML_ALLOWLIST) {
+                return@addTool CallToolResult(
+                    content = listOf(TextContent(text = """{"error":"Kind '$kind' is not exposed via MCP. Allowed kinds: ${MCP_YAML_ALLOWLIST.sorted().joinToString(", ")}"}""")),
+                    isError = true,
+                )
+            }
             val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
             val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content
             val yaml = kubeClient.getResourceYaml(kind, name, namespace)
@@ -167,6 +226,11 @@ object McpServerManager {
                 required = listOf("name", "namespace"),
             ),
         ) { request ->
+            val kubeClient = resolveClient()
+                ?: return@addTool CallToolResult(
+                    content = listOf(TextContent(text = """{"error":"No cluster connected. Open a cluster tab first."}""")),
+                    isError = true,
+                )
             val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
             val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content ?: ""
             val container = request.arguments?.get("container")?.jsonPrimitive?.content
@@ -203,6 +267,11 @@ object McpServerManager {
                 required = listOf("kind"),
             ),
         ) { request ->
+            val kubeClient = resolveClient()
+                ?: return@addTool CallToolResult(
+                    content = listOf(TextContent(text = """{"error":"No cluster connected. Open a cluster tab first."}""")),
+                    isError = true,
+                )
             val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
             val ns = request.arguments?.get("namespace")?.jsonPrimitive?.content
             val result = when (kind.lowercase()) {

@@ -71,6 +71,7 @@ import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.clusterInitial
@@ -619,6 +620,94 @@ fun SettingsScreen(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     textStyle = MaterialTheme.typography.bodyMedium,
                                 )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Switch(
+                                    checked = viewModel.mcpLocalhostOnly,
+                                    onCheckedChange = { viewModel.updateMcpLocalhostOnly(it) },
+                                    enabled = !viewModel.isMcpServerEnabled,
+                                )
+                                Column {
+                                    Text("Localhost only", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        if (viewModel.isMcpServerEnabled) "Stop MCP server to change." else "Bind to 127.0.0.1. Recommended for local-only workflows.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KdTextSecondary,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Switch(
+                                    checked = viewModel.mcpRequireAuth,
+                                    onCheckedChange = { viewModel.updateMcpRequireAuth(it) },
+                                    enabled = !viewModel.isMcpServerEnabled,
+                                )
+                                Column {
+                                    Text("Require authentication", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        if (viewModel.isMcpServerEnabled) "Stop MCP server to change." else "Generate a bearer token each time the server starts.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KdTextSecondary,
+                                    )
+                                }
+                            }
+                            if (!viewModel.mcpLocalhostOnly && !viewModel.mcpRequireAuth) {
+                                Spacer(Modifier.height(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        "MCP server is exposed on the network with no authentication. Anyone on your LAN can read cluster data. Enable at least one defense.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.padding(12.dp),
+                                    )
+                                }
+                            }
+                            if (viewModel.isMcpServerEnabled && viewModel.mcpBearerToken != null) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "Bearer token (regenerated each start)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    OutlinedTextField(
+                                        value = viewModel.mcpBearerToken.orEmpty(),
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            val sel = java.awt.datatransfer.StringSelection(viewModel.mcpBearerToken.orEmpty())
+                                            java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+                                        },
+                                    ) {
+                                        Icon(
+                                            painterResource(Res.drawable.content_copy_filled),
+                                            contentDescription = "Copy bearer token",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = KdTextSecondary,
+                                        )
+                                    }
+                                }
                             }
                         }
 

@@ -35,14 +35,25 @@ class SettingsScreenViewModel : ViewModel() {
     var mcpServerPort: Int by mutableStateOf(McpServerManager.DEFAULT_PORT)
         private set
 
+    var mcpLocalhostOnly: Boolean by mutableStateOf(true)
+        private set
+
+    var mcpRequireAuth: Boolean by mutableStateOf(true)
+        private set
+
+    var mcpBearerToken: String? by mutableStateOf(McpServerManager.bearerToken)
+        private set
+
     fun toggleMcpServer(enabled: Boolean) {
         isMcpServerEnabled = enabled
         viewModelScope.launch(Dispatchers.IO) {
             PreferenceRepository.mcpServerEnabled = enabled
             if (enabled) {
                 McpServerManager.start(mcpServerPort)
+                mcpBearerToken = McpServerManager.bearerToken
             } else {
                 McpServerManager.stop()
+                mcpBearerToken = null
             }
         }
     }
@@ -53,8 +64,19 @@ class SettingsScreenViewModel : ViewModel() {
             PreferenceRepository.mcpServerPort = port
             if (isMcpServerEnabled) {
                 McpServerManager.start(port)
+                mcpBearerToken = McpServerManager.bearerToken
             }
         }
+    }
+
+    fun updateMcpLocalhostOnly(v: Boolean) {
+        mcpLocalhostOnly = v
+        viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.mcpLocalhostOnly = v }
+    }
+
+    fun updateMcpRequireAuth(v: Boolean) {
+        mcpRequireAuth = v
+        viewModelScope.launch(Dispatchers.IO) { PreferenceRepository.mcpRequireAuth = v }
     }
 
     private val _closeTabFocus = MutableStateFlow(PreferenceRepository.closeTabFocus)
@@ -130,11 +152,14 @@ class SettingsScreenViewModel : ViewModel() {
     init {
         viewModelScope.launch(Dispatchers.IO) {
             mcpServerPort = PreferenceRepository.mcpServerPort
+            mcpLocalhostOnly = PreferenceRepository.mcpLocalhostOnly
+            mcpRequireAuth = PreferenceRepository.mcpRequireAuth
             val enabled = PreferenceRepository.mcpServerEnabled
             if (enabled && !McpServerManager.isRunning) {
                 McpServerManager.start(mcpServerPort)
             }
             isMcpServerEnabled = enabled
+            mcpBearerToken = McpServerManager.bearerToken
         }
     }
 }

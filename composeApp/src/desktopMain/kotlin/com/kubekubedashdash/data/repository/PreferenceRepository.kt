@@ -28,6 +28,8 @@ object PreferenceRepository {
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
+    private val MCP_LOCALHOST_ONLY by lazy { booleanPreferencesKey("mcp_localhost_only") }
+    private val MCP_REQUIRE_AUTH by lazy { booleanPreferencesKey("mcp_require_auth") }
     private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
     private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
@@ -64,6 +66,22 @@ object PreferenceRepository {
     fun mcpServerEnabled(): Flow<Boolean> = dataStore.data.map {
         it[MCP_SERVER_ENABLED] ?: false
     }
+
+    var mcpLocalhostOnly: Boolean
+        get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_LOCALHOST_ONLY) ?: true }
+        set(value) {
+            runBlocking { dataStore.edit { it[MCP_LOCALHOST_ONLY] = value } }
+        }
+
+    fun mcpLocalhostOnly(): Flow<Boolean> = dataStore.data.map { it[MCP_LOCALHOST_ONLY] ?: true }
+
+    var mcpRequireAuth: Boolean
+        get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_REQUIRE_AUTH) ?: true }
+        set(value) {
+            runBlocking { dataStore.edit { it[MCP_REQUIRE_AUTH] = value } }
+        }
+
+    fun mcpRequireAuth(): Flow<Boolean> = dataStore.data.map { it[MCP_REQUIRE_AUTH] ?: true }
 
     var mcpServerPort: Int
         get() = runBlocking { dataStore.data.firstOrNull()?.get(MCP_SERVER_PORT) ?: 3001 }
