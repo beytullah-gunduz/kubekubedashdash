@@ -55,6 +55,8 @@ internal fun PodTable(
     selectedUid: String? = null,
     onPodClick: (PodInfo) -> Unit,
     onViewLogs: ((PodInfo) -> Unit)? = null,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -63,6 +65,7 @@ internal fun PodTable(
         val rows = pods.map { pod ->
             TableRow(
                 id = pod.uid,
+                pinId = "pod:${pod.namespace}:${pod.name}",
                 cells = visible.map { it.cell(pod) },
                 actions = buildList {
                     if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
@@ -80,6 +83,9 @@ internal fun PodTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> pods.find { it.uid == row.id }?.let(onPodClick) },
             emptyMessage = "No pods found",
+            pinnable = onTogglePin != null,
+            pinnedIds = pinnedIds,
+            onTogglePin = onTogglePin,
         )
     }
 }

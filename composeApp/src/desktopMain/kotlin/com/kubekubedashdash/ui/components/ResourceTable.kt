@@ -82,6 +82,8 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
 import com.kubekubedashdash.resources.arrow_upward_filled
+import com.kubekubedashdash.resources.star_filled
+import com.kubekubedashdash.resources.star_outline
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -110,6 +112,8 @@ data class TableRow(
      * name, copy a `kubectl` command). Mutations belong in their own pass.
      */
     val actions: List<RowAction> = emptyList(),
+    /** Stable key used for pin persistence. Defaults to [id] when null. */
+    val pinId: String? = null,
 )
 
 /** A single entry in a row's right-click menu. */
@@ -126,6 +130,9 @@ fun ResourceTable(
     defaultSortColumn: Int = -1,
     defaultSortAscending: Boolean = true,
     scrollToTopOnChange: Boolean = false,
+    pinnable: Boolean = false,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     var sortColumn by remember { mutableStateOf(defaultSortColumn) }
     var sortAscending by remember { mutableStateOf(defaultSortAscending) }
@@ -158,6 +165,7 @@ fun ResourceTable(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (pinnable) Spacer(Modifier.width(30.dp))
             columns.forEachIndexed { index, col ->
                 Row(
                     modifier = Modifier
@@ -276,6 +284,13 @@ fun ResourceTable(
                                 } else {
                                     null
                                 },
+                                pinnable = pinnable,
+                                isPinned = (row.pinId ?: row.id) in pinnedIds,
+                                onTogglePin = if (onTogglePin != null) {
+                                    { onTogglePin(row.pinId ?: row.id) }
+                                } else {
+                                    null
+                                },
                             )
                         }
                         if (row.actions.isEmpty()) {
@@ -309,6 +324,9 @@ private fun TableRowItem(
     @Suppress("UNUSED_PARAMETER") isEven: Boolean,
     isSelected: Boolean = false,
     onClick: (() -> Unit)?,
+    pinnable: Boolean = false,
+    isPinned: Boolean = false,
+    onTogglePin: (() -> Unit)? = null,
 ) {
     var hovered by remember { mutableStateOf(false) }
     // Switched from zebra striping to a hairline border between rows.
@@ -346,6 +364,19 @@ private fun TableRowItem(
             .padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (pinnable) {
+            Box(
+                modifier = Modifier.width(30.dp).clickable(enabled = onTogglePin != null) { onTogglePin?.invoke() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painterResource(if (isPinned) Res.drawable.star_filled else Res.drawable.star_outline),
+                    contentDescription = if (isPinned) "Unpin" else "Pin",
+                    modifier = Modifier.size(14.dp),
+                    tint = if (isPinned) KdPrimary else KdTextSecondary.copy(alpha = if (hovered) 0.6f else 0.25f),
+                )
+            }
+        }
         columns.forEachIndexed { index, col ->
             val cell = row.cells.getOrNull(index)
             Box(modifier = if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f)) {

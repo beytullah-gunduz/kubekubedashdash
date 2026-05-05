@@ -187,4 +187,18 @@ object PreferenceRepository {
             emptyList()
         }
     }
+
+    private val PINNED_RESOURCES by lazy { stringPreferencesKey("pinned_resources") }
+
+    fun pinnedResources(): Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[PINNED_RESOURCES]?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+    }
+
+    suspend fun togglePinned(id: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[PINNED_RESOURCES]?.split(",")?.filter { it.isNotBlank() }?.toMutableSet() ?: mutableSetOf()
+            if (id in current) current.remove(id) else current.add(id)
+            prefs[PINNED_RESOURCES] = current.joinToString(",")
+        }
+    }
 }

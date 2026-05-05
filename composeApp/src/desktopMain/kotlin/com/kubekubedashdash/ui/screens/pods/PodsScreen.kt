@@ -15,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
@@ -36,6 +38,7 @@ import com.kubekubedashdash.ui.components.matchesLabelSelector
 import com.kubekubedashdash.ui.components.parseLabelSelector
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @Composable
 fun PodsScreen(
@@ -54,6 +57,8 @@ fun PodsScreen(
     // A non-null Set is the explicit allowlist after the user touched the menu.
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
     var labelQuery by rememberSaveable { mutableStateOf("") }
+    val pinnedIds by PreferenceRepository.pinnedResources().collectAsState(initial = emptySet())
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(selectPodUid) {
         viewModel.setParams(selectPodUid)
@@ -86,15 +91,19 @@ fun PodsScreen(
                 }
                 val activeStatusFilter = statusFilter
                 val labelSelector = remember(labelQuery) { parseLabelSelector(labelQuery) }
-                val filtered = allPods.filter { pod ->
-                    val passesSearch = searchQuery.isBlank() ||
-                        pod.name.contains(searchQuery, ignoreCase = true) ||
-                        pod.namespace.contains(searchQuery, ignoreCase = true) ||
-                        pod.status.contains(searchQuery, ignoreCase = true) ||
-                        pod.node.contains(searchQuery, ignoreCase = true)
-                    val passesStatus = activeStatusFilter == null || pod.status in activeStatusFilter
-                    val passesLabels = labelSelector.isEmpty() || matchesLabelSelector(pod.labels, labelSelector)
-                    passesSearch && passesStatus && passesLabels
+                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, pinnedIds) {
+                    allPods
+                        .filter { pod ->
+                            val passesSearch = searchQuery.isBlank() ||
+                                pod.name.contains(searchQuery, ignoreCase = true) ||
+                                pod.namespace.contains(searchQuery, ignoreCase = true) ||
+                                pod.status.contains(searchQuery, ignoreCase = true) ||
+                                pod.node.contains(searchQuery, ignoreCase = true)
+                            val passesStatus = activeStatusFilter == null || pod.status in activeStatusFilter
+                            val passesLabels = labelSelector.isEmpty() || matchesLabelSelector(pod.labels, labelSelector)
+                            passesSearch && passesStatus && passesLabels
+                        }
+                        .sortedByDescending { pod -> "pod:${pod.namespace}:${pod.name}" in pinnedIds }
                 }
 
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -144,6 +153,8 @@ fun PodsScreen(
                                 onNavigate(Screen.Detail.PodDetail(pod))
                             },
                             onViewLogs = { pod -> onNavigate(Screen.Detail.PodLogs(pod.name, pod.namespace)) },
+                            pinnedIds = pinnedIds,
+                            onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
                         )
                     }
                 }
