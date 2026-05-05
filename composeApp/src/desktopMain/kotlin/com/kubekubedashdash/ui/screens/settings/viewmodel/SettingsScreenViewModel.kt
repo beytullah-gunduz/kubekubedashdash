@@ -15,8 +15,10 @@ import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsScreenViewModel : ViewModel() {
@@ -109,6 +111,20 @@ class SettingsScreenViewModel : ViewModel() {
 
     fun killMockServer() {
         MockClusterProvider.forceShutdown()
+    }
+
+    // ── Cluster color overrides ────────────────────────────────────────────────
+
+    val clusterColorOverrides: StateFlow<Map<String, String>> =
+        PreferenceRepository.clusterColorOverrides()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    fun setClusterColor(context: String, hex: String) {
+        viewModelScope.launch { PreferenceRepository.setClusterColor(context, hex) }
+    }
+
+    fun clearClusterColor(context: String) {
+        viewModelScope.launch { PreferenceRepository.clearClusterColor(context) }
     }
 
     init {

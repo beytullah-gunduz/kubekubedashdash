@@ -17,15 +17,34 @@ data class ClusterColor(
     val hue: Float,
     val saturation: Float = 0.55f,
     val lightness: Float = 0.55f,
+    /** User-chosen override color; when set, overrides HSL-derived values. */
+    val override: Color? = null,
 ) {
-    val composeColor: Color get() = Color.hsl(hue, saturation, lightness)
+    val composeColor: Color get() = override ?: Color.hsl(hue, saturation, lightness)
 
-    fun shifted(deltaLightness: Float): Color = Color.hsl(hue, saturation, (lightness + deltaLightness).coerceIn(0f, 1f))
+    fun shifted(deltaLightness: Float): Color = override
+        ?: Color.hsl(hue, saturation, (lightness + deltaLightness).coerceIn(0f, 1f))
 
     companion object {
         fun fromContext(context: String): ClusterColor {
             val hash = context.hashCode().absoluteValue
             return ClusterColor(hue = (hash % 360).toFloat())
+        }
+
+        fun effectiveColor(context: String, overrides: Map<String, String>): ClusterColor {
+            val hex = overrides[context] ?: return fromContext(context)
+            return fromContext(context).copy(override = parseHex(hex))
+        }
+
+        fun parseHex(hex: String): Color? = try {
+            val clean = hex.trimStart('#').padStart(6, '0')
+            Color(
+                red = clean.substring(0, 2).toInt(16) / 255f,
+                green = clean.substring(2, 4).toInt(16) / 255f,
+                blue = clean.substring(4, 6).toInt(16) / 255f,
+            )
+        } catch (_: Exception) {
+            null
         }
     }
 }

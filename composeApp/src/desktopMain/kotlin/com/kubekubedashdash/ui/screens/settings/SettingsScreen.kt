@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,7 +72,10 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.description_filled
+import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
+import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -339,6 +343,7 @@ fun SettingsScreen(
     val sectionOffsets = remember { mutableStateMapOf<String, Int>() }
     val sectionTitles = buildList {
         add("Appearance")
+        add("Cluster colors")
         add("Tab behavior")
         add("Integrations")
         add("Cluster discovery")
@@ -461,6 +466,23 @@ fun SettingsScreen(
                                     onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                                 )
                             }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        val clusterColorOverrides by viewModel.clusterColorOverrides.collectAsState()
+                        val knownContexts by AppViewModel.instance.contexts.collectAsState()
+
+                        SettingsSection(
+                            title = "Cluster colors",
+                            onLayoutTop = { y -> sectionOffsets["Cluster colors"] = y },
+                        ) {
+                            ClusterColorsSection(
+                                contexts = knownContexts,
+                                overrides = clusterColorOverrides,
+                                onSetColor = { ctx, hex -> viewModel.setClusterColor(ctx, hex) },
+                                onClearColor = { ctx -> viewModel.clearClusterColor(ctx) },
+                            )
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -726,6 +748,99 @@ fun SettingsScreen(
 
         if (showAboutModal) {
             AboutModal(onDismiss = { showAboutModal = false })
+        }
+    }
+}
+
+private val clusterColorPresets = listOf(
+    "#E53935",
+    "#FB8C00",
+    "#FDD835",
+    "#43A047",
+    "#00897B",
+    "#1E88E5",
+    "#8E24AA",
+    "#D81B60",
+)
+
+@Composable
+private fun ClusterColorsSection(
+    contexts: List<String>,
+    overrides: Map<String, String>,
+    onSetColor: (String, String) -> Unit,
+    onClearColor: (String) -> Unit,
+) {
+    if (contexts.isEmpty()) {
+        Text(
+            "No cluster contexts found. Add a kubeconfig context to assign colors.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = KdTextSecondary,
+        )
+        return
+    }
+    Text(
+        "Assign a color to each cluster for quick identification in tabs and the overview.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = KdTextSecondary,
+    )
+    Spacer(Modifier.height(12.dp))
+    contexts.forEach { ctx ->
+        val overrideHex = overrides[ctx]
+        val effectiveColor = ClusterColor.effectiveColor(ctx, overrides)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(effectiveColor.composeColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    clusterInitial(ctx),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color.White,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                ctx,
+                style = MaterialTheme.typography.bodySmall,
+                color = KdTextPrimary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(8.dp))
+            clusterColorPresets.forEach { hex ->
+                val selected = overrideHex == hex
+                Box(
+                    modifier = Modifier
+                        .padding(2.dp)
+                        .size(if (selected) 20.dp else 16.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(ClusterColor.parseHex(hex) ?: KdTextSecondary)
+                        .then(
+                            if (selected) {
+                                Modifier.border(2.dp, KdTextPrimary, androidx.compose.foundation.shape.CircleShape)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clickable { onSetColor(ctx, hex) },
+                )
+            }
+            if (overrideHex != null) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Reset",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdPrimary,
+                    modifier = Modifier.clickable { onClearColor(ctx) },
+                )
+            }
         }
     }
 }

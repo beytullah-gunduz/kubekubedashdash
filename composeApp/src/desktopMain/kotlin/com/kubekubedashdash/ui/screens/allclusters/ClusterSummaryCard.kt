@@ -18,6 +18,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.clusterInitial
@@ -41,7 +44,8 @@ internal fun ClusterSummaryCard(
     onClick: (() -> Unit)? = null,
     onErrorChipClick: (() -> Unit)? = null,
 ) {
-    val clusterColor = ClusterColor.fromContext(summary.contextName)
+    val colorOverrides by PreferenceRepository.clusterColorOverrides().collectAsState(initial = emptyMap())
+    val clusterColor = ClusterColor.effectiveColor(summary.contextName, colorOverrides)
 
     Card(
         modifier = modifier

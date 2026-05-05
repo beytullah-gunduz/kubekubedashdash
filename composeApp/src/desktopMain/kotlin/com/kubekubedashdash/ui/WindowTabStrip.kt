@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
@@ -84,6 +85,7 @@ fun WindowTabStrip(
     onDragCancelledTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val clusterColorOverrides by PreferenceRepository.clusterColorOverrides().collectAsState(initial = emptyMap())
     val clusterTabs = tabs.filterIsInstance<WorkspaceTab.Cluster>()
 
     val contexts: List<String> = clusterTabs.map { ct ->
@@ -195,7 +197,7 @@ fun WindowTabStrip(
                             ClusterChip(
                                 modifier = chipModifier,
                                 label = display.label,
-                                color = ClusterColor.fromContext(display.context),
+                                color = ClusterColor.effectiveColor(display.context, clusterColorOverrides),
                                 initial = clusterInitial(display.context),
                                 isActive = tab.key == activeTabKey,
                                 isConnected = display.connected,

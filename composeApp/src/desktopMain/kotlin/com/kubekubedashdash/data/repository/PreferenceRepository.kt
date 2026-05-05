@@ -201,4 +201,35 @@ object PreferenceRepository {
             prefs[PINNED_RESOURCES] = current.joinToString(",")
         }
     }
+
+    private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
+
+    private fun decodeColorOverrides(raw: String?): Map<String, String> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            json.decodeFromString<Map<String, String>>(raw)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun clusterColorOverrides(): Flow<Map<String, String>> = dataStore.data.map { prefs ->
+        decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES])
+    }
+
+    suspend fun setClusterColor(context: String, hex: String) {
+        dataStore.edit { prefs ->
+            val current = decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
+            current[context] = hex
+            prefs[CLUSTER_COLOR_OVERRIDES] = json.encodeToString(current)
+        }
+    }
+
+    suspend fun clearClusterColor(context: String) {
+        dataStore.edit { prefs ->
+            val current = decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
+            current.remove(context)
+            prefs[CLUSTER_COLOR_OVERRIDES] = json.encodeToString(current)
+        }
+    }
 }

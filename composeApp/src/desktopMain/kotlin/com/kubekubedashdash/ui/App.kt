@@ -296,6 +296,7 @@ fun App(
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
+        val clusterColorOverrides by PreferenceRepository.clusterColorOverrides().collectAsState(initial = emptyMap())
 
         // Nothing to show until bootstrap populates the tab list.
         if (tabs.isEmpty()) return@KubeDashTheme
@@ -452,7 +453,7 @@ fun App(
                                         ) {
                                             ClusterChip(
                                                 label = ctx,
-                                                color = ClusterColor.fromContext(ctx),
+                                                color = ClusterColor.effectiveColor(ctx, clusterColorOverrides),
                                                 initial = clusterInitial(ctx),
                                                 isActive = true,
                                                 isDropTarget = isDropTarget,
