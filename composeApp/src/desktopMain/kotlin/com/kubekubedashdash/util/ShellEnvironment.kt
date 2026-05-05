@@ -121,14 +121,25 @@ object ShellEnvironment {
         }
     }
 
+    private val ALLOWED_SHELLS = setOf(
+        "/bin/bash", "/bin/zsh", "/bin/sh",
+        "/usr/bin/bash", "/usr/bin/zsh", "/usr/bin/sh",
+        "/usr/local/bin/bash", "/usr/local/bin/zsh",
+        "/opt/homebrew/bin/bash", "/opt/homebrew/bin/zsh",
+    )
+
+    private const val SENTINEL_BEGIN = "::KKDD_PATH_BEGIN::"
+    private const val SENTINEL_END = "::KKDD_PATH_END::"
+
     private fun runShellPathQuery(login: Boolean): String? {
         try {
-            val shell = System.getenv("SHELL")?.takeIf { it.isNotBlank() } ?: "/bin/zsh"
-            val args = if (login) {
-                listOf(shell, "-l", "-c", "echo \$PATH")
-            } else {
-                listOf(shell, "-c", "echo \$PATH")
+            val candidate = System.getenv("SHELL")?.takeIf { it.isNotBlank() }
+            val shell = if (candidate != null && candidate in ALLOWED_SHELLS) candidate else "/bin/sh"
+            if (candidate != null && candidate != shell) {
+                log.info("\$SHELL not in allowlist, falling back to /bin/sh")
             }
+            val echoCmd = "echo \"$SENTINEL_BEGIN\$PATH$SENTINEL_END\""
+            val args = if (login) listOf(shell, "-l", "-c", echoCmd) else listOf(shell, "-c", echoCmd)
             val pb = ProcessBuilder(args).redirectErrorStream(false)
             val p = pb.start()
             val finished = p.waitFor(5, TimeUnit.SECONDS)
@@ -137,14 +148,10 @@ object ShellEnvironment {
                 return null
             }
             if (p.exitValue() != 0) return null
-            val out = p.inputStream.bufferedReader().readText().trim()
-            for (line in out.lines().asReversed()) {
-                val trimmed = line.trim()
-                if (trimmed.isNotBlank() && trimmed.contains("/") && !trimmed.startsWith("#")) {
-                    return trimmed
-                }
-            }
-            return null
+            val out = p.inputStream.bufferedReader().readText()
+            val begin = out.indexOf(SENTINEL_BEGIN)
+            val end = out.indexOf(SENTINEL_END, startIndex = begin + SENTINEL_BEGIN.length)
+            return if (begin >= 0 && end > begin) out.substring(begin + SENTINEL_BEGIN.length, end) else null
         } catch (e: Exception) {
             log.debug("shell PATH query failed: {}", e.message)
             return null

@@ -20,34 +20,57 @@ object SystemDirectories {
     private fun resolveDataDir(): String = when {
         isWindows -> {
             val appData = envOrNull("APPDATA") ?: "$home\\AppData\\Roaming"
-            "$appData\\KubeKubeDashDash"
+            validateUnderHome("$appData\\KubeKubeDashDash", "$home\\AppData\\Roaming\\KubeKubeDashDash")
         }
 
         isMac -> "$home/Library/Application Support/KubeKubeDashDash"
 
         else -> {
             val xdg = envOrNull("XDG_DATA_HOME") ?: "$home/.local/share"
-            "$xdg/kubekubedashdash"
+            validateUnderHome("$xdg/kubekubedashdash", "$home/.local/share/kubekubedashdash")
         }
     }
 
     private fun resolveLogsDir(): String = when {
         isWindows -> {
             val localAppData = envOrNull("LOCALAPPDATA") ?: "$home\\AppData\\Local"
-            "$localAppData\\KubeKubeDashDash\\Logs"
+            validateUnderHome("$localAppData\\KubeKubeDashDash\\Logs", "$home\\AppData\\Local\\KubeKubeDashDash\\Logs")
         }
 
         isMac -> "$home/Library/Logs/KubeKubeDashDash"
 
         else -> {
             val xdg = envOrNull("XDG_STATE_HOME") ?: "$home/.local/state"
-            "$xdg/kubekubedashdash/logs"
+            validateUnderHome("$xdg/kubekubedashdash/logs", "$home/.local/state/kubekubedashdash/logs")
         }
     }
 
     private fun envOrNull(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
 
+    private fun validateUnderHome(candidate: String, fallback: String): String = try {
+        val homePath = File(home).toPath().toRealPath()
+        val candidatePath = File(candidate).toPath()
+        val resolved = if (candidatePath.toFile().exists()) candidatePath.toRealPath() else candidatePath.normalize()
+        if (resolved.startsWith(homePath)) candidate else fallback
+    } catch (e: Exception) {
+        fallback
+    }
+
     private fun ensureDir(path: String) {
-        runCatching { File(path).mkdirs() }
+        runCatching {
+            val file = File(path)
+            file.mkdirs()
+            if (!isWindows) {
+                // Best-effort 0700 on POSIX so logs and DataStore aren't world-readable.
+                // Only the leaf directory is restricted; intermediate dirs under $HOME are
+                // already user-owned and typically 0755.
+                runCatching {
+                    java.nio.file.Files.setPosixFilePermissions(
+                        file.toPath(),
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"),
+                    )
+                }
+            }
+        }
     }
 }

@@ -74,7 +74,7 @@ class KubeConnectionManager : Closeable {
             close()
             log.debug("connect step 1/4: Config.autoConfigure")
             val config = Config.autoConfigure(context)
-            log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", config.masterUrl)
+            log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", redactUrl(config.masterUrl))
             val c = KubernetesClientBuilder().withConfig(config).build()
             _client = c
             _connectedContext = context ?: config.currentContext?.name
@@ -82,7 +82,8 @@ class KubeConnectionManager : Closeable {
             clearConnectionError()
             log.debug("connect step 4/4: fetch /version")
             val v = c.kubernetesVersion
-            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, config.masterUrl)
+            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, redactUrl(config.masterUrl))
+            _cachedFallbackContext = null
             _connectionVersion.update { it + 1 }
             Result.success("${v.major}.${v.minor}")
         } catch (t: Throwable) {
@@ -149,7 +150,10 @@ class KubeConnectionManager : Closeable {
                 val authInfo = users[userName]?.user
                 val awsProfile = authInfo?.exec?.env.orEmpty()
                     .firstOrNull { it.name == "AWS_PROFILE" }?.value
-                ContextBinding(name = namedCtx.name, awsProfile = awsProfile)
+                ContextBinding(
+                    name = namedCtx.name.stripControlChars(),
+                    awsProfile = awsProfile?.stripControlChars(),
+                )
             }
         } catch (e: Exception) {
             log.warn("Failed to read context bindings: {}", e.message)
@@ -164,11 +168,17 @@ class KubeConnectionManager : Closeable {
      * the cluster overview header / breadcrumbs read — different sessions must
      * see different values, otherwise multi-window all looks like one cluster.
      */
-    fun getCurrentContext(): String = _connectedContext ?: try {
-        Config.autoConfigure(null).currentContext?.name ?: ""
-    } catch (e: Exception) {
-        log.warn("Failed to get current context: {}", e.message)
-        ""
+    @Volatile private var _cachedFallbackContext: String? = null
+
+    fun getCurrentContext(): String = _connectedContext ?: run {
+        _cachedFallbackContext ?: synchronized(connectLock) {
+            _cachedFallbackContext ?: try {
+                Config.autoConfigure(null).currentContext?.name.orEmpty()
+            } catch (e: Exception) {
+                log.warn("Failed to get current context: {}", e.message)
+                ""
+            }.also { _cachedFallbackContext = it }
+        }
     }
 
     fun getClusterServer(): String = _client?.configuration?.masterUrl ?: ""
@@ -185,4 +195,16 @@ class KubeConnectionManager : Closeable {
         _client = null
         _connectedContext = null
     }
+
+    private fun redactUrl(url: String?): String {
+        if (url.isNullOrBlank()) return "<none>"
+        return try {
+            val u = java.net.URI(url)
+            "${u.scheme}://<redacted>:${if (u.port > 0) u.port else "default"}"
+        } catch (e: Exception) {
+            "<unparseable>"
+        }
+    }
+
+    private fun String.stripControlChars(): String = filter { it >= ' ' && it.code != 127 }
 }

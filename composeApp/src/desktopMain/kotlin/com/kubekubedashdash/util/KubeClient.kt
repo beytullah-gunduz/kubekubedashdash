@@ -785,7 +785,7 @@ class KubeClient(
     }
 
     fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
-        log.info("Starting log stream pod={} namespace={} container={}", name, namespace, container)
+        log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
         val watch = try {
             val op = client.pods().inNamespace(namespace).withName(name)
             val withC = if (container != null) op.inContainer(container) else op
@@ -986,12 +986,17 @@ fun formatCpuCores(millis: Long): String = when {
     else -> "${millis}m"
 }
 
+private val ageLog = LoggerFactory.getLogger("com.kubekubedashdash.util.formatAge")
+
 fun formatAge(timestamp: String?, now: Instant = Instant.now()): String {
     if (timestamp.isNullOrBlank()) return ""
     return try {
         val created = Instant.parse(timestamp)
         val dur = Duration.between(created, now)
-        if (dur.isNegative) return "0s"
+        if (dur.isNegative) {
+            ageLog.debug("Negative age duration: now={} created={} (clock skew?)", now, created)
+            return "0s"
+        }
         when {
             dur.toDays() > 365 -> "${dur.toDays() / 365}y${(dur.toDays() % 365) / 30}mo"
             dur.toDays() > 30 -> "${dur.toDays() / 30}mo${dur.toDays() % 30}d"

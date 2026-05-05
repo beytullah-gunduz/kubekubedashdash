@@ -1006,7 +1006,7 @@ class ReactiveKubeClient(
     }
 
     fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
-        log.info("Starting log stream pod={} namespace={} container={}", name, namespace, container)
+        log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
         val watch = try {
             val op = k8s.pods().inNamespace(namespace).withName(name)
             val withC = if (container != null) op.inContainer(container) else op

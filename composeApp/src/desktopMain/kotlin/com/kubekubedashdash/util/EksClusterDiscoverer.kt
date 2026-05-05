@@ -14,6 +14,8 @@ data class EksCluster(
     val region: String,
 )
 
+class CliInvocationFailure(val exitCode: Int, val stderrSnippet: String, message: String) : Exception(message)
+
 object EksClusterDiscoverer {
 
     private val log = LoggerFactory.getLogger(EksClusterDiscoverer::class.java)
@@ -115,31 +117,46 @@ object EksClusterDiscoverer {
         }
     }
 
+    private fun safeCmd(args: List<String>): String = "${args.firstOrNull() ?: "?"} ${args.getOrNull(1).orEmpty()} ${args.getOrNull(2).orEmpty()}".trim()
+
     private fun runCli(args: List<String>, timeoutSeconds: Long): Result<String> = try {
         val resolvedArgs = if (args.firstOrNull() == "aws") {
             val abs = ShellEnvironment.resolveCommand("aws")
-                ?: return Result.failure(RuntimeException("aws CLI not found on PATH"))
+                ?: return Result.failure(CliInvocationFailure(-1, "", "aws CLI not found on PATH"))
             listOf(abs) + args.drop(1)
         } else {
             args
         }
-        val pb = ProcessBuilder(resolvedArgs).redirectErrorStream(false)
+        // Merge stderr → stdout so a single drainer thread prevents pipe-buffer deadlock
+        // (if aws writes >64 KB to stdout/stderr, waitFor blocks unless we drain first).
+        val pb = ProcessBuilder(resolvedArgs).redirectErrorStream(true)
         ShellEnvironment.applyTo(pb)
         val process = pb.start()
         process.outputStream.close()
+        val output = StringBuilder()
+        val drainer = Thread {
+            process.inputStream.bufferedReader().use { r ->
+                r.lineSequence().forEach { line -> synchronized(output) { output.appendLine(line) } }
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
         val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
         if (!finished) {
             process.destroyForcibly()
-            Result.failure(RuntimeException("Timed out after ${timeoutSeconds}s: ${args.take(3).joinToString(" ")}"))
+            drainer.join(1_000)
+            Result.failure(CliInvocationFailure(-1, "", "Timed out after ${timeoutSeconds}s: ${safeCmd(args)}"))
         } else {
-            val stdout = process.inputStream.bufferedReader().readText()
-            val stderr = process.errorStream.bufferedReader().readText()
-            if (process.exitValue() == 0) {
-                Result.success(stdout)
+            drainer.join(2_000)
+            val combined = synchronized(output) { output.toString() }
+            val exitCode = process.exitValue()
+            if (exitCode == 0) {
+                Result.success(combined)
             } else {
-                val msg = stderr.trim().ifBlank { stdout.trim() }.ifBlank { "exit ${process.exitValue()}" }
-                log.warn("aws CLI failed: cmd={} msg={}", args.joinToString(" "), msg)
-                Result.failure(RuntimeException(msg))
+                val msg = combined.trim().ifBlank { "exit $exitCode" }
+                log.warn("aws CLI failed: cmd={} msg={}", safeCmd(args), msg)
+                Result.failure(CliInvocationFailure(exitCode, msg.take(500), msg))
             }
         }
     } catch (e: Exception) {
