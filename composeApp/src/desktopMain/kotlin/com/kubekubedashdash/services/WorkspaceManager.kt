@@ -141,6 +141,7 @@ object WorkspaceManager {
     fun closeSession(workspace: Workspace, sessionId: SessionId) {
         val key = "cluster:${sessionId.value}"
         closeTab(workspace, key)
+        LogStreamRegistry.closeAllForSession(sessionId)
     }
 
     /** Open or focus the Logs tab in [workspace]. Singleton. */
