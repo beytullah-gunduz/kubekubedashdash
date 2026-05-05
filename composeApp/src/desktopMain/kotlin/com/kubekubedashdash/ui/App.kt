@@ -51,7 +51,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -62,11 +61,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
@@ -80,27 +76,6 @@ import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
-import com.kubekubedashdash.resources.cloud_filled
-import com.kubekubedashdash.resources.content_copy_filled
-import com.kubekubedashdash.resources.dashboard_filled
-import com.kubekubedashdash.resources.description_filled
-import com.kubekubedashdash.resources.dns_filled
-import com.kubekubedashdash.resources.dynamic_feed_filled
-import com.kubekubedashdash.resources.folder_open_filled
-import com.kubekubedashdash.resources.folder_special_filled
-import com.kubekubedashdash.resources.hub
-import com.kubekubedashdash.resources.language_filled
-import com.kubekubedashdash.resources.layers_filled
-import com.kubekubedashdash.resources.list_filled
-import com.kubekubedashdash.resources.lock_filled
-import com.kubekubedashdash.resources.notifications_filled
-import com.kubekubedashdash.resources.save_filled
-import com.kubekubedashdash.resources.schedule_filled
-import com.kubekubedashdash.resources.security_filled
-import com.kubekubedashdash.resources.settings_ethernet_filled
-import com.kubekubedashdash.resources.storage_filled
-import com.kubekubedashdash.resources.view_in_ar_filled
-import com.kubekubedashdash.resources.work_filled
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -132,137 +107,6 @@ import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
 import org.jetbrains.compose.resources.painterResource
-
-/** Conditionally wrap [content] in a [CompositionLocalProvider] for [session] when non-null. */
-@Composable
-private fun MaybeProvideSessionLocals(session: ClusterSession?, content: @Composable () -> Unit) {
-    if (session != null) {
-        val isConnected by session.viewModel.isConnected.collectAsState()
-        val connectionError by session.viewModel.connectionError.collectAsState()
-        CompositionLocalProvider(
-            LocalViewModelStoreOwner provides session,
-            LocalReactiveKubeClient provides session.reactiveClient,
-            LocalIsConnected provides isConnected,
-            LocalConnectionError provides connectionError,
-        ) { content() }
-    } else {
-        content()
-    }
-}
-
-/**
- * Collects palette entries for the active cluster session — sidebar
- * destinations, cluster tabs (for switching), namespaces, plus pods and nodes
- * already cached on the reactive client. Returns a list shaped for
- * [CommandPalette].
- */
-@Composable
-private fun rememberPaletteEntries(
-    activeSession: ClusterSession?,
-    tabs: List<WorkspaceTab>,
-    onNavigate: (Screen) -> Unit,
-    onActivateTab: (tabKey: String) -> Unit,
-    onSelectNamespace: (String) -> Unit,
-): List<PaletteEntry> {
-    val screenEntries = remember(onNavigate) {
-        listOf(
-            paletteScreen("Cluster Overview", Res.drawable.dashboard_filled, Screen.Main.ClusterOverview, onNavigate),
-            paletteScreen("Nodes", Res.drawable.dns_filled, Screen.Main.Nodes(), onNavigate),
-            paletteScreen("Namespaces", Res.drawable.folder_special_filled, Screen.Main.Namespaces, onNavigate),
-            paletteScreen("Events", Res.drawable.notifications_filled, Screen.Main.Events(), onNavigate),
-            paletteScreen("Pods", Res.drawable.view_in_ar_filled, Screen.Main.Pods(), onNavigate),
-            paletteScreen("Deployments", Res.drawable.layers_filled, Screen.Main.Deployments, onNavigate),
-            paletteScreen("StatefulSets", Res.drawable.storage_filled, Screen.Main.StatefulSets, onNavigate),
-            paletteScreen("DaemonSets", Res.drawable.dynamic_feed_filled, Screen.Main.DaemonSets, onNavigate),
-            paletteScreen("ReplicaSets", Res.drawable.content_copy_filled, Screen.Main.ReplicaSets, onNavigate),
-            paletteScreen("Jobs", Res.drawable.work_filled, Screen.Main.Jobs, onNavigate),
-            paletteScreen("CronJobs", Res.drawable.schedule_filled, Screen.Main.CronJobs, onNavigate),
-            paletteScreen("ConfigMaps", Res.drawable.description_filled, Screen.Main.ConfigMaps, onNavigate),
-            paletteScreen("Secrets", Res.drawable.lock_filled, Screen.Main.Secrets, onNavigate),
-            paletteScreen("Services", Res.drawable.cloud_filled, Screen.Main.Services, onNavigate),
-            paletteScreen("Ingresses", Res.drawable.language_filled, Screen.Main.Ingresses, onNavigate),
-            paletteScreen("Endpoints", Res.drawable.settings_ethernet_filled, Screen.Main.Endpoints, onNavigate),
-            paletteScreen("Network Policies", Res.drawable.security_filled, Screen.Main.NetworkPolicies, onNavigate),
-            paletteScreen("Persistent Volumes", Res.drawable.save_filled, Screen.Main.PersistentVolumes, onNavigate),
-            paletteScreen("PV Claims", Res.drawable.folder_open_filled, Screen.Main.PersistentVolumeClaims, onNavigate),
-            paletteScreen("Storage Classes", Res.drawable.list_filled, Screen.Main.StorageClasses, onNavigate),
-        )
-    }
-
-    val vm = activeSession?.viewModel
-    val namespacesState = vm?.namespaces?.collectAsState()
-    val client = activeSession?.reactiveClient
-    val podsState = client?.pods?.collectAsState()
-    val nodesState = client?.nodes?.collectAsState()
-
-    val resourceEntries = remember(podsState?.value, nodesState?.value, onNavigate) {
-        val pods = (podsState?.value as? com.kubekubedashdash.models.ResourceState.Success)?.data.orEmpty()
-        val nodes = (nodesState?.value as? com.kubekubedashdash.models.ResourceState.Success)?.data.orEmpty()
-        buildList {
-            pods.forEach { pod ->
-                add(
-                    PaletteEntry(
-                        label = pod.name,
-                        sublabel = pod.namespace,
-                        category = "Pods",
-                        icon = Res.drawable.view_in_ar_filled,
-                        onActivate = { onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) },
-                    ),
-                )
-            }
-            nodes.forEach { node ->
-                add(
-                    PaletteEntry(
-                        label = node.name,
-                        sublabel = node.roles.ifBlank { null },
-                        category = "Nodes",
-                        icon = Res.drawable.dns_filled,
-                        onActivate = { onNavigate(Screen.Main.Nodes(selectNodeName = node.name)) },
-                    ),
-                )
-            }
-        }
-    }
-
-    val namespaceEntries = remember(namespacesState?.value, onSelectNamespace) {
-        (namespacesState?.value ?: emptyList()).map { ns ->
-            PaletteEntry(
-                label = ns,
-                sublabel = "namespace",
-                category = "Namespaces",
-                icon = Res.drawable.folder_special_filled,
-                onActivate = { onSelectNamespace(ns) },
-            )
-        }
-    }
-
-    val clusterEntries = remember(tabs, onActivateTab) {
-        tabs.filterIsInstance<WorkspaceTab.Cluster>().mapNotNull { tab ->
-            val ctx = tab.session.connectionManager.getCurrentContext().ifBlank { return@mapNotNull null }
-            PaletteEntry(
-                label = ctx,
-                sublabel = "switch cluster",
-                category = "Clusters",
-                icon = Res.drawable.hub,
-                onActivate = { onActivateTab(tab.key) },
-            )
-        }
-    }
-
-    return screenEntries + clusterEntries + namespaceEntries + resourceEntries
-}
-
-private fun paletteScreen(
-    label: String,
-    icon: org.jetbrains.compose.resources.DrawableResource,
-    screen: Screen,
-    onNavigate: (Screen) -> Unit,
-): PaletteEntry = PaletteEntry(
-    label = label,
-    category = "Go to",
-    icon = icon,
-    onActivate = { onNavigate(screen) },
-)
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -829,48 +673,4 @@ fun ExtraPaneRouter(
             else -> { /* nothing */ }
         }
     }
-}
-
-/**
- * Convert this layout's bounds to a screen-space rectangle that
- * [com.kubekubedashdash.services.WorkspaceManager.handleChipRelease] can hit-
- * test against AWT's `MouseInfo` cursor location at chip-drag end.
- *
- * Compose's `positionOnScreen` returns *physical* pixels on JBR with Retina
- * (a 2x scaling), but `MouseInfo.getPointerInfo().location` returns *logical*
- * pixels — feeding the two into the same hit-test silently shifted every
- * drop zone south-east by 2x on a 2x display. We compute the screen rect
- * via AWT (`Window.locationOnScreen`, logical) plus the layout's
- * window-local position converted from physical pixels through [density],
- * which keeps both sides of the comparison in AWT's coordinate space.
- *
- * Returns null if the layout is detached or the AWT window is not yet
- * showing on screen.
- */
-private fun LayoutCoordinates.toScreenRect(
-    awtWindow: java.awt.Window,
-    density: Density,
-): Rect? {
-    if (!isAttached) return null
-    val winOrigin = runCatching { awtWindow.locationOnScreen }.getOrNull() ?: return null
-    val localPx = positionInWindow()
-    val sizePx = size
-    val localDpX: Float
-    val localDpY: Float
-    val sizeDpX: Float
-    val sizeDpY: Float
-    with(density) {
-        localDpX = localPx.x.toDp().value
-        localDpY = localPx.y.toDp().value
-        sizeDpX = sizePx.width.toDp().value
-        sizeDpY = sizePx.height.toDp().value
-    }
-    val left = winOrigin.x + localDpX
-    val top = winOrigin.y + localDpY
-    return Rect(
-        left = left,
-        top = top,
-        right = left + sizeDpX,
-        bottom = top + sizeDpY,
-    )
 }
