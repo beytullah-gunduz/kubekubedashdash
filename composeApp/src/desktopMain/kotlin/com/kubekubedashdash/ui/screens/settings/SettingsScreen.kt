@@ -75,6 +75,7 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.clusterInitial
+import com.kubekubedashdash.ui.components.DebugLogStreamButton
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -350,6 +351,7 @@ fun SettingsScreen(
         add("Cluster discovery")
         if (mockRunning) add("Demo cluster simulator")
         add("Diagnostics")
+        add("Debug")
         add("About")
     }
 
@@ -798,6 +800,27 @@ fun SettingsScreen(
                                 Spacer(Modifier.width(6.dp))
                                 Text("Open application logs", color = KdTextPrimary)
                             }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        SettingsSection(
+                            title = "Debug",
+                            onLayoutTop = { y -> sectionOffsets["Debug"] = y },
+                        ) {
+                            Text(
+                                "Developer tools",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Open a test log stream in the drawer (Cmd/Ctrl+J to show/hide)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            DebugLogStreamButton()
                         }
 
                         Spacer(Modifier.height(16.dp))

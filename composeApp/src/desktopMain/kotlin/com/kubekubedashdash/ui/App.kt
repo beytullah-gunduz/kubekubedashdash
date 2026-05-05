@@ -427,7 +427,9 @@ fun App(
                 }
 
                 Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                    LogDrawer(state = drawerState, onStateChange = { drawerState = it })
+                    LogDrawer(state = drawerState, onStateChange = { drawerState = it }) {
+                        LogDrawerContent()
+                    }
                 }
             }
         }
