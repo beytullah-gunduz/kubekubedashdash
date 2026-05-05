@@ -1,6 +1,11 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -108,7 +113,11 @@ fun AllClustersScreen() {
             heatmapVisible = filters.heatmapVisible,
             onToggleHeatmap = { viewModel.updateFilters { f -> f.copy(heatmapVisible = !f.heatmapVisible) } },
         )
-        AnimatedVisibility(visible = filters.heatmapVisible) {
+        AnimatedVisibility(
+            visible = filters.heatmapVisible,
+            enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+            exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(animationSpec = tween(200)),
+        ) {
             AllClustersReasonHeatmap(
                 data = heatmapData,
                 onCellClick = { cluster, reason -> viewModel.onHeatmapCellClick(cluster, reason) },

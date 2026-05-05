@@ -34,6 +34,7 @@ internal fun AllClustersReasonHeatmap(
     }
 
     val allNonZeroValues = data.cells.values.filter { it > 0 }
+    val clusterColumnWidth = 180.dp
 
     Column(
         modifier = Modifier
@@ -50,7 +51,7 @@ internal fun AllClustersReasonHeatmap(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Leading empty column (120dp)
-            Box(modifier = Modifier.width(120.dp))
+            Box(modifier = Modifier.width(clusterColumnWidth))
 
             // Reason header cells
             data.reasons.forEach { reason ->
@@ -85,7 +86,7 @@ internal fun AllClustersReasonHeatmap(
                     color = KdTextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(120.dp),
+                    modifier = Modifier.width(clusterColumnWidth),
                 )
 
                 // Cell per reason
