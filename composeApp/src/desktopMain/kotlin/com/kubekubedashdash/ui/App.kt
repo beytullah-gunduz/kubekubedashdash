@@ -59,9 +59,12 @@ import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
+import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
+import com.kubekubedashdash.util.MockClusterProvider
+import com.kubekubedashdash.util.ShellEnvironment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
 import org.jetbrains.compose.resources.painterResource
@@ -104,6 +107,8 @@ fun App(
 
         val activeTab = tabs.firstOrNull { it.key == activeTabKey }
         val activeSession = (activeTab as? WorkspaceTab.Cluster)?.session
+        val hasRealContexts by appViewModel.hasRealContexts.collectAsState()
+        val awsCliAvailable = remember { ShellEnvironment.resolveCommand("aws") != null }
 
         // For title-bar context use the active cluster session; fall back to the
         // first cluster tab when the Logs tab is active, so the namespace picker
@@ -123,6 +128,7 @@ fun App(
         val isConnected by (titleVm?.isConnected ?: emptyBool).collectAsState()
         val isConnecting by (titleVm?.isConnecting ?: emptyBool).collectAsState()
         val searchQuery by (titleVm?.searchQuery ?: emptyString).collectAsState()
+        val showFirstRun = !hasRealContexts && !isConnected
 
         // Pager state mirrors workspace.activeTabKey. Tab clicks / drag-drop
         // / close events drive activeTabKey externally and the LaunchedEffect
@@ -212,163 +218,189 @@ fun App(
                         }
                     },
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-                ) {
-                    // isMultiTab: show the strip when there are ≥2 tabs, OR
-                    // when any non-cluster tab (Logs) is present — so the user
-                    // always sees the strip and its + button even with a single
-                    // cluster tab alongside the Logs tab. The user can also
-                    // force the strip on regardless via the Tab strip preference
-                    // (see §6.1 in .docs/gui-audit-2026-05-03.md).
-                    val hasNonClusterTab = tabs.any { it !is WorkspaceTab.Cluster }
-                    val isMultiTab =
-                        tabs.size >= 2 ||
-                            hasNonClusterTab ||
-                            tabStripVisibility == TabStripVisibility.ALWAYS
-
-                    // The drop zone for chip-on-chip merge is the union of the
-                    // title bar and (when present) the tab strip.
-                    Column(
-                        modifier = Modifier.onGloballyPositioned { coords ->
-                            workspace.updateDropZoneScreenBounds(
-                                coords.toScreenRect(awtWindow, density),
+                if (showFirstRun) {
+                    FirstRunScreen(
+                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                        onTryDemo = {
+                            WorkspaceManager.openCluster(
+                                workspace,
+                                MockClusterProvider.MOCK_CONTEXT_NAME,
+                                OpenTarget.CURRENT_VIEW,
                             )
                         },
+                        onOpenDocs = {
+                            runCatching {
+                                java.awt.Desktop.getDesktop().browse(
+                                    java.net.URI("https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/"),
+                                )
+                            }
+                        },
+                        onRescan = { appViewModel.refreshContexts() },
+                        onDiscoverEks = if (awsCliAvailable) {
+                            { workspace.showEksDiscovery() }
+                        } else {
+                            null
+                        },
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                     ) {
-                        with(windowScope) {
-                            TitleBar(
-                                title = "KubeKubeDashDash",
-                                windowState = windowState,
-                                onClose = onClose,
-                                searchQuery = searchQuery,
-                                onSearchChange = { titleVm?.setSearchQuery(it) },
-                                selectedNamespace = selectedNamespace,
-                                namespaces = namespaces,
-                                onNamespaceChange = { titleVm?.setSelectedNamespace(it) },
-                                sidebarCollapsed = sidebarCollapsed,
-                                onToggleSidebar = {
-                                    PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
-                                },
-                                onOpenSettings = { workspace.showSettings() },
-                                chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
-                                    @Composable {
-                                        val ctx = selectedContext
-                                        Row(
-                                            // Eat press events over the chip + add-button area so the
-                                            // title bar's ancestor pointerInput doesn't kick off
-                                            // macOS's performWindowDragWithEvent: on every press.
-                                            modifier = Modifier.pointerInput(Unit) {
-                                                awaitPointerEventScope {
-                                                    while (true) {
-                                                        val event = awaitPointerEvent(PointerEventPass.Main)
-                                                        if (event.type == PointerEventType.Press) {
-                                                            event.changes.forEach { it.consume() }
+                        // isMultiTab: show the strip when there are ≥2 tabs, OR
+                        // when any non-cluster tab (Logs) is present — so the user
+                        // always sees the strip and its + button even with a single
+                        // cluster tab alongside the Logs tab. The user can also
+                        // force the strip on regardless via the Tab strip preference
+                        // (see §6.1 in .docs/gui-audit-2026-05-03.md).
+                        val hasNonClusterTab = tabs.any { it !is WorkspaceTab.Cluster }
+                        val isMultiTab =
+                            tabs.size >= 2 ||
+                                hasNonClusterTab ||
+                                tabStripVisibility == TabStripVisibility.ALWAYS
+
+                        // The drop zone for chip-on-chip merge is the union of the
+                        // title bar and (when present) the tab strip.
+                        Column(
+                            modifier = Modifier.onGloballyPositioned { coords ->
+                                workspace.updateDropZoneScreenBounds(
+                                    coords.toScreenRect(awtWindow, density),
+                                )
+                            },
+                        ) {
+                            with(windowScope) {
+                                TitleBar(
+                                    title = "KubeKubeDashDash",
+                                    windowState = windowState,
+                                    onClose = onClose,
+                                    searchQuery = searchQuery,
+                                    onSearchChange = { titleVm?.setSearchQuery(it) },
+                                    selectedNamespace = selectedNamespace,
+                                    namespaces = namespaces,
+                                    onNamespaceChange = { titleVm?.setSelectedNamespace(it) },
+                                    sidebarCollapsed = sidebarCollapsed,
+                                    onToggleSidebar = {
+                                        PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
+                                    },
+                                    onOpenSettings = { workspace.showSettings() },
+                                    chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
+                                        @Composable {
+                                            val ctx = selectedContext
+                                            Row(
+                                                // Eat press events over the chip + add-button area so the
+                                                // title bar's ancestor pointerInput doesn't kick off
+                                                // macOS's performWindowDragWithEvent: on every press.
+                                                modifier = Modifier.pointerInput(Unit) {
+                                                    awaitPointerEventScope {
+                                                        while (true) {
+                                                            val event = awaitPointerEvent(PointerEventPass.Main)
+                                                            if (event.type == PointerEventType.Press) {
+                                                                event.changes.forEach { it.consume() }
+                                                            }
                                                         }
                                                     }
-                                                }
-                                            },
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            ClusterChip(
-                                                label = ctx,
-                                                color = ClusterColor.effectiveColor(ctx, clusterColorOverrides),
-                                                initial = clusterInitial(ctx),
-                                                isActive = true,
-                                                isDropTarget = isDropTarget,
-                                                isConnected = isConnected,
-                                                isConnecting = isConnecting,
-                                                onClick = { workspace.showClusterSelector() },
-                                                onDragMove = { x, y ->
-                                                    WorkspaceManager.notifyDragMove(activeSession.id, x, y)
                                                 },
-                                                onDragRelease = { x, y ->
-                                                    WorkspaceManager.handleChipRelease(activeSession.id, x, y)
-                                                },
-                                                onDragCancelled = { WorkspaceManager.cancelDrag() },
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .clip(CircleShape)
-                                                    .clickable {
-                                                        workspace.showClusterSelector(OpenTarget.NEW_TAB)
-                                                    },
-                                                contentAlignment = Alignment.Center,
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                                             ) {
-                                                Icon(
-                                                    painterResource(Res.drawable.add),
-                                                    contentDescription = "Open another cluster",
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                ClusterChip(
+                                                    label = ctx,
+                                                    color = ClusterColor.effectiveColor(ctx, clusterColorOverrides),
+                                                    initial = clusterInitial(ctx),
+                                                    isActive = true,
+                                                    isDropTarget = isDropTarget,
+                                                    isConnected = isConnected,
+                                                    isConnecting = isConnecting,
+                                                    onClick = { workspace.showClusterSelector() },
+                                                    onDragMove = { x, y ->
+                                                        WorkspaceManager.notifyDragMove(activeSession.id, x, y)
+                                                    },
+                                                    onDragRelease = { x, y ->
+                                                        WorkspaceManager.handleChipRelease(activeSession.id, x, y)
+                                                    },
+                                                    onDragCancelled = { WorkspaceManager.cancelDrag() },
                                                 )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(24.dp)
+                                                        .clip(CircleShape)
+                                                        .clickable {
+                                                            workspace.showClusterSelector(OpenTarget.NEW_TAB)
+                                                        },
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        painterResource(Res.drawable.add),
+                                                        contentDescription = "Open another cluster",
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                } else {
-                                    null
-                                },
-                            )
-                        }
-
-                        if (isMultiTab) {
-                            WindowTabStrip(
-                                tabs = tabs,
-                                activeTabKey = activeTabKey,
-                                isDropTarget = isDropTarget,
-                                onSelectTab = { key ->
-                                    val tab = tabs.firstOrNull { it.key == key }
-                                    if (key == activeTabKey) {
-                                        // Clicking the already-active cluster tab opens the cluster
-                                        // selector so the user can swap that session's context.
-                                        if (tab is WorkspaceTab.Cluster) workspace.showClusterSelector()
                                     } else {
-                                        workspace.setActive(key)
-                                    }
-                                },
-                                onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
-                                onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
-                                onDragMoveSession = { id, x, y ->
-                                    WorkspaceManager.notifyDragMove(id, x, y)
-                                },
-                                onDragReleaseSession = { id, x, y ->
-                                    WorkspaceManager.handleChipRelease(id, x, y)
-                                },
-                                onDragCancelled = { _ -> WorkspaceManager.cancelDrag() },
-                                onDragMoveTab = { key, x, y ->
-                                    WorkspaceManager.notifyDragMoveTab(key, x, y)
-                                },
-                                onDragReleaseTab = { key, x, y ->
-                                    WorkspaceManager.handleTabRelease(key, x, y)
-                                },
-                                onDragCancelledTab = { WorkspaceManager.cancelDrag() },
-                            )
+                                        null
+                                    },
+                                )
+                            }
+
+                            if (isMultiTab) {
+                                WindowTabStrip(
+                                    tabs = tabs,
+                                    activeTabKey = activeTabKey,
+                                    isDropTarget = isDropTarget,
+                                    onSelectTab = { key ->
+                                        val tab = tabs.firstOrNull { it.key == key }
+                                        if (key == activeTabKey) {
+                                            // Clicking the already-active cluster tab opens the cluster
+                                            // selector so the user can swap that session's context.
+                                            if (tab is WorkspaceTab.Cluster) workspace.showClusterSelector()
+                                        } else {
+                                            workspace.setActive(key)
+                                        }
+                                    },
+                                    onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
+                                    onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
+                                    onDragMoveSession = { id, x, y ->
+                                        WorkspaceManager.notifyDragMove(id, x, y)
+                                    },
+                                    onDragReleaseSession = { id, x, y ->
+                                        WorkspaceManager.handleChipRelease(id, x, y)
+                                    },
+                                    onDragCancelled = { _ -> WorkspaceManager.cancelDrag() },
+                                    onDragMoveTab = { key, x, y ->
+                                        WorkspaceManager.notifyDragMoveTab(key, x, y)
+                                    },
+                                    onDragReleaseTab = { key, x, y ->
+                                        WorkspaceManager.handleTabRelease(key, x, y)
+                                    },
+                                    onDragCancelledTab = { WorkspaceManager.cancelDrag() },
+                                )
+                            }
                         }
-                    }
 
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        key = { idx -> tabs[idx].key },
-                    ) { page ->
-                        when (val tab = tabs[page]) {
-                            is WorkspaceTab.Cluster -> SessionPaneContent(
-                                session = tab.session,
-                                sidebarCollapsed = sidebarCollapsed,
-                                onSelectCluster = { workspace.showClusterSelector() },
-                                onDiscoverEks = { workspace.showEksDiscovery() },
-                                onOpenLogsTab = { workspace.openLogsTab() },
-                                onOpenLogs = onOpenLogs,
-                            )
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            key = { idx -> tabs[idx].key },
+                        ) { page ->
+                            when (val tab = tabs[page]) {
+                                is WorkspaceTab.Cluster -> SessionPaneContent(
+                                    session = tab.session,
+                                    sidebarCollapsed = sidebarCollapsed,
+                                    onSelectCluster = { workspace.showClusterSelector() },
+                                    onDiscoverEks = { workspace.showEksDiscovery() },
+                                    onOpenLogsTab = { workspace.openLogsTab() },
+                                    onOpenLogs = onOpenLogs,
+                                )
 
-                            WorkspaceTab.Logs -> LogsPaneContent()
+                                WorkspaceTab.Logs -> LogsPaneContent()
 
-                            WorkspaceTab.AllClusters -> AllClustersScreen()
+                                WorkspaceTab.AllClusters -> AllClustersScreen()
+                            }
                         }
+                        if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(DrawerHeaderHeight))
                     }
-                    if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(DrawerHeaderHeight))
-                }
+                } // end if (showFirstRun) else
 
                 val prereq = prerequisiteResult
                 if (showPrerequisites) {

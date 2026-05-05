@@ -10,8 +10,11 @@ import com.kubekubedashdash.util.PrerequisiteChecker
 import com.kubekubedashdash.util.PrerequisiteResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -33,6 +36,9 @@ class AppViewModel private constructor() : ViewModel() {
 
     private val _contexts = MutableStateFlow<List<String>>(emptyList())
     val contexts: StateFlow<List<String>> = _contexts.asStateFlow()
+    val hasRealContexts: StateFlow<Boolean> = _contexts
+        .map { list -> list.any { !MockClusterProvider.isMockContext(it) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialValue = false)
 
     private val _prerequisiteResult = MutableStateFlow<PrerequisiteResult?>(null)
     val prerequisiteResult: StateFlow<PrerequisiteResult?> = _prerequisiteResult.asStateFlow()
@@ -44,22 +50,35 @@ class AppViewModel private constructor() : ViewModel() {
         runPrerequisiteChecks()
     }
 
+    private suspend fun loadContextsSync(): List<String> = withContext(Dispatchers.IO) {
+        listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
+            WorkspaceManager.activeSession.connectionManager.getContexts()
+    }
+
     private fun runPrerequisiteChecks() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { PrerequisiteChecker.runAll() }
             _prerequisiteResult.value = result
             if (result.allPassed) {
                 _showPrerequisites.value = false
-                WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
-                refreshContexts()
+                val loaded = loadContextsSync()
+                _contexts.value = loaded
+                if (loaded.any { !MockClusterProvider.isMockContext(it) }) {
+                    WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
+                }
             }
         }
     }
 
     fun dismissPrerequisites() {
         _showPrerequisites.value = false
-        WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
-        refreshContexts()
+        viewModelScope.launch {
+            val loaded = loadContextsSync()
+            _contexts.value = loaded
+            if (loaded.any { !MockClusterProvider.isMockContext(it) }) {
+                WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
+            }
+        }
     }
 
     fun loadingPrerequisiteResult(): PrerequisiteResult = PrerequisiteResult(
@@ -77,10 +96,7 @@ class AppViewModel private constructor() : ViewModel() {
      * EKS clusters so the picker shows them without a restart.
      */
     fun refreshContexts() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
-                WorkspaceManager.activeSession.connectionManager.getContexts()
-        }
+        viewModelScope.launch { _contexts.value = loadContextsSync() }
     }
 
     /**
