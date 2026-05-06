@@ -1541,8 +1541,10 @@ class ReactiveKubeClient(
             groupsByKey.getOrPut(groupKey) { PodGroup(root) }.pods.add(pod)
         }
 
-        // Add WorkloadGroup nodes
-        // Map groupId -> WorkloadGroup node id
+        // Add WorkloadGroup nodes (and one Pod child node per pod, edged from the group).
+        // Pod nodes are emitted into the graph so the WorkloadGroupCard expander can list
+        // them; they are filtered out of the column layout in the UI so they don't pollute
+        // the topology lanes — they only appear when their parent group is expanded.
         val groupNodeId = mutableMapOf<String, String>() // groupKey -> nodeId
         for ((groupKey, group) in groupsByKey) {
             val pods = group.pods
@@ -1552,14 +1554,57 @@ class ReactiveKubeClient(
                     (pod.status?.containerStatuses?.all { it.ready == true } ?: false)
             }
             val totalCount = pods.size
-            val statusStr = "$readyCount/$totalCount ready"
+            // When everything is healthy, show the compact ready ratio. Otherwise, show a
+            // breakdown of effective pod statuses (Running, Pending, CrashLoopBackOff, …)
+            // so the user can tell *why* the group is unhealthy at a glance.
+            val statusStr = if (readyCount == totalCount) {
+                "$readyCount/$totalCount ready"
+            } else {
+                val byStatus = pods.groupingBy { effectivePodStatus(it) }.eachCount()
+                byStatus.entries
+                    .sortedByDescending { it.value }
+                    .joinToString(" · ") { (state, count) -> "$count $state" }
+            }
             val rootKind = root?.kind ?: "Pod"
             val rootUid = root?.uid ?: (pods.firstOrNull()?.metadata?.namespace ?: "unknown")
             val nodeId = "WorkloadGroup:$rootKind:$rootUid"
             val name = root?.name ?: "standalone"
             val groupNs = pods.firstOrNull()?.metadata?.namespace
+            // Primary container image of the first pod — gives the user "what's running"
+            // without an extra click. We pick the first container for simplicity; if a pod
+            // has sidecars they're not shown here (would bloat the card).
+            val primaryImage = pods.firstOrNull()?.spec?.containers?.firstOrNull()?.image
             groupNodeId[groupKey] = nodeId
-            addNode(ResourceGraphNode(nodeId, name, "WorkloadGroup", statusStr, groupNs))
+            addNode(
+                ResourceGraphNode(
+                    id = nodeId,
+                    name = name,
+                    kind = "WorkloadGroup",
+                    status = statusStr,
+                    namespace = groupNs,
+                    subKind = rootKind,
+                    image = primaryImage,
+                ),
+            )
+
+            // Emit per-pod child nodes + edges. Pod IDs use UID so collisions are
+            // impossible across namespaces.
+            for (pod in pods) {
+                val podUid = pod.metadata?.uid ?: continue
+                val podId = "Pod:$podUid"
+                val podRestarts = pod.status?.containerStatuses?.sumOf { it.restartCount ?: 0 } ?: 0
+                addNode(
+                    ResourceGraphNode(
+                        id = podId,
+                        name = pod.metadata?.name ?: "",
+                        kind = "Pod",
+                        status = effectivePodStatus(pod),
+                        namespace = pod.metadata?.namespace,
+                        restartCount = podRestarts,
+                    ),
+                )
+                addEdge(nodeId, podId)
+            }
         }
 
         // Step 4: Service -> WorkloadGroup edges
@@ -1630,10 +1675,23 @@ class ReactiveKubeClient(
             }
         }
 
-        // Step 6: Scale guard
-        if (graphNodes.size > 200) {
-            val truncated = graphNodes.take(200).toMutableList()
-            truncated.add(
+        // Step 6: Scale guard. The 200-node limit applies only to nodes that occupy a
+        // column lane in the UI — Pods are emitted into the graph but rendered as hidden
+        // children of their WorkloadGroup, so they don't compete for visual space.
+        val visibleCount = graphNodes.count { it.kind != "Pod" }
+        if (visibleCount > 200) {
+            val visibleKept = mutableListOf<ResourceGraphNode>()
+            val keptIds = mutableSetOf<String>()
+            for (n in graphNodes) {
+                if (n.kind == "Pod") continue
+                if (visibleKept.size >= 200) break
+                visibleKept.add(n)
+                keptIds.add(n.id)
+            }
+            // Keep child pods of any retained WorkloadGroup so the expander still works.
+            val truncated = visibleKept + graphNodes.filter { it.kind == "Pod" && edges.any { e -> e.targetId == it.id && e.sourceId in keptIds } }
+            val withWarning = truncated.toMutableList()
+            withWarning.add(
                 ResourceGraphNode(
                     id = "__truncated__",
                     name = "Graph truncated at 200 nodes",
@@ -1641,8 +1699,8 @@ class ReactiveKubeClient(
                     status = "Use namespace filter to zoom in",
                 ),
             )
-            log.warn("Cluster topology graph truncated: {} nodes exceeded limit of 200", graphNodes.size)
-            return ResourceGraph(truncated, edges)
+            log.warn("Cluster topology graph truncated: {} visible nodes exceeded limit of 200", visibleCount)
+            return ResourceGraph(withWarning, edges)
         }
 
         log.debug("Cluster topology graph built: {} nodes, {} edges", graphNodes.size, edges.size)

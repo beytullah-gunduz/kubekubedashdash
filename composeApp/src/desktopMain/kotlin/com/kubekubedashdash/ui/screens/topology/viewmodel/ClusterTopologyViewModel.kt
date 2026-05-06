@@ -47,15 +47,15 @@ class ClusterTopologyViewModel(
             "Ingress" to 1,
             "Service" to 2,
             "WorkloadGroup" to 3,
-            "Pod" to 3,
-            "ConfigMap" to 4,
-            "Secret" to 4,
-            "PersistentVolumeClaim" to 4,
-            "ServiceAccount" to 4,
+            "Pod" to 4,
+            "ConfigMap" to 5,
+            "Secret" to 5,
+            "PersistentVolumeClaim" to 5,
+            "ServiceAccount" to 5,
         )
 
         fun groupIntoColumns(graph: ResourceGraph): List<List<ResourceGraphNode>> {
-            val columns = Array(5) { mutableListOf<ResourceGraphNode>() }
+            val columns = Array(6) { mutableListOf<ResourceGraphNode>() }
             graph.nodes.forEach { node ->
                 val col = kindColumnOrder[node.kind] ?: 2
                 columns[col].add(node)
