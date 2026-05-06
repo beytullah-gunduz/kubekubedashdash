@@ -122,9 +122,13 @@ fun ClusterTopologyGraph(
                 color = KdTextSecondary,
             )
             Spacer(Modifier.weight(1f))
-            // Legend
+            // Legend. "WorkloadGroup" is intentionally excluded — it's an internal
+            // placeholder kind that the cards now translate to the actual root kind
+            // (Deployment / StatefulSet / DaemonSet / CronJob / Job) via subKind.
+            // Showing "WorkloadGroup" here would re-expose the placeholder name the
+            // user otherwise never sees.
             graph.nodes.map { it.kind }.distinct()
-                .filter { it != "__truncated__" && it != "Warning" }
+                .filter { it != "__truncated__" && it != "Warning" && it != "WorkloadGroup" }
                 .sortedBy { ClusterTopologyViewModel.kindColumnOrder[it] ?: 99 }
                 .forEach { kind ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
