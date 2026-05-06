@@ -1326,7 +1326,7 @@ class ReactiveKubeClient(
             val ingUid = ing.metadata?.uid ?: continue
             val ingId = "Ingress:$ingUid"
             val ingNs = ing.metadata?.namespace ?: namespace
-            addNode(ResourceGraphNode(ingId, ing.metadata?.name ?: "", "Ingress", null))
+            addNode(ResourceGraphNode(ingId, ing.metadata?.name ?: "", "Ingress", null, ingNs))
             ing.spec?.rules?.forEach { rule ->
                 rule.http?.paths?.forEach { path ->
                     val svcName = path.backend?.service?.name ?: return@forEach
@@ -1354,7 +1354,7 @@ class ReactiveKubeClient(
             val svcNs = svc.metadata?.namespace ?: ""
             val svcName = svc.metadata?.name ?: ""
             svcIdByNameNs["$svcName/$svcNs"] = svcId
-            addNode(ResourceGraphNode(svcId, svcName, "Service", svc.spec?.type))
+            addNode(ResourceGraphNode(svcId, svcName, "Service", svc.spec?.type, svcNs))
 
             // External nodes
             val lbIngresses = svc.status?.loadBalancer?.ingress ?: emptyList()
@@ -1557,8 +1557,9 @@ class ReactiveKubeClient(
             val rootUid = root?.uid ?: (pods.firstOrNull()?.metadata?.namespace ?: "unknown")
             val nodeId = "WorkloadGroup:$rootKind:$rootUid"
             val name = root?.name ?: "standalone"
+            val groupNs = pods.firstOrNull()?.metadata?.namespace
             groupNodeId[groupKey] = nodeId
-            addNode(ResourceGraphNode(nodeId, name, "WorkloadGroup", statusStr))
+            addNode(ResourceGraphNode(nodeId, name, "WorkloadGroup", statusStr, groupNs))
         }
 
         // Step 4: Service -> WorkloadGroup edges
@@ -1590,35 +1591,39 @@ class ReactiveKubeClient(
         }
 
         // Step 5: Mounts (volumes and service accounts per pod -> WorkloadGroup)
+        // Cluster-scoped helpers (ConfigMap/Secret/PVC/ServiceAccount) are namespace-scoped in
+        // K8s but were keyed by name only here, which collapsed same-named objects across
+        // namespaces into a single node with cross-namespace edges. Qualify by namespace.
         val addedMountEdges = mutableSetOf<String>()
         for ((groupKey, group) in groupsByKey) {
             val groupId = groupNodeId[groupKey] ?: continue
             for (pod in group.pods) {
                 val spec = pod.spec ?: continue
+                val podNs = pod.metadata?.namespace ?: ""
                 spec.volumes?.forEach { vol ->
                     vol.configMap?.name?.let { cmName ->
-                        val cmId = "ConfigMap:$cmName"
-                        addNode(ResourceGraphNode(cmId, cmName, "ConfigMap", null))
+                        val cmId = "ConfigMap:$podNs/$cmName"
+                        addNode(ResourceGraphNode(cmId, cmName, "ConfigMap", null, podNs))
                         val edgeKey = "$groupId->$cmId"
                         if (addedMountEdges.add(edgeKey)) addEdge(groupId, cmId)
                     }
                     vol.secret?.secretName?.let { secretName ->
-                        val secretId = "Secret:$secretName"
-                        addNode(ResourceGraphNode(secretId, secretName, "Secret", null))
+                        val secretId = "Secret:$podNs/$secretName"
+                        addNode(ResourceGraphNode(secretId, secretName, "Secret", null, podNs))
                         val edgeKey = "$groupId->$secretId"
                         if (addedMountEdges.add(edgeKey)) addEdge(groupId, secretId)
                     }
                     vol.persistentVolumeClaim?.claimName?.let { claimName ->
-                        val pvcId = "PersistentVolumeClaim:$claimName"
-                        addNode(ResourceGraphNode(pvcId, claimName, "PersistentVolumeClaim", null))
+                        val pvcId = "PersistentVolumeClaim:$podNs/$claimName"
+                        addNode(ResourceGraphNode(pvcId, claimName, "PersistentVolumeClaim", null, podNs))
                         val edgeKey = "$groupId->$pvcId"
                         if (addedMountEdges.add(edgeKey)) addEdge(groupId, pvcId)
                     }
                 }
                 val saName = spec.serviceAccountName?.takeIf { it.isNotBlank() && it != "default" }
                 if (saName != null) {
-                    val saId = "ServiceAccount:$saName"
-                    addNode(ResourceGraphNode(saId, saName, "ServiceAccount", null))
+                    val saId = "ServiceAccount:$podNs/$saName"
+                    addNode(ResourceGraphNode(saId, saName, "ServiceAccount", null, podNs))
                     val edgeKey = "$groupId->$saId"
                     if (addedMountEdges.add(edgeKey)) addEdge(groupId, saId)
                 }

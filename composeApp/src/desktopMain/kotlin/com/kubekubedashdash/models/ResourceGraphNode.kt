@@ -5,4 +5,5 @@ data class ResourceGraphNode(
     val name: String,
     val kind: String,
     val status: String? = null,
+    val namespace: String? = null,
 )

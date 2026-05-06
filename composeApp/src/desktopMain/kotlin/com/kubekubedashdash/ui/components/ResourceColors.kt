@@ -25,6 +25,12 @@ fun kindColor(kind: String): Color = when (kind) {
     else -> Color(0xFF6B7280)
 }
 
+fun namespaceAccentColor(namespace: String): Color {
+    val hash = namespace.hashCode().toLong() and 0xFFFFFFFFL
+    val hue = (hash % 360L).toFloat()
+    return Color.hsv(hue, 0.50f, 0.78f)
+}
+
 fun kindStatusColor(kind: String, status: String?): Color? {
     if (status == null) return null
     return when (kind) {

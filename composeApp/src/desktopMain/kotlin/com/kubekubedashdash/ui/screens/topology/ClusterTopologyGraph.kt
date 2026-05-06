@@ -14,6 +14,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -66,6 +67,7 @@ import com.kubekubedashdash.resources.graph_3_24
 import com.kubekubedashdash.resources.refresh_24
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
+import com.kubekubedashdash.ui.components.namespaceAccentColor
 import com.kubekubedashdash.ui.screens.topology.viewmodel.ClusterTopologyViewModel
 import org.jetbrains.compose.resources.painterResource
 
@@ -77,6 +79,7 @@ fun ClusterTopologyGraph(
 ) {
     val packetAnimationEnabled by PreferenceRepository.topologyPacketAnimationEnabled.collectAsState()
     val truncatedNode = graph.nodes.find { it.id == "__truncated__" }
+    val isAllNamespaces = namespace == "All Namespaces"
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Toolbar
@@ -142,6 +145,7 @@ fun ClusterTopologyGraph(
         TopologyGraphContent(
             graph = graph,
             packetAnimationEnabled = packetAnimationEnabled,
+            showNamespaceLabel = isAllNamespaces,
             modifier = Modifier.weight(1f).fillMaxWidth(),
         )
     }
@@ -151,6 +155,7 @@ fun ClusterTopologyGraph(
 private fun TopologyGraphContent(
     graph: ResourceGraph,
     packetAnimationEnabled: Boolean,
+    showNamespaceLabel: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val nodeRects = remember(graph) { mutableStateMapOf<String, Rect>() }
@@ -373,6 +378,7 @@ private fun TopologyGraphContent(
                                 canExpand = canExpand,
                                 selected = node.id == selectedNodeId,
                                 dimmed = dimmed,
+                                showNamespace = showNamespaceLabel,
                                 onClick = {
                                     selectedNodeId = if (selectedNodeId == node.id) null else node.id
                                 },
@@ -409,6 +415,7 @@ private fun TopologyGraphContent(
                                         node = pod,
                                         selected = pod.id == selectedNodeId,
                                         dimmed = podDimmed,
+                                        showNamespace = showNamespaceLabel,
                                         onClick = {
                                             selectedNodeId = if (selectedNodeId == pod.id) null else pod.id
                                         },
@@ -434,6 +441,7 @@ private fun TopologyGraphContent(
                                 node = node,
                                 selected = node.id == selectedNodeId,
                                 dimmed = dimmed,
+                                showNamespace = showNamespaceLabel,
                                 onClick = {
                                     selectedNodeId = if (selectedNodeId == node.id) null else node.id
                                 },
@@ -466,6 +474,7 @@ private fun GraphNodeCard(
     node: ResourceGraphNode,
     selected: Boolean,
     dimmed: Boolean,
+    showNamespace: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -474,6 +483,7 @@ private fun GraphNodeCard(
     val alpha = if (dimmed) 0.35f else 1f
     val borderWidth = if (selected) 2.dp else 1.dp
     val borderAlpha = if (selected) 0.8f else 0.25f
+    val nsToShow = node.namespace?.takeIf { showNamespace && it.isNotBlank() }
 
     Surface(
         modifier = modifier
@@ -484,31 +494,53 @@ private fun GraphNodeCard(
         border = BorderStroke(borderWidth, color.copy(alpha = borderAlpha * alpha)),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            modifier = Modifier.height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(
-                    node.kind,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color.copy(alpha = alpha),
-                    fontWeight = FontWeight.SemiBold,
+            if (nsToShow != null) {
+                Box(
+                    Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(namespaceAccentColor(nsToShow).copy(alpha = alpha)),
                 )
-                Text(
-                    node.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = KdTextPrimary.copy(alpha = alpha),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (node.status != null) {
+            }
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
+                Spacer(Modifier.width(8.dp))
+                Column {
                     Text(
-                        node.status,
+                        node.kind,
                         style = MaterialTheme.typography.labelSmall,
-                        color = (sColor ?: KdTextSecondary).copy(alpha = alpha),
+                        color = color.copy(alpha = alpha),
+                        fontWeight = FontWeight.SemiBold,
                     )
+                    Text(
+                        node.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KdTextPrimary.copy(alpha = alpha),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (nsToShow != null) {
+                        Text(
+                            nsToShow,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdTextSecondary.copy(alpha = alpha),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (node.status != null) {
+                        Text(
+                            node.status,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = (sColor ?: KdTextSecondary).copy(alpha = alpha),
+                        )
+                    }
                 }
             }
         }
@@ -523,6 +555,7 @@ private fun WorkloadGroupCard(
     canExpand: Boolean,
     selected: Boolean,
     dimmed: Boolean,
+    showNamespace: Boolean,
     onClick: () -> Unit,
     onToggleExpand: () -> Unit,
     modifier: Modifier = Modifier,
@@ -532,6 +565,7 @@ private fun WorkloadGroupCard(
     val alpha = if (dimmed) 0.35f else 1f
     val borderWidth = if (selected) 2.dp else 1.dp
     val borderAlpha = if (selected) 0.8f else 0.25f
+    val nsToShow = node.namespace?.takeIf { showNamespace && it.isNotBlank() }
 
     Surface(
         modifier = modifier
@@ -541,49 +575,68 @@ private fun WorkloadGroupCard(
         color = color.copy(alpha = if (selected) 0.15f else 0.08f),
         border = BorderStroke(borderWidth, color.copy(alpha = borderAlpha * alpha)),
     ) {
-        Column {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
-                Spacer(Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        node.kind,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = color.copy(alpha = alpha),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        node.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdTextPrimary.copy(alpha = alpha),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (node.status != null) {
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            if (nsToShow != null) {
+                Box(
+                    Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(namespaceAccentColor(nsToShow).copy(alpha = alpha)),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            node.status,
+                            node.kind,
                             style = MaterialTheme.typography.labelSmall,
-                            color = (sColor ?: KdTextSecondary).copy(alpha = alpha),
+                            color = color.copy(alpha = alpha),
+                            fontWeight = FontWeight.SemiBold,
                         )
+                        Text(
+                            node.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KdTextPrimary.copy(alpha = alpha),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (nsToShow != null) {
+                            Text(
+                                nsToShow,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KdTextSecondary.copy(alpha = alpha),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (node.status != null) {
+                            Text(
+                                node.status,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = (sColor ?: KdTextSecondary).copy(alpha = alpha),
+                            )
+                        }
                     }
                 }
-            }
-            if (podCount > 0) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onToggleExpand),
-                    color = color.copy(alpha = if (canExpand) 0.06f else 0.02f),
-                ) {
-                    Text(
-                        text = if (expanded) "▾ $podCount pods" else "▸ $podCount pods",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (canExpand) color.copy(alpha = alpha) else KdTextSecondary.copy(alpha = alpha),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
+                if (podCount > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onToggleExpand),
+                        color = color.copy(alpha = if (canExpand) 0.06f else 0.02f),
+                    ) {
+                        Text(
+                            text = if (expanded) "▾ $podCount pods" else "▸ $podCount pods",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (canExpand) color.copy(alpha = alpha) else KdTextSecondary.copy(alpha = alpha),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
                 }
             }
         }
