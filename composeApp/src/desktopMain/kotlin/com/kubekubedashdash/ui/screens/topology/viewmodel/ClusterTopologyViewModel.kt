@@ -34,7 +34,10 @@ class ClusterTopologyViewModel(
                 }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Failed to load topology"
-                _graph.value = null
+                // Keep the previously-loaded graph visible on refresh failure.
+                // Only the first load will leave _graph null, so the screen can
+                // still distinguish "no graph yet" from "failed refresh, keep
+                // showing the last good graph".
             } finally {
                 _loading.value = false
             }

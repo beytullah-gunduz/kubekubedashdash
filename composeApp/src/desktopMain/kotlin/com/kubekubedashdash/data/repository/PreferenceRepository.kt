@@ -46,6 +46,7 @@ object PreferenceRepository {
     private val PINNED_RESOURCES by lazy { stringPreferencesKey("pinned_resources") }
     private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
+    private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -92,6 +93,10 @@ object PreferenceRepository {
     private val _topologyPacketAnimationEnabled = MutableStateFlow(true)
     val topologyPacketAnimationEnabled: StateFlow<Boolean> = _topologyPacketAnimationEnabled.asStateFlow()
 
+    // Auto-refresh interval for the topology screen. 0 = off; positive value = seconds.
+    private val _topologyRefreshIntervalSec = MutableStateFlow(60)
+    val topologyRefreshIntervalSec: StateFlow<Int> = _topologyRefreshIntervalSec.asStateFlow()
+
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
@@ -119,6 +124,7 @@ object PreferenceRepository {
                     ?: emptySet()
                 _clusterColorOverrides.value = decodeColorOverrides(p[CLUSTER_COLOR_OVERRIDES])
                 _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
+                _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
             }
         }
     }
@@ -161,6 +167,12 @@ object PreferenceRepository {
     fun setTopologyPacketAnimationEnabled(value: Boolean) {
         _topologyPacketAnimationEnabled.value = value
         ioScope.launch { dataStore.edit { it[TOPOLOGY_PACKET_ANIMATION_ENABLED] = value } }
+    }
+
+    fun setTopologyRefreshIntervalSec(value: Int) {
+        val clamped = value.coerceAtLeast(0)
+        _topologyRefreshIntervalSec.value = clamped
+        ioScope.launch { dataStore.edit { it[TOPOLOGY_REFRESH_INTERVAL_SEC] = clamped } }
     }
 
     fun setCloseTabFocus(value: CloseTabFocus) {

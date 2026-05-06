@@ -35,6 +35,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -88,6 +90,8 @@ fun ClusterTopologyGraph(
     namespace: String,
 ) {
     val packetAnimationEnabled by PreferenceRepository.topologyPacketAnimationEnabled.collectAsState()
+    val refreshIntervalSec by PreferenceRepository.topologyRefreshIntervalSec.collectAsState()
+    var refreshMenuOpen by remember { mutableStateOf(false) }
     val truncatedNode = graph.nodes.find { it.id == "__truncated__" }
     val isAllNamespaces = namespace == "All Namespaces"
 
@@ -107,6 +111,43 @@ fun ClusterTopologyGraph(
                     modifier = Modifier.size(16.dp),
                     tint = KdTextSecondary,
                 )
+            }
+            Box {
+                Row(
+                    modifier = Modifier
+                        .clickable { refreshMenuOpen = true }
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Auto: " + formatRefreshInterval(refreshIntervalSec),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KdTextSecondary,
+                    )
+                    Text(" ▾", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                }
+                DropdownMenu(
+                    expanded = refreshMenuOpen,
+                    onDismissRequest = { refreshMenuOpen = false },
+                ) {
+                    listOf(
+                        0 to "Off",
+                        5 to "5s",
+                        15 to "15s",
+                        30 to "30s",
+                        60 to "60s",
+                        120 to "2m",
+                        300 to "5m",
+                    ).forEach { (sec, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                PreferenceRepository.setTopologyRefreshIntervalSec(sec)
+                                refreshMenuOpen = false
+                            },
+                        )
+                    }
+                }
             }
             IconButton(onClick = { PreferenceRepository.setTopologyPacketAnimationEnabled(!packetAnimationEnabled) }) {
                 Icon(
@@ -606,6 +647,13 @@ private fun GraphNodeCard(
 private fun shortImage(image: String): String {
     val lastSlash = image.lastIndexOf('/')
     return if (lastSlash >= 0) image.substring(lastSlash + 1) else image
+}
+
+private fun formatRefreshInterval(sec: Int): String = when {
+    sec <= 0 -> "Off"
+    sec < 60 -> "${sec}s"
+    sec % 60 == 0 -> "${sec / 60}m"
+    else -> "${sec}s"
 }
 
 @Composable
