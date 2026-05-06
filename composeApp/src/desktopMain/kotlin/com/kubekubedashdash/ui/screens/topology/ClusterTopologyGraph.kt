@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -63,6 +64,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -163,19 +165,27 @@ fun ClusterTopologyGraph(
                 color = KdTextSecondary,
             )
             Spacer(Modifier.weight(1f))
-            // Legend. "WorkloadGroup" is intentionally excluded — it's an internal
-            // placeholder kind that the cards now translate to the actual root kind
-            // (Deployment / StatefulSet / DaemonSet / CronJob / Job) via subKind.
-            // Showing "WorkloadGroup" here would re-expose the placeholder name the
-            // user otherwise never sees.
-            graph.nodes.map { it.kind }.distinct()
+            // Legend. The internal "WorkloadGroup" placeholder is replaced by one entry
+            // per actual subKind present in the graph (Deployment, StatefulSet, …) so
+            // the legend matches what the cards display, and the per-subKind colors
+            // stay self-explanatory.
+            val workloadGroupCol = ClusterTopologyViewModel.kindColumnOrder["WorkloadGroup"] ?: 3
+            val nonWorkloadKinds = graph.nodes.map { it.kind }.distinct()
                 .filter { it != "__truncated__" && it != "Warning" && it != "WorkloadGroup" }
-                .sortedBy { ClusterTopologyViewModel.kindColumnOrder[it] ?: 99 }
-                .forEach { kind ->
+                .map { it to (ClusterTopologyViewModel.kindColumnOrder[it] ?: 99) }
+            val workloadSubKinds = graph.nodes
+                .filter { it.kind == "WorkloadGroup" }
+                .mapNotNull { it.subKind }
+                .distinct()
+                .sorted()
+                .map { it to workloadGroupCol }
+            (nonWorkloadKinds + workloadSubKinds)
+                .sortedBy { it.second }
+                .forEach { (label, _) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(kindColor(kind)))
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(kindColor(label)))
                         Spacer(Modifier.width(4.dp))
-                        Text(kind, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                         Spacer(Modifier.width(8.dp))
                     }
                 }
@@ -481,72 +491,85 @@ private fun TopologyGraphContent(
                             Spacer(Modifier.weight(1f))
                             displayNodes.forEach { node ->
                                 if (node.id == "__truncated__") return@forEach
-                                val dimmed = hasSelection &&
-                                    node.id != selectedNodeId &&
-                                    node.id !in connectedNodeIds
-                                if (node.kind == "WorkloadGroup") {
-                                    val pods = podsByGroupId[node.id] ?: emptyList()
-                                    val isExpanded = node.id in expandedGroups.value
-                                    val canExpand = pods.isNotEmpty() && pods.size <= 20
-                                    WorkloadGroupCard(
-                                        node = node,
-                                        podCount = pods.size,
-                                        expanded = isExpanded,
-                                        canExpand = canExpand,
-                                        selected = node.id == selectedNodeId,
-                                        dimmed = dimmed,
-                                        showNamespace = showNamespaceLabel,
-                                        onClick = {
-                                            selectedNodeId = if (selectedNodeId == node.id) null else node.id
-                                        },
-                                        onToggleExpand = {
-                                            if (canExpand) {
-                                                expandedGroups.value = if (isExpanded) {
-                                                    expandedGroups.value - node.id
-                                                } else {
-                                                    expandedGroups.value + node.id
+                                key(node.id) {
+                                    // Tear down this node's cached rect when it leaves
+                                    // composition (e.g. pods collapse). Without this the
+                                    // mutableStateMapOf grew unbounded across expand/
+                                    // collapse cycles — visually harmless thanks to the
+                                    // edge filter, but a slow leak.
+                                    DisposableEffect(Unit) {
+                                        onDispose { nodeRects.remove(node.id) }
+                                    }
+                                    val dimmed = hasSelection &&
+                                        node.id != selectedNodeId &&
+                                        node.id !in connectedNodeIds
+                                    if (node.kind == "WorkloadGroup") {
+                                        val pods = podsByGroupId[node.id] ?: emptyList()
+                                        val isExpanded = node.id in expandedGroups.value
+                                        // Cap removed: the Pod column has its own verticalScroll
+                                        // so a 100-pod expansion just makes that column scrollable;
+                                        // it doesn't blow up the layout.
+                                        val canExpand = pods.isNotEmpty()
+                                        WorkloadGroupCard(
+                                            node = node,
+                                            podCount = pods.size,
+                                            expanded = isExpanded,
+                                            canExpand = canExpand,
+                                            selected = node.id == selectedNodeId,
+                                            dimmed = dimmed,
+                                            showNamespace = showNamespaceLabel,
+                                            onClick = {
+                                                selectedNodeId = if (selectedNodeId == node.id) null else node.id
+                                            },
+                                            onToggleExpand = {
+                                                if (canExpand) {
+                                                    expandedGroups.value = if (isExpanded) {
+                                                        expandedGroups.value - node.id
+                                                    } else {
+                                                        expandedGroups.value + node.id
+                                                    }
                                                 }
-                                            }
-                                        },
-                                        modifier = Modifier.onGloballyPositioned { coords ->
-                                            try {
-                                                boxCoords?.let { parent ->
-                                                    val pos = parent.localPositionOf(coords, Offset.Zero)
-                                                    nodeRects[node.id] = Rect(
-                                                        left = pos.x,
-                                                        top = pos.y,
-                                                        right = pos.x + coords.size.width,
-                                                        bottom = pos.y + coords.size.height,
-                                                    )
+                                            },
+                                            modifier = Modifier.onGloballyPositioned { coords ->
+                                                try {
+                                                    boxCoords?.let { parent ->
+                                                        val pos = parent.localPositionOf(coords, Offset.Zero)
+                                                        nodeRects[node.id] = Rect(
+                                                            left = pos.x,
+                                                            top = pos.y,
+                                                            right = pos.x + coords.size.width,
+                                                            bottom = pos.y + coords.size.height,
+                                                        )
+                                                    }
+                                                } catch (_: Exception) {
                                                 }
-                                            } catch (_: Exception) {
-                                            }
-                                        },
-                                    )
-                                } else {
-                                    GraphNodeCard(
-                                        node = node,
-                                        selected = node.id == selectedNodeId,
-                                        dimmed = dimmed,
-                                        showNamespace = showNamespaceLabel,
-                                        onClick = {
-                                            selectedNodeId = if (selectedNodeId == node.id) null else node.id
-                                        },
-                                        modifier = Modifier.onGloballyPositioned { coords ->
-                                            try {
-                                                boxCoords?.let { parent ->
-                                                    val pos = parent.localPositionOf(coords, Offset.Zero)
-                                                    nodeRects[node.id] = Rect(
-                                                        left = pos.x,
-                                                        top = pos.y,
-                                                        right = pos.x + coords.size.width,
-                                                        bottom = pos.y + coords.size.height,
-                                                    )
+                                            },
+                                        )
+                                    } else {
+                                        GraphNodeCard(
+                                            node = node,
+                                            selected = node.id == selectedNodeId,
+                                            dimmed = dimmed,
+                                            showNamespace = showNamespaceLabel,
+                                            onClick = {
+                                                selectedNodeId = if (selectedNodeId == node.id) null else node.id
+                                            },
+                                            modifier = Modifier.onGloballyPositioned { coords ->
+                                                try {
+                                                    boxCoords?.let { parent ->
+                                                        val pos = parent.localPositionOf(coords, Offset.Zero)
+                                                        nodeRects[node.id] = Rect(
+                                                            left = pos.x,
+                                                            top = pos.y,
+                                                            right = pos.x + coords.size.width,
+                                                            bottom = pos.y + coords.size.height,
+                                                        )
+                                                    }
+                                                } catch (_: Exception) {
                                                 }
-                                            } catch (_: Exception) {
-                                            }
-                                        },
-                                    )
+                                            },
+                                        )
+                                    }
                                 }
                             }
                             Spacer(Modifier.weight(1f))
@@ -607,13 +630,32 @@ private fun GraphNodeCard(
                         color = color.copy(alpha = alpha),
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Text(
-                        node.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdTextPrimary.copy(alpha = alpha),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (node.kind == "External") {
+                        // LB hostnames like a1b2c3d4-foo.elb.us-east-1.amazonaws.com get
+                        // the most-useful suffix (region/zone) chopped off by end-ellipsis,
+                        // and they're not naturally word-wrappable (no spaces). Use
+                        // monospace + a slightly smaller size + 2 lines so the full
+                        // hostname is readable without a tooltip.
+                        Text(
+                            node.name,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                            ),
+                            color = KdTextPrimary.copy(alpha = alpha),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = true,
+                        )
+                    } else {
+                        Text(
+                            node.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KdTextPrimary.copy(alpha = alpha),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     if (nsToShow != null) {
                         Text(
                             nsToShow,
@@ -669,7 +711,12 @@ private fun WorkloadGroupCard(
     onToggleExpand: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val color = kindColor(node.kind)
+    // Card color routes through subKind (Deployment / StatefulSet / DaemonSet / CronJob /
+    // Job) so the card visually distinguishes workload types at a glance. Status routing
+    // keeps the "WorkloadGroup" key — the topology-specific "X/Y ready" / breakdown
+    // format only makes sense under that key, regardless of which workload kind is
+    // underneath.
+    val color = kindColor(node.subKind ?: node.kind)
     val sColor = kindStatusColor(node.kind, node.status)
     val alpha = if (dimmed) 0.35f else 1f
     val borderWidth = if (selected) 2.dp else 1.dp
