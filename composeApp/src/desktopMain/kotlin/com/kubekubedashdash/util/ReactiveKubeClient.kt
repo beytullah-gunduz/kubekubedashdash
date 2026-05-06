@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -65,6 +66,17 @@ class ReactiveKubeClient(
     fun reportError(message: String) = connectionManager.reportError(message)
 
     private val _connectionVersion: StateFlow<Long> = connectionManager.connectionVersion
+
+    /**
+     * Connection-gated trigger for the reactive flows below. The underlying
+     * version StateFlow starts at 0 and increments on each successful connect,
+     * so filtering for `>0` keeps every informer / polling loop dormant until
+     * a cluster has actually been wired up. Without this gate, SessionViewModel
+     * subscribing in its `init` block immediately starts informers / polling
+     * against a null client, producing repeated "Not connected to a cluster"
+     * errors and a noisy log every ~10 seconds.
+     */
+    private val connectedTrigger: Flow<Long> = _connectionVersion.filter { it > 0L }
 
     fun connect(context: String? = null): Result<String> = connectionManager.connect(context)
 
@@ -101,7 +113,7 @@ class ReactiveKubeClient(
     private fun <R : HasMetadata, T> informerFlow(
         inform: (KubernetesClient, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T,
-    ): StateFlow<ResourceState<List<T>>> = _connectionVersion
+    ): StateFlow<ResourceState<List<T>>> = connectedTrigger
         .flatMapLatest {
             channelFlow {
                 send(ResourceState.Loading)
@@ -163,7 +175,7 @@ class ReactiveKubeClient(
     private fun <R : HasMetadata, T> namespacedInformerFlow(
         inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T?,
-    ): StateFlow<ResourceState<List<T>>> = combine(_selectedNamespace, _connectionVersion) { ns, _ -> ns }
+    ): StateFlow<ResourceState<List<T>>> = combine(_selectedNamespace, connectedTrigger) { ns, _ -> ns }
         .flatMapLatest { ns ->
             channelFlow {
                 send(ResourceState.Loading)
@@ -229,7 +241,7 @@ class ReactiveKubeClient(
     private fun <T> namespacedPollingStateFlow(
         intervalMs: Long = 5_000,
         fetch: (namespace: String?) -> T,
-    ): StateFlow<ResourceState<T>> = combine(_selectedNamespace, _connectionVersion) { ns, _ -> ns }
+    ): StateFlow<ResourceState<T>> = combine(_selectedNamespace, connectedTrigger) { ns, _ -> ns }
         .flatMapLatest { ns ->
             flow {
                 emit(ResourceState.Loading)
@@ -256,7 +268,7 @@ class ReactiveKubeClient(
     private fun <T> pollingStateFlow(
         intervalMs: Long = 5_000,
         fetch: () -> T,
-    ): StateFlow<ResourceState<T>> = _connectionVersion
+    ): StateFlow<ResourceState<T>> = connectedTrigger
         .flatMapLatest {
             flow {
                 emit(ResourceState.Loading)
@@ -282,7 +294,7 @@ class ReactiveKubeClient(
         intervalMs: Long = 5_000,
         initial: T,
         fetch: () -> T,
-    ): StateFlow<T> = _connectionVersion
+    ): StateFlow<T> = connectedTrigger
         .flatMapLatest {
             flow {
                 emit(initial)
