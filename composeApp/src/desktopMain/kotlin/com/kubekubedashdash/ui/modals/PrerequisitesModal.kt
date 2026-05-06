@@ -156,7 +156,36 @@ fun PrerequisitesModal(
                 if (!result.isRunning && !result.allPassed) {
                     HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
-                    run {
+                    if (result.onlyFirstRunIssues) {
+                        // Soft info footer for the first-run case (no kubeconfig / no contexts):
+                        // these aren't real prereq failures, just the empty-setup state. The
+                        // welcome screen behind the modal already offers all the next steps.
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                        ) {
+                            Text(
+                                "No kubeconfig configured yet. Close this dialog to use the welcome screen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Spacer(Modifier.weight(1f))
+                                Button(
+                                    onClick = onIgnore,
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                                ) {
+                                    Text("Close", color = Color.White)
+                                }
+                            }
+                        }
+                    } else {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()

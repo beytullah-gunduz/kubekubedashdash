@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ fun FirstRunScreen(
     onOpenDocs: () -> Unit,
     onRescan: () -> Unit,
     onDiscoverEks: (() -> Unit)? = null,
+    onShowDiagnostics: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -80,6 +82,16 @@ fun FirstRunScreen(
             }
             OutlinedButton(onClick = onRescan) {
                 Text("Re-scan")
+            }
+        }
+        onShowDiagnostics?.let { handler ->
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = handler) {
+                Text(
+                    "View diagnostics",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = KdTextSecondary,
+                )
             }
         }
     }

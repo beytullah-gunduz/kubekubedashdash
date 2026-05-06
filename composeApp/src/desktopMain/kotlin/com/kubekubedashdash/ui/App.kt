@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -45,6 +46,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -53,6 +55,7 @@ import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
+import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
@@ -100,10 +103,17 @@ fun App(
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
+        val bootstrapComplete by appViewModel.bootstrapComplete.collectAsState()
         val clusterColorOverrides by PreferenceRepository.clusterColorOverrides.collectAsState()
 
-        // Nothing to show until bootstrap populates the tab list.
-        if (tabs.isEmpty()) return@KubeDashTheme
+        // While the AppViewModel is still running its initial prereq checks +
+        // contexts load, render a splash instead of letting FirstRunScreen flash
+        // behind the modal. The splash stays up until [bootstrapComplete] flips
+        // and the workspace's first tab is in place.
+        if (!bootstrapComplete || tabs.isEmpty()) {
+            BootstrapSplash()
+            return@KubeDashTheme
+        }
 
         val activeTab = tabs.firstOrNull { it.key == activeTabKey }
         val activeSession = (activeTab as? WorkspaceTab.Cluster)?.session
@@ -218,7 +228,15 @@ fun App(
                         }
                     },
             ) {
-                if (showFirstRun) {
+                // While the EKS discovery modal is open from a first-run state,
+                // hide the welcome screen behind it. The user is committed to
+                // the discovery flow, and once they click "Open clusters" the
+                // post-import refresh keeps the splash up (via bootstrapComplete
+                // flipping) until the cluster selector pops — no FirstRunScreen
+                // flash in between.
+                if (showFirstRun && showEksDiscovery) {
+                    BootstrapSplash()
+                } else if (showFirstRun) {
                     FirstRunScreen(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                         onTryDemo = {
@@ -241,6 +259,7 @@ fun App(
                         } else {
                             null
                         },
+                        onShowDiagnostics = { appViewModel.showDiagnostics() },
                     )
                 } else {
                     Column(
@@ -402,23 +421,18 @@ fun App(
                     }
                 } // end if (showFirstRun) else
 
-                val prereq = prerequisiteResult
-                if (showPrerequisites) {
-                    if (prereq == null) {
-                        PrerequisitesModal(
-                            result = appViewModel.loadingPrerequisiteResult(),
-                            onQuit = onClose,
-                            onIgnore = {},
-                            onDiscoverEks = { workspace.showEksDiscovery() },
-                        )
-                    } else {
-                        PrerequisitesModal(
-                            result = prereq,
-                            onQuit = onClose,
-                            onIgnore = { appViewModel.dismissPrerequisites() },
-                            onDiscoverEks = { workspace.showEksDiscovery() },
-                        )
-                    }
+                // After the bootstrap gate above, prerequisiteResult is guaranteed
+                // non-null (runPrerequisiteChecks always sets it before flipping
+                // bootstrapComplete). Drop the prereq==null fallback that used to
+                // render a loading-state modal — the splash covers that window now.
+                val prereqSnapshot = prerequisiteResult
+                if (showPrerequisites && prereqSnapshot != null) {
+                    PrerequisitesModal(
+                        result = prereqSnapshot,
+                        onQuit = onClose,
+                        onIgnore = { appViewModel.dismissPrerequisites() },
+                        onDiscoverEks = { workspace.showEksDiscovery() },
+                    )
                 } else if (showClusterSelector) {
                     val clusterSelectorDefault by workspace.clusterSelectorDefaultTarget.collectAsState()
                     ClusterSelectorModal(
@@ -472,6 +486,38 @@ fun App(
                     LogDrawer(state = drawerState, onStateChange = { drawerState = it })
                 }
             }
+        }
+    }
+}
+
+/**
+ * Splash shown while AppViewModel runs its initial prereq checks + first
+ * contexts load, so neither FirstRunScreen nor the prereq modal's own loading
+ * state flashes during bootstrap. Visually echoes FirstRunScreen (same icon,
+ * same primary color) so the transition into either FirstRunScreen or the
+ * cluster selector reads as a continuation rather than a content swap.
+ */
+@Composable
+private fun BootstrapSplash() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = painterResource(Res.drawable.dashboard_filled),
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = KdPrimary,
+            )
+            Spacer(Modifier.height(20.dp))
+            CircularProgressIndicator(
+                modifier = Modifier.size(28.dp),
+                color = KdPrimary,
+                strokeWidth = 2.5.dp,
+            )
         }
     }
 }

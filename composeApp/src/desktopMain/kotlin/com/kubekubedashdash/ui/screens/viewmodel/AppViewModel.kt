@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.MockClusterProvider
@@ -46,6 +47,16 @@ class AppViewModel private constructor() : ViewModel() {
     private val _showPrerequisites = MutableStateFlow(true)
     val showPrerequisites: StateFlow<Boolean> = _showPrerequisites.asStateFlow()
 
+    /**
+     * Flips to `true` once the initial prereq pass completes — and, when
+     * applicable, the contexts list has been loaded. Lets the UI render a
+     * dedicated splash while we don't yet know whether to show FirstRunScreen,
+     * the cluster selector, or the prereq-failure modal, instead of flashing
+     * FirstRunScreen behind the modal during bootstrap.
+     */
+    private val _bootstrapComplete = MutableStateFlow(false)
+    val bootstrapComplete: StateFlow<Boolean> = _bootstrapComplete.asStateFlow()
+
     init {
         runPrerequisiteChecks()
     }
@@ -55,30 +66,59 @@ class AppViewModel private constructor() : ViewModel() {
             WorkspaceManager.activeSession.connectionManager.getContexts()
     }
 
+    /**
+     * Reload the kubeconfig contexts list and, if real contexts are now available
+     * AND no workspace currently has a connected cluster session, automatically
+     * open the cluster selector on the first workspace. This is the right
+     * behavior for every "user just gained contexts" entry point — initial
+     * prereq pass, dismissing the modal, post-EKS-import on first run, and
+     * Re-scan from the welcome screen — but a no-op when the user already has a
+     * session active (e.g. an EKS import triggered from inside an open cluster).
+     */
+    private suspend fun loadContextsAndOfferSelector() {
+        val loaded = loadContextsSync()
+        _contexts.value = loaded
+        val hasReal = loaded.any { !MockClusterProvider.isMockContext(it) }
+        if (hasReal && !anyWorkspaceHasActiveCluster()) {
+            WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
+        }
+    }
+
+    private fun anyWorkspaceHasActiveCluster(): Boolean = WorkspaceManager.workspaces.value.any { ws ->
+        ws.tabs.value.filterIsInstance<WorkspaceTab.Cluster>()
+            .any { it.session.viewModel.selectedContext.value.isNotBlank() }
+    }
+
     private fun runPrerequisiteChecks() {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { PrerequisiteChecker.runAll() }
             _prerequisiteResult.value = result
-            if (result.allPassed) {
+            // A missing kubeconfig (or a kubeconfig with zero contexts) is a normal
+            // first-launch state, not a prerequisite failure: FirstRunScreen handles it.
+            // Only the modal blocks for genuine prereq problems (CLI missing for an
+            // existing context, etc.).
+            if (result.allPassed || result.onlyFirstRunIssues) {
                 _showPrerequisites.value = false
-                val loaded = loadContextsSync()
-                _contexts.value = loaded
-                if (loaded.any { !MockClusterProvider.isMockContext(it) }) {
-                    WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
-                }
+                loadContextsAndOfferSelector()
             }
+            // Flip last so the splash stays up until both the prereq result is
+            // known AND (when applicable) contexts have been loaded — otherwise
+            // FirstRunScreen flashes behind the modal during bootstrap.
+            _bootstrapComplete.value = true
         }
     }
 
     fun dismissPrerequisites() {
         _showPrerequisites.value = false
-        viewModelScope.launch {
-            val loaded = loadContextsSync()
-            _contexts.value = loaded
-            if (loaded.any { !MockClusterProvider.isMockContext(it) }) {
-                WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
-            }
-        }
+        viewModelScope.launch { loadContextsAndOfferSelector() }
+    }
+
+    /**
+     * Re-open the diagnostics modal from FirstRunScreen so power users can inspect
+     * the prereq checks and the log stream when no kubeconfig is configured yet.
+     */
+    fun showDiagnostics() {
+        _showPrerequisites.value = true
     }
 
     fun loadingPrerequisiteResult(): PrerequisiteResult = PrerequisiteResult(
@@ -92,21 +132,37 @@ class AppViewModel private constructor() : ViewModel() {
     )
 
     /**
-     * Reload the list of kubeconfig contexts. Call after the user imports new
-     * EKS clusters so the picker shows them without a restart.
+     * Reload the list of kubeconfig contexts. Used by the welcome-screen "Re-scan"
+     * button and the post-EKS-import path: when fresh real contexts surface and
+     * no cluster is currently connected, the cluster selector pops up so the
+     * user can pick which one to open. While the reload is in flight and the
+     * user has no active cluster, [bootstrapComplete] is flipped back to false
+     * so the splash covers the gap — otherwise FirstRunScreen would flash
+     * between modal close and cluster selector open.
      */
     fun refreshContexts() {
-        viewModelScope.launch { _contexts.value = loadContextsSync() }
+        val firstRunReload = !anyWorkspaceHasActiveCluster()
+        if (firstRunReload) _bootstrapComplete.value = false
+        viewModelScope.launch {
+            loadContextsAndOfferSelector()
+            if (firstRunReload) _bootstrapComplete.value = true
+        }
     }
 
     /**
-     * Called when the EKS-import flow completes (with or without imports).
-     * If prereqs are still showing, re-run the checks (an aws-cli install just
-     * happened); otherwise just refresh contexts so the new clusters appear in
-     * the picker.
+     * Called when the EKS-import flow completes (with or without imports). If
+     * the prereq modal is still showing (the user installed an aws CLI mid-flow
+     * for example), re-run the checks; otherwise just refresh contexts. In both
+     * cases the cluster selector opens automatically when the user has no
+     * active cluster yet — see [loadContextsAndOfferSelector] — and the
+     * splash covers the reload window so FirstRunScreen doesn't flash.
      */
     fun onEksImportComplete() {
         if (_showPrerequisites.value) {
+            // Mid-prereq-modal re-check: flip bootstrap state ourselves so the
+            // splash covers the second pass. (runPrerequisiteChecks only flips
+            // it back to true at the end.)
+            if (!anyWorkspaceHasActiveCluster()) _bootstrapComplete.value = false
             runPrerequisiteChecks()
         } else {
             refreshContexts()

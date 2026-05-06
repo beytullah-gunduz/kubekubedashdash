@@ -19,9 +19,25 @@ data class PrerequisiteResult(
 ) {
     val allPassed: Boolean get() = checks.none { it.required && it.status == CheckStatus.FAILED }
     val isRunning: Boolean get() = checks.any { it.status == CheckStatus.CHECKING }
+
+    /**
+     * True when the only failing required checks are the "first-run setup" ones — a missing
+     * kubeconfig file or a kubeconfig with zero contexts. Both are normal first-launch states
+     * (FirstRunScreen handles them gracefully), not "prerequisite missing" errors that justify
+     * a blocking modal.
+     */
+    val onlyFirstRunIssues: Boolean get() {
+        if (allPassed) return false
+        val failures = checks.filter { it.required && it.status == CheckStatus.FAILED }
+        return failures.isNotEmpty() &&
+            failures.all { it.name == PrerequisiteChecker.NAME_KUBECONFIG || it.name == PrerequisiteChecker.NAME_CONTEXTS }
+    }
 }
 
 object PrerequisiteChecker {
+
+    const val NAME_KUBECONFIG = "Kubeconfig"
+    const val NAME_CONTEXTS = "Cluster Contexts"
 
     private val log = LoggerFactory.getLogger(PrerequisiteChecker::class.java)
 
@@ -85,7 +101,7 @@ object PrerequisiteChecker {
         return if (file.exists() && file.canRead()) {
             log.debug("Kubeconfig found at {}", kubeconfig)
             PrerequisiteCheck(
-                name = "Kubeconfig",
+                name = NAME_KUBECONFIG,
                 description = "Kubernetes configuration file",
                 status = CheckStatus.PASSED,
                 detail = kubeconfig,
@@ -93,7 +109,7 @@ object PrerequisiteChecker {
         } else {
             log.warn("Kubeconfig not found at {}", kubeconfig)
             PrerequisiteCheck(
-                name = "Kubeconfig",
+                name = NAME_KUBECONFIG,
                 description = "Kubernetes configuration file",
                 status = CheckStatus.FAILED,
                 detail = "Not found at $kubeconfig",
@@ -111,14 +127,14 @@ object PrerequisiteChecker {
 
     private fun checkContextsExist(contexts: List<String>): PrerequisiteCheck = if (contexts.isNotEmpty()) {
         PrerequisiteCheck(
-            name = "Cluster Contexts",
+            name = NAME_CONTEXTS,
             description = "Available Kubernetes contexts",
             status = CheckStatus.PASSED,
             detail = "${contexts.size} context${if (contexts.size != 1) "s" else ""} found",
         )
     } else {
         PrerequisiteCheck(
-            name = "Cluster Contexts",
+            name = NAME_CONTEXTS,
             description = "Available Kubernetes contexts",
             status = CheckStatus.FAILED,
             detail = "No contexts defined in kubeconfig",
