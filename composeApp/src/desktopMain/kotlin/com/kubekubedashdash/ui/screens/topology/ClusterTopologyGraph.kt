@@ -165,13 +165,32 @@ private fun TopologyGraphContent(
     val expandedGroups = remember { mutableStateOf(setOf<String>()) }
 
     val connectedNodeIds = remember(selectedNodeId, graph) {
-        if (selectedNodeId == null) {
+        val seed = selectedNodeId
+        if (seed == null) {
             emptySet()
         } else {
-            graph.edges
-                .filter { it.sourceId == selectedNodeId || it.targetId == selectedNodeId }
-                .flatMap { listOf(it.sourceId, it.targetId) }
-                .toSet()
+            // Walk the pipe in both directions: upstream via incoming edges and
+            // downstream via outgoing edges, transitively. Lights up the entire
+            // chain (External → Ingress → Service → Workload → mounts) instead of
+            // only the immediate neighbors of the clicked node.
+            val outgoing = graph.edges.groupBy({ it.sourceId }, { it.targetId })
+            val incoming = graph.edges.groupBy({ it.targetId }, { it.sourceId })
+            val visited = mutableSetOf(seed)
+            val upQueue = ArrayDeque<String>().apply { add(seed) }
+            while (upQueue.isNotEmpty()) {
+                val n = upQueue.removeFirst()
+                incoming[n].orEmpty().forEach { src ->
+                    if (visited.add(src)) upQueue.add(src)
+                }
+            }
+            val downQueue = ArrayDeque<String>().apply { add(seed) }
+            while (downQueue.isNotEmpty()) {
+                val n = downQueue.removeFirst()
+                outgoing[n].orEmpty().forEach { tgt ->
+                    if (visited.add(tgt)) downQueue.add(tgt)
+                }
+            }
+            visited
         }
     }
 
@@ -254,7 +273,8 @@ private fun TopologyGraphContent(
                 if (from.isEmpty || to.isEmpty) return@forEachIndexed
 
                 val isHighlighted = hasSelection &&
-                    (edge.sourceId == selectedNodeId || edge.targetId == selectedNodeId)
+                    edge.sourceId in connectedNodeIds &&
+                    edge.targetId in connectedNodeIds
                 val edgeColor = when {
                     !hasSelection -> defaultEdgeColor
 
