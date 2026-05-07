@@ -13,6 +13,10 @@ fun ServiceDetailScreen(
     service: ServiceInfo,
     onNavigate: (Screen) -> Unit,
     onClose: () -> Unit,
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val selectorFields = service.selector.map { (k, v) -> DetailField("Selector", "$k=$v") }
 
@@ -32,5 +36,9 @@ fun ServiceDetailScreen(
         annotations = service.annotations,
         onClose = onClose,
         modifier = Modifier.fillMaxSize(),
+        labelQuery = labelQuery,
+        onToggleLabel = onToggleLabel,
+        annotationQuery = annotationQuery,
+        onToggleAnnotation = onToggleAnnotation,
     )
 }

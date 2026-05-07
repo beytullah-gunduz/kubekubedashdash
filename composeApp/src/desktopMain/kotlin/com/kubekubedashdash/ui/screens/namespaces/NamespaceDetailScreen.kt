@@ -14,6 +14,10 @@ fun NamespaceDetailScreen(
     namespace: GenericResourceInfo,
     onNavigate: (Screen) -> Unit,
     onClose: () -> Unit,
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     ResourceDetailPanel(
         kind = "Namespace",
@@ -28,5 +32,9 @@ fun NamespaceDetailScreen(
         annotations = namespace.annotations,
         onClose = onClose,
         modifier = Modifier.fillMaxSize(),
+        labelQuery = labelQuery,
+        onToggleLabel = onToggleLabel,
+        annotationQuery = annotationQuery,
+        onToggleAnnotation = onToggleAnnotation,
     )
 }

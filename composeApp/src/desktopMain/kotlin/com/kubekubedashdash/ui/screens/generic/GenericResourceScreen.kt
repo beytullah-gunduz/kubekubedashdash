@@ -49,6 +49,7 @@ import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
@@ -203,6 +204,14 @@ fun GenericResourceScreen(
                                 annotations = res.annotations,
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
+                                labelQuery = labelQuery,
+                                onToggleLabel = { k, v ->
+                                    onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))
+                                },
+                                annotationQuery = annotationQuery,
+                                onToggleAnnotation = { k, v ->
+                                    onAnnotationQueryChange(toggleSelectorEntry(annotationQuery, k, v))
+                                },
                             )
                         }
                     }

@@ -60,6 +60,7 @@ import com.kubekubedashdash.resources.view_list_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.GenericYamlTab
@@ -85,6 +86,10 @@ internal fun NodeDetailPanel(
     onClose: () -> Unit,
     onPodClick: (PodInfo) -> Unit,
     modifier: Modifier = Modifier,
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableStateOf(NodeDetailTab.Overview) }
@@ -206,9 +211,26 @@ internal fun NodeDetailPanel(
                     when (tabs[page]) {
                         NodeDetailTab.Overview -> {
                             if (isTall) {
-                                NodeOverviewCombinedTab(node, pods, podsLoading, events, eventsLoading, onPodClick)
+                                NodeOverviewCombinedTab(
+                                    node = node,
+                                    pods = pods,
+                                    podsLoading = podsLoading,
+                                    events = events,
+                                    eventsLoading = eventsLoading,
+                                    onPodClick = onPodClick,
+                                    labelQuery = labelQuery,
+                                    onToggleLabel = onToggleLabel,
+                                    annotationQuery = annotationQuery,
+                                    onToggleAnnotation = onToggleAnnotation,
+                                )
                             } else {
-                                NodeDetailsOnlyTab(node)
+                                NodeDetailsOnlyTab(
+                                    node = node,
+                                    labelQuery = labelQuery,
+                                    onToggleLabel = onToggleLabel,
+                                    annotationQuery = annotationQuery,
+                                    onToggleAnnotation = onToggleAnnotation,
+                                )
                             }
                         }
 
@@ -232,7 +254,13 @@ private fun NodeOverviewCombinedTab(
     events: List<EventInfo>,
     eventsLoading: Boolean,
     onPodClick: (PodInfo) -> Unit,
+    labelQuery: String,
+    onToggleLabel: (String, String) -> Unit,
+    annotationQuery: String,
+    onToggleAnnotation: (String, String) -> Unit,
 ) {
+    val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
+    val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
     val fields = listOf(
         DetailField("Status", node.status, statusColor(node.status)),
         DetailField("Roles", node.roles),
@@ -288,7 +316,14 @@ private fun NodeOverviewCombinedTab(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.labels.entries.toList().chunked(2).forEach { chunk ->
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                            chunk.forEach { (k, v) ->
+                                LabelChip(
+                                    key = k,
+                                    value = v,
+                                    active = activeLabels[k] == v,
+                                    onClick = { onToggleLabel(k, v) },
+                                )
+                            }
                         }
                     }
                 }
@@ -305,7 +340,14 @@ private fun NodeOverviewCombinedTab(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.annotations.entries.toList().chunked(2).forEach { chunk ->
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                            chunk.forEach { (k, v) ->
+                                LabelChip(
+                                    key = k,
+                                    value = v,
+                                    active = activeAnnotations[k] == v,
+                                    onClick = { onToggleAnnotation(k, v) },
+                                )
+                            }
                         }
                     }
                 }
@@ -363,7 +405,15 @@ private fun NodeOverviewCombinedTab(
 // ── Compact-mode tabs ───────────────────────────────────────────────────────────
 
 @Composable
-private fun NodeDetailsOnlyTab(node: NodeInfo) {
+private fun NodeDetailsOnlyTab(
+    node: NodeInfo,
+    labelQuery: String,
+    onToggleLabel: (String, String) -> Unit,
+    annotationQuery: String,
+    onToggleAnnotation: (String, String) -> Unit,
+) {
+    val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
+    val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
     val fields = listOf(
         DetailField("Status", node.status, statusColor(node.status)),
         DetailField("Roles", node.roles),
@@ -417,7 +467,14 @@ private fun NodeDetailsOnlyTab(node: NodeInfo) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.labels.entries.toList().chunked(2).forEach { chunk ->
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                            chunk.forEach { (k, v) ->
+                                LabelChip(
+                                    key = k,
+                                    value = v,
+                                    active = activeLabels[k] == v,
+                                    onClick = { onToggleLabel(k, v) },
+                                )
+                            }
                         }
                     }
                 }
@@ -433,7 +490,14 @@ private fun NodeDetailsOnlyTab(node: NodeInfo) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.annotations.entries.toList().chunked(2).forEach { chunk ->
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                            chunk.forEach { (k, v) ->
+                                LabelChip(
+                                    key = k,
+                                    value = v,
+                                    active = activeAnnotations[k] == v,
+                                    onClick = { onToggleAnnotation(k, v) },
+                                )
+                            }
                         }
                     }
                 }

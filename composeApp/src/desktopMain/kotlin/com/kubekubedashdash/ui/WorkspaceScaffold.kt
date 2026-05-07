@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.logs.LogsScreen
 
 /**
@@ -165,6 +166,14 @@ internal fun SessionPaneContent(
                         onClose = { sessionVm.closeExtraPane() },
                         modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
                         onOpenLogs = onOpenLogs,
+                        labelQuery = labelQuery,
+                        onToggleLabel = { k, v ->
+                            sessionVm.setLabelQuery(toggleSelectorEntry(sessionVm.labelQuery.value, k, v))
+                        },
+                        annotationQuery = annotationQuery,
+                        onToggleAnnotation = { k, v ->
+                            sessionVm.setAnnotationQuery(toggleSelectorEntry(sessionVm.annotationQuery.value, k, v))
+                        },
                     )
                 }
             }

@@ -88,6 +88,7 @@ import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.MetricsLineChart
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.highlightYamlLine
 import com.kubekubedashdash.util.formatCpuCores
@@ -116,6 +117,10 @@ fun PodDetailPanel(
     onClose: () -> Unit,
     onNavigateToNode: ((nodeName: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val kubeClient = LocalReactiveKubeClient.current
     var activeTab by remember { mutableStateOf(DetailTab.Overview) }
@@ -173,9 +178,25 @@ fun PodDetailPanel(
                     when (tabs[page]) {
                         DetailTab.Overview -> {
                             if (isTall) {
-                                OverviewAndLogsTab(pod, metricsHistory, onNavigateToNode)
+                                OverviewAndLogsTab(
+                                    pod = pod,
+                                    metricsHistory = metricsHistory,
+                                    onNavigateToNode = onNavigateToNode,
+                                    labelQuery = labelQuery,
+                                    onToggleLabel = onToggleLabel,
+                                    annotationQuery = annotationQuery,
+                                    onToggleAnnotation = onToggleAnnotation,
+                                )
                             } else {
-                                OverviewTab(pod, metricsHistory, onNavigateToNode)
+                                OverviewTab(
+                                    pod = pod,
+                                    metricsHistory = metricsHistory,
+                                    onNavigateToNode = onNavigateToNode,
+                                    labelQuery = labelQuery,
+                                    onToggleLabel = onToggleLabel,
+                                    annotationQuery = annotationQuery,
+                                    onToggleAnnotation = onToggleAnnotation,
+                                )
                             }
                         }
 
@@ -259,10 +280,22 @@ private fun OverviewAndLogsTab(
     pod: PodInfo,
     metricsHistory: List<PodMetricsSnapshot>,
     onNavigateToNode: ((String) -> Unit)? = null,
+    labelQuery: String,
+    onToggleLabel: (String, String) -> Unit,
+    annotationQuery: String,
+    onToggleAnnotation: (String, String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(2f).fillMaxWidth()) {
-            OverviewTab(pod, metricsHistory, onNavigateToNode)
+            OverviewTab(
+                pod = pod,
+                metricsHistory = metricsHistory,
+                onNavigateToNode = onNavigateToNode,
+                labelQuery = labelQuery,
+                onToggleLabel = onToggleLabel,
+                annotationQuery = annotationQuery,
+                onToggleAnnotation = onToggleAnnotation,
+            )
         }
         HorizontalDivider(color = KdBorder)
         Box(modifier = Modifier.weight(3f).fillMaxWidth()) {
@@ -274,7 +307,17 @@ private fun OverviewAndLogsTab(
 // ── Overview Tab ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>, onNavigateToNode: ((String) -> Unit)? = null) {
+private fun OverviewTab(
+    pod: PodInfo,
+    metricsHistory: List<PodMetricsSnapshot>,
+    onNavigateToNode: ((String) -> Unit)? = null,
+    labelQuery: String,
+    onToggleLabel: (String, String) -> Unit,
+    annotationQuery: String,
+    onToggleAnnotation: (String, String) -> Unit,
+) {
+    val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
+    val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -314,7 +357,14 @@ private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>, 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 pod.labels.entries.toList().chunked(2).forEach { chunk ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        chunk.forEach { (k, v) ->
+                            LabelChip(
+                                key = k,
+                                value = v,
+                                active = activeLabels[k] == v,
+                                onClick = { onToggleLabel(k, v) },
+                            )
+                        }
                     }
                 }
             }
@@ -325,7 +375,14 @@ private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>, 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 pod.annotations.entries.toList().chunked(2).forEach { chunk ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        chunk.forEach { (k, v) ->
+                            LabelChip(
+                                key = k,
+                                value = v,
+                                active = activeAnnotations[k] == v,
+                                onClick = { onToggleAnnotation(k, v) },
+                            )
+                        }
                     }
                 }
             }

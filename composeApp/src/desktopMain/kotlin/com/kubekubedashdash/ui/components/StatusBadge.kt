@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -126,15 +127,25 @@ fun StatusCell(
 }
 
 @Composable
-fun LabelChip(key: String, value: String) {
+fun LabelChip(
+    key: String,
+    value: String,
+    active: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    val background = if (active) KdPrimary.copy(alpha = 0.18f) else KdSurfaceVariant
+    val sepColor = if (active) KdPrimary.copy(alpha = 0.7f) else KdTextSecondary
+    val valueColor = if (active) KdPrimary else KdTextPrimary
+    val baseModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
     Surface(
         shape = RoundedCornerShape(4.dp),
-        color = KdSurfaceVariant,
+        color = background,
+        modifier = baseModifier,
     ) {
         Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
             Text(key, style = MaterialTheme.typography.labelSmall, color = KdPrimary)
-            Text("=", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-            Text(value, style = MaterialTheme.typography.labelSmall, color = KdTextPrimary)
+            Text("=", style = MaterialTheme.typography.labelSmall, color = sepColor)
+            Text(value, style = MaterialTheme.typography.labelSmall, color = valueColor)
         }
     }
 }

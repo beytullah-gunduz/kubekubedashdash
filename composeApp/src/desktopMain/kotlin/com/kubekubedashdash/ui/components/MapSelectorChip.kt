@@ -46,6 +46,22 @@ fun parseMapSelector(query: String): Map<String, String> {
 
 fun matchesMapSelector(entries: Map<String, String>, selector: Map<String, String>): Boolean = selector.all { (k, v) -> entries[k] == v }
 
+/**
+ * Toggles a single key=value entry in a map-selector query string. If the
+ * pair is already present, removes it; if a different value is bound to
+ * the same key, replaces it; if absent, appends it. Used by detail-panel
+ * chips for one-click filter add/remove.
+ */
+fun toggleSelectorEntry(query: String, key: String, value: String): String {
+    val pairs = parseMapSelector(query).toMutableMap()
+    if (pairs[key] == value) {
+        pairs.remove(key)
+    } else {
+        pairs[key] = value
+    }
+    return pairs.entries.joinToString(", ") { "${it.key}=${it.value}" }
+}
+
 @Composable
 fun MapSelectorChip(
     query: String,

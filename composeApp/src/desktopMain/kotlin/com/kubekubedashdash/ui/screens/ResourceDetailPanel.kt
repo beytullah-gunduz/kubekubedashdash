@@ -65,6 +65,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.parseMapSelector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +102,10 @@ fun ResourceDetailPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     extraTabs: List<ExtraTab> = emptyList(),
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -211,8 +216,18 @@ fun ResourceDetailPanel(
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 when {
-                    page == 0 -> GenericOverviewTab(fields, labels, annotations)
+                    page == 0 -> GenericOverviewTab(
+                        fields = fields,
+                        labels = labels,
+                        annotations = annotations,
+                        labelQuery = labelQuery,
+                        onToggleLabel = onToggleLabel,
+                        annotationQuery = annotationQuery,
+                        onToggleAnnotation = onToggleAnnotation,
+                    )
+
                     page == yamlIndex -> GenericYamlTab(kind, name, namespace)
+
                     else -> extraTabs[page - 1].content()
                 }
             }
@@ -227,7 +242,13 @@ private fun GenericOverviewTab(
     fields: List<DetailField>,
     labels: Map<String, String>,
     annotations: Map<String, String>,
+    labelQuery: String,
+    onToggleLabel: (String, String) -> Unit,
+    annotationQuery: String,
+    onToggleAnnotation: (String, String) -> Unit,
 ) {
+    val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
+    val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -265,7 +286,14 @@ private fun GenericOverviewTab(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 labels.entries.toList().chunked(2).forEach { chunk ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        chunk.forEach { (k, v) ->
+                            LabelChip(
+                                key = k,
+                                value = v,
+                                active = activeLabels[k] == v,
+                                onClick = { onToggleLabel(k, v) },
+                            )
+                        }
                     }
                 }
             }
@@ -276,7 +304,14 @@ private fun GenericOverviewTab(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 annotations.entries.toList().chunked(2).forEach { chunk ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        chunk.forEach { (k, v) ->
+                            LabelChip(
+                                key = k,
+                                value = v,
+                                active = activeAnnotations[k] == v,
+                                onClick = { onToggleAnnotation(k, v) },
+                            )
+                        }
                     }
                 }
             }

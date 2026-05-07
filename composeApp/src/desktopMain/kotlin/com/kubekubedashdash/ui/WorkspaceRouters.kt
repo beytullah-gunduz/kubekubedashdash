@@ -170,6 +170,10 @@ fun ExtraPaneRouter(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     Box(modifier = modifier) {
         when (screen) {
@@ -182,6 +186,10 @@ fun ExtraPaneRouter(
                 onClose = onClose,
                 onNavigateToNode = { nodeName -> onNavigate(Screen.Main.Nodes(selectNodeName = nodeName)) },
                 modifier = Modifier.fillMaxSize(),
+                labelQuery = labelQuery,
+                onToggleLabel = onToggleLabel,
+                annotationQuery = annotationQuery,
+                onToggleAnnotation = onToggleAnnotation,
             )
 
             is Screen.Detail.NodeDetail -> NodeDetailPanel(
@@ -189,13 +197,41 @@ fun ExtraPaneRouter(
                 onClose = onClose,
                 onPodClick = { pod -> onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) },
                 modifier = Modifier.fillMaxSize(),
+                labelQuery = labelQuery,
+                onToggleLabel = onToggleLabel,
+                annotationQuery = annotationQuery,
+                onToggleAnnotation = onToggleAnnotation,
             )
 
-            is Screen.Detail.DeploymentDetail -> DeploymentDetailScreen(screen.deployment, onNavigate, onClose)
+            is Screen.Detail.DeploymentDetail -> DeploymentDetailScreen(
+                deployment = screen.deployment,
+                onNavigate = onNavigate,
+                onClose = onClose,
+                labelQuery = labelQuery,
+                onToggleLabel = onToggleLabel,
+                annotationQuery = annotationQuery,
+                onToggleAnnotation = onToggleAnnotation,
+            )
 
-            is Screen.Detail.ServiceDetail -> ServiceDetailScreen(screen.service, onNavigate, onClose)
+            is Screen.Detail.ServiceDetail -> ServiceDetailScreen(
+                service = screen.service,
+                onNavigate = onNavigate,
+                onClose = onClose,
+                labelQuery = labelQuery,
+                onToggleLabel = onToggleLabel,
+                annotationQuery = annotationQuery,
+                onToggleAnnotation = onToggleAnnotation,
+            )
 
-            is Screen.Detail.NamespaceDetail -> NamespaceDetailScreen(screen.namespace, onNavigate, onClose)
+            is Screen.Detail.NamespaceDetail -> NamespaceDetailScreen(
+                namespace = screen.namespace,
+                onNavigate = onNavigate,
+                onClose = onClose,
+                labelQuery = labelQuery,
+                onToggleLabel = onToggleLabel,
+                annotationQuery = annotationQuery,
+                onToggleAnnotation = onToggleAnnotation,
+            )
 
             else -> { /* nothing */ }
         }

@@ -18,6 +18,10 @@ fun DeploymentDetailScreen(
     deployment: DeploymentInfo,
     onNavigate: (Screen) -> Unit,
     onClose: () -> Unit,
+    labelQuery: String = "",
+    onToggleLabel: (String, String) -> Unit = { _, _ -> },
+    annotationQuery: String = "",
+    onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val readyParts = deployment.ready.split("/")
     val isReady = readyParts.size == 2 && readyParts[0] == readyParts[1] && readyParts[0] != "0"
@@ -51,5 +55,9 @@ fun DeploymentDetailScreen(
                 )
             },
         ),
+        labelQuery = labelQuery,
+        onToggleLabel = onToggleLabel,
+        annotationQuery = annotationQuery,
+        onToggleAnnotation = onToggleAnnotation,
     )
 }
