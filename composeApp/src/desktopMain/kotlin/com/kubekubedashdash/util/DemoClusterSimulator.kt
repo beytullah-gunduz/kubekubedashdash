@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateTerminatedBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateWaitingBuilder
@@ -11,6 +12,8 @@ import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.Quantity
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
+import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import kotlinx.coroutines.CancellationException
@@ -140,6 +143,24 @@ class DemoClusterSimulator(
         "db-migrate" to "postgres:16",
     )
     private val cronOwnerPool = listOf("nightly-backup", "log-rotation", "db-vacuum", null, null, null)
+
+    // Where each seeded CronJob actually lives — used to route Job spawns into
+    // the right namespace so the Job's ownerRef resolves to a real CronJob.
+    // Falling back to a random ns would orphan the Job from its CronJob, which
+    // would push its pods into the topology Standalone bucket instead of a
+    // CronJob workload card.
+    private val cronOwnerNs = mapOf(
+        "nightly-backup" to "production",
+        "log-rotation" to "monitoring",
+        "db-vacuum" to "production",
+    )
+
+    // ns/app -> ReplicaSet that any synthetic pod for that (ns, app) is owned
+    // by. Reuses any pre-seeded RS (e.g., the seeded `frontend-7b9d5c8f4` in
+    // `default`) when the labels match; otherwise mints a Deployment + RS pair
+    // on the fly. Without this cache the simulator would create one-deployment-
+    // per-pod or, worse, leave pods unowned.
+    private val syntheticRsByKey = ConcurrentHashMap<String, ReplicaSet>()
 
     private var currentTargetNodes = initialTargets.nodesMin.coerceAtLeast(1)
     private var currentTargetPods = initialTargets.podsMin.coerceAtLeast(10)
@@ -337,14 +358,18 @@ class DemoClusterSimulator(
         val nodes = runCatching { client.nodes().list().items }.getOrElse { emptyList() }
         val node = nodes.randomOrNull() ?: return
         val nodeName = node.metadata.name
+        // Skip the spawn entirely if we can't get an owning RS — better to drop
+        // a tick than to create an orphan pod that pollutes the topology
+        // Standalone bucket.
+        val rs = getOrCreateSyntheticRs(ns, app, image) ?: return
         val suffix = "${random.nextInt(10_000, 99_999)}"
-        val name = "$app-$suffix"
+        val name = "${rs.metadata.name}-$suffix"
         val key = "$ns/$name"
 
         scope.launch {
             runCatching {
                 client.pods().inNamespace(ns).resource(
-                    MockClusterProvider.buildPod(name, ns, app, image, nodeName, "Pending"),
+                    MockClusterProvider.buildPod(name, ns, app, image, nodeName, "Pending", owner = rs),
                 ).create()
             }.onFailure { return@launch }
 
@@ -388,6 +413,63 @@ class DemoClusterSimulator(
             val startTime = System.currentTimeMillis()
             podFates[key] = rollFate(startTime)
         }
+    }
+
+    /**
+     * Resolve (or lazily create) the ReplicaSet that should own pods spawned
+     * for the given (namespace, app) combination. Reuses any pre-seeded RS
+     * with a matching `app` label so simulator pods land under the same
+     * topology card as the seed pods (e.g., new `frontend` pods in `default`
+     * end up under the seeded `frontend-7b9d5c8f4` RS / `frontend` Deployment).
+     * For combinations the seed didn't cover, mints a fresh Deployment + RS
+     * named after the app.
+     *
+     * Returns null only when the create itself fails (network blip,
+     * already-exists race, etc.) — caller should skip the pod spawn rather
+     * than fall back to an unowned pod.
+     */
+    private fun getOrCreateSyntheticRs(ns: String, app: String, image: String): ReplicaSet? {
+        val key = "$ns/$app"
+        syntheticRsByKey[key]?.let { return it }
+
+        val existing = runCatching {
+            client.apps().replicaSets().inNamespace(ns).withLabel("app", app).list().items.firstOrNull()
+        }.getOrNull()
+        if (existing != null) {
+            syntheticRsByKey[key] = existing
+            return existing
+        }
+
+        val createdDep = runCatching {
+            client.apps().deployments().inNamespace(ns).resource(
+                DeploymentBuilder()
+                    .withNewMetadata()
+                    .withName(app)
+                    .withNamespace(ns)
+                    .addToLabels("app", app)
+                    .endMetadata()
+                    .withNewSpec()
+                    .withReplicas(1)
+                    .withNewSelector().addToMatchLabels("app", app).endSelector()
+                    .withNewTemplate()
+                    .withNewMetadata().addToLabels("app", app).endMetadata()
+                    .withNewSpec()
+                    .withContainers(ContainerBuilder().withName(app).withImage(image).build())
+                    .endSpec()
+                    .endTemplate()
+                    .endSpec()
+                    .build(),
+            ).create()
+        }.getOrNull() ?: return null
+
+        val createdRs = runCatching {
+            client.apps().replicaSets().inNamespace(ns).resource(
+                MockClusterProvider.buildReplicaSet(createdDep, replicas = 1, suffix = "57c84"),
+            ).create()
+        }.getOrNull() ?: return null
+
+        syntheticRsByKey[key] = createdRs
+        return createdRs
     }
 
     private fun rollFate(now: Long): PodFate = when (random.nextInt(100)) {
@@ -566,16 +648,39 @@ class DemoClusterSimulator(
 
     private fun spawnJob() {
         val (app, image) = jobAppPool.random()
-        val ns = nsPool.random()
-        val suffix = "${random.nextInt(10_000, 99_999)}"
         val cronOwner = cronOwnerPool.random()
+        // Route Jobs into the owning CronJob's namespace so the owner ref
+        // resolves; for free-standing jobs, pick a random ns.
+        val ns = cronOwner?.let { cronOwnerNs[it] } ?: nsPool.random()
+        val suffix = "${random.nextInt(10_000, 99_999)}"
         val name = if (cronOwner != null) "$cronOwner-${System.currentTimeMillis() / 1000}-$suffix" else "$app-$suffix"
         val key = "$ns/$name"
 
+        val cj = cronOwner?.let {
+            runCatching { client.batch().v1().cronjobs().inNamespace(ns).withName(it).get() }.getOrNull()
+        }
+
         runCatching {
-            client.batch().v1().jobs().inNamespace(ns).resource(
-                MockClusterProvider.buildJob(name, ns, app, image, ownerCronJob = cronOwner),
+            val createdJob = client.batch().v1().jobs().inNamespace(ns).resource(
+                MockClusterProvider.buildJob(name, ns, app, image, cronJob = cj),
             ).create()
+
+            // One pod owned by this Job — without it, the Job has no children
+            // and the topology graph won't render a workload card for it.
+            val nodeName = client.nodes().list().items.randomOrNull()?.metadata?.name
+            if (nodeName != null) {
+                client.pods().inNamespace(ns).resource(
+                    MockClusterProvider.buildPod(
+                        name = "$name-${random.nextInt(10_000, 99_999)}",
+                        ns = ns,
+                        app = app,
+                        image = image,
+                        nodeName = nodeName,
+                        phase = "Running",
+                        owner = createdJob,
+                    ),
+                ).create()
+            }
         }.onSuccess {
             emitEvent("Normal", "SuccessfulCreate", "Created job $name", "Job", ns, name, "job-controller")
             val now = System.currentTimeMillis()

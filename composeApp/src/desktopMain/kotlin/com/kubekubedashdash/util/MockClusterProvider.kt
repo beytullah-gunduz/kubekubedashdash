@@ -13,6 +13,7 @@ import io.fabric8.kubernetes.api.model.EndpointSubsetBuilder
 import io.fabric8.kubernetes.api.model.EndpointsBuilder
 import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
+import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.api.model.Node
 import io.fabric8.kubernetes.api.model.NodeAddressBuilder
@@ -20,6 +21,8 @@ import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.NodeConditionBuilder
 import io.fabric8.kubernetes.api.model.NodeSystemInfoBuilder
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
+import io.fabric8.kubernetes.api.model.OwnerReference
+import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.PersistentVolumeBuilder
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder
 import io.fabric8.kubernetes.api.model.Pod
@@ -32,9 +35,12 @@ import io.fabric8.kubernetes.api.model.ServiceBuilder
 import io.fabric8.kubernetes.api.model.ServicePortBuilder
 import io.fabric8.kubernetes.api.model.ServiceSpecBuilder
 import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
+import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
+import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
 import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.Job
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
@@ -270,14 +276,17 @@ object MockClusterProvider {
         podIp: String? = null,
         restartCount: Int = 0,
         creationTimestamp: String = now(),
+        owner: HasMetadata? = null,
     ): Pod {
         val isRunning = phase == "Running"
+        val ownerRefs = owner?.let { listOf(ownerRefOf(it)) } ?: emptyList()
         return PodBuilder()
             .withNewMetadata()
             .withName(name)
             .withNamespace(ns)
             .withCreationTimestamp(creationTimestamp)
             .addToLabels("app", app)
+            .withOwnerReferences(ownerRefs)
             .endMetadata()
             .withSpec(
                 PodSpecBuilder()
@@ -325,8 +334,9 @@ object MockClusterProvider {
         app: String,
         image: String,
         creationTimestamp: String = now(),
-        ownerCronJob: String? = null,
+        cronJob: CronJob? = null,
     ): Job {
+        val ownerRefs = cronJob?.let { listOf(ownerRefOf(it)) } ?: emptyList()
         val builder = JobBuilder()
             .withNewMetadata()
             .withName(name)
@@ -334,8 +344,9 @@ object MockClusterProvider {
             .withCreationTimestamp(creationTimestamp)
             .addToLabels("app", app)
             .addToLabels("job-name", name)
-        if (ownerCronJob != null) {
-            builder.addToLabels("cronjob", ownerCronJob)
+            .withOwnerReferences(ownerRefs)
+        if (cronJob != null) {
+            builder.addToLabels("cronjob", cronJob.metadata.name)
         }
         return builder.endMetadata()
             .withNewSpec()
@@ -360,6 +371,60 @@ object MockClusterProvider {
             .withNewStatus()
             .withActive(1)
             .withStartTime(creationTimestamp)
+            .endStatus()
+            .build()
+    }
+
+    /**
+     * Build a controller-style OwnerReference pointing at [parent]. Caller is
+     * responsible for ensuring [parent] is the persisted (post-`.create()`)
+     * object so its UID is populated — without a UID the topology builder
+     * can't resolve the owner chain (see ReactiveKubeClient.findRoot).
+     */
+    private fun ownerRefOf(parent: HasMetadata): OwnerReference {
+        val uid = parent.metadata?.uid
+            ?: error("ownerRefOf: parent ${parent.kind}/${parent.metadata?.name} has no UID — call .create() first")
+        return OwnerReferenceBuilder()
+            .withApiVersion(parent.apiVersion)
+            .withKind(parent.kind)
+            .withName(parent.metadata.name)
+            .withUid(uid)
+            .withController(true)
+            .withBlockOwnerDeletion(true)
+            .build()
+    }
+
+    /**
+     * Build a ReplicaSet that the topology graph will resolve back to its
+     * parent Deployment. Pass the persisted Deployment (with UID) so the
+     * ownerReferences UID matches what the graph builder looks up.
+     */
+    internal fun buildReplicaSet(deployment: Deployment, replicas: Int, suffix: String): ReplicaSet {
+        val ns = deployment.metadata.namespace
+        val app = deployment.spec.selector.matchLabels["app"]
+            ?: error("buildReplicaSet: deployment ${deployment.metadata.name} has no app selector label")
+        val image = deployment.spec.template.spec.containers.first().image
+        return ReplicaSetBuilder()
+            .withNewMetadata()
+            .withName("${deployment.metadata.name}-$suffix")
+            .withNamespace(ns)
+            .withCreationTimestamp(deployment.metadata.creationTimestamp ?: now())
+            .addToLabels("app", app)
+            .withOwnerReferences(listOf(ownerRefOf(deployment)))
+            .endMetadata()
+            .withNewSpec()
+            .withReplicas(replicas)
+            .withNewSelector().addToMatchLabels("app", app).endSelector()
+            .withNewTemplate()
+            .withNewMetadata().addToLabels("app", app).endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName(app).withImage(image).build())
+            .endSpec()
+            .endTemplate()
+            .endSpec()
+            .withNewStatus()
+            .withReplicas(replicas)
+            .withReadyReplicas(replicas)
             .endStatus()
             .build()
     }
@@ -422,47 +487,49 @@ object MockClusterProvider {
                 },
         ).create()
 
-        // ── Pods ────────────────────────────────────────────────────────────────
-        data class PodDef(val name: String, val ns: String, val app: String, val image: String, val phase: String, val node: String = "mock-node-1", val ip: String)
-
-        val podDefs = listOf(
-            PodDef("frontend-7b9d5c8f4-abc12", "default", "frontend", "nginx:1.25", "Running", ip = "10.244.0.5"),
-            PodDef("frontend-7b9d5c8f4-def34", "default", "frontend", "nginx:1.25", "Running", ip = "10.244.0.6"),
-            PodDef("backend-api-6c4f8d9b2-xyz99", "default", "backend-api", "node:20-alpine", "Running", ip = "10.244.0.7"),
-            PodDef("backend-api-6c4f8d9b2-uvw88", "default", "backend-api", "node:20-alpine", "Running", ip = "10.244.0.8"),
-            PodDef("postgres-0", "production", "postgres", "postgres:16", "Running", ip = "10.244.0.10"),
-            PodDef("redis-cache-5f7a3b1d0-qrs55", "production", "redis-cache", "redis:7-alpine", "Running", ip = "10.244.0.11"),
-            PodDef("monitoring-agent-ht7k2", "monitoring", "monitoring-agent", "prom/node-exporter:v1.7.0", "Running", ip = "10.244.0.20"),
-            PodDef("data-migration-job-lm4n8", "default", "data-migration", "busybox:1.36", "Pending", ip = ""),
+        // ── Deployments + ReplicaSets + Pods ────────────────────────────────────
+        // Pod names and IPs are coordinated with the Endpoints subsets seeded
+        // below — changing them here means updating the Endpoints block too.
+        data class DeployDef(
+            val name: String,
+            val ns: String,
+            val app: String,
+            val image: String,
+            val rsSuffix: String,
+            val podSpecs: List<Pair<String, String>>,
         )
-
-        podDefs.forEach { def ->
-            val ts = minutesAgo(if (def.phase == "Running") 120 else 2)
-            client.pods().inNamespace(def.ns).resource(
-                buildPod(
-                    def.name,
-                    def.ns,
-                    def.app,
-                    def.image,
-                    if (def.phase == "Running") def.node else null,
-                    def.phase,
-                    def.ip.ifEmpty { null },
-                    creationTimestamp = ts,
-                ),
-            ).create()
-        }
-
-        // ── Deployments ─────────────────────────────────────────────────────────
-        data class DeployDef(val name: String, val ns: String, val app: String, val image: String, val replicas: Int)
 
         val deployDefs = listOf(
-            DeployDef("frontend", "default", "frontend", "nginx:1.25", 2),
-            DeployDef("backend-api", "default", "backend-api", "node:20-alpine", 2),
-            DeployDef("redis-cache", "production", "redis-cache", "redis:7-alpine", 1),
+            DeployDef(
+                "frontend",
+                "default",
+                "frontend",
+                "nginx:1.25",
+                "7b9d5c8f4",
+                listOf("abc12" to "10.244.0.5", "def34" to "10.244.0.6"),
+            ),
+            DeployDef(
+                "backend-api",
+                "default",
+                "backend-api",
+                "node:20-alpine",
+                "6c4f8d9b2",
+                listOf("xyz99" to "10.244.0.7", "uvw88" to "10.244.0.8"),
+            ),
+            DeployDef(
+                "redis-cache",
+                "production",
+                "redis-cache",
+                "redis:7-alpine",
+                "5f7a3b1d0",
+                listOf("qrs55" to "10.244.0.11"),
+            ),
         )
 
+        var totalPodsSeeded = 0
         deployDefs.forEach { def ->
-            client.apps().deployments().inNamespace(def.ns).resource(
+            val replicas = def.podSpecs.size
+            val createdDep = client.apps().deployments().inNamespace(def.ns).resource(
                 DeploymentBuilder()
                     .withNewMetadata()
                     .withName(def.name)
@@ -471,7 +538,7 @@ object MockClusterProvider {
                     .addToLabels("app", def.app)
                     .endMetadata()
                     .withNewSpec()
-                    .withReplicas(def.replicas)
+                    .withReplicas(replicas)
                     .withNewSelector().addToMatchLabels("app", def.app).endSelector()
                     .withNewTemplate()
                     .withNewMetadata().addToLabels("app", def.app).endMetadata()
@@ -482,38 +549,34 @@ object MockClusterProvider {
                     .withNewStrategy().withType("RollingUpdate").endStrategy()
                     .endSpec()
                     .withNewStatus()
-                    .withReplicas(def.replicas)
-                    .withReadyReplicas(def.replicas)
-                    .withAvailableReplicas(def.replicas)
-                    .withUpdatedReplicas(def.replicas)
+                    .withReplicas(replicas)
+                    .withReadyReplicas(replicas)
+                    .withAvailableReplicas(replicas)
+                    .withUpdatedReplicas(replicas)
                     .endStatus()
                     .build(),
             ).create()
 
-            client.apps().replicaSets().inNamespace(def.ns).resource(
-                ReplicaSetBuilder()
-                    .withNewMetadata()
-                    .withName("${def.name}-7b9d5c8f4")
-                    .withNamespace(def.ns)
-                    .withCreationTimestamp(minutesAgo(1440))
-                    .addToLabels("app", def.app)
-                    .endMetadata()
-                    .withNewSpec()
-                    .withReplicas(def.replicas)
-                    .withNewSelector().addToMatchLabels("app", def.app).endSelector()
-                    .withNewTemplate()
-                    .withNewMetadata().addToLabels("app", def.app).endMetadata()
-                    .withNewSpec()
-                    .withContainers(ContainerBuilder().withName(def.app).withImage(def.image).build())
-                    .endSpec()
-                    .endTemplate()
-                    .endSpec()
-                    .withNewStatus()
-                    .withReplicas(def.replicas)
-                    .withReadyReplicas(def.replicas)
-                    .endStatus()
-                    .build(),
+            val createdRs = client.apps().replicaSets().inNamespace(def.ns).resource(
+                buildReplicaSet(createdDep, replicas, def.rsSuffix),
             ).create()
+
+            def.podSpecs.forEach { (podSuffix, ip) ->
+                client.pods().inNamespace(def.ns).resource(
+                    buildPod(
+                        name = "${def.name}-${def.rsSuffix}-$podSuffix",
+                        ns = def.ns,
+                        app = def.app,
+                        image = def.image,
+                        nodeName = "mock-node-1",
+                        phase = "Running",
+                        podIp = ip,
+                        creationTimestamp = minutesAgo(120),
+                        owner = createdRs,
+                    ),
+                ).create()
+                totalPodsSeeded++
+            }
         }
 
         // ── Services ────────────────────────────────────────────────────────────
@@ -750,16 +813,24 @@ object MockClusterProvider {
             ).create()
         }
 
-        // ── StatefulSets ───────────────────────────────────────────────────────
-        data class StsDef(val name: String, val ns: String, val app: String, val image: String, val replicas: Int, val serviceName: String)
+        // ── StatefulSets + their Pods ──────────────────────────────────────────
+        data class StsDef(
+            val name: String,
+            val ns: String,
+            val app: String,
+            val image: String,
+            val replicas: Int,
+            val serviceName: String,
+            val podIps: List<String?> = List(replicas) { null },
+        )
 
         val stsDefs = listOf(
-            StsDef("postgres", "production", "postgres", "postgres:16", 1, "postgres"),
+            StsDef("postgres", "production", "postgres", "postgres:16", 1, "postgres", listOf("10.244.0.10")),
             StsDef("kafka", "monitoring", "kafka", "bitnami/kafka:3.7", 3, "kafka-headless"),
         )
 
         stsDefs.forEach { def ->
-            client.apps().statefulSets().inNamespace(def.ns).resource(
+            val createdSts = client.apps().statefulSets().inNamespace(def.ns).resource(
                 StatefulSetBuilder()
                     .withNewMetadata()
                     .withName(def.name)
@@ -787,9 +858,26 @@ object MockClusterProvider {
                     .endStatus()
                     .build(),
             ).create()
+
+            repeat(def.replicas) { idx ->
+                client.pods().inNamespace(def.ns).resource(
+                    buildPod(
+                        name = "${def.name}-$idx",
+                        ns = def.ns,
+                        app = def.app,
+                        image = def.image,
+                        nodeName = "mock-node-1",
+                        phase = "Running",
+                        podIp = def.podIps.getOrNull(idx),
+                        creationTimestamp = minutesAgo(120),
+                        owner = createdSts,
+                    ),
+                ).create()
+                totalPodsSeeded++
+            }
         }
 
-        // ── DaemonSets ─────────────────────────────────────────────────────────
+        // ── DaemonSets + one Pod per node ──────────────────────────────────────
         data class DsDef(val name: String, val ns: String, val app: String, val image: String)
 
         val dsDefs = listOf(
@@ -797,8 +885,13 @@ object MockClusterProvider {
             DsDef("node-exporter", "monitoring", "node-exporter", "prom/node-exporter:v1.7.0"),
         )
 
+        // Snapshot node names once — DaemonSets get one pod per existing node at seed
+        // time. The simulator's runtime node churn does not retroactively spawn
+        // DaemonSet pods; that's fine for the demo.
+        val nodeNamesAtSeed = client.nodes().list().items.mapNotNull { it.metadata?.name }
+
         dsDefs.forEach { def ->
-            client.apps().daemonSets().inNamespace(def.ns).resource(
+            val createdDs = client.apps().daemonSets().inNamespace(def.ns).resource(
                 DaemonSetBuilder()
                     .withNewMetadata()
                     .withName(def.name)
@@ -817,14 +910,31 @@ object MockClusterProvider {
                     .endTemplate()
                     .endSpec()
                     .withNewStatus()
-                    .withDesiredNumberScheduled(1)
-                    .withCurrentNumberScheduled(1)
-                    .withNumberReady(1)
-                    .withNumberAvailable(1)
+                    .withDesiredNumberScheduled(nodeNamesAtSeed.size)
+                    .withCurrentNumberScheduled(nodeNamesAtSeed.size)
+                    .withNumberReady(nodeNamesAtSeed.size)
+                    .withNumberAvailable(nodeNamesAtSeed.size)
                     .withNumberMisscheduled(0)
                     .endStatus()
                     .build(),
             ).create()
+
+            nodeNamesAtSeed.forEachIndexed { idx, nodeName ->
+                client.pods().inNamespace(def.ns).resource(
+                    buildPod(
+                        name = "${def.name}-${nodeName.takeLast(5)}-$idx",
+                        ns = def.ns,
+                        app = def.app,
+                        image = def.image,
+                        nodeName = nodeName,
+                        phase = "Running",
+                        podIp = "10.244.${idx + 1}.${10 + idx}",
+                        creationTimestamp = minutesAgo(120),
+                        owner = createdDs,
+                    ),
+                ).create()
+                totalPodsSeeded++
+            }
         }
 
         // ── CronJobs ───────────────────────────────────────────────────────────
@@ -837,8 +947,9 @@ object MockClusterProvider {
             CjDef("cert-renewal", "default", "0 0 * * 1", "cert-bot", "certbot/certbot:v2.10.0", "certbot renew --quiet"),
         )
 
+        val createdCjByName = mutableMapOf<String, CronJob>()
         cjDefs.forEach { def ->
-            client.batch().v1().cronjobs().inNamespace(def.ns).resource(
+            val cj = client.batch().v1().cronjobs().inNamespace(def.ns).resource(
                 CronJobBuilder()
                     .withNewMetadata()
                     .withName(def.name)
@@ -875,7 +986,56 @@ object MockClusterProvider {
                     .endStatus()
                     .build(),
             ).create()
+            createdCjByName[def.name] = cj
         }
+
+        // Seed a recent Job + owned Pod for two CronJobs so the topology graph
+        // has CronJob cards on first render. The simulator's job loop creates
+        // more jobs over time but isn't guaranteed to fire within the screenshot
+        // task's warmup window.
+        val seedJobChains = listOf(
+            Triple("nightly-backup", "backup", "busybox:1.36"),
+            Triple("log-rotation", "log-rotator", "busybox:1.36"),
+        )
+        seedJobChains.forEach { (cjName, app, image) ->
+            val cj = createdCjByName[cjName] ?: return@forEach
+            val ns = cj.metadata.namespace
+            val jobName = "$cjName-28000001"
+            val createdJob = client.batch().v1().jobs().inNamespace(ns).resource(
+                buildJob(jobName, ns, app, image, creationTimestamp = minutesAgo(15), cronJob = cj),
+            ).create()
+            client.pods().inNamespace(ns).resource(
+                buildPod(
+                    name = "$jobName-r9q4z",
+                    ns = ns,
+                    app = app,
+                    image = image,
+                    nodeName = "mock-node-1",
+                    phase = "Running",
+                    podIp = null,
+                    creationTimestamp = minutesAgo(15),
+                    owner = createdJob,
+                ),
+            ).create()
+            totalPodsSeeded++
+        }
+
+        // One deliberately-orphan pod so the topology Standalone bucket stays
+        // exercised (pre-existing demo pod with a FailedScheduling event).
+        client.pods().inNamespace("default").resource(
+            buildPod(
+                name = "data-migration-job-lm4n8",
+                ns = "default",
+                app = "data-migration",
+                image = "busybox:1.36",
+                nodeName = null,
+                phase = "Pending",
+                podIp = null,
+                creationTimestamp = minutesAgo(2),
+                owner = null,
+            ),
+        ).create()
+        totalPodsSeeded++
 
         // ── Endpoints ──────────────────────────────────────────────────────────
         data class EpDef(val svc: String, val ns: String, val targets: List<Triple<String, String, Int>>)
@@ -1001,7 +1161,7 @@ object MockClusterProvider {
         log.info(
             "Mock cluster seeded: 3 namespaces, 1 node, {} pods, {} deployments, 3 services, 1 configmap, 1 secret, {} events, " +
                 "{} storage classes, {} PVs, {} PVCs, {} statefulsets, {} daemonsets, {} cronjobs, {} endpoints, 3 networkpolicies",
-            podDefs.size,
+            totalPodsSeeded,
             deployDefs.size,
             eventDefs.size,
             scDefs.size,
