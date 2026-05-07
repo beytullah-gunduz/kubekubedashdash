@@ -1,11 +1,14 @@
 package com.kubekubedashdash
 
+import androidx.compose.foundation.DefaultContextMenuRepresentation
+import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -266,9 +269,23 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
     }
     val colorScheme = if (ThemeManager.isDarkTheme) DarkColorScheme else LightColorScheme
     val typography = appTypography(sans = kdSansFamily())
+    // Theme the right-click ContextMenuArea popup. Compose's default uses
+    // its own foundation colors and clashes with the Kd palette — give it
+    // KdSurface / KdTextPrimary / KdHover so it visually matches the
+    // dropdown we already use for the row's overflow `⋮` menu.
+    val contextMenuRepresentation = remember(ThemeManager.isDarkTheme) {
+        DefaultContextMenuRepresentation(
+            backgroundColor = if (ThemeManager.isDarkTheme) KdSurfaceDark else KdSurfaceLight,
+            textColor = if (ThemeManager.isDarkTheme) KdTextPrimaryDark else KdTextPrimaryLight,
+            itemHoverColor = if (ThemeManager.isDarkTheme) KdHoverDark else KdHoverLight,
+        )
+    }
     MaterialTheme(
         colorScheme = colorScheme,
         typography = typography,
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalContextMenuRepresentation provides contextMenuRepresentation) {
+            content()
+        }
+    }
 }
