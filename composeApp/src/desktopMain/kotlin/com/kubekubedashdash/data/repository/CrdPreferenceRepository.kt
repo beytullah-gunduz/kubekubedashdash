@@ -54,18 +54,11 @@ object CrdPreferenceRepository {
     fun togglePinned(context: String, crdKey: String) {
         ioScope.launch {
             dataStore.edit { prefs ->
-                val pinned = decode(prefs[CRD_PINNED]).toMutableMap()
-                val hidden = decode(prefs[CRD_HIDDEN]).toMutableMap()
-                val pinnedHere = pinned[context]?.toMutableSet() ?: mutableSetOf()
-                val hiddenHere = hidden[context]?.toMutableSet() ?: mutableSetOf()
-                if (crdKey in pinnedHere) {
-                    pinnedHere.remove(crdKey)
-                } else {
-                    pinnedHere.add(crdKey)
-                    hiddenHere.remove(crdKey)
-                }
-                writeBack(prefs, pinned, context, pinnedHere, CRD_PINNED)
-                writeBack(prefs, hidden, context, hiddenHere, CRD_HIDDEN)
+                val pinned = decode(prefs[CRD_PINNED])
+                val hidden = decode(prefs[CRD_HIDDEN])
+                val (newPinned, newHidden) = computeTogglePinned(pinned, hidden, context, crdKey)
+                prefs[CRD_PINNED] = encode(newPinned)
+                prefs[CRD_HIDDEN] = encode(newHidden)
             }
         }
     }
@@ -73,34 +66,68 @@ object CrdPreferenceRepository {
     fun toggleHidden(context: String, crdKey: String) {
         ioScope.launch {
             dataStore.edit { prefs ->
-                val pinned = decode(prefs[CRD_PINNED]).toMutableMap()
-                val hidden = decode(prefs[CRD_HIDDEN]).toMutableMap()
-                val pinnedHere = pinned[context]?.toMutableSet() ?: mutableSetOf()
-                val hiddenHere = hidden[context]?.toMutableSet() ?: mutableSetOf()
-                if (crdKey in hiddenHere) {
-                    hiddenHere.remove(crdKey)
-                } else {
-                    hiddenHere.add(crdKey)
-                    pinnedHere.remove(crdKey)
-                }
-                writeBack(prefs, pinned, context, pinnedHere, CRD_PINNED)
-                writeBack(prefs, hidden, context, hiddenHere, CRD_HIDDEN)
+                val pinned = decode(prefs[CRD_PINNED])
+                val hidden = decode(prefs[CRD_HIDDEN])
+                val (newPinned, newHidden) = computeToggleHidden(pinned, hidden, context, crdKey)
+                prefs[CRD_PINNED] = encode(newPinned)
+                prefs[CRD_HIDDEN] = encode(newHidden)
             }
         }
     }
 
-    private fun writeBack(
-        prefs: androidx.datastore.preferences.core.MutablePreferences,
-        map: MutableMap<String, Set<String>>,
+    /**
+     * Pure pin-toggle. If the key is already pinned in this context, unpin it
+     * (no-op on the hidden map). Otherwise pin it and ensure it's not hidden
+     * — pinning auto-unhides because pin and hide are mutually exclusive.
+     */
+    internal fun computeTogglePinned(
+        pinned: Map<String, Set<String>>,
+        hidden: Map<String, Set<String>>,
         context: String,
-        forContext: Set<String>,
-        key: androidx.datastore.preferences.core.Preferences.Key<String>,
-    ) {
-        if (forContext.isEmpty()) map.remove(context) else map[context] = forContext
-        prefs[key] = json.encodeToString(map.mapValues { it.value.toList() })
+        crdKey: String,
+    ): Pair<Map<String, Set<String>>, Map<String, Set<String>>> {
+        val pinnedHere = pinned[context].orEmpty()
+        val hiddenHere = hidden[context].orEmpty()
+        return if (crdKey in pinnedHere) {
+            updateContext(pinned, context, pinnedHere - crdKey) to hidden
+        } else {
+            updateContext(pinned, context, pinnedHere + crdKey) to
+                updateContext(hidden, context, hiddenHere - crdKey)
+        }
     }
 
-    private fun decode(raw: String?): Map<String, Set<String>> {
+    /**
+     * Pure hide-toggle. Symmetric to [computeTogglePinned] — hiding auto-unpins.
+     */
+    internal fun computeToggleHidden(
+        pinned: Map<String, Set<String>>,
+        hidden: Map<String, Set<String>>,
+        context: String,
+        crdKey: String,
+    ): Pair<Map<String, Set<String>>, Map<String, Set<String>>> {
+        val pinnedHere = pinned[context].orEmpty()
+        val hiddenHere = hidden[context].orEmpty()
+        return if (crdKey in hiddenHere) {
+            pinned to updateContext(hidden, context, hiddenHere - crdKey)
+        } else {
+            updateContext(pinned, context, pinnedHere - crdKey) to
+                updateContext(hidden, context, hiddenHere + crdKey)
+        }
+    }
+
+    private fun updateContext(
+        map: Map<String, Set<String>>,
+        context: String,
+        next: Set<String>,
+    ): Map<String, Set<String>> {
+        val mutable = map.toMutableMap()
+        if (next.isEmpty()) mutable.remove(context) else mutable[context] = next
+        return mutable
+    }
+
+    private fun encode(map: Map<String, Set<String>>): String = json.encodeToString(map.mapValues { it.value.toList() })
+
+    internal fun decode(raw: String?): Map<String, Set<String>> {
         if (raw.isNullOrBlank()) return emptyMap()
         return try {
             json.decodeFromString<Map<String, List<String>>>(raw).mapValues { it.value.toSet() }
