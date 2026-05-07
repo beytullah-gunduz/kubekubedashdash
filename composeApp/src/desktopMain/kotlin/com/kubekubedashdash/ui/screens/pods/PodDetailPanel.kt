@@ -19,12 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -32,11 +32,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -73,15 +70,13 @@ import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.expand_more_filled
-import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.refresh_24
 import com.kubekubedashdash.resources.terminal_filled
-import com.kubekubedashdash.resources.vertical_align_bottom_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
@@ -91,6 +86,7 @@ import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.highlightYamlLine
+import com.kubekubedashdash.ui.screens.logviewer.LogLine
 import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
 import kotlinx.coroutines.Dispatchers
@@ -108,14 +104,14 @@ private enum class DetailTab(val label: String, val icon: DrawableResource) {
     Logs("Logs", Res.drawable.terminal_filled),
 }
 
-private val tallTabs = listOf(DetailTab.Overview, DetailTab.Yaml)
-private val compactTabs = DetailTab.entries.toList()
+private val detailTabs = DetailTab.entries.toList()
 
 @Composable
 fun PodDetailPanel(
     pod: PodInfo,
     onClose: () -> Unit,
     onNavigateToNode: ((nodeName: String) -> Unit)? = null,
+    onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     labelQuery: String = "",
     onToggleLabel: (String, String) -> Unit = { _, _ -> },
@@ -141,20 +137,12 @@ fun PodDetailPanel(
 
     Surface(modifier = modifier, color = KdSurface) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isTall = maxHeight >= 1000.dp
-            val tabs = if (isTall) tallTabs else compactTabs
+            val tabs = detailTabs
             val pagerState = rememberPagerState(pageCount = { tabs.size })
 
             LaunchedEffect(pod.uid) {
                 activeTab = DetailTab.Overview
                 pagerState.scrollToPage(0)
-            }
-
-            LaunchedEffect(isTall) {
-                if (isTall && activeTab == DetailTab.Logs) {
-                    activeTab = DetailTab.Overview
-                    pagerState.scrollToPage(0)
-                }
             }
 
             LaunchedEffect(pagerState, tabs) {
@@ -176,33 +164,19 @@ fun PodDetailPanel(
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
                     when (tabs[page]) {
-                        DetailTab.Overview -> {
-                            if (isTall) {
-                                OverviewAndLogsTab(
-                                    pod = pod,
-                                    metricsHistory = metricsHistory,
-                                    onNavigateToNode = onNavigateToNode,
-                                    labelQuery = labelQuery,
-                                    onToggleLabel = onToggleLabel,
-                                    annotationQuery = annotationQuery,
-                                    onToggleAnnotation = onToggleAnnotation,
-                                )
-                            } else {
-                                OverviewTab(
-                                    pod = pod,
-                                    metricsHistory = metricsHistory,
-                                    onNavigateToNode = onNavigateToNode,
-                                    labelQuery = labelQuery,
-                                    onToggleLabel = onToggleLabel,
-                                    annotationQuery = annotationQuery,
-                                    onToggleAnnotation = onToggleAnnotation,
-                                )
-                            }
-                        }
+                        DetailTab.Overview -> OverviewTab(
+                            pod = pod,
+                            metricsHistory = metricsHistory,
+                            onNavigateToNode = onNavigateToNode,
+                            labelQuery = labelQuery,
+                            onToggleLabel = onToggleLabel,
+                            annotationQuery = annotationQuery,
+                            onToggleAnnotation = onToggleAnnotation,
+                        )
 
                         DetailTab.Yaml -> YamlTab(pod)
 
-                        DetailTab.Logs -> LogsTab(pod)
+                        DetailTab.Logs -> LogsTab(pod, onOpenLogs)
                     }
                 }
             }
@@ -269,37 +243,6 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, onTabChange: 
                     Text(tab.label, style = MaterialTheme.typography.labelMedium)
                 }
             }
-        }
-    }
-}
-
-// ── Overview + Logs combined Tab ─────────────────────────────────────────────────
-
-@Composable
-private fun OverviewAndLogsTab(
-    pod: PodInfo,
-    metricsHistory: List<PodMetricsSnapshot>,
-    onNavigateToNode: ((String) -> Unit)? = null,
-    labelQuery: String,
-    onToggleLabel: (String, String) -> Unit,
-    annotationQuery: String,
-    onToggleAnnotation: (String, String) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.weight(2f).fillMaxWidth()) {
-            OverviewTab(
-                pod = pod,
-                metricsHistory = metricsHistory,
-                onNavigateToNode = onNavigateToNode,
-                labelQuery = labelQuery,
-                onToggleLabel = onToggleLabel,
-                annotationQuery = annotationQuery,
-                onToggleAnnotation = onToggleAnnotation,
-            )
-        }
-        HorizontalDivider(color = KdBorder)
-        Box(modifier = Modifier.weight(3f).fillMaxWidth()) {
-            LogsTab(pod)
         }
     }
 }
@@ -574,34 +517,28 @@ private fun YamlTab(pod: PodInfo) {
     }
 }
 
-// ── Logs Tab ────────────────────────────────────────────────────────────────────
+// ── Logs Tab (preview → drawer) ──────────────────────────────────────────────────
+
+private const val LOGS_PREVIEW_TAIL = 50
 
 @Composable
-private fun LogsTab(pod: PodInfo) {
+private fun LogsTab(
+    pod: PodInfo,
+    onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit,
+) {
     val kubeClient = LocalReactiveKubeClient.current
-    var logLines by remember(pod.uid) { mutableStateOf(listOf<String>()) }
+    var lines by remember(pod.uid) { mutableStateOf(listOf<String>()) }
     var loading by remember(pod.uid) { mutableStateOf(true) }
-    var following by remember { mutableStateOf(true) }
-    var filterText by remember { mutableStateOf("") }
-    var selectedContainer by remember(pod.uid) { mutableStateOf(pod.containers.firstOrNull()?.name) }
-    val listState = rememberLazyListState()
+    var refreshTick by remember(pod.uid) { mutableStateOf(0) }
+    val firstContainer = pod.containers.firstOrNull()?.name
 
-    LaunchedEffect(pod.uid, selectedContainer) {
+    LaunchedEffect(pod.uid, refreshTick) {
         loading = true
-        while (true) {
-            val logs = withContext(Dispatchers.IO) {
-                kubeClient.getPodLogs(pod.name, pod.namespace, selectedContainer, tailLines = 1000)
-            }
-            logLines = logs.lines()
-            loading = false
-            delay(3_000)
+        val logs = withContext(Dispatchers.IO) {
+            kubeClient.getPodLogs(pod.name, pod.namespace, firstContainer, tailLines = LOGS_PREVIEW_TAIL)
         }
-    }
-
-    LaunchedEffect(logLines.size, following) {
-        if (following && logLines.isNotEmpty()) {
-            listState.animateScrollToItem(logLines.lastIndex)
-        }
+        lines = logs.lines().filter { it.isNotEmpty() }
+        loading = false
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -610,46 +547,28 @@ private fun LogsTab(pod: PodInfo) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (pod.containers.size > 1) {
-                ContainerPicker(
-                    containers = pod.containers.map { it.name },
-                    selected = selectedContainer ?: "",
-                    onSelect = { selectedContainer = it },
+            Text(
+                text = if (firstContainer != null && pod.containers.size > 1) {
+                    "Last $LOGS_PREVIEW_TAIL lines · $firstContainer · open viewer to switch container"
+                } else {
+                    "Last $LOGS_PREVIEW_TAIL lines"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = { refreshTick++ },
+                modifier = Modifier.size(28.dp),
+            ) {
+                Icon(
+                    painterResource(Res.drawable.refresh_24),
+                    "Refresh preview",
+                    Modifier.size(14.dp),
+                    tint = KdTextSecondary,
                 )
             }
-
-            OutlinedTextField(
-                value = filterText,
-                onValueChange = { filterText = it },
-                placeholder = {
-                    Text("Filter logs...", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-                },
-                leadingIcon = { Icon(painterResource(Res.drawable.filter_list_filled), null, Modifier.size(14.dp), tint = KdTextSecondary) },
-                singleLine = true,
-                modifier = Modifier.weight(1f).height(32.dp),
-                textStyle = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = kdMonoFamily(),
-                    color = KdTextPrimary,
-                ),
-                shape = RoundedCornerShape(6.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = KdPrimary,
-                    unfocusedBorderColor = KdBorder,
-                    cursorColor = KdPrimary,
-                    focusedContainerColor = KdSurfaceVariant,
-                    unfocusedContainerColor = KdSurfaceVariant,
-                ),
-            )
-
-            IconButton(
-                onClick = { following = !following },
-                modifier = Modifier.size(28.dp),
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = if (following) KdPrimary else KdTextSecondary,
-                ),
-            ) {
-                Icon(painterResource(Res.drawable.vertical_align_bottom_filled), "Follow", Modifier.size(15.dp))
-            }
+            OpenInLogViewerButton(pod = pod, onOpenLogs = onOpenLogs)
         }
 
         Surface(
@@ -657,36 +576,21 @@ private fun LogsTab(pod: PodInfo) {
             shape = RoundedCornerShape(6.dp),
             color = Color(0xFF0D1117),
         ) {
-            if (loading && logLines.isEmpty()) {
-                ResourceLoadingIndicator()
-            } else {
-                val filtered = if (filterText.isBlank()) {
-                    logLines
-                } else {
-                    logLines.filter { it.contains(filterText, ignoreCase = true) }
+            when {
+                loading && lines.isEmpty() -> ResourceLoadingIndicator()
+
+                lines.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No recent log output. Open viewer to stream live.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KdTextSecondary,
+                    )
                 }
 
-                if (filtered.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No log output", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                    }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
-                    ) {
-                        items(filtered) { line ->
-                            Text(
-                                line,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = kdMonoFamily(),
-                                    fontSize = 10.sp,
-                                    lineHeight = 14.sp,
-                                ),
-                                color = logLineColor(line),
-                                maxLines = 1,
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 0.5.dp),
-                            )
+                else -> SelectionContainer {
+                    LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                        items(lines) { line ->
+                            LogLine(line, highlight = "", wrap = false)
                         }
                     }
                 }
@@ -696,48 +600,58 @@ private fun LogsTab(pod: PodInfo) {
 }
 
 @Composable
-private fun ContainerPicker(containers: List<String>, selected: String, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
+private fun OpenInLogViewerButton(
+    pod: PodInfo,
+    onOpenLogs: (String, String, String?) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(
-            onClick = { expanded = true },
+            onClick = {
+                if (pod.containers.size > 1) {
+                    menuOpen = true
+                } else {
+                    onOpenLogs(pod.name, pod.namespace, pod.containers.firstOrNull()?.name)
+                }
+            },
             modifier = Modifier.height(28.dp),
             shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
-            border = BorderStroke(1.dp, KdBorder),
+            contentPadding = PaddingValues(horizontal = 10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = KdPrimary),
+            border = BorderStroke(1.dp, KdPrimary.copy(alpha = 0.5f)),
         ) {
-            Icon(painterResource(Res.drawable.view_in_ar_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
+            Icon(painterResource(Res.drawable.terminal_filled), null, Modifier.size(12.dp))
             Spacer(Modifier.width(4.dp))
-            Text(selected, style = MaterialTheme.typography.labelSmall)
-            Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
+            Text("Open in log viewer", style = MaterialTheme.typography.labelSmall)
+            if (pod.containers.size > 1) {
+                Spacer(Modifier.width(2.dp))
+                Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
+            }
         }
         DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
             modifier = Modifier.background(KdSurface),
         ) {
-            containers.forEach { c ->
+            pod.containers.forEach { c ->
                 DropdownMenuItem(
-                    text = { Text(c, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
+                    text = { Text(c.name, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
                     onClick = {
-                        onSelect(c)
-                        expanded = false
+                        menuOpen = false
+                        onOpenLogs(pod.name, pod.namespace, c.name)
                     },
                     leadingIcon = {
-                        if (c == selected) Icon(painterResource(Res.drawable.check_filled), null, Modifier.size(14.dp), tint = KdPrimary)
+                        Icon(
+                            painterResource(Res.drawable.view_in_ar_filled),
+                            null,
+                            Modifier.size(14.dp),
+                            tint = KdTextSecondary,
+                        )
                     },
                 )
             }
         }
     }
-}
-
-private fun logLineColor(line: String): Color = when {
-    line.contains("ERROR", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> KdError
-    line.contains("WARN", ignoreCase = true) -> KdWarning
-    line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> KdTextSecondary
-    else -> Color(0xFFB0BEC5)
 }
 
 private fun copyToClipboard(text: String) {
