@@ -24,6 +24,7 @@ import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
+import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.MockClusterProvider
 import com.kubekubedashdash.util.SystemDirectories
 import kotlinx.coroutines.CoroutineScope
@@ -184,6 +185,12 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Capturing settings dialog over cluster overview")
         sessionVm.navigate(Screen.Main.ClusterOverview)
         delay(5000L)
+        // Strip real kubeconfig contexts so the Settings → Cluster colors section
+        // can't render the user's actual cluster ARNs into the public screenshot.
+        AppViewModel.instance.overrideContextsForScreenshots(
+            listOf(MockClusterProvider.MOCK_CONTEXT_NAME),
+        )
+        delay(300)
         initialWorkspace.showSettings()
         delay(5000L)
         captureWindow(initialWorkspace.id, outDir.resolve("22-settings.png"))

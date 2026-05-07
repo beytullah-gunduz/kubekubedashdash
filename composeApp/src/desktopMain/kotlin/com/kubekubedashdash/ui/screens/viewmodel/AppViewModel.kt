@@ -169,6 +169,10 @@ class AppViewModel private constructor() : ViewModel() {
         }
     }
 
+    internal fun overrideContextsForScreenshots(contexts: List<String>) {
+        _contexts.value = contexts
+    }
+
     companion object {
         val instance: AppViewModel by lazy { AppViewModel() }
     }
