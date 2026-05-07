@@ -31,6 +31,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
@@ -43,6 +44,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -53,7 +57,7 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class ReactiveKubeClient(
     private val scope: CoroutineScope,
     private val connectionManager: KubeConnectionManager,
@@ -146,20 +150,30 @@ class ReactiveKubeClient(
                         },
                     )
                     launch {
-                        for (signal in emitSignal) {
-                            delay(100)
-                            try {
-                                val items = informer.store.list()
-                                log.debug("Informer emitting {} items from store", items.size)
-                                send(ResourceState.Success(items.map(mapper)))
-                                reportSuccess()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                log.warn("Informer failed to map store contents: {}", e.message)
-                                reportError(e.message ?: "Unknown error")
+                        // Debounce, not periodic emit. fabric8 fires onAdd for
+                        // every item during initial list-and-watch — without
+                        // debounce a CONFLATED channel + delay(100) becomes a
+                        // fixed 10 Hz cadence of full-store re-emits. debounce
+                        // collapses the burst into one emission once events
+                        // settle.
+                        emitSignal.consumeAsFlow()
+                            .debounce(100)
+                            .collect {
+                                // Pre-sync emissions are dropped — the post-sync
+                                // send below covers the first paint.
+                                if (!informer.hasSynced()) return@collect
+                                try {
+                                    val items = informer.store.list()
+                                    log.debug("Informer emitting {} items from store", items.size)
+                                    send(ResourceState.Success(items.map(mapper)))
+                                    reportSuccess()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    log.warn("Informer failed to map store contents: {}", e.message)
+                                    reportError(e.message ?: "Unknown error")
+                                }
                             }
-                        }
                     }
                     while (!informer.hasSynced()) delay(50)
                     val items = informer.store.list()
@@ -187,6 +201,7 @@ class ReactiveKubeClient(
                 }
             }
         }
+        .distinctUntilChanged()
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
@@ -220,20 +235,22 @@ class ReactiveKubeClient(
                         },
                     )
                     launch {
-                        for (signal in emitSignal) {
-                            delay(100)
-                            try {
-                                val items = informer.store.list()
-                                log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
-                                send(ResourceState.Success(items.mapNotNull(mapper)))
-                                reportSuccess()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
-                                reportError(e.message ?: "Unknown error")
+                        emitSignal.consumeAsFlow()
+                            .debounce(100)
+                            .collect {
+                                if (!informer.hasSynced()) return@collect
+                                try {
+                                    val items = informer.store.list()
+                                    log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
+                                    send(ResourceState.Success(items.mapNotNull(mapper)))
+                                    reportSuccess()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
+                                    reportError(e.message ?: "Unknown error")
+                                }
                             }
-                        }
                     }
                     while (!informer.hasSynced()) delay(50)
                     val items = informer.store.list()
@@ -255,6 +272,7 @@ class ReactiveKubeClient(
                 }
             }
         }
+        .distinctUntilChanged()
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
