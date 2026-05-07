@@ -2,6 +2,9 @@ package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.ContainerInfo
+import com.kubekubedashdash.models.CrdColumnSpec
+import com.kubekubedashdash.models.CrdInfo
+import com.kubekubedashdash.models.CrdScope
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.GenericResourceInfo
@@ -15,9 +18,12 @@ import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.models.ServiceInfo
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 import io.fabric8.kubernetes.client.utils.Serialization
@@ -44,6 +50,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReactiveKubeClient(
@@ -857,6 +864,159 @@ class ReactiveKubeClient(
             )
         },
     )
+
+    // ── Custom Resource Definitions ─────────────────────────────────────────────
+
+    /**
+     * Discovered CRDs on the cluster. Emits an empty list (not an error) when
+     * the caller's RBAC denies `customresourcedefinitions` — many service
+     * accounts can't list CRDs, and the dashboard still works for built-in
+     * resources, so failing this informer should silently hide the "Custom
+     * Resources" section rather than tripping a connection error.
+     */
+    val crds: StateFlow<ResourceState<List<CrdInfo>>> = connectedTrigger
+        .flatMapLatest {
+            channelFlow {
+                send(ResourceState.Loading)
+                val informer = try {
+                    val emitSignal = Channel<Unit>(Channel.CONFLATED)
+                    val inf = k8s.apiextensions().v1().customResourceDefinitions().inform(
+                        object : ResourceEventHandler<CustomResourceDefinition> {
+                            override fun onAdd(obj: CustomResourceDefinition) {
+                                emitSignal.trySend(Unit)
+                            }
+                            override fun onUpdate(o: CustomResourceDefinition, n: CustomResourceDefinition) {
+                                emitSignal.trySend(Unit)
+                            }
+                            override fun onDelete(obj: CustomResourceDefinition, deletedFinalStateUnknown: Boolean) {
+                                emitSignal.trySend(Unit)
+                            }
+                        },
+                    )
+                    launch {
+                        for (signal in emitSignal) {
+                            delay(100)
+                            try {
+                                send(ResourceState.Success(inf.store.list().mapNotNull(::mapCrd)))
+                            } catch (e: Exception) {
+                                log.debug("CRD informer mapping failed: {}", e.message)
+                            }
+                        }
+                    }
+                    inf
+                } catch (e: Exception) {
+                    log.info("CRD discovery unavailable (likely RBAC): {}", e.message)
+                    send(ResourceState.Success(emptyList()))
+                    null
+                }
+                if (informer == null) {
+                    awaitCancellation()
+                } else {
+                    while (!informer.hasSynced()) delay(50)
+                    val items = informer.store.list().mapNotNull(::mapCrd)
+                    log.info("CRD informer synced with {} CRDs", items.size)
+                    send(ResourceState.Success(items))
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        informer.close()
+                    }
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
+
+    private fun mapCrd(crd: CustomResourceDefinition): CrdInfo? {
+        val spec = crd.spec ?: return null
+        val version = spec.versions
+            ?.firstOrNull { it.storage == true }
+            ?: spec.versions?.firstOrNull { it.served == true }
+            ?: return null
+        if (version.served != true) return null
+        val columns = version.additionalPrinterColumns
+            ?.mapNotNull { col ->
+                val name = col.name ?: return@mapNotNull null
+                val path = col.jsonPath ?: return@mapNotNull null
+                CrdColumnSpec(
+                    name = name,
+                    type = col.type ?: "string",
+                    jsonPath = path,
+                    priority = col.priority ?: 0,
+                )
+            }
+            .orEmpty()
+        return CrdInfo(
+            group = spec.group ?: "",
+            version = version.name ?: return null,
+            kind = spec.names?.kind ?: return null,
+            plural = spec.names?.plural ?: return null,
+            singular = spec.names?.singular ?: spec.names?.kind?.lowercase().orEmpty(),
+            shortNames = spec.names?.shortNames.orEmpty(),
+            categories = spec.names?.categories.orEmpty(),
+            scope = if (spec.scope.equals("Namespaced", ignoreCase = true)) CrdScope.NAMESPACED else CrdScope.CLUSTER,
+            columns = columns,
+        )
+    }
+
+    // ── Custom resource instances (lazy, cached per GVK) ────────────────────────
+
+    private val crdInstanceFlows = ConcurrentHashMap<String, StateFlow<ResourceState<List<GenericResourceInfo>>>>()
+
+    /**
+     * Reactive list of instances for the given CRD. Created lazily on first
+     * subscribe; the underlying informer stops 60s after the last subscriber
+     * goes away (`WhileSubscribed`), and is recreated on resubscribe. The
+     * StateFlow itself is cached for the lifetime of this client so multiple
+     * UI surfaces (sidebar count, list screen, palette) share one informer.
+     */
+    fun customResourceInstances(crd: CrdInfo): StateFlow<ResourceState<List<GenericResourceInfo>>> = crdInstanceFlows.computeIfAbsent(crd.groupVersionKind) { buildCrInstanceFlow(crd) }
+
+    private fun buildCrInstanceFlow(crd: CrdInfo): StateFlow<ResourceState<List<GenericResourceInfo>>> {
+        val rdc = ResourceDefinitionContext.Builder()
+            .withGroup(crd.group)
+            .withVersion(crd.version)
+            .withKind(crd.kind)
+            .withPlural(crd.plural)
+            .withNamespaced(crd.namespaced)
+            .build()
+        val mapper: (GenericKubernetesResource) -> GenericResourceInfo = { gkr ->
+            mapCrInstance(gkr, crd)
+        }
+        return if (crd.namespaced) {
+            namespacedInformerFlow(
+                inform = { k, ns, h ->
+                    if (ns != null) {
+                        k.genericKubernetesResources(rdc).inNamespace(ns).inform(h)
+                    } else {
+                        k.genericKubernetesResources(rdc).inAnyNamespace().inform(h)
+                    }
+                },
+                mapper = mapper,
+            )
+        } else {
+            informerFlow(
+                inform = { k, h -> k.genericKubernetesResources(rdc).inform(h) },
+                mapper = mapper,
+            )
+        }
+    }
+
+    private fun mapCrInstance(gkr: GenericKubernetesResource, crd: CrdInfo): GenericResourceInfo {
+        val extras = linkedMapOf<String, String>()
+        for (col in crd.columns) {
+            extras[col.name] = CrdJsonPath.evaluate(gkr, col.jsonPath, col.type)
+        }
+        return GenericResourceInfo(
+            uid = gkr.metadata?.uid ?: "",
+            name = gkr.metadata?.name ?: "",
+            namespace = gkr.metadata?.namespace,
+            status = null,
+            age = formatAge(gkr.metadata?.creationTimestamp),
+            labels = gkr.metadata?.labels ?: emptyMap(),
+            extraColumns = extras,
+        )
+    }
 
     // ── Cluster Info (polling — composite) ──────────────────────────────────────
 

@@ -70,6 +70,7 @@ kotlin {
             implementation(libs.ktor.server.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.jna)
+            implementation(libs.json.path)
         }
     }
 }
