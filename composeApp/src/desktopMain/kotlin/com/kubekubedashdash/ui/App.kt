@@ -150,9 +150,22 @@ fun App(
             pageCount = { tabs.size },
         )
 
-        LaunchedEffect(activeIndex) {
+        // Track the previous tab count so we can detect "a tab was just
+        // inserted" and snap to it instead of animating. animateScrollToPage
+        // forces composition of every intermediate page during the scroll —
+        // when opening the 2nd cluster (tabs grow 1→2 or 1→3 with the
+        // AllClusters tab) that would compose multiple full session panes at
+        // once. scrollToPage limits composition to the destination page.
+        val prevTabsSize = remember { mutableStateOf(tabs.size) }
+        LaunchedEffect(activeIndex, tabs.size) {
+            val grew = tabs.size > prevTabsSize.value
+            prevTabsSize.value = tabs.size
             if (pagerState.currentPage != activeIndex) {
-                pagerState.animateScrollToPage(activeIndex)
+                if (grew) {
+                    pagerState.scrollToPage(activeIndex)
+                } else {
+                    pagerState.animateScrollToPage(activeIndex)
+                }
             }
         }
 
@@ -401,6 +414,12 @@ fun App(
                             state = pagerState,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             key = { idx -> tabs[idx].key },
+                            // Only compose the active page. Without this the
+                            // pager pre-composes adjacent pages, which forces
+                            // the previous active session's pane to first-
+                            // compose alongside the new one when the user
+                            // switches tabs.
+                            beyondViewportPageCount = 0,
                         ) { page ->
                             when (val tab = tabs[page]) {
                                 is WorkspaceTab.Cluster -> SessionPaneContent(

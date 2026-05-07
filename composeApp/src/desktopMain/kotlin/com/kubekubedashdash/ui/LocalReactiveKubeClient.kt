@@ -1,6 +1,6 @@
 package com.kubekubedashdash.ui
 
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import com.kubekubedashdash.util.ReactiveKubeClient
 
 /**
@@ -13,10 +13,16 @@ import com.kubekubedashdash.util.ReactiveKubeClient
  * connection, defeating multi-window. Read it in the screen composable, then
  * pass it to the screen's ViewModel via the `viewModel { … }` initializer so
  * the VM constructor captures the right client.
+ *
+ * Uses [compositionLocalOf] (not `staticCompositionLocalOf`) because the
+ * provided value swaps every time the active session changes — opening a new
+ * cluster, switching tabs, etc. With the static variant, every composable in
+ * scope of the provider gets invalidated on each swap regardless of whether it
+ * reads the local. See `.docs/feature/second-cluster-pick-perf.md`.
  */
-val LocalReactiveKubeClient = staticCompositionLocalOf<ReactiveKubeClient> {
+val LocalReactiveKubeClient = compositionLocalOf<ReactiveKubeClient> {
     error("No ReactiveKubeClient — wrap content in CompositionLocalProvider with the active session's reactiveClient")
 }
 
-val LocalIsConnected = staticCompositionLocalOf { false }
-val LocalConnectionError = staticCompositionLocalOf<String?> { null }
+val LocalIsConnected = compositionLocalOf { false }
+val LocalConnectionError = compositionLocalOf<String?> { null }

@@ -9,10 +9,15 @@ import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * Where a freshly-picked cluster lands when the user confirms it from the
@@ -54,6 +59,15 @@ object WorkspaceManager {
      */
     private val _dragTarget = MutableStateFlow<WorkspaceId?>(null)
     val dragTarget: StateFlow<WorkspaceId?> = _dragTarget.asStateFlow()
+
+    /**
+     * Internal scope for fire-and-forget UI scheduling — currently used to
+     * defer the AllClusters-tab reconcile in [openCluster] off the click frame
+     * so the AllClusters insertion's structural reordering of tab indices
+     * doesn't pile onto the recomposition that builds the new session's pane.
+     * See `.docs/feature/second-cluster-pick-perf.md`.
+     */
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
         val workspace = Workspace()
@@ -112,7 +126,17 @@ object WorkspaceManager {
                 session.viewModel.connectToCluster(ctx)
             }
         }
-        reconcileAllClustersTab()
+        // Defer the AllClusters tab insertion off the click frame. When opening
+        // the second cluster, totalClusters just hit 2 → reconcile would insert
+        // AllClusters at index 0, which shifts existing pages' indices. That
+        // structural reordering forces the pager to compose the previous active
+        // session's pane alongside the new one (doubled first-composition).
+        // Deferring by a frame keeps the click-driven recomposition focused on
+        // the new cluster only.
+        managerScope.launch {
+            delay(50)
+            reconcileAllClustersTab()
+        }
     }
 
     /**
