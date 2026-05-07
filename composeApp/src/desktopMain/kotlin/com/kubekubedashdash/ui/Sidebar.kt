@@ -25,12 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,7 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -58,6 +62,8 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.CrdPreferenceRepository
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.cloud_filled
@@ -149,8 +155,37 @@ fun Sidebar(
                 SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims, collapsed) { onNavigate(Screen.Main.PersistentVolumeClaims) }
                 SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses, collapsed) { onNavigate(Screen.Main.StorageClasses) }
             }
+
+            CrdSection(currentScreen, onNavigate, collapsed)
         }
     }
+}
+
+@Composable
+private fun CrdSection(
+    currentScreen: Screen,
+    onNavigate: (Screen) -> Unit,
+    collapsed: Boolean,
+) {
+    val client = LocalReactiveKubeClient.current
+    val crdsState by client.crds.collectAsState()
+    val crds = (crdsState as? ResourceState.Success)?.data.orEmpty()
+    if (crds.isEmpty()) return
+    val context = remember(client) { client.getCurrentContext() }
+    val pinnedByContext by CrdPreferenceRepository.pinnedByContext.collectAsState()
+    val hiddenByContext by CrdPreferenceRepository.hiddenByContext.collectAsState()
+    val pinned = pinnedByContext[context].orEmpty()
+    val hidden = hiddenByContext[context].orEmpty()
+    CustomResourcesSection(
+        crds = crds,
+        currentScreen = currentScreen,
+        pinned = pinned,
+        hidden = hidden,
+        onNavigate = onNavigate,
+        onTogglePin = { CrdPreferenceRepository.togglePinned(context, it.key) },
+        onToggleHide = { CrdPreferenceRepository.toggleHidden(context, it.key) },
+        collapsed = collapsed,
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -160,9 +195,13 @@ fun SidebarItem(
     label: String,
     selected: Boolean,
     collapsed: Boolean = false,
+    contextMenu: (@Composable (onDismiss: () -> Unit) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     var hovered by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
+    val density = LocalDensity.current
     val bg = when {
         selected -> KdSelected
         hovered -> KdHover
@@ -180,8 +219,24 @@ fun SidebarItem(
                 .background(bg)
                 .clickable(onClick = onClick)
                 .onPointerEvent(PointerEventType.Enter) { hovered = true }
-                .onPointerEvent(PointerEventType.Exit) { hovered = false },
+                .onPointerEvent(PointerEventType.Exit) { hovered = false }
+                .onPointerEvent(PointerEventType.Press) { event ->
+                    if (contextMenu != null && event.buttons.isSecondaryPressed) {
+                        val pos = event.changes.first().position
+                        menuOffset = with(density) { DpOffset(pos.x.toDp(), pos.y.toDp()) }
+                        menuExpanded = true
+                    }
+                },
         ) {
+            if (contextMenu != null) {
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    offset = menuOffset,
+                ) {
+                    contextMenu { menuExpanded = false }
+                }
+            }
             // Selection indicator: a 3 dp primary bar hugging the leading
             // edge of the row. Visible in both collapsed and expanded modes
             // so the active page is identifiable at a glance.
@@ -258,9 +313,10 @@ private fun SidebarItemTooltip(text: String) {
 fun SidebarSection(
     title: String,
     collapsed: Boolean = false,
+    defaultExpanded: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    var expanded by rememberSaveable(title) { mutableStateOf(true) }
+    var expanded by rememberSaveable(title) { mutableStateOf(defaultExpanded) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         if (!collapsed) {
