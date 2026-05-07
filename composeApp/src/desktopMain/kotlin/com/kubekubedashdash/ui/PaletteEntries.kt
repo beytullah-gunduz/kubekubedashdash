@@ -4,8 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
@@ -13,6 +15,7 @@ import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
+import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.hub
@@ -74,6 +77,8 @@ internal fun rememberPaletteEntries(
     val client = activeSession?.reactiveClient
     val podsState = client?.pods?.collectAsState()
     val nodesState = client?.nodes?.collectAsState()
+    val crdsState = client?.crds?.collectAsState()
+    val hiddenByContext = CrdPreferenceRepository.hiddenByContext.collectAsState()
 
     val resourceEntries = remember(podsState?.value, nodesState?.value, onNavigate) {
         val pods = (podsState?.value as? com.kubekubedashdash.models.ResourceState.Success)?.data.orEmpty()
@@ -129,7 +134,32 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + clusterEntries + namespaceEntries + resourceEntries
+    val activeContext = activeSession?.connectionManager?.getCurrentContext().orEmpty()
+    val hiddenForActive = hiddenByContext.value[activeContext].orEmpty()
+    val crdEntries = remember(crdsState?.value, hiddenForActive, onNavigate) {
+        val crds = (crdsState?.value as? ResourceState.Success)?.data.orEmpty()
+        crds.filterNot { it.key in hiddenForActive }.map { crd ->
+            PaletteEntry(
+                label = crd.kind,
+                sublabel = "${crd.group}/${crd.version}",
+                category = "Custom Resources",
+                icon = Res.drawable.extension_filled,
+                onActivate = {
+                    onNavigate(
+                        Screen.Main.CustomResource(
+                            group = crd.group,
+                            version = crd.version,
+                            kind = crd.kind,
+                            plural = crd.plural,
+                            namespaced = crd.namespaced,
+                        ),
+                    )
+                },
+            )
+        }
+    }
+
+    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries
 }
 
 private fun paletteScreen(
