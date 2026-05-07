@@ -13,16 +13,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
 import com.kubekubedashdash.ui.components.ClearFiltersChip
+import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
@@ -30,6 +33,8 @@ import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun DeploymentsScreen(
@@ -44,6 +49,10 @@ fun DeploymentsScreen(
     val viewModel: DeploymentsScreenViewModel = viewModel { DeploymentsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var pendingDelete by remember { mutableStateOf<DeploymentInfo?>(null) }
+    var deleteInFlight by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()
@@ -100,8 +109,40 @@ fun DeploymentsScreen(
                         selectedUid = dep.uid
                         onNavigate(Screen.Detail.DeploymentDetail(dep))
                     },
+                    onDelete = { dep ->
+                        pendingDelete = dep
+                        deleteError = null
+                    },
                 )
             }
         }
+    }
+
+    pendingDelete?.let { dep ->
+        DeleteConfirmDialog(
+            kind = "Deployment",
+            name = dep.name,
+            namespace = dep.namespace,
+            inFlight = deleteInFlight,
+            errorMessage = deleteError,
+            body = "Delete Deployment \"${dep.name}\" in namespace ${dep.namespace}? " +
+                "Pods owned by this Deployment will be deleted as well. This cannot be undone.",
+            onConfirm = {
+                deleteInFlight = true
+                deleteError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = reactiveClient.deleteResource("deployment", dep.name, dep.namespace)
+                    deleteInFlight = false
+                    result.fold(
+                        onSuccess = { pendingDelete = null },
+                        onFailure = { deleteError = it.message ?: "Delete failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingDelete = null
+                deleteError = null
+            },
+        )
     }
 }

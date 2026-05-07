@@ -18,6 +18,7 @@ import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.models.ServiceInfo
+import io.fabric8.kubernetes.api.model.DeletionPropagation
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Pod
@@ -1303,17 +1304,75 @@ class ReactiveKubeClient(
 
     // ── On-demand: Delete ───────────────────────────────────────────────────────
 
-    fun deleteResource(kind: String, name: String, namespace: String?): Result<Unit> = try {
+    fun deleteResource(
+        kind: String,
+        name: String,
+        namespace: String?,
+        group: String? = null,
+        version: String? = null,
+        plural: String? = null,
+        propagationPolicy: DeletionPropagation? = null,
+    ): Result<Unit> = try {
         log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
         when (kind.lowercase()) {
-            "pod" -> namespace?.let { k8s.pods().inNamespace(it).withName(name).delete() }
-            "deployment" -> namespace?.let { k8s.apps().deployments().inNamespace(it).withName(name).delete() }
-            "service" -> namespace?.let { k8s.services().inNamespace(it).withName(name).delete() }
-            "configmap" -> namespace?.let { k8s.configMaps().inNamespace(it).withName(name).delete() }
-            "secret" -> namespace?.let { k8s.secrets().inNamespace(it).withName(name).delete() }
-            "job" -> namespace?.let { k8s.batch().v1().jobs().inNamespace(it).withName(name).delete() }
-            "cronjob" -> namespace?.let { k8s.batch().v1().cronjobs().inNamespace(it).withName(name).delete() }
-            else -> throw IllegalArgumentException("Delete not supported for $kind")
+            "pod" -> {
+                val ns = requireNamespace("Pod", namespace)
+                k8s.pods().inNamespace(ns).withName(name).delete()
+            }
+
+            "deployment" -> {
+                val ns = requireNamespace("Deployment", namespace)
+                // Foreground so dependent ReplicaSets/Pods are deleted before the
+                // call returns, matching the "click Delete → it's gone" expectation.
+                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
+                k8s.apps().deployments().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
+            }
+
+            "service" -> {
+                val ns = requireNamespace("Service", namespace)
+                k8s.services().inNamespace(ns).withName(name).delete()
+            }
+
+            "configmap" -> {
+                val ns = requireNamespace("ConfigMap", namespace)
+                k8s.configMaps().inNamespace(ns).withName(name).delete()
+            }
+
+            "secret" -> {
+                val ns = requireNamespace("Secret", namespace)
+                k8s.secrets().inNamespace(ns).withName(name).delete()
+            }
+
+            "job" -> {
+                val ns = requireNamespace("Job", namespace)
+                // kubectl's default orphans Pods; users hitting "Delete" in a
+                // dashboard expect the Pods to go too.
+                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
+                k8s.batch().v1().jobs().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
+            }
+
+            "cronjob" -> {
+                val ns = requireNamespace("CronJob", namespace)
+                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
+                k8s.batch().v1().cronjobs().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
+            }
+
+            "namespace" -> k8s.namespaces().withName(name).delete()
+
+            else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
+                val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
+                val rdc = ResourceDefinitionContext.Builder()
+                    .withGroup(group)
+                    .withVersion(version)
+                    .withKind(kind)
+                    .withPlural(effectivePlural)
+                    .withNamespaced(namespace != null)
+                    .build()
+                val op = k8s.genericKubernetesResources(rdc)
+                if (namespace != null) op.inNamespace(namespace).withName(name).delete() else op.withName(name).delete()
+            } else {
+                throw IllegalArgumentException("Delete not supported for $kind")
+            }
         }
         log.info("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
         Result.success(Unit)
@@ -1321,6 +1380,8 @@ class ReactiveKubeClient(
         log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         Result.failure(e)
     }
+
+    private fun requireNamespace(kind: String, namespace: String?): String = namespace ?: throw IllegalArgumentException("$kind requires a namespace")
 
     // ── On-demand: Pod Metrics ──────────────────────────────────────────────────
 

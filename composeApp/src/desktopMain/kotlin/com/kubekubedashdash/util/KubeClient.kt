@@ -857,27 +857,6 @@ class KubeClient(
         "Error fetching logs: ${e.message}"
     }
 
-    // ── Delete ──────────────────────────────────────────────────────────────────
-
-    fun deleteResource(kind: String, name: String, namespace: String?): Result<Unit> = try {
-        log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
-        when (kind.lowercase()) {
-            "pod" -> namespace?.let { client.pods().inNamespace(it).withName(name).delete() }
-            "deployment" -> namespace?.let { client.apps().deployments().inNamespace(it).withName(name).delete() }
-            "service" -> namespace?.let { client.services().inNamespace(it).withName(name).delete() }
-            "configmap" -> namespace?.let { client.configMaps().inNamespace(it).withName(name).delete() }
-            "secret" -> namespace?.let { client.secrets().inNamespace(it).withName(name).delete() }
-            "job" -> namespace?.let { client.batch().v1().jobs().inNamespace(it).withName(name).delete() }
-            "cronjob" -> namespace?.let { client.batch().v1().cronjobs().inNamespace(it).withName(name).delete() }
-            else -> throw IllegalArgumentException("Delete not supported for $kind")
-        }
-        log.info("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
-        Result.success(Unit)
-    } catch (e: Exception) {
-        log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
-        Result.failure(e)
-    }
-
     // ── Pod Metrics (single pod) ────────────────────────────────────────────────
 
     fun getPodMetrics(name: String, namespace: String): PodMetricsSnapshot? = try {

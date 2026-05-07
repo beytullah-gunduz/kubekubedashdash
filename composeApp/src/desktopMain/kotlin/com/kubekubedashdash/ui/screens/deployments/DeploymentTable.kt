@@ -13,6 +13,7 @@ import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.TableRow
 
 private class DeployColumn(
@@ -41,12 +42,17 @@ internal fun DeploymentTable(
     deployments: List<DeploymentInfo>,
     selectedUid: String? = null,
     onClick: (DeploymentInfo) -> Unit,
+    onDelete: ((DeploymentInfo) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = deployColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = deployments.map { dep ->
-            TableRow(id = dep.uid, cells = visible.map { it.cell(dep) })
+            TableRow(
+                id = dep.uid,
+                cells = visible.map { it.cell(dep) },
+                actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(dep) }) else emptyList(),
+            )
         }
 
         ResourceTable(

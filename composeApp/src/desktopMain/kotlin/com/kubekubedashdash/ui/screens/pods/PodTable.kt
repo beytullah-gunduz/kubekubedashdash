@@ -55,6 +55,7 @@ internal fun PodTable(
     selectedUid: String? = null,
     onPodClick: (PodInfo) -> Unit,
     onViewLogs: ((PodInfo) -> Unit)? = null,
+    onDelete: ((PodInfo) -> Unit)? = null,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
 ) {
@@ -73,6 +74,7 @@ internal fun PodTable(
                     add(RowAction("Copy kubectl get") { copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}") })
                     add(RowAction("Copy kubectl describe") { copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}") })
                     add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}") })
+                    if (onDelete != null) add(RowAction("Delete") { onDelete(pod) })
                 },
             )
         }

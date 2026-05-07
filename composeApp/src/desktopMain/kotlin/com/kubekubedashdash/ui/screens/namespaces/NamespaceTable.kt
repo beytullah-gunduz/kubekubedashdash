@@ -11,6 +11,7 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 
@@ -35,12 +36,17 @@ internal fun NamespaceTable(
     namespaces: List<GenericResourceInfo>,
     selectedUid: String? = null,
     onClick: (GenericResourceInfo) -> Unit,
+    onDelete: ((GenericResourceInfo) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nsColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = namespaces.map { ns ->
-            TableRow(id = ns.uid, cells = visible.map { it.cell(ns) })
+            TableRow(
+                id = ns.uid,
+                cells = visible.map { it.cell(ns) },
+                actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(ns) }) else emptyList(),
+            )
         }
 
         ResourceTable(
