@@ -11,6 +11,7 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 
@@ -27,6 +28,7 @@ internal fun GenericTable(
     namespacedKind: Boolean,
     selectedUid: String?,
     onClick: (GenericResourceInfo) -> Unit,
+    onDelete: ((GenericResourceInfo) -> Unit)? = null,
 ) {
     val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
     val hasStatus = resources.any { it.status != null }
@@ -59,7 +61,11 @@ internal fun GenericTable(
         val visible = columns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = resources.map { r ->
-            TableRow(id = r.uid, cells = visible.map { it.cell(r) })
+            TableRow(
+                id = r.uid,
+                cells = visible.map { it.cell(r) },
+                actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(r) }) else emptyList(),
+            )
         }
 
         ResourceTable(

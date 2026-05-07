@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,8 +38,10 @@ import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
 import com.kubekubedashdash.ui.components.ClearFiltersChip
+import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
@@ -54,7 +57,9 @@ import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
 
 /**
@@ -104,6 +109,12 @@ fun GenericResourceScreen(
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
+
+    val client = LocalReactiveKubeClient.current
+    val scope = rememberCoroutineScope()
+    var pendingDelete by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
+    var deleteInFlight by remember(kind) { mutableStateOf(false) }
+    var deleteError by remember(kind) { mutableStateOf<String?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -187,6 +198,10 @@ fun GenericResourceScreen(
                             namespacedKind = namespacedKind,
                             selectedUid = selected?.uid,
                             onClick = { res -> viewModel.selectItem(res) },
+                            onDelete = { res ->
+                                pendingDelete = res
+                                deleteError = null
+                            },
                         )
                     }
                 }
@@ -238,5 +253,39 @@ fun GenericResourceScreen(
                 }
             }
         }
+    }
+
+    pendingDelete?.let { target ->
+        DeleteConfirmDialog(
+            kind = kind,
+            name = target.name,
+            namespace = target.namespace,
+            requireTypedConfirm = kind.equals("Namespace", ignoreCase = true),
+            inFlight = deleteInFlight,
+            errorMessage = deleteError,
+            onConfirm = {
+                deleteInFlight = true
+                deleteError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = client.deleteResource(
+                        kind = kind,
+                        name = target.name,
+                        namespace = target.namespace,
+                        group = apiGroup,
+                        version = apiVersion,
+                        plural = plural,
+                    )
+                    deleteInFlight = false
+                    result.fold(
+                        onSuccess = { pendingDelete = null },
+                        onFailure = { deleteError = it.message ?: "Delete failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingDelete = null
+                deleteError = null
+            },
+        )
     }
 }

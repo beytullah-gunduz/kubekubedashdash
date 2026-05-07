@@ -26,12 +26,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
 import com.kubekubedashdash.ui.components.ClearFiltersChip
+import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -41,6 +43,7 @@ import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -67,6 +70,10 @@ fun PodsScreen(
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
     val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
     val scope = rememberCoroutineScope()
+
+    var pendingDelete by remember { mutableStateOf<PodInfo?>(null) }
+    var deleteInFlight by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(selectPodUid) {
         viewModel.setParams(selectPodUid)
@@ -182,6 +189,10 @@ fun PodsScreen(
                                 onNavigate(Screen.Detail.PodDetail(pod))
                             },
                             onViewLogs = { pod -> onOpenLogs(pod.name, pod.namespace, null) },
+                            onDelete = { pod ->
+                                pendingDelete = pod
+                                deleteError = null
+                            },
                             pinnedIds = pinnedIds,
                             onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
                         )
@@ -189,5 +200,31 @@ fun PodsScreen(
                 }
             }
         }
+    }
+
+    pendingDelete?.let { pod ->
+        DeleteConfirmDialog(
+            kind = "Pod",
+            name = pod.name,
+            namespace = pod.namespace,
+            inFlight = deleteInFlight,
+            errorMessage = deleteError,
+            onConfirm = {
+                deleteInFlight = true
+                deleteError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = reactiveClient.deleteResource("pod", pod.name, pod.namespace)
+                    deleteInFlight = false
+                    result.fold(
+                        onSuccess = { pendingDelete = null },
+                        onFailure = { deleteError = it.message ?: "Delete failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingDelete = null
+                deleteError = null
+            },
+        )
     }
 }
