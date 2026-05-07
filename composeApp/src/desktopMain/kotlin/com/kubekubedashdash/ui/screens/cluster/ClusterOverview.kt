@@ -32,7 +32,6 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
@@ -66,69 +65,85 @@ fun ClusterOverviewScreen(
     val recentPods by viewModel.recentPods.collectAsState()
     val recentEvents by viewModel.recentEvents.collectAsState()
 
+    val nodesCount by viewModel.nodesCount.collectAsState()
+    val namespacesCount by viewModel.namespacesCount.collectAsState()
+    val deploymentsCount by viewModel.deploymentsCount.collectAsState()
+    val servicesCount by viewModel.servicesCount.collectAsState()
+    val phaseCounts by viewModel.podPhaseCounts.collectAsState()
+
     var statsExpanded by remember { mutableStateOf(true) }
 
-    when (val s = state) {
-        is ResourceState.Error -> ResourceErrorMessage(s.message)
+    // Connection error gets a centered error screen — same as before.
+    // Loading no longer hides the scaffold; per-card flows render
+    // skeletons until each informer syncs.
+    val errorState = state as? ResourceState.Error
+    if (errorState != null) {
+        ResourceErrorMessage(errorState.message)
+        return
+    }
 
-        is ResourceState.Success -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            ) {
-                ClusterHeader(s.data)
+    // Cluster identity comes from sync getters — they're stable for the
+    // lifetime of the connection, so the header paints immediately
+    // instead of waiting for any flow to emit.
+    val clusterName = remember(reactiveClient) { reactiveClient.getCurrentContext() }
+    val clusterServer = remember(reactiveClient) { reactiveClient.getClusterServer() }
+    val clusterVersion = (state as? ResourceState.Success)?.data?.version.orEmpty()
 
-                Spacer(Modifier.height(24.dp))
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        ClusterHeader(name = clusterName, server = clusterServer, version = clusterVersion)
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SummaryCard("Nodes", "${s.data.nodesCount}", Res.drawable.dns_filled, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Main.Nodes()) }
-                    SummaryCard("Namespaces", "${s.data.namespacesCount}", Res.drawable.folder_special_filled, KdInfo, Modifier.weight(1f)) { onNavigate(Screen.Main.Namespaces) }
-                    SummaryCard("Pods", "${s.data.podsCount}", Res.drawable.view_in_ar_filled, KdSuccess, Modifier.weight(1f)) { onNavigate(Screen.Main.Pods()) }
-                    SummaryCard("Deployments", "${s.data.deploymentsCount}", Res.drawable.layers_filled, KdWarning, Modifier.weight(1f)) { onNavigate(Screen.Main.Deployments) }
-                    SummaryCard("Services", "${s.data.servicesCount}", Res.drawable.cloud_filled, Color(0xFF9C27B0), Modifier.weight(1f)) { onNavigate(Screen.Main.Services) }
-                }
+        Spacer(Modifier.height(24.dp))
 
-                Spacer(Modifier.height(24.dp))
-
-                ClusterUsageStatistics(
-                    clusterInfo = s.data,
-                    usage = resourceUsage,
-                    cpuHistory = cpuHistory,
-                    memHistory = memHistory,
-                    podsCount = podsCount,
-                    podsCapacity = podsCapacity,
-                    podsLoaded = podsLoaded,
-                    podsHistory = podsHistory,
-                    topNodes = topNodes,
-                    expanded = statsExpanded,
-                    onToggle = { statsExpanded = !statsExpanded },
-                    onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                RecentClusterActivity(
-                    nodes = recentNodes,
-                    pods = recentPods,
-                    events = recentEvents,
-                    onNodeClick = { node -> onNavigate(Screen.Main.Nodes(selectNodeName = node.name)) },
-                    onPodClick = { pod -> onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) },
-                    onEventClick = { event -> onNavigate(Screen.Main.Events(selectEventUid = event.uid)) },
-                    onViewAllNodes = { onNavigate(Screen.Main.Nodes()) },
-                    onViewAllPods = { onNavigate(Screen.Main.Pods()) },
-                    onViewAllEvents = { onNavigate(Screen.Main.Events()) },
-                )
-            }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            SummaryCard("Nodes", nodesCount.asCardValue(), Res.drawable.dns_filled, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Main.Nodes()) }
+            SummaryCard("Namespaces", namespacesCount.asCardValue(), Res.drawable.folder_special_filled, KdInfo, Modifier.weight(1f)) { onNavigate(Screen.Main.Namespaces) }
+            SummaryCard("Pods", podsCount.asCardValue(), Res.drawable.view_in_ar_filled, KdSuccess, Modifier.weight(1f)) { onNavigate(Screen.Main.Pods()) }
+            SummaryCard("Deployments", deploymentsCount.asCardValue(), Res.drawable.layers_filled, KdWarning, Modifier.weight(1f)) { onNavigate(Screen.Main.Deployments) }
+            SummaryCard("Services", servicesCount.asCardValue(), Res.drawable.cloud_filled, Color(0xFF9C27B0), Modifier.weight(1f)) { onNavigate(Screen.Main.Services) }
         }
 
-        else -> ResourceLoadingIndicator()
+        Spacer(Modifier.height(24.dp))
+
+        ClusterUsageStatistics(
+            phaseCounts = phaseCounts,
+            usage = resourceUsage,
+            cpuHistory = cpuHistory,
+            memHistory = memHistory,
+            podsCount = podsCount,
+            podsCapacity = podsCapacity,
+            podsLoaded = podsLoaded,
+            podsHistory = podsHistory,
+            topNodes = topNodes,
+            expanded = statsExpanded,
+            onToggle = { statsExpanded = !statsExpanded },
+            onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        RecentClusterActivity(
+            nodes = recentNodes,
+            pods = recentPods,
+            events = recentEvents,
+            onNodeClick = { node -> onNavigate(Screen.Main.Nodes(selectNodeName = node.name)) },
+            onPodClick = { pod -> onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) },
+            onEventClick = { event -> onNavigate(Screen.Main.Events(selectEventUid = event.uid)) },
+            onViewAllNodes = { onNavigate(Screen.Main.Nodes()) },
+            onViewAllPods = { onNavigate(Screen.Main.Pods()) },
+            onViewAllEvents = { onNavigate(Screen.Main.Events()) },
+        )
     }
 }
 
+private fun Int?.asCardValue(): String = this?.toString() ?: "—"
+
 @Composable
-private fun ClusterHeader(info: ClusterInfo) {
+private fun ClusterHeader(name: String, server: String, version: String) {
     Text(
         "Cluster Overview",
         style = MaterialTheme.typography.headlineMedium,
@@ -137,14 +152,14 @@ private fun ClusterHeader(info: ClusterInfo) {
     )
     Spacer(Modifier.height(4.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(info.name, style = MaterialTheme.typography.bodyMedium, color = KdPrimary)
-        if (info.version.isNotBlank()) {
+        Text(name, style = MaterialTheme.typography.bodyMedium, color = KdPrimary)
+        if (version.isNotBlank()) {
             Spacer(Modifier.width(12.dp))
-            Text("v${info.version}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+            Text("v$version", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
         }
-        if (info.server.isNotBlank()) {
+        if (server.isNotBlank()) {
             Spacer(Modifier.width(12.dp))
-            Text(info.server, style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+            Text(server, style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
         }
     }
 }
