@@ -1210,12 +1210,51 @@ object MockClusterProvider {
             namespaced = true,
             columns = sparkColumns,
         )
-        listOf(
+        val sparkApps = listOf(
             sparkInstance("spark-pi-success", "default", "RUNNING", attempts = 1, ageMin = 25),
             sparkInstance("spark-etl-nightly", "production", "COMPLETED", attempts = 1, ageMin = 720),
             sparkInstance("spark-failed-job", "production", "FAILED", attempts = 3, ageMin = 60),
-        ).forEach { (instance, ns) ->
-            seedCrInstance(client, "sparkoperator.k8s.io", "v1beta2", "sparkapplications", ns, instance)
+        ).map { (instance, ns) ->
+            seedCrInstance(client, "sparkoperator.k8s.io", "v1beta2", "sparkapplications", ns, instance) to ns
+        }
+
+        // Driver/executor pods for the RUNNING SparkApplication exercise the
+        // topology graph's CRD-aware findRoot. The driver pod is owned by the
+        // SparkApplication; the executors are owned by the driver pod, which
+        // matches Spark Operator's real ownerReference chain.
+        val (runningApp, runningAppNs) = sparkApps.first { (sa, _) ->
+            @Suppress("UNCHECKED_CAST")
+            (sa.additionalProperties["status"] as? Map<String, Any>)?.let { st ->
+                (st["applicationState"] as? Map<String, Any>)?.get("state")
+            } == "RUNNING"
+        }
+        val sparkDriver = client.pods().inNamespace(runningAppNs).resource(
+            buildPod(
+                name = "${runningApp.metadata.name}-driver",
+                ns = runningAppNs,
+                app = "spark-driver",
+                image = "spark:3.5.0",
+                nodeName = "mock-node-1",
+                phase = "Running",
+                podIp = "10.244.0.50",
+                creationTimestamp = minutesAgo(20),
+                owner = runningApp,
+            ),
+        ).create()
+        listOf("10.244.0.51", "10.244.0.52").forEachIndexed { i, ip ->
+            client.pods().inNamespace(runningAppNs).resource(
+                buildPod(
+                    name = "${runningApp.metadata.name}-exec-${i + 1}",
+                    ns = runningAppNs,
+                    app = "spark-executor",
+                    image = "spark:3.5.0",
+                    nodeName = "mock-node-1",
+                    phase = "Running",
+                    podIp = ip,
+                    creationTimestamp = minutesAgo(18),
+                    owner = sparkDriver,
+                ),
+            ).create()
         }
 
         val workflowColumns = listOf(
@@ -1235,11 +1274,30 @@ object MockClusterProvider {
             namespaced = true,
             columns = workflowColumns,
         )
-        listOf(
+        val workflows = listOf(
             workflowInstance("hello-world-abc12", "default", "Succeeded", ageMin = 12),
             workflowInstance("data-pipeline-xyz", "production", "Running", ageMin = 5),
-        ).forEach { (instance, ns) ->
-            seedCrInstance(client, "argoproj.io", "v1alpha1", "workflows", ns, instance)
+        ).map { (instance, ns) ->
+            seedCrInstance(client, "argoproj.io", "v1alpha1", "workflows", ns, instance) to ns
+        }
+
+        // One step pod per Workflow, directly owned (no intermediate pod). Argo
+        // Workflows owns its step pods directly; this is the simpler shape that
+        // the topology integration also has to handle.
+        workflows.forEach { (wf, wfNs) ->
+            client.pods().inNamespace(wfNs).resource(
+                buildPod(
+                    name = "${wf.metadata.name}-step-1",
+                    ns = wfNs,
+                    app = "argo-step",
+                    image = "alpine:3.19",
+                    nodeName = "mock-node-1",
+                    phase = "Running",
+                    podIp = null,
+                    creationTimestamp = minutesAgo(3),
+                    owner = wf,
+                ),
+            ).create()
         }
     }
 
@@ -1295,7 +1353,7 @@ object MockClusterProvider {
         plural: String,
         namespace: String,
         instance: GenericKubernetesResource,
-    ) {
+    ): GenericKubernetesResource {
         val rdc = ResourceDefinitionContext.Builder()
             .withGroup(group)
             .withVersion(version)
@@ -1303,7 +1361,7 @@ object MockClusterProvider {
             .withPlural(plural)
             .withNamespaced(true)
             .build()
-        client.genericKubernetesResources(rdc).inNamespace(namespace).resource(instance).create()
+        return client.genericKubernetesResources(rdc).inNamespace(namespace).resource(instance).create()
     }
 
     private fun sparkInstance(

@@ -1661,12 +1661,28 @@ class ReactiveKubeClient(
         val statefulSetsByUid = allStatefulSets.associateBy { it.metadata?.uid }
         val daemonSetsByUid = allDaemonSets.associateBy { it.metadata?.uid }
         val cronJobsByUid = allCronJobs.associateBy { it.metadata?.uid }
+        val podsByUid = allPods.associateBy { it.metadata?.uid }
+        val crdKinds: Set<String> = (crds.value as? ResourceState.Success)?.data
+            ?.map { it.kind }
+            ?.toSet()
+            .orEmpty()
 
         data class RootWorkload(val uid: String, val kind: String, val name: String, val groupKey: String)
 
         fun findRoot(pod: io.fabric8.kubernetes.api.model.Pod): RootWorkload? {
-            val ownerRef = pod.metadata?.ownerReferences?.firstOrNull() ?: return null
-            val podNs = pod.metadata?.namespace ?: ""
+            // Walk ownerReferences upward. Pods owned by other pods (Spark
+            // Operator's executor → driver topology) climb until we hit a
+            // controller kind or a CRD that the cluster actually carries.
+            // Bounded depth as a paranoia check against cycles in malformed
+            // ownerReferences — 6 covers Spark's pod→pod→SparkApplication
+            // chain with headroom.
+            var ownerRef = pod.metadata?.ownerReferences?.firstOrNull() ?: return null
+            var depth = 0
+            while (ownerRef.kind == "Pod" && depth < 6) {
+                val parentPod = podsByUid[ownerRef.uid] ?: return null
+                ownerRef = parentPod.metadata?.ownerReferences?.firstOrNull() ?: return null
+                depth++
+            }
             return when (ownerRef.kind) {
                 "ReplicaSet" -> {
                     val rs = rsByUid[ownerRef.uid]
@@ -1724,6 +1740,12 @@ class ReactiveKubeClient(
                     val uid = ownerRef.uid ?: return null
                     val cj = cronJobsByUid[uid]
                     RootWorkload(uid, "CronJob", cj?.metadata?.name ?: ownerRef.name ?: "", "CronJob:$uid")
+                }
+
+                in crdKinds -> {
+                    val uid = ownerRef.uid ?: return null
+                    val name = ownerRef.name ?: ""
+                    RootWorkload(uid, ownerRef.kind, name, "${ownerRef.kind}:$uid")
                 }
 
                 else -> null
