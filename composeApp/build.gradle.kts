@@ -115,6 +115,15 @@ val generateScreenshots by tasks.registering(JavaExec::class) {
 compose.desktop {
     application {
         mainClass = "com.kubekubedashdash.MainKt"
+
+        // ShellEnvironment.installIntoJvmEnv() reflects into java.lang.ProcessEnvironment
+        // to inject an augmented PATH so subprocesses spawned by third-party libs
+        // (notably fabric8's exec credential plugins for EKS/GKE auth) can find tools
+        // like `aws` when the .app is launched from Finder, where the inherited PATH is
+        // minimal. Without --add-opens this reflection fails on JDK 17+ and the exec
+        // plugin returns "command not found" → every API call comes back 401.
+        jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED")
+
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "KubeKubeDashDash"

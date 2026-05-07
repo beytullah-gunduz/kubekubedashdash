@@ -18,11 +18,18 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
+import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
 import org.slf4j.LoggerFactory
 
 fun main() {
     System.setProperty("LOG_DIR", SystemDirectories.logsDirectory)
+
+    // Must run before any code that may spawn a subprocess inheriting the JVM env — most
+    // critically fabric8's KubeConfigUtils, which shells out to `aws`/`gcloud`/`kubelogin`
+    // for kubeconfig exec credential plugins. .app bundles launched from Finder inherit a
+    // minimal PATH; without this, those plugins fail and every API call returns 401.
+    ShellEnvironment.installIntoJvmEnv()
 
     // Route every uncaught exception/error (including LinkageError and
     // NoClassDefFoundError from any thread — Netty event-loops, Vert.x
