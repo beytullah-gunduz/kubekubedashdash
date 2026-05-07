@@ -319,6 +319,17 @@ private fun OverviewTab(pod: PodInfo, metricsHistory: List<PodMetricsSnapshot>, 
                 }
             }
         }
+
+        if (pod.annotations.isNotEmpty()) {
+            SectionLabel("Annotations")
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                pod.annotations.entries.toList().chunked(2).forEach { chunk ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        chunk.forEach { (k, v) -> LabelChip(k, v) }
+                    }
+                }
+            }
+        }
     }
 }
 

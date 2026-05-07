@@ -107,6 +107,7 @@ class KubeClient(
             node = pod.spec?.nodeName ?: "<none>",
             ip = pod.status?.podIP ?: "<none>",
             labels = pod.metadata.labels ?: emptyMap(),
+            annotations = pod.metadata.annotations ?: emptyMap(),
             containers = containers,
         )
     }
@@ -385,6 +386,7 @@ class KubeClient(
                 pods = alloc?.get("pods")?.toString() ?: "",
                 age = formatAge(node.metadata.creationTimestamp),
                 labels = node.metadata.labels ?: emptyMap(),
+                annotations = node.metadata.annotations ?: emptyMap(),
             )
         }
     }

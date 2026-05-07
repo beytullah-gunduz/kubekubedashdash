@@ -15,5 +15,6 @@ data class PodInfo(
     val node: String,
     val ip: String,
     val labels: Map<String, String>,
+    val annotations: Map<String, String>,
     val containers: List<ContainerInfo>,
 )

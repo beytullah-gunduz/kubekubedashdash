@@ -28,14 +28,15 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.AnnotationSelectorChip
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
-import com.kubekubedashdash.ui.components.matchesLabelSelector
-import com.kubekubedashdash.ui.components.parseLabelSelector
+import com.kubekubedashdash.ui.components.matchesMapSelector
+import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -58,6 +59,7 @@ fun PodsScreen(
     // A non-null Set is the explicit allowlist after the user touched the menu.
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
     var labelQuery by rememberSaveable { mutableStateOf("") }
+    var annotationQuery by rememberSaveable { mutableStateOf("") }
     val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -91,8 +93,9 @@ fun PodsScreen(
                     allPods.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
                 }
                 val activeStatusFilter = statusFilter
-                val labelSelector = remember(labelQuery) { parseLabelSelector(labelQuery) }
-                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, pinnedIds) {
+                val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
+                val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
+                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, annotationSelector, pinnedIds) {
                     allPods
                         .filter { pod ->
                             val passesSearch = searchQuery.isBlank() ||
@@ -101,8 +104,10 @@ fun PodsScreen(
                                 pod.status.contains(searchQuery, ignoreCase = true) ||
                                 pod.node.contains(searchQuery, ignoreCase = true)
                             val passesStatus = activeStatusFilter == null || pod.status in activeStatusFilter
-                            val passesLabels = labelSelector.isEmpty() || matchesLabelSelector(pod.labels, labelSelector)
-                            passesSearch && passesStatus && passesLabels
+                            val passesLabels = labelSelector.isEmpty() || matchesMapSelector(pod.labels, labelSelector)
+                            val passesAnnotations = annotationSelector.isEmpty() ||
+                                matchesMapSelector(pod.annotations, annotationSelector)
+                            passesSearch && passesStatus && passesLabels && passesAnnotations
                         }
                         .sortedByDescending { pod -> "pod:${pod.namespace}:${pod.name}" in pinnedIds }
                 }
@@ -132,6 +137,11 @@ fun PodsScreen(
                                 LabelSelectorChip(
                                     query = labelQuery,
                                     onQueryChange = { labelQuery = it },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                                AnnotationSelectorChip(
+                                    query = annotationQuery,
+                                    onQueryChange = { annotationQuery = it },
                                     modifier = Modifier.padding(end = 8.dp),
                                 )
                                 StatusFilterMenu(

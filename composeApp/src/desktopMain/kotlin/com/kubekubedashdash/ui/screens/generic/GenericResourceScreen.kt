@@ -45,8 +45,8 @@ import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
-import com.kubekubedashdash.ui.components.matchesLabelSelector
-import com.kubekubedashdash.ui.components.parseLabelSelector
+import com.kubekubedashdash.ui.components.matchesMapSelector
+import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
@@ -106,7 +106,7 @@ fun GenericResourceScreen(
                 s.data.mapNotNull { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
             val activeStatusFilter = statusFilter
-            val labelSelector = remember(labelQuery) { parseLabelSelector(labelQuery) }
+            val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val filtered = s.data.filter { r ->
                 val passesSearch = searchQuery.isBlank() ||
                     r.name.contains(searchQuery, ignoreCase = true) ||
@@ -114,7 +114,7 @@ fun GenericResourceScreen(
                     (r.status?.contains(searchQuery, ignoreCase = true) ?: false)
                 val passesStatus = activeStatusFilter == null ||
                     (r.status != null && r.status in activeStatusFilter)
-                val passesLabels = labelSelector.isEmpty() || matchesLabelSelector(r.labels, labelSelector)
+                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(r.labels, labelSelector)
                 passesSearch && passesStatus && passesLabels
             }
 

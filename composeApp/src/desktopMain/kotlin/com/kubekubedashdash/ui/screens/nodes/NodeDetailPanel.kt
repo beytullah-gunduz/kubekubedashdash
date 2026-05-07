@@ -295,6 +295,23 @@ private fun NodeOverviewCombinedTab(
             }
         }
 
+        // ── Annotations ─────────────────────────────────────────────────────
+        if (node.annotations.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    node.annotations.entries.toList().chunked(2).forEach { chunk ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Pods ────────────────────────────────────────────────────────────
         item {
             Spacer(Modifier.height(4.dp))
@@ -399,6 +416,22 @@ private fun NodeDetailsOnlyTab(node: NodeInfo) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.labels.entries.toList().chunked(2).forEach { chunk ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            chunk.forEach { (k, v) -> LabelChip(k, v) }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (node.annotations.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    node.annotations.entries.toList().chunked(2).forEach { chunk ->
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             chunk.forEach { (k, v) -> LabelChip(k, v) }
                         }

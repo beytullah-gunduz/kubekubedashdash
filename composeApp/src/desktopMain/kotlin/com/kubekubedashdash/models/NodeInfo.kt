@@ -18,4 +18,5 @@ data class NodeInfo(
     val age: String,
     val creationTimestamp: String = "",
     val labels: Map<String, String>,
+    val annotations: Map<String, String>,
 )

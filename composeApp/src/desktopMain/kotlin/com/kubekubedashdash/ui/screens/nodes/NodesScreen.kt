@@ -25,11 +25,15 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.AnnotationSelectorChip
+import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
+import com.kubekubedashdash.ui.components.matchesMapSelector
+import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
 import kotlinx.coroutines.flow.first
 
@@ -55,6 +59,8 @@ fun NodesScreen(
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
+    var labelQuery by rememberSaveable { mutableStateOf("") }
+    var annotationQuery by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(selectNodeName) {
         viewModel.setParams(selectNodeName)
@@ -77,13 +83,18 @@ fun NodesScreen(
                 allNodes.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
             val activeStatusFilter = statusFilter
+            val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
+            val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
             val filtered = allNodes.filter { node ->
                 val passesSearch = searchQuery.isBlank() ||
                     node.name.contains(searchQuery, ignoreCase = true) ||
                     node.roles.contains(searchQuery, ignoreCase = true) ||
                     node.status.contains(searchQuery, ignoreCase = true)
                 val passesStatus = activeStatusFilter == null || node.status in activeStatusFilter
-                passesSearch && passesStatus
+                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(node.labels, labelSelector)
+                val passesAnnotations = annotationSelector.isEmpty() ||
+                    matchesMapSelector(node.annotations, annotationSelector)
+                passesSearch && passesStatus && passesLabels && passesAnnotations
             }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -113,6 +124,16 @@ fun NodesScreen(
                             LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                         },
                         actions = {
+                            LabelSelectorChip(
+                                query = labelQuery,
+                                onQueryChange = { labelQuery = it },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            AnnotationSelectorChip(
+                                query = annotationQuery,
+                                onQueryChange = { annotationQuery = it },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
                             StatusFilterMenu(
                                 available = availableStatuses,
                                 selected = activeStatusFilter ?: availableStatuses,

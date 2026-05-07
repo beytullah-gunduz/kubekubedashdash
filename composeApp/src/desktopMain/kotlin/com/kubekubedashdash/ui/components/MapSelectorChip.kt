@@ -34,7 +34,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.filter_list_filled
 import org.jetbrains.compose.resources.painterResource
 
-fun parseLabelSelector(query: String): Map<String, String> {
+fun parseMapSelector(query: String): Map<String, String> {
     if (query.isBlank()) return emptyMap()
     return query.split(",")
         .mapNotNull { part ->
@@ -44,16 +44,18 @@ fun parseLabelSelector(query: String): Map<String, String> {
         .toMap()
 }
 
-fun matchesLabelSelector(labels: Map<String, String>, selector: Map<String, String>): Boolean = selector.all { (k, v) -> labels[k] == v }
+fun matchesMapSelector(entries: Map<String, String>, selector: Map<String, String>): Boolean = selector.all { (k, v) -> entries[k] == v }
 
 @Composable
-fun LabelSelectorChip(
+fun MapSelectorChip(
     query: String,
     onQueryChange: (String) -> Unit,
+    title: String,
+    placeholder: String,
     modifier: Modifier = Modifier,
 ) {
     val active = query.isNotBlank()
-    val matchCount = remember(query) { parseLabelSelector(query).size }
+    val matchCount = remember(query) { parseMapSelector(query).size }
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
@@ -68,13 +70,13 @@ fun LabelSelectorChip(
             ) {
                 Icon(
                     painterResource(Res.drawable.filter_list_filled),
-                    contentDescription = "Filter by labels",
+                    contentDescription = "Filter by ${title.lowercase()}",
                     modifier = Modifier.size(14.dp),
                     tint = if (active) KdPrimary else KdTextSecondary,
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    if (active) "Labels: $matchCount" else "Labels",
+                    if (active) "$title: $matchCount" else title,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (active) KdPrimary else KdTextSecondary,
                 )
@@ -82,7 +84,7 @@ fun LabelSelectorChip(
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         painterResource(Res.drawable.close_filled),
-                        contentDescription = "Clear label filter",
+                        contentDescription = "Clear ${title.lowercase()} filter",
                         modifier = Modifier.size(12.dp).clickable { onQueryChange("") },
                         tint = KdPrimary,
                     )
@@ -100,7 +102,7 @@ fun LabelSelectorChip(
                     .widthIn(min = 220.dp, max = 300.dp),
             ) {
                 Text(
-                    "Filter by labels",
+                    "Filter by ${title.lowercase()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = KdTextSecondary,
                 )
@@ -109,7 +111,7 @@ fun LabelSelectorChip(
                     value = query,
                     onValueChange = onQueryChange,
                     placeholder = {
-                        Text("app=nginx, tier=backend", style = MaterialTheme.typography.bodySmall)
+                        Text(placeholder, style = MaterialTheme.typography.bodySmall)
                     },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -125,3 +127,29 @@ fun LabelSelectorChip(
         }
     }
 }
+
+@Composable
+fun LabelSelectorChip(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) = MapSelectorChip(
+    query = query,
+    onQueryChange = onQueryChange,
+    title = "Labels",
+    placeholder = "app=nginx, tier=backend",
+    modifier = modifier,
+)
+
+@Composable
+fun AnnotationSelectorChip(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) = MapSelectorChip(
+    query = query,
+    onQueryChange = onQueryChange,
+    title = "Annotations",
+    placeholder = "owner=team-a, prometheus.io/scrape=true",
+    modifier = modifier,
+)

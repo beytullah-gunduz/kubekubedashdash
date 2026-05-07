@@ -31,6 +31,7 @@ fun main(): Unit = application {
                 node = "node-1",
                 ip = "10.244.0.5",
                 labels = mapOf("app" to "frontend"),
+                annotations = mapOf("owner" to "team-web", "prometheus.io/scrape" to "true"),
                 containers = listOf(
                     ContainerInfo(name = "nginx", image = "nginx:latest", ready = true, restartCount = 0, state = "running"),
                 ),
@@ -46,6 +47,7 @@ fun main(): Unit = application {
                 node = "node-2",
                 ip = "10.244.1.3",
                 labels = mapOf("app" to "backend"),
+                annotations = mapOf("owner" to "team-api"),
                 containers = listOf(
                     ContainerInfo(name = "api", image = "myapp/api:v1.2", ready = true, restartCount = 2, state = "running"),
                 ),
@@ -61,6 +63,7 @@ fun main(): Unit = application {
                 node = "node-1",
                 ip = "",
                 labels = mapOf("app" to "worker"),
+                annotations = emptyMap(),
                 containers = listOf(
                     ContainerInfo(name = "worker", image = "myapp/worker:v1.0", ready = false, restartCount = 0, state = "waiting"),
                 ),
@@ -76,6 +79,7 @@ fun main(): Unit = application {
                 node = "node-2",
                 ip = "10.244.1.8",
                 labels = mapOf("app" to "cronjob"),
+                annotations = emptyMap(),
                 containers = listOf(
                     ContainerInfo(name = "job", image = "myapp/job:v2.0", ready = false, restartCount = 0, state = "terminated"),
                 ),
@@ -91,6 +95,7 @@ fun main(): Unit = application {
                 node = "node-1",
                 ip = "10.244.0.12",
                 labels = mapOf("app" to "broken"),
+                annotations = emptyMap(),
                 containers = listOf(
                     ContainerInfo(name = "crash", image = "myapp/crash:v0.1", ready = false, restartCount = 15, state = "waiting"),
                 ),

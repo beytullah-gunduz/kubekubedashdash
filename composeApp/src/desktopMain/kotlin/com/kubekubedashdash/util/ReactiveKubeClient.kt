@@ -341,6 +341,7 @@ class ReactiveKubeClient(
             node = pod.spec?.nodeName ?: "<none>",
             ip = pod.status?.podIP ?: "<none>",
             labels = pod.metadata.labels ?: emptyMap(),
+            annotations = pod.metadata.annotations ?: emptyMap(),
             containers = containers,
         )
     }
@@ -519,6 +520,7 @@ class ReactiveKubeClient(
                 age = formatAge(node.metadata.creationTimestamp),
                 creationTimestamp = node.metadata.creationTimestamp ?: "",
                 labels = node.metadata.labels ?: emptyMap(),
+                annotations = node.metadata.annotations ?: emptyMap(),
             )
         },
     )
