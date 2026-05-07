@@ -24,6 +24,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 object PreferenceRepository {
+    const val DEFAULT_LOG_DRAWER_HEIGHT_DP = 308
+    const val MIN_LOG_DRAWER_HEIGHT_DP = 140
+    const val MAX_LOG_DRAWER_HEIGHT_DP = 800
+
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val json = Json { ignoreUnknownKeys = true }
@@ -47,6 +51,7 @@ object PreferenceRepository {
     private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
+    private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -97,6 +102,9 @@ object PreferenceRepository {
     private val _topologyRefreshIntervalSec = MutableStateFlow(60)
     val topologyRefreshIntervalSec: StateFlow<Int> = _topologyRefreshIntervalSec.asStateFlow()
 
+    private val _logDrawerHeightDp = MutableStateFlow(DEFAULT_LOG_DRAWER_HEIGHT_DP)
+    val logDrawerHeightDp: StateFlow<Int> = _logDrawerHeightDp.asStateFlow()
+
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
@@ -125,6 +133,8 @@ object PreferenceRepository {
                 _clusterColorOverrides.value = decodeColorOverrides(p[CLUSTER_COLOR_OVERRIDES])
                 _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
                 _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
+                _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
+                    .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
             }
         }
     }
@@ -173,6 +183,13 @@ object PreferenceRepository {
         val clamped = value.coerceAtLeast(0)
         _topologyRefreshIntervalSec.value = clamped
         ioScope.launch { dataStore.edit { it[TOPOLOGY_REFRESH_INTERVAL_SEC] = clamped } }
+    }
+
+    fun setLogDrawerHeightDp(value: Int) {
+        val clamped = value.coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
+        if (_logDrawerHeightDp.value == clamped) return
+        _logDrawerHeightDp.value = clamped
+        ioScope.launch { dataStore.edit { it[LOG_DRAWER_HEIGHT_DP] = clamped } }
     }
 
     fun setCloseTabFocus(value: CloseTabFocus) {

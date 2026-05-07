@@ -10,7 +10,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,20 +32,26 @@ import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
@@ -50,11 +60,12 @@ import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
+import java.awt.Cursor
 
 enum class LogDrawerState { HIDDEN, COLLAPSED, EXPANDED }
 
 val DrawerHeaderHeight = 48.dp
-val DrawerBodyHeight = 308.dp
+private val DrawerResizeHandleHeight = 6.dp
 
 @Composable
 fun LogDrawer(
@@ -63,7 +74,19 @@ fun LogDrawer(
     modifier: Modifier = Modifier,
 ) {
     val streams by LogStreamRegistry.streams.collectAsState()
-    var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val focusedKey by LogStreamRegistry.focusedKey.collectAsState()
+    val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
+    val density = LocalDensity.current
+    var liveHeightDp by remember { mutableFloatStateOf(persistedHeightDp.toFloat()) }
+    LaunchedEffect(persistedHeightDp) { liveHeightDp = persistedHeightDp.toFloat() }
+    val resizable = state == LogDrawerState.EXPANDED
+    val dragState = rememberDraggableState { deltaPx ->
+        val deltaDp = with(density) { deltaPx.toDp().value }
+        liveHeightDp = (liveHeightDp - deltaDp).coerceIn(
+            PreferenceRepository.MIN_LOG_DRAWER_HEIGHT_DP.toFloat(),
+            PreferenceRepository.MAX_LOG_DRAWER_HEIGHT_DP.toFloat(),
+        )
+    }
 
     AnimatedVisibility(
         visible = state != LogDrawerState.HIDDEN,
@@ -72,7 +95,13 @@ fun LogDrawer(
         modifier = modifier,
     ) {
         Column(modifier = Modifier.fillMaxWidth().background(KdSurface)) {
-            HorizontalDivider(color = KdBorder, thickness = 1.dp)
+            DrawerResizeHandle(
+                enabled = resizable,
+                dragState = dragState,
+                onDragStopped = {
+                    PreferenceRepository.setLogDrawerHeightDp(liveHeightDp.toInt())
+                },
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth().height(DrawerHeaderHeight),
@@ -95,7 +124,7 @@ fun LogDrawer(
                                 Tab(
                                     selected = stream.id.key == displayedKey,
                                     onClick = {
-                                        focusedKey = stream.id.key
+                                        LogStreamRegistry.focus(stream.id)
                                         if (state == LogDrawerState.COLLAPSED) {
                                             onStateChange(LogDrawerState.EXPANDED)
                                         }
@@ -176,7 +205,7 @@ fun LogDrawer(
                 exit = shrinkVertically() + slideOutVertically(targetOffsetY = { it }),
             ) {
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(DrawerBodyHeight),
+                    modifier = Modifier.fillMaxWidth().height(liveHeightDp.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (streams.isEmpty()) {
@@ -206,5 +235,48 @@ fun LogDrawer(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DrawerResizeHandle(
+    enabled: Boolean,
+    dragState: androidx.compose.foundation.gestures.DraggableState,
+    onDragStopped: () -> Unit,
+) {
+    val handleModifier = if (enabled) {
+        Modifier
+            .pointerHoverIcon(PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR)))
+            .draggable(
+                state = dragState,
+                orientation = Orientation.Vertical,
+                onDragStopped = { onDragStopped() },
+            )
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(DrawerResizeHandleHeight)
+            .then(handleModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (enabled) {
+            Box(
+                modifier = Modifier
+                    .size(width = 28.dp, height = 3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(KdTextSecondary.copy(alpha = 0.45f)),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(KdBorder)
+                .align(Alignment.BottomCenter),
+        )
     }
 }

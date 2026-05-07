@@ -35,6 +35,8 @@ object LogStreamRegistry {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val _streams = MutableStateFlow<Map<String, ActiveLogStream>>(emptyMap())
     val streams: StateFlow<Map<String, ActiveLogStream>> = _streams.asStateFlow()
+    private val _focusedKey = MutableStateFlow<String?>(null)
+    val focusedKey: StateFlow<String?> = _focusedKey.asStateFlow()
     private val jobs = ConcurrentHashMap<String, Job>()
 
     private const val MAX_LINES = 5_000
@@ -57,7 +59,10 @@ object LogStreamRegistry {
         displayLabel: String,
         flowFactory: () -> Flow<String>,
     ): LogStreamId {
-        if (id.key in _streams.value) return id
+        if (id.key in _streams.value) {
+            _focusedKey.value = id.key
+            return id
+        }
         val state = MutableStateFlow<List<String>>(emptyList())
         val job = scope.launch {
             flowFactory()
@@ -68,12 +73,18 @@ object LogStreamRegistry {
         _streams.update {
             it + (id.key to ActiveLogStream(id, displayLabel, state.asStateFlow(), System.currentTimeMillis()))
         }
+        _focusedKey.value = id.key
         return id
+    }
+
+    fun focus(id: LogStreamId) {
+        if (id.key in _streams.value) _focusedKey.value = id.key
     }
 
     fun close(id: LogStreamId) {
         jobs.remove(id.key)?.cancel()
         _streams.update { it - id.key }
+        if (_focusedKey.value == id.key) _focusedKey.value = null
     }
 
     fun closeAllForSession(sessionId: SessionId) {
@@ -88,5 +99,6 @@ object LogStreamRegistry {
             jobs.remove(key)?.cancel()
         }
         _streams.value = emptyMap()
+        _focusedKey.value = null
     }
 }

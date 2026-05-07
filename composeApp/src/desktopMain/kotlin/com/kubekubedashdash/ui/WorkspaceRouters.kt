@@ -217,6 +217,7 @@ fun ExtraPaneRouter(
                 pod = screen.pod,
                 onClose = onClose,
                 onNavigateToNode = { nodeName -> onNavigate(Screen.Main.Nodes(selectNodeName = nodeName)) },
+                onOpenLogs = onOpenLogs,
                 modifier = Modifier.fillMaxSize(),
                 labelQuery = labelQuery,
                 onToggleLabel = onToggleLabel,
