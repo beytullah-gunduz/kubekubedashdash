@@ -62,6 +62,8 @@ internal fun SessionPaneContent(
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
+    val labelQuery by sessionVm.labelQuery.collectAsState()
+    val annotationQuery by sessionVm.annotationQuery.collectAsState()
     val sessionIsConnected by sessionVm.isConnected.collectAsState()
     val sessionConnectionError by sessionVm.connectionError.collectAsState()
 
@@ -131,6 +133,10 @@ internal fun SessionPaneContent(
                         ContentRouter(
                             screen = currentScreen,
                             searchQuery = searchQuery,
+                            labelQuery = labelQuery,
+                            onLabelQueryChange = sessionVm::setLabelQuery,
+                            annotationQuery = annotationQuery,
+                            onAnnotationQueryChange = sessionVm::setAnnotationQuery,
                             onNavigate = sessionVm::navigate,
                             onSelectCluster = onSelectCluster,
                             onDiscoverEks = onDiscoverEks,

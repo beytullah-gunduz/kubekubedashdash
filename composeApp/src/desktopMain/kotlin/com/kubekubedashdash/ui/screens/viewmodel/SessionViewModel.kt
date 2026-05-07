@@ -53,6 +53,15 @@ class SessionViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    // Cross-kind selectors shared by Pod and Node screens so users can track
+    // a workload (e.g. topology.kubernetes.io/zone=…) across resource kinds
+    // without re-typing.
+    private val _labelQuery = MutableStateFlow("")
+    val labelQuery: StateFlow<String> = _labelQuery.asStateFlow()
+
+    private val _annotationQuery = MutableStateFlow("")
+    val annotationQuery: StateFlow<String> = _annotationQuery.asStateFlow()
+
     private val _retryCountdown = MutableStateFlow(0)
     val retryCountdown: StateFlow<Int> = _retryCountdown.asStateFlow()
 
@@ -197,5 +206,13 @@ class SessionViewModel(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun setLabelQuery(query: String) {
+        _labelQuery.value = query
+    }
+
+    fun setAnnotationQuery(query: String) {
+        _annotationQuery.value = query
     }
 }

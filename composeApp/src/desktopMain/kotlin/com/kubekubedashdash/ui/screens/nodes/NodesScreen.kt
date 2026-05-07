@@ -42,6 +42,10 @@ internal const val MAX_HISTORY_SIZE = 20
 @Composable
 fun NodesScreen(
     searchQuery: String,
+    labelQuery: String,
+    onLabelQueryChange: (String) -> Unit,
+    annotationQuery: String,
+    onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
     selectNodeName: String? = null,
 ) {
@@ -59,8 +63,6 @@ fun NodesScreen(
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
-    var labelQuery by rememberSaveable { mutableStateOf("") }
-    var annotationQuery by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(selectNodeName) {
         viewModel.setParams(selectNodeName)
@@ -126,12 +128,12 @@ fun NodesScreen(
                         actions = {
                             LabelSelectorChip(
                                 query = labelQuery,
-                                onQueryChange = { labelQuery = it },
+                                onQueryChange = onLabelQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                             AnnotationSelectorChip(
                                 query = annotationQuery,
-                                onQueryChange = { annotationQuery = it },
+                                onQueryChange = onAnnotationQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                             StatusFilterMenu(

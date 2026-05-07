@@ -32,6 +32,10 @@ import com.kubekubedashdash.ui.screens.topology.ClusterTopologyScreen
 fun ContentRouter(
     screen: Screen,
     searchQuery: String,
+    labelQuery: String,
+    onLabelQueryChange: (String) -> Unit,
+    annotationQuery: String,
+    onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
     onSelectCluster: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
@@ -47,28 +51,68 @@ fun ContentRouter(
     ) { target ->
         when (target) {
             is Screen.Main.Connecting -> ConnectingScreen()
+
             is Screen.Main.ConnectionError -> ConnectionErrorScreen(target.error, target.retryCountdown)
+
             is Screen.Main.ClusterOverview -> ClusterOverviewScreen(onNavigate)
+
             is Screen.Main.ClusterTopology -> ClusterTopologyScreen(onNavigate)
-            is Screen.Main.Nodes -> NodesScreen(searchQuery, onNavigate, target.selectNodeName)
+
+            is Screen.Main.Nodes -> NodesScreen(
+                searchQuery = searchQuery,
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                onNavigate = onNavigate,
+                selectNodeName = target.selectNodeName,
+            )
+
             is Screen.Main.Namespaces -> NamespacesScreen(searchQuery, onNavigate)
+
             is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)
-            is Screen.Main.Pods -> PodsScreen(searchQuery, onNavigate, onOpenLogs, target.selectPodUid)
+
+            is Screen.Main.Pods -> PodsScreen(
+                searchQuery = searchQuery,
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                onNavigate = onNavigate,
+                onOpenLogs = onOpenLogs,
+                selectPodUid = target.selectPodUid,
+            )
+
             is Screen.Main.Deployments -> DeploymentsScreen(searchQuery, onNavigate)
+
             is Screen.Main.Services -> ServicesScreen(searchQuery, onNavigate)
+
             is Screen.Main.StatefulSets -> GenericResourceScreen("StatefulSet", searchQuery, sourceFlow = reactiveClient.statefulSets)
+
             is Screen.Main.DaemonSets -> GenericResourceScreen("DaemonSet", searchQuery, sourceFlow = reactiveClient.daemonSets)
+
             is Screen.Main.ReplicaSets -> GenericResourceScreen("ReplicaSet", searchQuery, sourceFlow = reactiveClient.replicaSets)
+
             is Screen.Main.Jobs -> GenericResourceScreen("Job", searchQuery, sourceFlow = reactiveClient.jobs)
+
             is Screen.Main.CronJobs -> GenericResourceScreen("CronJob", searchQuery, sourceFlow = reactiveClient.cronJobs)
+
             is Screen.Main.ConfigMaps -> GenericResourceScreen("ConfigMap", searchQuery, sourceFlow = reactiveClient.configMaps)
+
             is Screen.Main.Secrets -> GenericResourceScreen("Secret", searchQuery, sourceFlow = reactiveClient.secrets)
+
             is Screen.Main.Ingresses -> GenericResourceScreen("Ingress", searchQuery, sourceFlow = reactiveClient.ingresses)
+
             is Screen.Main.Endpoints -> GenericResourceScreen("Endpoint", searchQuery, sourceFlow = reactiveClient.endpoints)
+
             is Screen.Main.NetworkPolicies -> GenericResourceScreen("NetworkPolicy", searchQuery, sourceFlow = reactiveClient.networkPolicies)
+
             is Screen.Main.PersistentVolumes -> GenericResourceScreen("PersistentVolume", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.persistentVolumes)
+
             is Screen.Main.PersistentVolumeClaims -> GenericResourceScreen("PersistentVolumeClaim", searchQuery, sourceFlow = reactiveClient.persistentVolumeClaims)
+
             is Screen.Main.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.storageClasses)
+
             else -> {}
         }
     }

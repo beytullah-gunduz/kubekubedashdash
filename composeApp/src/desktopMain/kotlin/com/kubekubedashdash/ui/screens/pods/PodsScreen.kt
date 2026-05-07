@@ -44,6 +44,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun PodsScreen(
     searchQuery: String,
+    labelQuery: String,
+    onLabelQueryChange: (String) -> Unit,
+    annotationQuery: String,
+    onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     selectPodUid: String? = null,
@@ -58,8 +62,6 @@ fun PodsScreen(
     // null sentinel = "no filter applied" (show every status that appears).
     // A non-null Set is the explicit allowlist after the user touched the menu.
     var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
-    var labelQuery by rememberSaveable { mutableStateOf("") }
-    var annotationQuery by rememberSaveable { mutableStateOf("") }
     val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -136,12 +138,12 @@ fun PodsScreen(
                             actions = {
                                 LabelSelectorChip(
                                     query = labelQuery,
-                                    onQueryChange = { labelQuery = it },
+                                    onQueryChange = onLabelQueryChange,
                                     modifier = Modifier.padding(end = 8.dp),
                                 )
                                 AnnotationSelectorChip(
                                     query = annotationQuery,
-                                    onQueryChange = { annotationQuery = it },
+                                    onQueryChange = onAnnotationQueryChange,
                                     modifier = Modifier.padding(end = 8.dp),
                                 )
                                 StatusFilterMenu(
