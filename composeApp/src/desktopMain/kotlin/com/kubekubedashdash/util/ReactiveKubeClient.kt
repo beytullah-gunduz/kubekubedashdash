@@ -389,6 +389,7 @@ class ReactiveKubeClient(
             labels = pod.metadata.labels ?: emptyMap(),
             annotations = pod.metadata.annotations ?: emptyMap(),
             containers = containers,
+            phase = pod.status?.phase ?: "",
         )
     }
 
@@ -1080,48 +1081,76 @@ class ReactiveKubeClient(
         )
     }
 
-    // ── Cluster Info (polling — composite) ──────────────────────────────────────
+    // ── Cluster Info (derived from informers + version polling) ─────────────────
 
-    val clusterInfo: StateFlow<ResourceState<ClusterInfo>> = namespacedPollingStateFlow(
-        intervalMs = 10_000,
-        fetch = { ns ->
-            val version = try {
-                val v = k8s.kubernetesVersion
-                val major = v?.major.orEmpty()
-                val minor = v?.minor.orEmpty()
-                if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
-            } catch (_: Exception) {
-                ""
-            }
-            val nodeItems = k8s.nodes().list().items
-            val nsItems = k8s.namespaces().list().items
-            val podItems = if (ns != null) {
-                k8s.pods().inNamespace(ns).list().items
-            } else {
-                k8s.pods().inAnyNamespace().list().items
-            }
-            val deps = if (ns != null) {
-                k8s.apps().deployments().inNamespace(ns).list().items
-            } else {
-                k8s.apps().deployments().inAnyNamespace().list().items
-            }
-            val svcs = if (ns != null) {
-                k8s.services().inNamespace(ns).list().items
-            } else {
-                k8s.services().inAnyNamespace().list().items
-            }
-            ClusterInfo(
-                name = getCurrentContext(), server = getClusterServer(),
-                version = version,
-                nodesCount = nodeItems.size, namespacesCount = nsItems.size,
-                podsCount = podItems.size, deploymentsCount = deps.size, servicesCount = svcs.size,
-                runningPods = podItems.count { it.status?.phase == "Running" },
-                pendingPods = podItems.count { it.status?.phase == "Pending" },
-                failedPods = podItems.count { it.status?.phase == "Failed" },
-                succeededPods = podItems.count { it.status?.phase == "Succeeded" },
-            )
+    /**
+     * K8s server version as `"major.minor"` (e.g. `"1.34"`). Polled on a
+     * slow cadence — it's the only piece of clusterInfo that has no watch
+     * API. Empty string while the first poll is in flight or after an error.
+     */
+    private val versionFlow: StateFlow<String> = directPollingStateFlow(
+        intervalMs = 60_000,
+        initial = "",
+        fetch = {
+            val v = k8s.kubernetesVersion
+            val major = v?.major.orEmpty()
+            val minor = v?.minor.orEmpty()
+            if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
         },
     )
+
+    /**
+     * Derived from the informer-backed `nodes`, `namespaceNames`, `pods`,
+     * `deployments`, `services` flows plus `versionFlow`. No separate REST
+     * polling — the informers already hold this data, and counts update on
+     * every real cluster change instead of every 10 s.
+     *
+     * Error semantics: first informer to error wins (matches the previous
+     * polling behavior, which threw on the first failed list call).
+     * `SessionViewModel.observeClusterInfoHealth` flips `_isConnected`
+     * on this transition, so propagating Error from any source preserves
+     * connection-health detection.
+     */
+    val clusterInfo: StateFlow<ResourceState<ClusterInfo>> = combine(
+        nodes,
+        namespaceNames,
+        pods,
+        combine(deployments, services, versionFlow) { d, s, v -> Triple(d, s, v) },
+    ) { nodesS, nsS, podsS, dsv ->
+        val (depsS, svcsS, version) = dsv
+        firstError(nodesS, nsS, podsS, depsS, svcsS)?.let { return@combine it }
+        if (nodesS is ResourceState.Success &&
+            nsS is ResourceState.Success &&
+            podsS is ResourceState.Success &&
+            depsS is ResourceState.Success &&
+            svcsS is ResourceState.Success
+        ) {
+            ResourceState.Success(
+                ClusterInfo(
+                    name = getCurrentContext(),
+                    server = getClusterServer(),
+                    version = version,
+                    nodesCount = nodesS.data.size,
+                    namespacesCount = nsS.data.size,
+                    podsCount = podsS.data.size,
+                    deploymentsCount = depsS.data.size,
+                    servicesCount = svcsS.data.size,
+                    runningPods = podsS.data.count { it.phase == "Running" },
+                    pendingPods = podsS.data.count { it.phase == "Pending" },
+                    failedPods = podsS.data.count { it.phase == "Failed" },
+                    succeededPods = podsS.data.count { it.phase == "Succeeded" },
+                ),
+            )
+        } else {
+            ResourceState.Loading
+        }
+    }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.IO)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
+
+    private fun firstError(vararg states: ResourceState<*>): ResourceState.Error? = states
+        .firstNotNullOfOrNull { it as? ResourceState.Error }
 
     // ── Resource Usage (polling — metrics server has no watch API) ───────────────
 
