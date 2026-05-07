@@ -37,6 +37,7 @@ fun DeploymentDetailScreen(
             *deployment.conditions.map { DetailField("Condition", it) }.toTypedArray(),
         ),
         labels = deployment.labels,
+        annotations = deployment.annotations,
         onClose = onClose,
         modifier = Modifier.fillMaxSize(),
         extraTabs = listOf(

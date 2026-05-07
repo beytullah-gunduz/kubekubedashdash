@@ -97,6 +97,7 @@ fun ResourceDetailPanel(
     status: String?,
     fields: List<DetailField>,
     labels: Map<String, String>,
+    annotations: Map<String, String>,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     extraTabs: List<ExtraTab> = emptyList(),
@@ -210,7 +211,7 @@ fun ResourceDetailPanel(
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 when {
-                    page == 0 -> GenericOverviewTab(fields, labels)
+                    page == 0 -> GenericOverviewTab(fields, labels, annotations)
                     page == yamlIndex -> GenericYamlTab(kind, name, namespace)
                     else -> extraTabs[page - 1].content()
                 }
@@ -222,7 +223,11 @@ fun ResourceDetailPanel(
 // ── Overview Tab ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun GenericOverviewTab(fields: List<DetailField>, labels: Map<String, String>) {
+private fun GenericOverviewTab(
+    fields: List<DetailField>,
+    labels: Map<String, String>,
+    annotations: Map<String, String>,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -259,6 +264,17 @@ private fun GenericOverviewTab(fields: List<DetailField>, labels: Map<String, St
             Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 labels.entries.toList().chunked(2).forEach { chunk ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        chunk.forEach { (k, v) -> LabelChip(k, v) }
+                    }
+                }
+            }
+        }
+
+        if (annotations.isNotEmpty()) {
+            Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                annotations.entries.toList().chunked(2).forEach { chunk ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         chunk.forEach { (k, v) -> LabelChip(k, v) }
                     }

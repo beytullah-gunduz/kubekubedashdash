@@ -25,6 +25,7 @@ fun NamespaceDetailScreen(
             DetailField("Age", namespace.age),
         ),
         labels = namespace.labels,
+        annotations = namespace.annotations,
         onClose = onClose,
         modifier = Modifier.fillMaxSize(),
     )

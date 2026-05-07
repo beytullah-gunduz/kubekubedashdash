@@ -58,6 +58,7 @@ class KubeClient(
             status = ns.status?.phase ?: "Active",
             age = formatAge(ns.metadata.creationTimestamp),
             labels = ns.metadata.labels ?: emptyMap(),
+            annotations = ns.metadata.annotations ?: emptyMap(),
         )
     }
 
@@ -146,6 +147,7 @@ class KubeClient(
                 age = formatAge(dep.metadata.creationTimestamp),
                 strategy = dep.spec?.strategy?.type ?: "",
                 labels = dep.metadata.labels ?: emptyMap(),
+                annotations = dep.metadata.annotations ?: emptyMap(),
                 conditions = dep.status?.conditions?.map { "${it.type}=${it.status}" } ?: emptyList(),
             )
         }
@@ -355,6 +357,7 @@ class KubeClient(
                 age = formatAge(svc.metadata.creationTimestamp),
                 selector = svc.spec?.selector ?: emptyMap(),
                 labels = svc.metadata.labels ?: emptyMap(),
+                annotations = svc.metadata.annotations ?: emptyMap(),
             )
         }
     }
@@ -461,6 +464,7 @@ class KubeClient(
                 status = null,
                 age = formatAge(cm.metadata.creationTimestamp),
                 labels = cm.metadata.labels ?: emptyMap(),
+                annotations = cm.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Data" to "${(cm.data?.size ?: 0) + (cm.binaryData?.size ?: 0)}"),
             )
         }
@@ -482,6 +486,7 @@ class KubeClient(
                 status = null,
                 age = formatAge(s.metadata.creationTimestamp),
                 labels = s.metadata.labels ?: emptyMap(),
+                annotations = s.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Type" to (s.type ?: ""), "Data" to "${s.data?.size ?: 0}"),
             )
         }
@@ -505,6 +510,7 @@ class KubeClient(
                 status = "$r/$d",
                 age = formatAge(ss.metadata.creationTimestamp),
                 labels = ss.metadata.labels ?: emptyMap(),
+                annotations = ss.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Ready" to "$r/$d"),
             )
         }
@@ -528,6 +534,7 @@ class KubeClient(
                 status = "$ready/$desired",
                 age = formatAge(ds.metadata.creationTimestamp),
                 labels = ds.metadata.labels ?: emptyMap(),
+                annotations = ds.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Desired" to "$desired", "Ready" to "$ready"),
             )
         }
@@ -551,6 +558,7 @@ class KubeClient(
                 status = "$r/$d",
                 age = formatAge(rs.metadata.creationTimestamp),
                 labels = rs.metadata.labels ?: emptyMap(),
+                annotations = rs.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Ready" to "$r/$d"),
             )
         }
@@ -580,6 +588,7 @@ class KubeClient(
                 status = status,
                 age = formatAge(job.metadata.creationTimestamp),
                 labels = job.metadata.labels ?: emptyMap(),
+                annotations = job.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Completions" to "$succ/$comp", "Status" to status),
             )
         }
@@ -601,6 +610,7 @@ class KubeClient(
                 status = if (cj.spec?.suspend == true) "Suspended" else "Active",
                 age = formatAge(cj.metadata.creationTimestamp),
                 labels = cj.metadata.labels ?: emptyMap(),
+                annotations = cj.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf(
                     "Schedule" to (cj.spec?.schedule ?: ""),
                     "Active" to "${cj.status?.active?.size ?: 0}",
@@ -626,6 +636,7 @@ class KubeClient(
                 status = null,
                 age = formatAge(ing.metadata.creationTimestamp),
                 labels = ing.metadata.labels ?: emptyMap(),
+                annotations = ing.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Hosts" to hosts),
             )
         }
@@ -648,6 +659,7 @@ class KubeClient(
                 status = null,
                 age = formatAge(ep.metadata.creationTimestamp),
                 labels = ep.metadata.labels ?: emptyMap(),
+                annotations = ep.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Endpoints" to "$count"),
             )
         }
@@ -669,6 +681,7 @@ class KubeClient(
                 status = null,
                 age = formatAge(np.metadata.creationTimestamp),
                 labels = np.metadata.labels ?: emptyMap(),
+                annotations = np.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Policy Types" to (np.spec?.policyTypes?.joinToString(", ") ?: "")),
             )
         }
@@ -682,6 +695,7 @@ class KubeClient(
             status = pv.status?.phase,
             age = formatAge(pv.metadata.creationTimestamp),
             labels = pv.metadata.labels ?: emptyMap(),
+            annotations = pv.metadata.annotations ?: emptyMap(),
             extraColumns = mapOf(
                 "Capacity" to (pv.spec?.capacity?.get("storage")?.toString() ?: ""),
                 "Access Modes" to (pv.spec?.accessModes?.joinToString(", ") ?: ""),
@@ -707,6 +721,7 @@ class KubeClient(
                 status = pvc.status?.phase,
                 age = formatAge(pvc.metadata.creationTimestamp),
                 labels = pvc.metadata.labels ?: emptyMap(),
+                annotations = pvc.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf(
                     "Capacity" to (pvc.status?.capacity?.get("storage")?.toString() ?: ""),
                     "Access Modes" to (pvc.status?.accessModes?.joinToString(", ") ?: ""),
@@ -727,6 +742,7 @@ class KubeClient(
             status = if (isDefault) "Default" else null,
             age = formatAge(sc.metadata.creationTimestamp),
             labels = sc.metadata.labels ?: emptyMap(),
+            annotations = sc.metadata.annotations ?: emptyMap(),
             extraColumns = mapOf(
                 "Provisioner" to (sc.provisioner ?: ""),
                 "Reclaim Policy" to (sc.reclaimPolicy ?: ""),

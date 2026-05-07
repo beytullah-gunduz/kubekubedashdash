@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -17,15 +18,23 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.AnnotationSelectorChip
+import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
+import com.kubekubedashdash.ui.components.matchesMapSelector
+import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenViewModel
 
 @Composable
 fun NamespacesScreen(
     searchQuery: String,
+    labelQuery: String,
+    onLabelQueryChange: (String) -> Unit,
+    annotationQuery: String,
+    onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
@@ -39,10 +48,16 @@ fun NamespacesScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
+            val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
+            val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
             val filtered = s.data.filter { ns ->
-                searchQuery.isBlank() ||
+                val passesSearch = searchQuery.isBlank() ||
                     ns.name.contains(searchQuery, ignoreCase = true) ||
                     (ns.status?.contains(searchQuery, ignoreCase = true) ?: false)
+                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(ns.labels, labelSelector)
+                val passesAnnotations = annotationSelector.isEmpty() ||
+                    matchesMapSelector(ns.annotations, annotationSelector)
+                passesSearch && passesLabels && passesAnnotations
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
@@ -51,6 +66,18 @@ fun NamespacesScreen(
                     kind = "Namespaces",
                     liveDot = {
                         LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                    },
+                    actions = {
+                        LabelSelectorChip(
+                            query = labelQuery,
+                            onQueryChange = onLabelQueryChange,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        AnnotationSelectorChip(
+                            query = annotationQuery,
+                            onQueryChange = onAnnotationQueryChange,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
                     },
                 )
                 NamespaceTable(

@@ -13,5 +13,6 @@ data class DeploymentInfo(
     val age: String,
     val strategy: String,
     val labels: Map<String, String>,
+    val annotations: Map<String, String>,
     val conditions: List<String>,
 )

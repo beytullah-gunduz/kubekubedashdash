@@ -29,6 +29,7 @@ fun ServiceDetailScreen(
             DetailField("Age", service.age),
         ) + selectorFields,
         labels = service.labels,
+        annotations = service.annotations,
         onClose = onClose,
         modifier = Modifier.fillMaxSize(),
     )

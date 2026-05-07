@@ -37,6 +37,7 @@ import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
+import com.kubekubedashdash.ui.components.AnnotationSelectorChip
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
@@ -86,6 +87,10 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
 fun GenericResourceScreen(
     kind: String,
     searchQuery: String,
+    labelQuery: String,
+    onLabelQueryChange: (String) -> Unit,
+    annotationQuery: String,
+    onAnnotationQueryChange: (String) -> Unit,
     namespacedKind: Boolean = true,
     sourceFlow: StateFlow<ResourceState<List<GenericResourceInfo>>>,
 ) {
@@ -94,7 +99,6 @@ fun GenericResourceScreen(
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
-    var labelQuery by rememberSaveable(kind) { mutableStateOf("") }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -107,6 +111,7 @@ fun GenericResourceScreen(
             }
             val activeStatusFilter = statusFilter
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
+            val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
             val filtered = s.data.filter { r ->
                 val passesSearch = searchQuery.isBlank() ||
                     r.name.contains(searchQuery, ignoreCase = true) ||
@@ -115,7 +120,9 @@ fun GenericResourceScreen(
                 val passesStatus = activeStatusFilter == null ||
                     (r.status != null && r.status in activeStatusFilter)
                 val passesLabels = labelSelector.isEmpty() || matchesMapSelector(r.labels, labelSelector)
-                passesSearch && passesStatus && passesLabels
+                val passesAnnotations = annotationSelector.isEmpty() ||
+                    matchesMapSelector(r.annotations, annotationSelector)
+                passesSearch && passesStatus && passesLabels && passesAnnotations
             }
 
             Row(modifier = Modifier.fillMaxSize()) {
@@ -129,7 +136,12 @@ fun GenericResourceScreen(
                         actions = {
                             LabelSelectorChip(
                                 query = labelQuery,
-                                onQueryChange = { labelQuery = it },
+                                onQueryChange = onLabelQueryChange,
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            AnnotationSelectorChip(
+                                query = annotationQuery,
+                                onQueryChange = onAnnotationQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                             if (availableStatuses.isNotEmpty()) {
@@ -188,6 +200,7 @@ fun GenericResourceScreen(
                                 status = res.status,
                                 fields = fields,
                                 labels = res.labels,
+                                annotations = res.annotations,
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
                             )

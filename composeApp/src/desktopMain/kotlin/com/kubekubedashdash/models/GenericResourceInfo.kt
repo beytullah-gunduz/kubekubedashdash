@@ -10,5 +10,6 @@ data class GenericResourceInfo(
     val status: String?,
     val age: String,
     val labels: Map<String, String>,
+    val annotations: Map<String, String>,
     val extraColumns: Map<String, String> = emptyMap(),
 )

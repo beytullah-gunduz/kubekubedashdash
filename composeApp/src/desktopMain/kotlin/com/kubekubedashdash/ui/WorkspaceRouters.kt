@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
 import com.kubekubedashdash.ui.screens.ResourceDetailScreen
@@ -27,6 +29,7 @@ import com.kubekubedashdash.ui.screens.pods.PodsScreen
 import com.kubekubedashdash.ui.screens.services.ServiceDetailScreen
 import com.kubekubedashdash.ui.screens.services.ServicesScreen
 import com.kubekubedashdash.ui.screens.topology.ClusterTopologyScreen
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun ContentRouter(
@@ -68,7 +71,14 @@ fun ContentRouter(
                 selectNodeName = target.selectNodeName,
             )
 
-            is Screen.Main.Namespaces -> NamespacesScreen(searchQuery, onNavigate)
+            is Screen.Main.Namespaces -> NamespacesScreen(
+                searchQuery = searchQuery,
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                onNavigate = onNavigate,
+            )
 
             is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)
 
@@ -83,40 +93,75 @@ fun ContentRouter(
                 selectPodUid = target.selectPodUid,
             )
 
-            is Screen.Main.Deployments -> DeploymentsScreen(searchQuery, onNavigate)
+            is Screen.Main.Deployments -> DeploymentsScreen(
+                searchQuery = searchQuery,
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                onNavigate = onNavigate,
+            )
 
-            is Screen.Main.Services -> ServicesScreen(searchQuery, onNavigate)
+            is Screen.Main.Services -> ServicesScreen(
+                searchQuery = searchQuery,
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                onNavigate = onNavigate,
+            )
 
-            is Screen.Main.StatefulSets -> GenericResourceScreen("StatefulSet", searchQuery, sourceFlow = reactiveClient.statefulSets)
+            is Screen.Main.StatefulSets -> genericKind("StatefulSet", reactiveClient.statefulSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.DaemonSets -> GenericResourceScreen("DaemonSet", searchQuery, sourceFlow = reactiveClient.daemonSets)
+            is Screen.Main.DaemonSets -> genericKind("DaemonSet", reactiveClient.daemonSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.ReplicaSets -> GenericResourceScreen("ReplicaSet", searchQuery, sourceFlow = reactiveClient.replicaSets)
+            is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.Jobs -> GenericResourceScreen("Job", searchQuery, sourceFlow = reactiveClient.jobs)
+            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.CronJobs -> GenericResourceScreen("CronJob", searchQuery, sourceFlow = reactiveClient.cronJobs)
+            is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.ConfigMaps -> GenericResourceScreen("ConfigMap", searchQuery, sourceFlow = reactiveClient.configMaps)
+            is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.Secrets -> GenericResourceScreen("Secret", searchQuery, sourceFlow = reactiveClient.secrets)
+            is Screen.Main.Secrets -> genericKind("Secret", reactiveClient.secrets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.Ingresses -> GenericResourceScreen("Ingress", searchQuery, sourceFlow = reactiveClient.ingresses)
+            is Screen.Main.Ingresses -> genericKind("Ingress", reactiveClient.ingresses, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.Endpoints -> GenericResourceScreen("Endpoint", searchQuery, sourceFlow = reactiveClient.endpoints)
+            is Screen.Main.Endpoints -> genericKind("Endpoint", reactiveClient.endpoints, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.NetworkPolicies -> GenericResourceScreen("NetworkPolicy", searchQuery, sourceFlow = reactiveClient.networkPolicies)
+            is Screen.Main.NetworkPolicies -> genericKind("NetworkPolicy", reactiveClient.networkPolicies, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.PersistentVolumes -> GenericResourceScreen("PersistentVolume", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.persistentVolumes)
+            is Screen.Main.PersistentVolumes -> genericKind("PersistentVolume", reactiveClient.persistentVolumes, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.PersistentVolumeClaims -> GenericResourceScreen("PersistentVolumeClaim", searchQuery, sourceFlow = reactiveClient.persistentVolumeClaims)
+            is Screen.Main.PersistentVolumeClaims -> genericKind("PersistentVolumeClaim", reactiveClient.persistentVolumeClaims, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
-            is Screen.Main.StorageClasses -> GenericResourceScreen("StorageClass", searchQuery, namespacedKind = false, sourceFlow = reactiveClient.storageClasses)
+            is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
             else -> {}
         }
     }
 }
+
+@Composable
+private fun genericKind(
+    kind: String,
+    sourceFlow: StateFlow<ResourceState<List<GenericResourceInfo>>>,
+    namespacedKind: Boolean,
+    searchQuery: String,
+    labelQuery: String,
+    onLabelQueryChange: (String) -> Unit,
+    annotationQuery: String,
+    onAnnotationQueryChange: (String) -> Unit,
+) = GenericResourceScreen(
+    kind = kind,
+    searchQuery = searchQuery,
+    labelQuery = labelQuery,
+    onLabelQueryChange = onLabelQueryChange,
+    annotationQuery = annotationQuery,
+    onAnnotationQueryChange = onAnnotationQueryChange,
+    namespacedKind = namespacedKind,
+    sourceFlow = sourceFlow,
+)
 
 @Composable
 fun ExtraPaneRouter(

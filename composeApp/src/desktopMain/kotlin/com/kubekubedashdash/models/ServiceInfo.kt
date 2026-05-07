@@ -14,4 +14,5 @@ data class ServiceInfo(
     val age: String,
     val selector: Map<String, String>,
     val labels: Map<String, String>,
+    val annotations: Map<String, String>,
 )
