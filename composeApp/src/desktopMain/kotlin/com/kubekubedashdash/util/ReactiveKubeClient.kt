@@ -1134,26 +1134,62 @@ class ReactiveKubeClient(
 
     // ── On-demand: YAML ─────────────────────────────────────────────────────────
 
-    fun getResourceYaml(kind: String, name: String, namespace: String?): String = try {
-        log.debug("Fetching YAML kind={} name={} namespace={}", kind, name, namespace)
+    fun getResourceYaml(
+        kind: String,
+        name: String,
+        namespace: String?,
+        group: String? = null,
+        version: String? = null,
+        plural: String? = null,
+    ): String = try {
+        log.debug("Fetching YAML kind={} name={} namespace={} group={} version={}", kind, name, namespace, group, version)
         val res: Any? = when (kind.lowercase()) {
             "pod" -> namespace?.let { k8s.pods().inNamespace(it).withName(name).get() }
+
             "deployment" -> namespace?.let { k8s.apps().deployments().inNamespace(it).withName(name).get() }
+
             "service" -> namespace?.let { k8s.services().inNamespace(it).withName(name).get() }
+
             "node" -> k8s.nodes().withName(name).get()
+
             "namespace" -> k8s.namespaces().withName(name).get()
+
             "configmap" -> namespace?.let { k8s.configMaps().inNamespace(it).withName(name).get() }
+
             "secret" -> namespace?.let { k8s.secrets().inNamespace(it).withName(name).get() }
+
             "statefulset" -> namespace?.let { k8s.apps().statefulSets().inNamespace(it).withName(name).get() }
+
             "daemonset" -> namespace?.let { k8s.apps().daemonSets().inNamespace(it).withName(name).get() }
+
             "replicaset" -> namespace?.let { k8s.apps().replicaSets().inNamespace(it).withName(name).get() }
+
             "job" -> namespace?.let { k8s.batch().v1().jobs().inNamespace(it).withName(name).get() }
+
             "cronjob" -> namespace?.let { k8s.batch().v1().cronjobs().inNamespace(it).withName(name).get() }
+
             "ingress" -> namespace?.let { k8s.network().v1().ingresses().inNamespace(it).withName(name).get() }
+
             "persistentvolume" -> k8s.persistentVolumes().withName(name).get()
+
             "persistentvolumeclaim" -> namespace?.let { k8s.persistentVolumeClaims().inNamespace(it).withName(name).get() }
+
             "storageclass" -> k8s.storage().v1().storageClasses().withName(name).get()
-            else -> null
+
+            else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
+                val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
+                val rdc = ResourceDefinitionContext.Builder()
+                    .withGroup(group)
+                    .withVersion(version)
+                    .withKind(kind)
+                    .withPlural(effectivePlural)
+                    .withNamespaced(namespace != null)
+                    .build()
+                val op = k8s.genericKubernetesResources(rdc)
+                if (namespace != null) op.inNamespace(namespace).withName(name).get() else op.withName(name).get()
+            } else {
+                null
+            }
         }
         if (res != null) {
             Serialization.asYaml(res)
@@ -1164,6 +1200,15 @@ class ReactiveKubeClient(
     } catch (e: Exception) {
         log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         "# Error: ${e.message}"
+    }
+
+    private fun defaultPluralForKind(kind: String): String {
+        val lower = kind.lowercase()
+        return when {
+            lower.endsWith("y") -> lower.dropLast(1) + "ies"
+            lower.endsWith("s") || lower.endsWith("x") || lower.endsWith("ch") || lower.endsWith("sh") -> lower + "es"
+            else -> lower + "s"
+        }
     }
 
     // ── On-demand: Pod Logs ─────────────────────────────────────────────────────

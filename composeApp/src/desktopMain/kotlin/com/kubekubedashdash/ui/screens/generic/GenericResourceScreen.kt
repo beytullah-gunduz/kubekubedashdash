@@ -88,6 +88,9 @@ fun GenericResourceScreen(
     searchQuery: String,
     namespacedKind: Boolean = true,
     sourceFlow: StateFlow<ResourceState<List<GenericResourceInfo>>>,
+    apiGroup: String? = null,
+    apiVersion: String? = null,
+    plural: String? = null,
 ) {
     val viewModel = viewModel(key = kind) { GenericResourceScreenViewModel(sourceFlow) }
     val state by viewModel.state.collectAsState()
@@ -190,6 +193,9 @@ fun GenericResourceScreen(
                                 labels = res.labels,
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
+                                apiGroup = apiGroup,
+                                apiVersion = apiVersion,
+                                plural = plural,
                             )
                         }
                     }

@@ -36,6 +36,20 @@ sealed class Screen(val title: String) {
 
         data object ClusterTopology : Main("Topology")
 
+        /**
+         * A custom resource list view, identified by its CRD group + kind. The
+         * router resolves the matching `CrdInfo` from
+         * `ReactiveKubeClient.crds` to fetch column metadata and stream
+         * instances.
+         */
+        data class CustomResource(
+            val group: String,
+            val version: String,
+            val kind: String,
+            val plural: String,
+            val namespaced: Boolean,
+        ) : Main(kind)
+
         data object Connecting : Main("Connecting")
         data class ConnectionError(val error: String?, val retryCountdown: Int) : Main("Connection Error")
     }
