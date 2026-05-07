@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
@@ -78,7 +80,9 @@ fun MapSelectorChip(
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = if (active) KdPrimary.copy(alpha = 0.15f) else KdSurfaceVariant,
-            modifier = Modifier.clickable { expanded = !expanded },
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .pointerHoverIcon(PointerIcon.Hand),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -101,7 +105,10 @@ fun MapSelectorChip(
                     Icon(
                         painterResource(Res.drawable.close_filled),
                         contentDescription = "Clear ${title.lowercase()} filter",
-                        modifier = Modifier.size(12.dp).clickable { onQueryChange("") },
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clickable { onQueryChange("") }
+                            .pointerHoverIcon(PointerIcon.Hand),
                         tint = KdPrimary,
                     )
                 }
@@ -169,3 +176,40 @@ fun AnnotationSelectorChip(
     placeholder = "owner=team-a, prometheus.io/scrape=true",
     modifier = modifier,
 )
+
+/**
+ * Small "Clear" chip that wipes the shared label + annotation selectors
+ * in one click. Render conditionally — only worth showing when at least
+ * one of those selectors is non-blank.
+ */
+@Composable
+fun ClearFiltersChip(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = KdSurfaceVariant,
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .pointerHoverIcon(PointerIcon.Hand),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painterResource(Res.drawable.close_filled),
+                contentDescription = "Clear all filters",
+                modifier = Modifier.size(12.dp),
+                tint = KdTextSecondary,
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "Clear",
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextSecondary,
+            )
+        }
+    }
+}

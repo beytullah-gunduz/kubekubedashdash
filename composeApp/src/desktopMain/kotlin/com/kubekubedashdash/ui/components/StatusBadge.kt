@@ -15,6 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
@@ -136,7 +138,11 @@ fun LabelChip(
     val background = if (active) KdPrimary.copy(alpha = 0.18f) else KdSurfaceVariant
     val sepColor = if (active) KdPrimary.copy(alpha = 0.7f) else KdTextSecondary
     val valueColor = if (active) KdPrimary else KdTextPrimary
-    val baseModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+    val baseModifier = if (onClick != null) {
+        Modifier.clickable(onClick = onClick).pointerHoverIcon(PointerIcon.Hand)
+    } else {
+        Modifier
+    }
     Surface(
         shape = RoundedCornerShape(4.dp),
         color = background,

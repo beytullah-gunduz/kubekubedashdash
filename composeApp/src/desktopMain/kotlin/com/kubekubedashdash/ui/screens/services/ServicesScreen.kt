@@ -1,5 +1,10 @@
 package com.kubekubedashdash.ui.screens.services
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,6 +24,7 @@ import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
+import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -79,6 +85,19 @@ fun ServicesScreen(
                             onQueryChange = onAnnotationQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
                         )
+                        AnimatedVisibility(
+                            visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                            enter = expandHorizontally() + fadeIn(),
+                            exit = shrinkHorizontally() + fadeOut(),
+                        ) {
+                            ClearFiltersChip(
+                                onClick = {
+                                    onLabelQueryChange("")
+                                    onAnnotationQueryChange("")
+                                },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
                     },
                 )
                 ServiceTable(

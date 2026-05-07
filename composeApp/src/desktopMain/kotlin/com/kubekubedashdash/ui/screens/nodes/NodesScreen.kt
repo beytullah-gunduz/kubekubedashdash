@@ -1,9 +1,11 @@
 package com.kubekubedashdash.ui.screens.nodes
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -26,6 +28,7 @@ import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
+import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -146,6 +149,19 @@ fun NodesScreen(
                                 onSelectAll = { statusFilter = null },
                                 onSelectNone = { statusFilter = emptySet() },
                             )
+                            AnimatedVisibility(
+                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                                enter = expandHorizontally() + fadeIn(),
+                                exit = shrinkHorizontally() + fadeOut(),
+                            ) {
+                                ClearFiltersChip(
+                                    onClick = {
+                                        onLabelQueryChange("")
+                                        onAnnotationQueryChange("")
+                                    },
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
                         },
                     )
                     NodeTable(

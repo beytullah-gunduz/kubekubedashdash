@@ -38,6 +38,7 @@ import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
+import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
@@ -155,6 +156,19 @@ fun GenericResourceScreen(
                                     },
                                     onSelectAll = { statusFilter = null },
                                     onSelectNone = { statusFilter = emptySet() },
+                                )
+                            }
+                            AnimatedVisibility(
+                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                                enter = expandHorizontally() + fadeIn(),
+                                exit = shrinkHorizontally() + fadeOut(),
+                            ) {
+                                ClearFiltersChip(
+                                    onClick = {
+                                        onLabelQueryChange("")
+                                        onAnnotationQueryChange("")
+                                    },
+                                    modifier = Modifier.padding(start = 8.dp),
                                 )
                             }
                         },
