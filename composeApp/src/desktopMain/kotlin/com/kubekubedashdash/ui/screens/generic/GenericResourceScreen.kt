@@ -247,6 +247,10 @@ fun GenericResourceScreen(
                                 apiGroup = apiGroup,
                                 apiVersion = apiVersion,
                                 plural = plural,
+                                onDelete = {
+                                    pendingDelete = res
+                                    deleteError = null
+                                },
                             )
                         }
                     }

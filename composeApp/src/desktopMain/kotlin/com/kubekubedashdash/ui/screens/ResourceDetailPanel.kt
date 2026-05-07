@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
+import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
@@ -60,6 +61,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
+import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LabelChip
@@ -109,6 +111,7 @@ fun ResourceDetailPanel(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -162,6 +165,11 @@ fun ResourceDetailPanel(
                             style = MaterialTheme.typography.labelSmall,
                             color = KdTextSecondary,
                         )
+                    }
+                }
+                if (onDelete != null) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                        Icon(painterResource(Res.drawable.delete_filled), "Delete", Modifier.size(16.dp), tint = KdError)
                     }
                 }
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
