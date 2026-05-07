@@ -171,6 +171,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
             "18-persistent-volumes" to Screen.Main.PersistentVolumes,
             "19-persistent-volume-claims" to Screen.Main.PersistentVolumeClaims,
             "20-storage-classes" to Screen.Main.StorageClasses,
+            "21-topology" to Screen.Main.ClusterTopology,
         )
 
         for ((slug, screen) in screens) {
@@ -185,10 +186,10 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(5000L)
         initialWorkspace.showSettings()
         delay(5000L)
-        captureWindow(initialWorkspace.id, outDir.resolve("21-settings.png"))
+        captureWindow(initialWorkspace.id, outDir.resolve("22-settings.png"))
         initialWorkspace.dismissSettings()
         delay(5000L)
-        log.info("captured 21-settings")
+        log.info("captured 22-settings")
 
         log.info("Building light/dark theme comparison")
         sessionVm.navigate(Screen.Main.ClusterOverview)
@@ -237,7 +238,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Capturing All Clusters tab")
         initialWorkspace.setActive(WorkspaceTab.AllClusters.key)
         delay(10_000L)
-        captureWindow(initialWorkspace.id, outDir.resolve("22-all-clusters.png"))
+        captureWindow(initialWorkspace.id, outDir.resolve("23-all-clusters.png"))
         log.info("captured all-clusters")
 
         log.info("Building multi-window showcase (2 windows)")
