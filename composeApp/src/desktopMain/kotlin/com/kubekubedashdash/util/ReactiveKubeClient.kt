@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 import io.fabric8.kubernetes.client.utils.Serialization
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -152,6 +153,8 @@ class ReactiveKubeClient(
                                 log.debug("Informer emitting {} items from store", items.size)
                                 send(ResourceState.Success(items.map(mapper)))
                                 reportSuccess()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 log.warn("Informer failed to map store contents: {}", e.message)
                                 reportError(e.message ?: "Unknown error")
@@ -169,6 +172,14 @@ class ReactiveKubeClient(
                         log.debug("Closing cluster-scoped informer")
                         informer.close()
                     }
+                } catch (e: CancellationException) {
+                    // flatMapLatest cancels the previous inner flow on every
+                    // namespace / connection-version change. This is normal
+                    // lifecycle, NOT a connection failure — never count it as
+                    // such or the shared failure counter trips and the UI
+                    // bounces to "Unable to connect" → retry → reconnect →
+                    // more cancellations → infinite loop.
+                    throw e
                 } catch (e: Exception) {
                     log.error("Cluster-scoped informer failed: {}", e.message)
                     reportError(e.message ?: "Unknown error")
@@ -216,6 +227,8 @@ class ReactiveKubeClient(
                                 log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
                                 send(ResourceState.Success(items.mapNotNull(mapper)))
                                 reportSuccess()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
                                 reportError(e.message ?: "Unknown error")
@@ -233,6 +246,8 @@ class ReactiveKubeClient(
                         log.debug("Closing namespaced informer for namespace={}", nsLabel)
                         informer.close()
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     log.error("Namespaced informer failed for namespace={}: {}", ns ?: "<all>", e.message)
                     reportError(e.message ?: "Unknown error")
@@ -260,6 +275,8 @@ class ReactiveKubeClient(
                         emit(ResourceState.Success(data))
                         loaded = true
                         log.trace("Polling fetch succeeded for namespace={}", ns ?: "<all>")
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         log.warn("Polling fetch failed for namespace={}: {}", ns ?: "<all>", e.message)
                         reportError(e.message ?: "Unknown error")
@@ -286,6 +303,8 @@ class ReactiveKubeClient(
                         reportSuccess()
                         emit(ResourceState.Success(data))
                         loaded = true
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         reportError(e.message ?: "Unknown error")
                         if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
@@ -308,6 +327,8 @@ class ReactiveKubeClient(
                 while (true) {
                     try {
                         emit(fetch())
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         // keep previous value on error
                     }
@@ -916,12 +937,16 @@ class ReactiveKubeClient(
                             delay(100)
                             try {
                                 send(ResourceState.Success(inf.store.list().mapNotNull(::mapCrd)))
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 log.debug("CRD informer mapping failed: {}", e.message)
                             }
                         }
                     }
                     inf
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     log.info("CRD discovery unavailable (likely RBAC): {}", e.message)
                     send(ResourceState.Success(emptyList()))
@@ -1259,6 +1284,11 @@ class ReactiveKubeClient(
                 watch.output.bufferedReader().use { reader ->
                     for (line in reader.lineSequence()) send(line)
                 }
+            } catch (e: CancellationException) {
+                // The log pane was closed (LogStreamRegistry.close → job.cancel).
+                // This is normal teardown — don't append a fake "[stream error]"
+                // line to the buffer the user is about to throw away.
+                throw e
             } catch (e: Exception) {
                 log.warn("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
                 trySend("[stream error: ${e.message}]")

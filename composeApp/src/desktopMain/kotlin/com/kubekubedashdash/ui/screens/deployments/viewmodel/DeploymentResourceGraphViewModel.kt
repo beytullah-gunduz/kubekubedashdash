@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.util.ReactiveKubeClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,8 @@ class DeploymentResourceGraphViewModel(
                 _graph.value = withContext(Dispatchers.IO) {
                     reactiveClient.getDeploymentResourceGraph(deploymentName, namespace)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "Failed to load resource graph"
             }
