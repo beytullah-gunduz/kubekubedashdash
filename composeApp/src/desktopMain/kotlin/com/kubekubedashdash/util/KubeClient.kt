@@ -753,26 +753,53 @@ class KubeClient(
 
     // ── YAML / Detail ───────────────────────────────────────────────────────────
 
-    fun getResourceYaml(kind: String, name: String, namespace: String?): String = try {
-        log.debug("Fetching YAML kind={} name={} namespace={}", kind, name, namespace)
+    fun getResourceYaml(
+        kind: String,
+        name: String,
+        namespace: String?,
+        group: String? = null,
+        version: String? = null,
+        plural: String? = null,
+    ): String = try {
+        log.debug("Fetching YAML kind={} name={} namespace={} group={} version={}", kind, name, namespace, group, version)
         val res: Any? = when (kind.lowercase()) {
             "pod" -> namespace?.let { client.pods().inNamespace(it).withName(name).get() }
+
             "deployment" -> namespace?.let { client.apps().deployments().inNamespace(it).withName(name).get() }
+
             "service" -> namespace?.let { client.services().inNamespace(it).withName(name).get() }
+
             "node" -> client.nodes().withName(name).get()
+
             "namespace" -> client.namespaces().withName(name).get()
+
             "configmap" -> namespace?.let { client.configMaps().inNamespace(it).withName(name).get() }
+
             "secret" -> namespace?.let { client.secrets().inNamespace(it).withName(name).get() }
+
             "statefulset" -> namespace?.let { client.apps().statefulSets().inNamespace(it).withName(name).get() }
+
             "daemonset" -> namespace?.let { client.apps().daemonSets().inNamespace(it).withName(name).get() }
+
             "replicaset" -> namespace?.let { client.apps().replicaSets().inNamespace(it).withName(name).get() }
+
             "job" -> namespace?.let { client.batch().v1().jobs().inNamespace(it).withName(name).get() }
+
             "cronjob" -> namespace?.let { client.batch().v1().cronjobs().inNamespace(it).withName(name).get() }
+
             "ingress" -> namespace?.let { client.network().v1().ingresses().inNamespace(it).withName(name).get() }
+
             "persistentvolume" -> client.persistentVolumes().withName(name).get()
+
             "persistentvolumeclaim" -> namespace?.let { client.persistentVolumeClaims().inNamespace(it).withName(name).get() }
+
             "storageclass" -> client.storage().v1().storageClasses().withName(name).get()
-            else -> null
+
+            else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
+                fetchGenericResource(group, version, kind, plural, name, namespace)
+            } else {
+                null
+            }
         }
         if (res != null) {
             Serialization.asYaml(res)
@@ -783,6 +810,39 @@ class KubeClient(
     } catch (e: Exception) {
         log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         "# Error: ${e.message}"
+    }
+
+    private fun fetchGenericResource(
+        group: String,
+        version: String,
+        kind: String,
+        plural: String?,
+        name: String,
+        namespace: String?,
+    ): io.fabric8.kubernetes.api.model.GenericKubernetesResource? {
+        val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: pluralizeForApi(kind)
+        val rdc = io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext.Builder()
+            .withGroup(group)
+            .withVersion(version)
+            .withKind(kind)
+            .withPlural(effectivePlural)
+            .withNamespaced(namespace != null)
+            .build()
+        val op = client.genericKubernetesResources(rdc)
+        return if (namespace != null) {
+            op.inNamespace(namespace).withName(name).get()
+        } else {
+            op.withName(name).get()
+        }
+    }
+
+    private fun pluralizeForApi(kind: String): String {
+        val lower = kind.lowercase()
+        return when {
+            lower.endsWith("y") -> lower.dropLast(1) + "ies"
+            lower.endsWith("s") || lower.endsWith("x") || lower.endsWith("ch") || lower.endsWith("sh") -> lower + "es"
+            else -> lower + "s"
+        }
     }
 
     // ── Pod Logs ────────────────────────────────────────────────────────────────

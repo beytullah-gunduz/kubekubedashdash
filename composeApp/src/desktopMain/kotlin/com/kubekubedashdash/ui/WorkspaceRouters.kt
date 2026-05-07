@@ -7,6 +7,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
@@ -137,6 +139,30 @@ fun ContentRouter(
 
             is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange)
 
+            is Screen.Main.CustomResource -> {
+                val crdState by reactiveClient.crds.collectAsState()
+                val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {
+                    it.group == target.group && it.kind == target.kind
+                }
+                if (crd != null) {
+                    genericKind(
+                        kind = crd.kind,
+                        sourceFlow = reactiveClient.customResourceInstances(crd),
+                        namespacedKind = crd.namespaced,
+                        searchQuery = searchQuery,
+                        labelQuery = labelQuery,
+                        onLabelQueryChange = onLabelQueryChange,
+                        annotationQuery = annotationQuery,
+                        onAnnotationQueryChange = onAnnotationQueryChange,
+                        apiGroup = crd.group,
+                        apiVersion = crd.version,
+                        plural = crd.plural,
+                    )
+                } else {
+                    ConnectingScreen()
+                }
+            }
+
             else -> {}
         }
     }
@@ -152,6 +178,9 @@ private fun genericKind(
     onLabelQueryChange: (String) -> Unit,
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
+    apiGroup: String? = null,
+    apiVersion: String? = null,
+    plural: String? = null,
 ) = GenericResourceScreen(
     kind = kind,
     searchQuery = searchQuery,
@@ -161,6 +190,9 @@ private fun genericKind(
     onAnnotationQueryChange = onAnnotationQueryChange,
     namespacedKind = namespacedKind,
     sourceFlow = sourceFlow,
+    apiGroup = apiGroup,
+    apiVersion = apiVersion,
+    plural = plural,
 )
 
 @Composable

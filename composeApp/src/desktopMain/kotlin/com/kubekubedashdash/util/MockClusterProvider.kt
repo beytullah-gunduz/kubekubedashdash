@@ -13,6 +13,7 @@ import io.fabric8.kubernetes.api.model.EndpointSubsetBuilder
 import io.fabric8.kubernetes.api.model.EndpointsBuilder
 import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.api.model.Node
@@ -20,6 +21,7 @@ import io.fabric8.kubernetes.api.model.NodeAddressBuilder
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.NodeConditionBuilder
 import io.fabric8.kubernetes.api.model.NodeSystemInfoBuilder
+import io.fabric8.kubernetes.api.model.ObjectMeta
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
 import io.fabric8.kubernetes.api.model.OwnerReference
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
@@ -34,6 +36,9 @@ import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.api.model.ServiceBuilder
 import io.fabric8.kubernetes.api.model.ServicePortBuilder
 import io.fabric8.kubernetes.api.model.ServiceSpecBuilder
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceColumnDefinitionBuilder
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionBuilder
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsBuilder
 import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
 import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
@@ -52,6 +57,7 @@ import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyBuilder
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.Context
@@ -1158,9 +1164,13 @@ object MockClusterProvider {
                 .build(),
         ).create()
 
+        // ── CRDs + CR instances ─────────────────────────────────────────────────
+        seedSparkAndArgo(client)
+
         log.info(
             "Mock cluster seeded: 3 namespaces, 1 node, {} pods, {} deployments, 3 services, 1 configmap, 1 secret, {} events, " +
-                "{} storage classes, {} PVs, {} PVCs, {} statefulsets, {} daemonsets, {} cronjobs, {} endpoints, 3 networkpolicies",
+                "{} storage classes, {} PVs, {} PVCs, {} statefulsets, {} daemonsets, {} cronjobs, {} endpoints, 3 networkpolicies, " +
+                "2 CRDs",
             totalPodsSeeded,
             deployDefs.size,
             eventDefs.size,
@@ -1172,5 +1182,233 @@ object MockClusterProvider {
             cjDefs.size,
             epDefs.size,
         )
+    }
+
+    /**
+     * Seed two real-world CRDs (Spark Operator and Argo Workflows) plus a
+     * handful of CR instances per group. Lets the dashboard's "Custom
+     * Resources" sidebar section, command palette, and per-CRD list screen
+     * have data to render in the demo cluster.
+     */
+    private fun seedSparkAndArgo(client: KubernetesClient) {
+        val sparkColumns = listOf(
+            CustomResourceColumnDefinitionBuilder()
+                .withName("Status").withType("string").withJsonPath(".status.applicationState.state").build(),
+            CustomResourceColumnDefinitionBuilder()
+                .withName("Attempts").withType("integer").withJsonPath(".status.executionAttempts").build(),
+            CustomResourceColumnDefinitionBuilder()
+                .withName("Age").withType("date").withJsonPath(".metadata.creationTimestamp").build(),
+        )
+        seedCrd(
+            client = client,
+            group = "sparkoperator.k8s.io",
+            version = "v1beta2",
+            kind = "SparkApplication",
+            plural = "sparkapplications",
+            singular = "sparkapplication",
+            shortNames = listOf("sparkapp"),
+            namespaced = true,
+            columns = sparkColumns,
+        )
+        val sparkApps = listOf(
+            sparkInstance("spark-pi-success", "default", "RUNNING", attempts = 1, ageMin = 25),
+            sparkInstance("spark-etl-nightly", "production", "COMPLETED", attempts = 1, ageMin = 720),
+            sparkInstance("spark-failed-job", "production", "FAILED", attempts = 3, ageMin = 60),
+        ).map { (instance, ns) ->
+            seedCrInstance(client, "sparkoperator.k8s.io", "v1beta2", "sparkapplications", ns, instance) to ns
+        }
+
+        // Driver/executor pods for the RUNNING SparkApplication exercise the
+        // topology graph's CRD-aware findRoot. The driver pod is owned by the
+        // SparkApplication; the executors are owned by the driver pod, which
+        // matches Spark Operator's real ownerReference chain.
+        val (runningApp, runningAppNs) = sparkApps.first { (sa, _) ->
+            @Suppress("UNCHECKED_CAST")
+            (sa.additionalProperties["status"] as? Map<String, Any>)?.let { st ->
+                (st["applicationState"] as? Map<String, Any>)?.get("state")
+            } == "RUNNING"
+        }
+        val sparkDriver = client.pods().inNamespace(runningAppNs).resource(
+            buildPod(
+                name = "${runningApp.metadata.name}-driver",
+                ns = runningAppNs,
+                app = "spark-driver",
+                image = "spark:3.5.0",
+                nodeName = "mock-node-1",
+                phase = "Running",
+                podIp = "10.244.0.50",
+                creationTimestamp = minutesAgo(20),
+                owner = runningApp,
+            ),
+        ).create()
+        listOf("10.244.0.51", "10.244.0.52").forEachIndexed { i, ip ->
+            client.pods().inNamespace(runningAppNs).resource(
+                buildPod(
+                    name = "${runningApp.metadata.name}-exec-${i + 1}",
+                    ns = runningAppNs,
+                    app = "spark-executor",
+                    image = "spark:3.5.0",
+                    nodeName = "mock-node-1",
+                    phase = "Running",
+                    podIp = ip,
+                    creationTimestamp = minutesAgo(18),
+                    owner = sparkDriver,
+                ),
+            ).create()
+        }
+
+        val workflowColumns = listOf(
+            CustomResourceColumnDefinitionBuilder()
+                .withName("Status").withType("string").withJsonPath(".status.phase").build(),
+            CustomResourceColumnDefinitionBuilder()
+                .withName("Age").withType("date").withJsonPath(".metadata.creationTimestamp").build(),
+        )
+        seedCrd(
+            client = client,
+            group = "argoproj.io",
+            version = "v1alpha1",
+            kind = "Workflow",
+            plural = "workflows",
+            singular = "workflow",
+            shortNames = listOf("wf"),
+            namespaced = true,
+            columns = workflowColumns,
+        )
+        val workflows = listOf(
+            workflowInstance("hello-world-abc12", "default", "Succeeded", ageMin = 12),
+            workflowInstance("data-pipeline-xyz", "production", "Running", ageMin = 5),
+        ).map { (instance, ns) ->
+            seedCrInstance(client, "argoproj.io", "v1alpha1", "workflows", ns, instance) to ns
+        }
+
+        // One step pod per Workflow, directly owned (no intermediate pod). Argo
+        // Workflows owns its step pods directly; this is the simpler shape that
+        // the topology integration also has to handle.
+        workflows.forEach { (wf, wfNs) ->
+            client.pods().inNamespace(wfNs).resource(
+                buildPod(
+                    name = "${wf.metadata.name}-step-1",
+                    ns = wfNs,
+                    app = "argo-step",
+                    image = "alpine:3.19",
+                    nodeName = "mock-node-1",
+                    phase = "Running",
+                    podIp = null,
+                    creationTimestamp = minutesAgo(3),
+                    owner = wf,
+                ),
+            ).create()
+        }
+    }
+
+    private fun seedCrd(
+        client: KubernetesClient,
+        group: String,
+        version: String,
+        kind: String,
+        plural: String,
+        singular: String,
+        shortNames: List<String>,
+        namespaced: Boolean,
+        columns: List<io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceColumnDefinition>,
+    ) {
+        val crd = CustomResourceDefinitionBuilder()
+            .withNewMetadata()
+            .withName("$plural.$group")
+            .withCreationTimestamp(minutesAgo(2880))
+            .endMetadata()
+            .withNewSpec()
+            .withGroup(group)
+            .withScope(if (namespaced) "Namespaced" else "Cluster")
+            .withNewNames()
+            .withKind(kind)
+            .withListKind("${kind}List")
+            .withPlural(plural)
+            .withSingular(singular)
+            .withShortNames(shortNames)
+            .endNames()
+            .addNewVersion()
+            .withName(version)
+            .withServed(true)
+            .withStorage(true)
+            .withAdditionalPrinterColumns(columns)
+            .withNewSchema()
+            .withOpenAPIV3Schema(
+                JSONSchemaPropsBuilder()
+                    .withType("object")
+                    .withXKubernetesPreserveUnknownFields(true)
+                    .build(),
+            )
+            .endSchema()
+            .endVersion()
+            .endSpec()
+            .build()
+        client.apiextensions().v1().customResourceDefinitions().resource(crd).create()
+    }
+
+    private fun seedCrInstance(
+        client: KubernetesClient,
+        group: String,
+        version: String,
+        plural: String,
+        namespace: String,
+        instance: GenericKubernetesResource,
+    ): GenericKubernetesResource {
+        val rdc = ResourceDefinitionContext.Builder()
+            .withGroup(group)
+            .withVersion(version)
+            .withKind(instance.kind)
+            .withPlural(plural)
+            .withNamespaced(true)
+            .build()
+        return client.genericKubernetesResources(rdc).inNamespace(namespace).resource(instance).create()
+    }
+
+    private fun sparkInstance(
+        name: String,
+        ns: String,
+        state: String,
+        attempts: Int,
+        ageMin: Long,
+    ): Pair<GenericKubernetesResource, String> {
+        val r = GenericKubernetesResource()
+        r.apiVersion = "sparkoperator.k8s.io/v1beta2"
+        r.kind = "SparkApplication"
+        r.metadata = ObjectMeta().apply {
+            this.name = name
+            this.namespace = ns
+            this.creationTimestamp = minutesAgo(ageMin)
+            this.labels = mapOf("app" to "spark", "job" to name)
+        }
+        r.additionalProperties["spec"] = mapOf(
+            "type" to "Scala",
+            "mode" to "cluster",
+            "image" to "spark:3.5.0",
+        )
+        r.additionalProperties["status"] = mapOf(
+            "applicationState" to mapOf("state" to state),
+            "executionAttempts" to attempts,
+        )
+        return r to ns
+    }
+
+    private fun workflowInstance(
+        name: String,
+        ns: String,
+        phase: String,
+        ageMin: Long,
+    ): Pair<GenericKubernetesResource, String> {
+        val r = GenericKubernetesResource()
+        r.apiVersion = "argoproj.io/v1alpha1"
+        r.kind = "Workflow"
+        r.metadata = ObjectMeta().apply {
+            this.name = name
+            this.namespace = ns
+            this.creationTimestamp = minutesAgo(ageMin)
+            this.labels = mapOf("workflows.argoproj.io/completed" to (phase == "Succeeded").toString())
+        }
+        r.additionalProperties["spec"] = mapOf("entrypoint" to "main")
+        r.additionalProperties["status"] = mapOf("phase" to phase)
+        return r to ns
     }
 }

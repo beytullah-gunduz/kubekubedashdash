@@ -106,6 +106,9 @@ fun ResourceDetailPanel(
     onToggleLabel: (String, String) -> Unit = { _, _ -> },
     annotationQuery: String = "",
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
+    apiGroup: String? = null,
+    apiVersion: String? = null,
+    plural: String? = null,
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -226,7 +229,7 @@ fun ResourceDetailPanel(
                         onToggleAnnotation = onToggleAnnotation,
                     )
 
-                    page == yamlIndex -> GenericYamlTab(kind, name, namespace)
+                    page == yamlIndex -> GenericYamlTab(kind, name, namespace, apiGroup, apiVersion, plural)
 
                     else -> extraTabs[page - 1].content()
                 }
@@ -322,13 +325,22 @@ private fun GenericOverviewTab(
 // ── YAML Tab ────────────────────────────────────────────────────────────────────
 
 @Composable
-internal fun GenericYamlTab(kind: String, name: String, namespace: String?) {
+internal fun GenericYamlTab(
+    kind: String,
+    name: String,
+    namespace: String?,
+    apiGroup: String? = null,
+    apiVersion: String? = null,
+    plural: String? = null,
+) {
     val kubeClient = LocalReactiveKubeClient.current
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
-    LaunchedEffect(kind, name, namespace) {
+    LaunchedEffect(kind, name, namespace, apiGroup, apiVersion) {
         loading = true
-        yaml = withContext(Dispatchers.IO) { kubeClient.getResourceYaml(kind, name, namespace) }
+        yaml = withContext(Dispatchers.IO) {
+            kubeClient.getResourceYaml(kind, name, namespace, apiGroup, apiVersion, plural)
+        }
         loading = false
     }
 

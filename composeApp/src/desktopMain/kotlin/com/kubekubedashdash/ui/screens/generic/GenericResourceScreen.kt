@@ -95,6 +95,9 @@ fun GenericResourceScreen(
     onAnnotationQueryChange: (String) -> Unit,
     namespacedKind: Boolean = true,
     sourceFlow: StateFlow<ResourceState<List<GenericResourceInfo>>>,
+    apiGroup: String? = null,
+    apiVersion: String? = null,
+    plural: String? = null,
 ) {
     val viewModel = viewModel(key = kind) { GenericResourceScreenViewModel(sourceFlow) }
     val state by viewModel.state.collectAsState()
@@ -226,6 +229,9 @@ fun GenericResourceScreen(
                                 onToggleAnnotation = { k, v ->
                                     onAnnotationQueryChange(toggleSelectorEntry(annotationQuery, k, v))
                                 },
+                                apiGroup = apiGroup,
+                                apiVersion = apiVersion,
+                                plural = plural,
                             )
                         }
                     }
