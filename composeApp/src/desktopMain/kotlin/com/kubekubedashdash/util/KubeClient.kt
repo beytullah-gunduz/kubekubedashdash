@@ -110,6 +110,7 @@ class KubeClient(
             labels = pod.metadata.labels ?: emptyMap(),
             annotations = pod.metadata.annotations ?: emptyMap(),
             containers = containers,
+            phase = pod.status?.phase ?: "",
         )
     }
 

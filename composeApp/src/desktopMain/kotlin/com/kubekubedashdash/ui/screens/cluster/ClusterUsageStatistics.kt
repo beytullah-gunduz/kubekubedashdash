@@ -38,8 +38,8 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
-import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.NodeResourceUsage
+import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
@@ -53,11 +53,11 @@ import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun ClusterUsageStatistics(
-    clusterInfo: ClusterInfo,
+    phaseCounts: PodPhaseCounts?,
     usage: ResourceUsageSummary?,
     cpuHistory: List<Float>,
     memHistory: List<Float>,
-    podsCount: Int,
+    podsCount: Int?,
     podsCapacity: Int,
     podsLoaded: Boolean,
     podsHistory: List<Float>,
@@ -131,21 +131,34 @@ fun ClusterUsageStatistics(
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(8.dp))
-                            PodStatusBar(
-                                clusterInfo.runningPods,
-                                clusterInfo.pendingPods,
-                                clusterInfo.failedPods,
-                                clusterInfo.succeededPods,
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceAround,
-                            ) {
-                                StatusLegend("Running", clusterInfo.runningPods, KdSuccess)
-                                StatusLegend("Pending", clusterInfo.pendingPods, KdWarning)
-                                StatusLegend("Failed", clusterInfo.failedPods, KdError)
-                                StatusLegend("Succeeded", clusterInfo.succeededPods, KdInfo)
+                            if (phaseCounts == null) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = KdPrimary,
+                                    )
+                                }
+                            } else {
+                                PodStatusBar(
+                                    phaseCounts.running,
+                                    phaseCounts.pending,
+                                    phaseCounts.failed,
+                                    phaseCounts.succeeded,
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceAround,
+                                ) {
+                                    StatusLegend("Running", phaseCounts.running, KdSuccess)
+                                    StatusLegend("Pending", phaseCounts.pending, KdWarning)
+                                    StatusLegend("Failed", phaseCounts.failed, KdError)
+                                    StatusLegend("Succeeded", phaseCounts.succeeded, KdInfo)
+                                }
                             }
                         }
 
@@ -218,8 +231,8 @@ private fun ClusterMemoryGauge(usage: ResourceUsageSummary?, memHistory: List<Fl
 }
 
 @Composable
-private fun ClusterPodsGauge(podsCount: Int, podsCapacity: Int, podsLoaded: Boolean, podsHistory: List<Float>) {
-    if (!podsLoaded) {
+private fun ClusterPodsGauge(podsCount: Int?, podsCapacity: Int, podsLoaded: Boolean, podsHistory: List<Float>) {
+    if (!podsLoaded || podsCount == null) {
         GaugePlaceholder(loading = true)
         return
     }

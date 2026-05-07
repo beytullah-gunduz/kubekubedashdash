@@ -7,6 +7,7 @@ import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.util.ReactiveKubeClient
@@ -35,8 +36,48 @@ class ClusterOverviewViewModel(
     private val reactiveClient: ReactiveKubeClient,
 ) : ViewModel() {
 
+    /**
+     * Aggregate `clusterInfo` state — used for surfacing connection errors
+     * via [ResourceErrorMessage]. The screen no longer gates its scaffold
+     * on this, so `Loading` is a normal pre-sync state, not a "show
+     * spinner" trigger. Per-card flows below populate the scaffold
+     * incrementally as each informer syncs.
+     */
     val state: StateFlow<ResourceState<ClusterInfo>> = reactiveClient.clusterInfo
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
+
+    // ── Per-card counts (each fires as soon as its informer syncs) ──────────────
+
+    val nodesCount: StateFlow<Int?> = reactiveClient.nodes
+        .map { (it as? ResourceState.Success)?.data?.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val namespacesCount: StateFlow<Int?> = reactiveClient.namespaceNames
+        .map { (it as? ResourceState.Success)?.data?.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val deploymentsCount: StateFlow<Int?> = reactiveClient.deployments
+        .map { (it as? ResourceState.Success)?.data?.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val servicesCount: StateFlow<Int?> = reactiveClient.services
+        .map { (it as? ResourceState.Success)?.data?.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val podPhaseCounts: StateFlow<PodPhaseCounts?> = reactiveClient.pods
+        .map { s ->
+            if (s is ResourceState.Success) {
+                PodPhaseCounts(
+                    running = s.data.count { it.phase == "Running" },
+                    pending = s.data.count { it.phase == "Pending" },
+                    failed = s.data.count { it.phase == "Failed" },
+                    succeeded = s.data.count { it.phase == "Succeeded" },
+                )
+            } else {
+                null
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     // ── Usage card data ─────────────────────────────────────────────────────────
 
@@ -72,16 +113,17 @@ class ClusterOverviewViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val podsCount: StateFlow<Int> = state
-        .map { s -> if (s is ResourceState.Success) s.data.podsCount else 0 }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val podsCount: StateFlow<Int?> = reactiveClient.pods
+        .map { (it as? ResourceState.Success)?.data?.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val podsLoaded: StateFlow<Boolean> = combine(podsCount, podsCapacity) { c, cap ->
+        val cInt = c ?: 0
         if (cap > 0) {
-            val frac = c.toFloat() / cap.toFloat()
+            val frac = cInt.toFloat() / cap.toFloat()
             _podsHistory.update { (it + frac).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
         }
-        cap > 0 || c > 0
+        cap > 0 || cInt > 0
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val topNodesByPressure: StateFlow<List<NodeResourceUsage>> = reactiveClient.nodeUsages

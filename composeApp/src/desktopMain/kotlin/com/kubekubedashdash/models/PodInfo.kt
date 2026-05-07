@@ -17,4 +17,9 @@ data class PodInfo(
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
     val containers: List<ContainerInfo>,
+    // Raw `pod.status.phase` (Pending/Running/Succeeded/Failed/Unknown).
+    // Distinct from `status` above, which is the *effective* status string
+    // (e.g. "CrashLoopBackOff") composed from phase + container states for
+    // display. Tallies in clusterInfo's combine count by raw phase.
+    val phase: String = "",
 )

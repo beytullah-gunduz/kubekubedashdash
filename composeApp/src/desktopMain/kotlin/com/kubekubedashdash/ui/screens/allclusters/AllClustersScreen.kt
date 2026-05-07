@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
 import com.kubekubedashdash.ui.screens.cluster.ClusterUsageStatistics
@@ -59,7 +60,12 @@ fun AllClustersScreen() {
         val info = clusterInfo
         if (info != null) {
             ClusterUsageStatistics(
-                clusterInfo = info,
+                phaseCounts = PodPhaseCounts(
+                    running = info.runningPods,
+                    pending = info.pendingPods,
+                    failed = info.failedPods,
+                    succeeded = info.succeededPods,
+                ),
                 usage = usage,
                 cpuHistory = cpuHistory,
                 memHistory = memHistory,

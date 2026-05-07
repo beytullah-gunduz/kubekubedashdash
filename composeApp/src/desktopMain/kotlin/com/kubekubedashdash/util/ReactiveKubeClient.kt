@@ -32,6 +32,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
@@ -44,6 +45,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -54,7 +58,7 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class ReactiveKubeClient(
     private val scope: CoroutineScope,
     private val connectionManager: KubeConnectionManager,
@@ -147,20 +151,30 @@ class ReactiveKubeClient(
                         },
                     )
                     launch {
-                        for (signal in emitSignal) {
-                            delay(100)
-                            try {
-                                val items = informer.store.list()
-                                log.debug("Informer emitting {} items from store", items.size)
-                                send(ResourceState.Success(items.map(mapper)))
-                                reportSuccess()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                log.warn("Informer failed to map store contents: {}", e.message)
-                                reportError(e.message ?: "Unknown error")
+                        // Debounce, not periodic emit. fabric8 fires onAdd for
+                        // every item during initial list-and-watch — without
+                        // debounce a CONFLATED channel + delay(100) becomes a
+                        // fixed 10 Hz cadence of full-store re-emits. debounce
+                        // collapses the burst into one emission once events
+                        // settle.
+                        emitSignal.consumeAsFlow()
+                            .debounce(100)
+                            .collect {
+                                // Pre-sync emissions are dropped — the post-sync
+                                // send below covers the first paint.
+                                if (!informer.hasSynced()) return@collect
+                                try {
+                                    val items = informer.store.list()
+                                    log.debug("Informer emitting {} items from store", items.size)
+                                    send(ResourceState.Success(items.map(mapper)))
+                                    reportSuccess()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    log.warn("Informer failed to map store contents: {}", e.message)
+                                    reportError(e.message ?: "Unknown error")
+                                }
                             }
-                        }
                     }
                     while (!informer.hasSynced()) delay(50)
                     val items = informer.store.list()
@@ -188,6 +202,7 @@ class ReactiveKubeClient(
                 }
             }
         }
+        .distinctUntilChanged()
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
@@ -221,20 +236,22 @@ class ReactiveKubeClient(
                         },
                     )
                     launch {
-                        for (signal in emitSignal) {
-                            delay(100)
-                            try {
-                                val items = informer.store.list()
-                                log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
-                                send(ResourceState.Success(items.mapNotNull(mapper)))
-                                reportSuccess()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
-                                reportError(e.message ?: "Unknown error")
+                        emitSignal.consumeAsFlow()
+                            .debounce(100)
+                            .collect {
+                                if (!informer.hasSynced()) return@collect
+                                try {
+                                    val items = informer.store.list()
+                                    log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
+                                    send(ResourceState.Success(items.mapNotNull(mapper)))
+                                    reportSuccess()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
+                                    reportError(e.message ?: "Unknown error")
+                                }
                             }
-                        }
                     }
                     while (!informer.hasSynced()) delay(50)
                     val items = informer.store.list()
@@ -256,6 +273,7 @@ class ReactiveKubeClient(
                 }
             }
         }
+        .distinctUntilChanged()
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
@@ -372,6 +390,7 @@ class ReactiveKubeClient(
             labels = pod.metadata.labels ?: emptyMap(),
             annotations = pod.metadata.annotations ?: emptyMap(),
             containers = containers,
+            phase = pod.status?.phase ?: "",
         )
     }
 
@@ -1063,48 +1082,76 @@ class ReactiveKubeClient(
         )
     }
 
-    // ── Cluster Info (polling — composite) ──────────────────────────────────────
+    // ── Cluster Info (derived from informers + version polling) ─────────────────
 
-    val clusterInfo: StateFlow<ResourceState<ClusterInfo>> = namespacedPollingStateFlow(
-        intervalMs = 10_000,
-        fetch = { ns ->
-            val version = try {
-                val v = k8s.kubernetesVersion
-                val major = v?.major.orEmpty()
-                val minor = v?.minor.orEmpty()
-                if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
-            } catch (_: Exception) {
-                ""
-            }
-            val nodeItems = k8s.nodes().list().items
-            val nsItems = k8s.namespaces().list().items
-            val podItems = if (ns != null) {
-                k8s.pods().inNamespace(ns).list().items
-            } else {
-                k8s.pods().inAnyNamespace().list().items
-            }
-            val deps = if (ns != null) {
-                k8s.apps().deployments().inNamespace(ns).list().items
-            } else {
-                k8s.apps().deployments().inAnyNamespace().list().items
-            }
-            val svcs = if (ns != null) {
-                k8s.services().inNamespace(ns).list().items
-            } else {
-                k8s.services().inAnyNamespace().list().items
-            }
-            ClusterInfo(
-                name = getCurrentContext(), server = getClusterServer(),
-                version = version,
-                nodesCount = nodeItems.size, namespacesCount = nsItems.size,
-                podsCount = podItems.size, deploymentsCount = deps.size, servicesCount = svcs.size,
-                runningPods = podItems.count { it.status?.phase == "Running" },
-                pendingPods = podItems.count { it.status?.phase == "Pending" },
-                failedPods = podItems.count { it.status?.phase == "Failed" },
-                succeededPods = podItems.count { it.status?.phase == "Succeeded" },
-            )
+    /**
+     * K8s server version as `"major.minor"` (e.g. `"1.34"`). Polled on a
+     * slow cadence — it's the only piece of clusterInfo that has no watch
+     * API. Empty string while the first poll is in flight or after an error.
+     */
+    private val versionFlow: StateFlow<String> = directPollingStateFlow(
+        intervalMs = 60_000,
+        initial = "",
+        fetch = {
+            val v = k8s.kubernetesVersion
+            val major = v?.major.orEmpty()
+            val minor = v?.minor.orEmpty()
+            if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
         },
     )
+
+    /**
+     * Derived from the informer-backed `nodes`, `namespaceNames`, `pods`,
+     * `deployments`, `services` flows plus `versionFlow`. No separate REST
+     * polling — the informers already hold this data, and counts update on
+     * every real cluster change instead of every 10 s.
+     *
+     * Error semantics: first informer to error wins (matches the previous
+     * polling behavior, which threw on the first failed list call).
+     * `SessionViewModel.observeClusterInfoHealth` flips `_isConnected`
+     * on this transition, so propagating Error from any source preserves
+     * connection-health detection.
+     */
+    val clusterInfo: StateFlow<ResourceState<ClusterInfo>> = combine(
+        nodes,
+        namespaceNames,
+        pods,
+        combine(deployments, services, versionFlow) { d, s, v -> Triple(d, s, v) },
+    ) { nodesS, nsS, podsS, dsv ->
+        val (depsS, svcsS, version) = dsv
+        firstError(nodesS, nsS, podsS, depsS, svcsS)?.let { return@combine it }
+        if (nodesS is ResourceState.Success &&
+            nsS is ResourceState.Success &&
+            podsS is ResourceState.Success &&
+            depsS is ResourceState.Success &&
+            svcsS is ResourceState.Success
+        ) {
+            ResourceState.Success(
+                ClusterInfo(
+                    name = getCurrentContext(),
+                    server = getClusterServer(),
+                    version = version,
+                    nodesCount = nodesS.data.size,
+                    namespacesCount = nsS.data.size,
+                    podsCount = podsS.data.size,
+                    deploymentsCount = depsS.data.size,
+                    servicesCount = svcsS.data.size,
+                    runningPods = podsS.data.count { it.phase == "Running" },
+                    pendingPods = podsS.data.count { it.phase == "Pending" },
+                    failedPods = podsS.data.count { it.phase == "Failed" },
+                    succeededPods = podsS.data.count { it.phase == "Succeeded" },
+                ),
+            )
+        } else {
+            ResourceState.Loading
+        }
+    }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.IO)
+        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
+
+    private fun firstError(vararg states: ResourceState<*>): ResourceState.Error? = states
+        .firstNotNullOfOrNull { it as? ResourceState.Error }
 
     // ── Resource Usage (polling — metrics server has no watch API) ───────────────
 
