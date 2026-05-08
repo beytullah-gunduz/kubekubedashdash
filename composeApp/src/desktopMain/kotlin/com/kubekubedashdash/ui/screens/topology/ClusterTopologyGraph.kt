@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +101,7 @@ import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
 import com.kubekubedashdash.ui.components.namespaceAccentColor
 import com.kubekubedashdash.ui.screens.topology.viewmodel.ClusterTopologyViewModel
+import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.painterResource
 
 // Rotation cycle. Right-rotate steps through the list in order; left-rotate steps
@@ -413,22 +415,39 @@ private fun TopologyGraphContent(
     val outerHorizontalScroll = rememberScrollState()
     val outerVerticalScroll = rememberScrollState()
 
-    // Anchor the scroll viewport at the vertical middle of the graph as
-    // soon as scroll bounds are known. Without this, the user lands on
-    // row 0 — which after the column-pyramid arrangement is a
-    // LEAST-connected node, the exact opposite of what you actually want
-    // to look at first. Keying on `maxValue` (rather than measured
-    // content/viewport sizes) is deliberate: maxValue is updated by
-    // verticalScroll *during* the layout pass that resolves the new
-    // bounds, so the scrollTo call here is guaranteed to clamp against
-    // the correct bound and not the previous frame's. Re-fires on
-    // rotation flip and on graph reshape; auto-refresh that changes
-    // overall height resets a manually-chosen scroll position — turn off
-    // auto-refresh in the toolbar to preserve manual scroll.
-    LaunchedEffect(direction, outerVerticalScroll.maxValue) {
-        if (outerVerticalScroll.maxValue <= 0) return@LaunchedEffect
-        outerVerticalScroll.animateScrollTo(
-            value = outerVerticalScroll.maxValue / 2,
+    // Anchor the scroll viewport on the axis perpendicular to the flow
+    // on initial mount and on rotation. Horizontal flow (LTR / RtL)
+    // centers vertically; vertical flow (TtB / BtT) centers horizontally.
+    // Without this, the user lands at row/column 0 — which after the
+    // pyramid arrangement is a LEAST-connected node, the exact opposite
+    // of what you actually want to look at first. The pyramid's "busy
+    // middle" is always perpendicular to flow regardless of rotation, so
+    // the rule generalizes cleanly.
+    //
+    // Keyed on `direction` only: graph reshape (auto-refresh adding /
+    // removing a workload) shouldn't yank a manually-chosen scroll back
+    // to center mid-investigation. Rotation does change `direction` and
+    // gets a re-center; reshape doesn't. Window resize doesn't fire this
+    // either, since direction is unchanged.
+    //
+    // snapshotFlow + first { > 0 } waits for the perpendicular axis to
+    // have a positive maxValue (i.e. content overflows the viewport)
+    // before animating. Compose dispatches LaunchedEffect coroutines
+    // *after* the frame's composition and layout, so on initial mount
+    // and on rotation maxValue is already the post-layout value — the
+    // first emission almost always satisfies the predicate immediately.
+    // The flow only suspends if layout hasn't produced a positive bound
+    // yet (e.g. the very first composition before measure runs).
+    LaunchedEffect(direction) {
+        val perpendicularScroll = if (direction.isHorizontal) {
+            outerVerticalScroll
+        } else {
+            outerHorizontalScroll
+        }
+        snapshotFlow { perpendicularScroll.maxValue }
+            .first { it > 0 }
+        perpendicularScroll.animateScrollTo(
+            value = perpendicularScroll.maxValue / 2,
             animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
         )
     }

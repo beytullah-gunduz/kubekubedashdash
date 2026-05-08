@@ -89,19 +89,51 @@ class ClusterTopologyViewModel(
                 }
             }
 
-            return columns.mapIndexed { colIdx, col ->
-                // Pod column gets skipped: every visible pod has exactly one
-                // upstream link (to its parent workload), so degree-based
-                // reorder would only scatter pods of the same workload that
-                // the user expects to see grouped together.
-                if (colIdx == 4 || col.size <= 1) return@mapIndexed col.toList()
-                val degrees = col.map { upstreamDegree[it.id] ?: 0 }
-                if (degrees.min() == degrees.max()) {
+            // Pyramid-arrange columns 0–3 and 5; the pod column (4) gets a
+            // separate ordering below tied to the parent workload's column-3
+            // position.
+            val arranged = MutableList<List<ResourceGraphNode>>(6) { idx ->
+                val col = columns[idx]
+                if (idx == 4 || col.size <= 1) {
                     col.toList()
                 } else {
-                    arrangeAroundCenter(col.sortedByDescending { upstreamDegree[it.id] ?: 0 })
+                    val degrees = col.map { upstreamDegree[it.id] ?: 0 }
+                    if (degrees.min() == degrees.max()) {
+                        col.toList()
+                    } else {
+                        arrangeAroundCenter(col.sortedByDescending { upstreamDegree[it.id] ?: 0 })
+                    }
                 }
             }
+
+            // Pod column (4): order pods by their parent workload's index in
+            // arranged[3]. Without this, expanding two workloads that landed
+            // far apart in column 3 (one near the top, one near the bottom
+            // after the pyramid) drops their pods into column 4 in
+            // graph.nodes order — diagonal connector lines instead of the
+            // parallel flow the user expects from a Sankey-ish layout. Same
+            // ordering as a stable sort: pods of the same workload preserve
+            // their original order; pods without an identifiable workload
+            // parent fall through to the end.
+            if (arranged[3].isNotEmpty() && columns[4].isNotEmpty()) {
+                val workloadOrder = arranged[3]
+                    .mapIndexed { idx, node -> node.id to idx }
+                    .toMap()
+                val parentByPod = HashMap<String, String>()
+                for (edge in graph.edges) {
+                    val srcCol = nodeToCol[edge.sourceId]
+                    val tgtCol = nodeToCol[edge.targetId]
+                    when {
+                        srcCol == 4 && tgtCol == 3 -> parentByPod[edge.sourceId] = edge.targetId
+                        srcCol == 3 && tgtCol == 4 -> parentByPod[edge.targetId] = edge.sourceId
+                    }
+                }
+                arranged[4] = columns[4].sortedBy { pod ->
+                    parentByPod[pod.id]?.let { workloadOrder[it] } ?: Int.MAX_VALUE
+                }
+            }
+
+            return arranged
         }
 
         // Place sorted-desc nodes so the top item lands at the visual center
