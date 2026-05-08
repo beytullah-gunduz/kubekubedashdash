@@ -24,6 +24,8 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.ExecListener
+import io.fabric8.kubernetes.client.dsl.ExecWatch
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
@@ -1349,6 +1351,52 @@ class ReactiveKubeClient(
         }
     }
 
+    // ── On-demand: Exec (interactive shell) ─────────────────────────────────────
+
+    /**
+     * Open an interactive `kubectl exec`-equivalent against [container] in pod
+     * [name]/[namespace]. Returns a live [ExecWatch] whose `input` (OutputStream)
+     * carries keystrokes and whose `output` (InputStream) carries shell output.
+     * Caller owns the watch and must call `close()` when done.
+     *
+     * [shellCmd] defaults to a sh/bash detection sequence so the call works on
+     * minimal images (alpine, distroless-with-shell, ubuntu).
+     *
+     * stderr is intentionally NOT redirected: with `withTTY()` the kernel PTY
+     * merges stderr into the single output stream, so a separate redirected
+     * error channel would sit unread and risk blocking the WebSocket reader if
+     * any frame did arrive. kubectl itself only redirects stdin/stdout in TTY
+     * mode for the same reason.
+     */
+    fun openExec(
+        name: String,
+        namespace: String,
+        container: String,
+        shellCmd: List<String> = DEFAULT_SHELL_CMD,
+        onClose: (Int, String?) -> Unit = { _, _ -> },
+    ): ExecWatch {
+        log.debug("Opening exec session pod={} namespace={} container={}", name, namespace, container)
+        return k8s.pods()
+            .inNamespace(namespace)
+            .withName(name)
+            .inContainer(container)
+            .redirectingInput()
+            .redirectingOutput()
+            .withTTY()
+            .usingListener(object : ExecListener {
+                override fun onClose(code: Int, reason: String?) {
+                    log.debug("Exec closed pod={} code={} reason={}", name, code, reason)
+                    onClose(code, reason)
+                }
+
+                override fun onFailure(t: Throwable, failureResponse: ExecListener.Response?) {
+                    log.warn("Exec failed pod={}: {}", name, t.message)
+                    onClose(-1, t.message)
+                }
+            })
+            .exec(*shellCmd.toTypedArray())
+    }
+
     // ── On-demand: Delete ───────────────────────────────────────────────────────
 
     fun deleteResource(
@@ -2097,3 +2145,15 @@ class ReactiveKubeClient(
         // Connection lifecycle is managed by KubeConnectionManager
     }
 }
+
+/**
+ * Default shell-detection command for `openExec`. Tries bash first (better
+ * line editing, history), falls back to sh on images that don't ship bash
+ * (alpine, distroless-with-shell). Wrapped in `/bin/sh -c` so the `command -v`
+ * check is portable.
+ */
+private val DEFAULT_SHELL_CMD = listOf(
+    "/bin/sh",
+    "-c",
+    "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+)

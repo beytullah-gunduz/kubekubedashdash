@@ -71,6 +71,8 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.jna)
             implementation(libs.json.path)
+            implementation(libs.jediterm.core)
+            implementation(libs.jediterm.ui)
         }
     }
 }

@@ -112,6 +112,7 @@ fun PodDetailPanel(
     onClose: () -> Unit,
     onNavigateToNode: ((nodeName: String) -> Unit)? = null,
     onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit = { _, _, _ -> },
+    onOpenTerminal: (podName: String, namespace: String, container: String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     labelQuery: String = "",
     onToggleLabel: (String, String) -> Unit = { _, _ -> },
@@ -176,7 +177,7 @@ fun PodDetailPanel(
 
                         DetailTab.Yaml -> YamlTab(pod)
 
-                        DetailTab.Logs -> LogsTab(pod, onOpenLogs)
+                        DetailTab.Logs -> LogsTab(pod, onOpenLogs, onOpenTerminal)
                     }
                 }
             }
@@ -507,6 +508,7 @@ private const val LOGS_PREVIEW_TAIL = 50
 private fun LogsTab(
     pod: PodInfo,
     onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit,
+    onOpenTerminal: (podName: String, namespace: String, container: String) -> Unit,
 ) {
     val kubeClient = LocalReactiveKubeClient.current
     var lines by remember(pod.uid) { mutableStateOf(listOf<String>()) }
@@ -550,6 +552,8 @@ private fun LogsTab(
                     tint = KdTextSecondary,
                 )
             }
+            OpenTerminalButton(pod = pod, onOpenTerminal = onOpenTerminal)
+            Spacer(Modifier.width(6.dp))
             OpenInLogViewerButton(pod = pod, onOpenLogs = onOpenLogs)
         }
 
@@ -621,6 +625,63 @@ private fun OpenInLogViewerButton(
                     onClick = {
                         menuOpen = false
                         onOpenLogs(pod.name, pod.namespace, c.name)
+                    },
+                    leadingIcon = {
+                        Icon(
+                            painterResource(Res.drawable.view_in_ar_filled),
+                            null,
+                            Modifier.size(14.dp),
+                            tint = KdTextSecondary,
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpenTerminalButton(
+    pod: PodInfo,
+    onOpenTerminal: (String, String, String) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = {
+                if (pod.containers.size > 1) {
+                    menuOpen = true
+                } else {
+                    pod.containers.firstOrNull()?.let { c ->
+                        onOpenTerminal(pod.name, pod.namespace, c.name)
+                    }
+                }
+            },
+            modifier = Modifier.height(28.dp),
+            shape = RoundedCornerShape(6.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = KdPrimary),
+            border = BorderStroke(1.dp, KdPrimary.copy(alpha = 0.5f)),
+        ) {
+            Icon(painterResource(Res.drawable.terminal_filled), null, Modifier.size(12.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Open terminal", style = MaterialTheme.typography.labelSmall)
+            if (pod.containers.size > 1) {
+                Spacer(Modifier.width(2.dp))
+                Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
+            }
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            modifier = Modifier.background(KdSurface),
+        ) {
+            pod.containers.forEach { c ->
+                DropdownMenuItem(
+                    text = { Text(c.name, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
+                    onClick = {
+                        menuOpen = false
+                        onOpenTerminal(pod.name, pod.namespace, c.name)
                     },
                     leadingIcon = {
                         Icon(

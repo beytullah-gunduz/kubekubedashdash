@@ -58,6 +58,7 @@ internal fun SessionPaneContent(
     onDiscoverEks: () -> Unit,
     onOpenLogsTab: () -> Unit,
     onOpenLogs: (String, String, String?) -> Unit,
+    onOpenTerminal: (String, String, String) -> Unit,
 ) {
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
@@ -143,6 +144,7 @@ internal fun SessionPaneContent(
                             onDiscoverEks = onDiscoverEks,
                             onOpenLogsTab = onOpenLogsTab,
                             onOpenLogs = onOpenLogs,
+                            onOpenTerminal = onOpenTerminal,
                         )
                     }
                 },
@@ -166,6 +168,7 @@ internal fun SessionPaneContent(
                         onClose = { sessionVm.closeExtraPane() },
                         modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
                         onOpenLogs = onOpenLogs,
+                        onOpenTerminal = onOpenTerminal,
                         labelQuery = labelQuery,
                         onToggleLabel = { k, v ->
                             sessionVm.setLabelQuery(toggleSelectorEntry(sessionVm.labelQuery.value, k, v))
