@@ -9,13 +9,18 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,12 +49,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +69,11 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
@@ -77,13 +89,35 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.fit_screen_filled
 import com.kubekubedashdash.resources.graph_3_24
 import com.kubekubedashdash.resources.refresh_24
+import com.kubekubedashdash.resources.rotate_left_filled
+import com.kubekubedashdash.resources.rotate_right_filled
+import com.kubekubedashdash.resources.zoom_in_filled
+import com.kubekubedashdash.resources.zoom_out_filled
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
 import com.kubekubedashdash.ui.components.namespaceAccentColor
 import com.kubekubedashdash.ui.screens.topology.viewmodel.ClusterTopologyViewModel
 import org.jetbrains.compose.resources.painterResource
+
+// Rotation cycle. Right-rotate steps through the list in order; left-rotate steps
+// backward. The order matches what the user sees on screen as they rotate
+// clockwise: horizontal flow → vertical flow → horizontal mirror → vertical mirror.
+enum class TopologyDirection {
+    LEFT_TO_RIGHT,
+    TOP_TO_BOTTOM,
+    RIGHT_TO_LEFT,
+    BOTTOM_TO_TOP,
+    ;
+
+    val isHorizontal: Boolean get() = this == LEFT_TO_RIGHT || this == RIGHT_TO_LEFT
+    val isReversed: Boolean get() = this == RIGHT_TO_LEFT || this == BOTTOM_TO_TOP
+
+    fun rotateRight(): TopologyDirection = entries[(ordinal + 1) % entries.size]
+    fun rotateLeft(): TopologyDirection = entries[(ordinal + entries.size - 1) % entries.size]
+}
 
 @Composable
 fun ClusterTopologyGraph(
@@ -94,6 +128,16 @@ fun ClusterTopologyGraph(
     val packetAnimationEnabled by PreferenceRepository.topologyPacketAnimationEnabled.collectAsState()
     val refreshIntervalSec by PreferenceRepository.topologyRefreshIntervalSec.collectAsState()
     var refreshMenuOpen by remember { mutableStateOf(false) }
+    var direction by remember { mutableStateOf(TopologyDirection.LEFT_TO_RIGHT) }
+    var scale by remember { mutableStateOf(1f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
+    // Rotation flips the layout axis; carrying over a pan/zoom from the old
+    // orientation lands the graph somewhere disorienting, so snap back to a
+    // neutral viewport on every rotate.
+    LaunchedEffect(direction) {
+        scale = 1f
+        panOffset = Offset.Zero
+    }
     val truncatedNode = graph.nodes.find { it.id == "__truncated__" }
     val isAllNamespaces = namespace == "All Namespaces"
 
@@ -110,6 +154,51 @@ fun ClusterTopologyGraph(
                 Icon(
                     painterResource(Res.drawable.refresh_24),
                     contentDescription = "Refresh topology",
+                    modifier = Modifier.size(16.dp),
+                    tint = KdTextSecondary,
+                )
+            }
+            IconButton(onClick = { direction = direction.rotateLeft() }) {
+                Icon(
+                    painterResource(Res.drawable.rotate_left_filled),
+                    contentDescription = "Rotate topology left",
+                    modifier = Modifier.size(16.dp),
+                    tint = KdTextSecondary,
+                )
+            }
+            IconButton(onClick = { direction = direction.rotateRight() }) {
+                Icon(
+                    painterResource(Res.drawable.rotate_right_filled),
+                    contentDescription = "Rotate topology right",
+                    modifier = Modifier.size(16.dp),
+                    tint = KdTextSecondary,
+                )
+            }
+            IconButton(onClick = { scale = (scale * 1.2f).coerceAtMost(3f) }) {
+                Icon(
+                    painterResource(Res.drawable.zoom_in_filled),
+                    contentDescription = "Zoom in",
+                    modifier = Modifier.size(16.dp),
+                    tint = KdTextSecondary,
+                )
+            }
+            IconButton(onClick = { scale = (scale / 1.2f).coerceAtLeast(0.3f) }) {
+                Icon(
+                    painterResource(Res.drawable.zoom_out_filled),
+                    contentDescription = "Zoom out",
+                    modifier = Modifier.size(16.dp),
+                    tint = KdTextSecondary,
+                )
+            }
+            IconButton(
+                onClick = {
+                    scale = 1f
+                    panOffset = Offset.Zero
+                },
+            ) {
+                Icon(
+                    painterResource(Res.drawable.fit_screen_filled),
+                    contentDescription = "Reset zoom and pan",
                     modifier = Modifier.size(16.dp),
                     tint = KdTextSecondary,
                 )
@@ -209,6 +298,10 @@ fun ClusterTopologyGraph(
 
         TopologyGraphContent(
             graph = graph,
+            direction = direction,
+            scale = scale,
+            panOffset = panOffset,
+            onPan = { delta -> panOffset += delta },
             packetAnimationEnabled = packetAnimationEnabled,
             showNamespaceLabel = isAllNamespaces,
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -219,10 +312,21 @@ fun ClusterTopologyGraph(
 @Composable
 private fun TopologyGraphContent(
     graph: ResourceGraph,
+    direction: TopologyDirection,
+    scale: Float,
+    panOffset: Offset,
+    onPan: (Offset) -> Unit,
     packetAnimationEnabled: Boolean,
     showNamespaceLabel: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val isHorizontalFlow = direction.isHorizontal
+    val isReversedFlow = direction.isReversed
+    // Pointer-event coroutines keyed on Unit run for the lifetime of the
+    // composable; rememberUpdatedState lets the gesture body read the *current*
+    // scale/pan without restarting the coroutine on every recomposition.
+    val scaleRef = rememberUpdatedState(scale)
+    val panRef = rememberUpdatedState(panOffset)
     val nodeRects = remember(graph) { mutableStateMapOf<String, Rect>() }
     var boxCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // Pods occupy their own column to the right of WorkloadGroup. The column itself is
@@ -306,276 +410,473 @@ private fun TopologyGraphContent(
             .toSet()
     }
 
+    val outerHorizontalScroll = rememberScrollState()
+    val outerVerticalScroll = rememberScrollState()
     Box(
         modifier = modifier
-            .horizontalScroll(rememberScrollState()),
+            // Both scroll axes are active regardless of flow direction so wheel
+            // scrolling can reach any card. Lanes themselves no longer scroll
+            // (used to, but the inner scroll could hide cards from the pan
+            // gesture — pan translated the lane but not its internal scroll
+            // position, leaving overflow cards permanently invisible).
+            .horizontalScroll(outerHorizontalScroll)
+            .verticalScroll(outerVerticalScroll)
+            // Pan gesture: any drag that *starts* on empty graph background
+            // (i.e. not on top of a card) translates the whole transformed
+            // viewport. Drags that begin on a card fall through to the card's
+            // own clickable, and scroll-wheel events (PointerEventType.Scroll)
+            // don't trigger awaitFirstDown so the outer scroll modifier still
+            // handles them.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val s = scaleRef.value
+                    val pan = panRef.value
+                    val layoutPos = if (s != 0f) {
+                        Offset((down.position.x - pan.x) / s, (down.position.y - pan.y) / s)
+                    } else {
+                        down.position
+                    }
+                    val onCard = nodeRects.values.any { rect ->
+                        !rect.isEmpty && rect.contains(layoutPos)
+                    }
+                    if (onCard) return@awaitEachGesture
+
+                    val dragChange = awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                        change.consume()
+                    } ?: return@awaitEachGesture
+                    onPan(dragChange.positionChange())
+                    dragChange.consume()
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Scroll) continue
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUp() || !change.pressed) break
+                        val delta = change.positionChange()
+                        if (delta != Offset.Zero) {
+                            onPan(delta)
+                            change.consume()
+                        }
+                    }
+                }
+            },
     ) {
         val defaultEdgeColor = Color(0xFF505A68)
         val dimmedEdgeColor = defaultEdgeColor.copy(alpha = 0.15f)
         val hasSelection = selectedNodeId != null
 
-        Canvas(
+        val outerInteractionSource =
+            remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        // Zoom + pan are baked into one graphicsLayer wrapping the entire
+        // graph (grid, edges, packet dots, cards). graphicsLayer is render-only
+        // — layout positions don't change — so nodeRects, edge math, and outer
+        // scroll continue to operate in the original layout coordinate space.
+        // The clear-selection clickable lives here so taps anywhere in the
+        // graph area (between cards or in lane gaps) deselect; cards consume
+        // their own taps before they reach this layer.
+        Box(
             modifier = Modifier
-                .matchParentSize()
-                .onGloballyPositioned { boxCoords = it },
-        ) {
-            // Grid background
-            val gridColorMinor = Color(0xFF505A68).copy(alpha = 0.04f)
-            val gridColorMajor = Color(0xFF505A68).copy(alpha = 0.07f)
-            val gridSpacingMinor = 20f
-            var x = 0f
-            while (x <= size.width) {
-                val isMajor = (x % 40f) < 1f
-                drawLine(if (isMajor) gridColorMajor else gridColorMinor, Offset(x, 0f), Offset(x, size.height))
-                x += gridSpacingMinor
-            }
-            var y = 0f
-            while (y <= size.height) {
-                val isMajor = (y % 40f) < 1f
-                drawLine(if (isMajor) gridColorMajor else gridColorMinor, Offset(0f, y), Offset(size.width, y))
-                y += gridSpacingMinor
-            }
-
-            // Bezier helper
-            val cubicBezier = { t: Float, p0: Offset, p1: Offset, p2: Offset, p3: Offset ->
-                val u = 1f - t
-                p0 * (u * u * u) + p1 * (3f * u * u * t) + p2 * (3f * u * t * t) + p3 * (t * t * t)
-            }
-
-            val nodeKindById = graph.nodes.associate { it.id to it.kind }
-            val maxColumn = ClusterTopologyViewModel.kindColumnOrder.values.max()
-            val sortedEdges = graph.edges.sortedWith(compareBy({ it.sourceId }, { it.targetId }))
-            sortedEdges.forEachIndexed { edgeIndex, edge ->
-                // Skip edges that touch a Pod that's not currently rendered. Without this
-                // check the node-rect cache from the previous expanded state would still be
-                // present and the edge would draw to where the pod *used to be*.
-                val sourceKind = nodeKindById[edge.sourceId]
-                val targetKind = nodeKindById[edge.targetId]
-                val touchesHiddenPod =
-                    (sourceKind == "Pod" && edge.sourceId !in visiblePodIds) ||
-                        (targetKind == "Pod" && edge.targetId !in visiblePodIds)
-                if (touchesHiddenPod) return@forEachIndexed
-                val from = nodeRects[edge.sourceId] ?: return@forEachIndexed
-                val to = nodeRects[edge.targetId] ?: return@forEachIndexed
-                if (from.isEmpty || to.isEmpty) return@forEachIndexed
-
-                val isHighlighted = hasSelection &&
-                    edge.sourceId in connectedNodeIds &&
-                    edge.targetId in connectedNodeIds
-                val edgeColor = when {
-                    !hasSelection -> defaultEdgeColor
-
-                    isHighlighted -> kindColor(
-                        graph.nodes.find { it.id == selectedNodeId }?.kind ?: "",
-                    )
-
-                    else -> dimmedEdgeColor
-                }
-                val strokeWidth = if (isHighlighted) 2.5f else 1.5f
-                val isDimmed = hasSelection && !isHighlighted
-                val targetIsDependency = (ClusterTopologyViewModel.kindColumnOrder[nodeKindById[edge.targetId]] ?: 0) >= maxColumn
-
-                // Horizontal S-curve: source center-right -> target center-left
-                val startX = from.right
-                val startY = from.center.y
-                val endX = to.left
-                val endY = to.center.y
-                val midX = (startX + endX) / 2f
-
-                val startOffset = Offset(startX, startY)
-                val cp1 = Offset(midX, startY)
-                val cp2 = Offset(midX, endY)
-                val endOffset = Offset(endX, endY)
-
-                val path = Path().apply {
-                    moveTo(startX, startY)
-                    cubicTo(midX, startY, midX, endY, endX, endY)
-                }
-
-                drawPath(
-                    path,
-                    color = edgeColor.copy(alpha = edgeColor.alpha * 0.3f),
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = panOffset.x,
+                    translationY = panOffset.y,
                 )
-
-                if (!isDimmed) {
-                    if (targetIsDependency) {
-                        // Static dotted line for mount/dependency edges — no animation
-                        drawPath(
-                            path,
-                            color = edgeColor.copy(alpha = 0.4f),
-                            style = Stroke(
-                                width = strokeWidth,
-                                cap = StrokeCap.Round,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 6f), phase = 0f),
-                            ),
-                        )
-                    } else {
-                        val dashLen = if (isHighlighted) 10f else 8f
-                        val gapLen = if (isHighlighted) 10f else 12f
-                        drawPath(
-                            path,
-                            color = edgeColor,
-                            style = Stroke(
-                                width = strokeWidth,
-                                cap = StrokeCap.Round,
-                                pathEffect = PathEffect.dashPathEffect(
-                                    floatArrayOf(dashLen, gapLen),
-                                    phase = dashPhase,
-                                ),
-                            ),
-                        )
-                    }
-                }
-
-                drawCircle(
-                    color = edgeColor,
-                    radius = if (isHighlighted) 4f else 3f,
-                    center = endOffset,
-                )
-
-                // Packet animation — skip dependency edges (target is in the last column)
-                if (packetAnimationEnabled && !isDimmed && !targetIsDependency) {
-                    val edgePhase = (edgeIndex * 0.37f) % 1f
-                    val t = (packetT + edgePhase) % 1f
-                    val pos = cubicBezier(t, startOffset, cp1, cp2, endOffset)
-                    drawCircle(color = edgeColor.copy(alpha = 0.9f), radius = 4.5f, center = pos)
-                    drawCircle(color = edgeColor.copy(alpha = 0.25f), radius = 9f, center = pos)
-                }
-            }
-        }
-
-        // Horizontal layout: row of columns, each column is a vertical list of nodes
-        Row(
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(horizontal = 14.dp, vertical = 8.dp)
                 .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    interactionSource = outerInteractionSource,
                     indication = null,
                     onClick = { selectedNodeId = null },
                 ),
-            horizontalArrangement = Arrangement.spacedBy(60.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            columns.forEachIndexed { colIndex, allColNodes ->
-                key(colIndex) {
-                    val colNodes = allColNodes.filter { it.kind != "Pod" || it.id in visiblePodIds }
-                    val isVisible = colNodes.isNotEmpty()
-                    // AnimatedVisibility unmounts content once the exit animation finishes,
-                    // but during the animation the same composable is still rendered.
-                    // Capture the last non-empty list so the column doesn't go blank
-                    // while it's shrinking out.
-                    var lastVisible by remember { mutableStateOf(colNodes) }
-                    if (isVisible) lastVisible = colNodes
-                    val displayNodes = if (isVisible) colNodes else lastVisible
-                    AnimatedVisibility(
-                        visible = isVisible,
-                        enter = expandHorizontally(
-                            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                            expandFrom = Alignment.Start,
-                        ) + fadeIn(animationSpec = tween(durationMillis = 220)),
-                        exit = shrinkHorizontally(
-                            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
-                            shrinkTowards = Alignment.Start,
-                        ) + fadeOut(animationSpec = tween(durationMillis = 140)),
-                    ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .width(250.dp)
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState()),
-                        ) {
-                            Spacer(Modifier.weight(1f))
-                            displayNodes.forEach { node ->
-                                if (node.id == "__truncated__") return@forEach
-                                key(node.id) {
-                                    // Tear down this node's cached rect when it leaves
-                                    // composition (e.g. pods collapse). Without this the
-                                    // mutableStateMapOf grew unbounded across expand/
-                                    // collapse cycles — visually harmless thanks to the
-                                    // edge filter, but a slow leak.
-                                    DisposableEffect(Unit) {
-                                        onDispose { nodeRects.remove(node.id) }
-                                    }
-                                    val dimmed = hasSelection &&
-                                        node.id != selectedNodeId &&
-                                        node.id !in connectedNodeIds
-                                    if (node.kind == "WorkloadGroup") {
-                                        val pods = podsByGroupId[node.id] ?: emptyList()
-                                        val isExpanded = node.id in expandedGroups.value
-                                        // Cap removed: the Pod column has its own verticalScroll
-                                        // so a 100-pod expansion just makes that column scrollable;
-                                        // it doesn't blow up the layout.
-                                        val canExpand = pods.isNotEmpty()
-                                        WorkloadGroupCard(
-                                            node = node,
-                                            podCount = pods.size,
-                                            expanded = isExpanded,
-                                            canExpand = canExpand,
-                                            selected = node.id == selectedNodeId,
-                                            dimmed = dimmed,
-                                            showNamespace = showNamespaceLabel,
-                                            onClick = {
-                                                selectedNodeId = if (selectedNodeId == node.id) null else node.id
-                                            },
-                                            onToggleExpand = {
-                                                if (canExpand) {
-                                                    expandedGroups.value = if (isExpanded) {
-                                                        expandedGroups.value - node.id
-                                                    } else {
-                                                        expandedGroups.value + node.id
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.onGloballyPositioned { coords ->
-                                                try {
-                                                    boxCoords?.let { parent ->
-                                                        val pos = parent.localPositionOf(coords, Offset.Zero)
-                                                        nodeRects[node.id] = Rect(
-                                                            left = pos.x,
-                                                            top = pos.y,
-                                                            right = pos.x + coords.size.width,
-                                                            bottom = pos.y + coords.size.height,
-                                                        )
-                                                    }
-                                                } catch (_: Exception) {
-                                                }
-                                            },
-                                        )
-                                    } else {
-                                        GraphNodeCard(
-                                            node = node,
-                                            selected = node.id == selectedNodeId,
-                                            dimmed = dimmed,
-                                            showNamespace = showNamespaceLabel,
-                                            onClick = {
-                                                selectedNodeId = if (selectedNodeId == node.id) null else node.id
-                                            },
-                                            modifier = Modifier.onGloballyPositioned { coords ->
-                                                try {
-                                                    boxCoords?.let { parent ->
-                                                        val pos = parent.localPositionOf(coords, Offset.Zero)
-                                                        nodeRects[node.id] = Rect(
-                                                            left = pos.x,
-                                                            top = pos.y,
-                                                            right = pos.x + coords.size.width,
-                                                            bottom = pos.y + coords.size.height,
-                                                        )
-                                                    }
-                                                } catch (_: Exception) {
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.weight(1f))
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    .onGloballyPositioned { boxCoords = it },
+            ) {
+                // Grid background
+                val gridColorMinor = Color(0xFF505A68).copy(alpha = 0.04f)
+                val gridColorMajor = Color(0xFF505A68).copy(alpha = 0.07f)
+                val gridSpacingMinor = 20f
+                var x = 0f
+                while (x <= size.width) {
+                    val isMajor = (x % 40f) < 1f
+                    drawLine(if (isMajor) gridColorMajor else gridColorMinor, Offset(x, 0f), Offset(x, size.height))
+                    x += gridSpacingMinor
+                }
+                var y = 0f
+                while (y <= size.height) {
+                    val isMajor = (y % 40f) < 1f
+                    drawLine(if (isMajor) gridColorMajor else gridColorMinor, Offset(0f, y), Offset(size.width, y))
+                    y += gridSpacingMinor
+                }
+
+                // Bezier helper
+                val cubicBezier = { t: Float, p0: Offset, p1: Offset, p2: Offset, p3: Offset ->
+                    val u = 1f - t
+                    p0 * (u * u * u) + p1 * (3f * u * u * t) + p2 * (3f * u * t * t) + p3 * (t * t * t)
+                }
+
+                val nodeKindById = graph.nodes.associate { it.id to it.kind }
+                val maxColumn = ClusterTopologyViewModel.kindColumnOrder.values.max()
+                val sortedEdges = graph.edges.sortedWith(compareBy({ it.sourceId }, { it.targetId }))
+                sortedEdges.forEachIndexed { edgeIndex, edge ->
+                    // Skip edges that touch a Pod that's not currently rendered. Without this
+                    // check the node-rect cache from the previous expanded state would still be
+                    // present and the edge would draw to where the pod *used to be*.
+                    val sourceKind = nodeKindById[edge.sourceId]
+                    val targetKind = nodeKindById[edge.targetId]
+                    val touchesHiddenPod =
+                        (sourceKind == "Pod" && edge.sourceId !in visiblePodIds) ||
+                            (targetKind == "Pod" && edge.targetId !in visiblePodIds)
+                    if (touchesHiddenPod) return@forEachIndexed
+                    val from = nodeRects[edge.sourceId] ?: return@forEachIndexed
+                    val to = nodeRects[edge.targetId] ?: return@forEachIndexed
+                    if (from.isEmpty || to.isEmpty) return@forEachIndexed
+
+                    val isHighlighted = hasSelection &&
+                        edge.sourceId in connectedNodeIds &&
+                        edge.targetId in connectedNodeIds
+                    val edgeColor = when {
+                        !hasSelection -> defaultEdgeColor
+
+                        isHighlighted -> kindColor(
+                            graph.nodes.find { it.id == selectedNodeId }?.kind ?: "",
+                        )
+
+                        else -> dimmedEdgeColor
+                    }
+                    val strokeWidth = if (isHighlighted) 2.5f else 1.5f
+                    val isDimmed = hasSelection && !isHighlighted
+                    val targetIsDependency = (ClusterTopologyViewModel.kindColumnOrder[nodeKindById[edge.targetId]] ?: 0) >= maxColumn
+
+                    // S-curve along the flow axis. For horizontal flows the curve runs
+                    // side-to-side and bezier control points share an x; for vertical
+                    // flows it runs top-to-bottom and the controls share a y.
+                    val startOffset: Offset
+                    val endOffset: Offset
+                    val cp1: Offset
+                    val cp2: Offset
+                    if (isHorizontalFlow) {
+                        val startX = if (direction == TopologyDirection.LEFT_TO_RIGHT) from.right else from.left
+                        val endX = if (direction == TopologyDirection.LEFT_TO_RIGHT) to.left else to.right
+                        val startY = from.center.y
+                        val endY = to.center.y
+                        val midX = (startX + endX) / 2f
+                        startOffset = Offset(startX, startY)
+                        endOffset = Offset(endX, endY)
+                        cp1 = Offset(midX, startY)
+                        cp2 = Offset(midX, endY)
+                    } else {
+                        val startY = if (direction == TopologyDirection.TOP_TO_BOTTOM) from.bottom else from.top
+                        val endY = if (direction == TopologyDirection.TOP_TO_BOTTOM) to.top else to.bottom
+                        val startX = from.center.x
+                        val endX = to.center.x
+                        val midY = (startY + endY) / 2f
+                        startOffset = Offset(startX, startY)
+                        endOffset = Offset(endX, endY)
+                        cp1 = Offset(startX, midY)
+                        cp2 = Offset(endX, midY)
+                    }
+
+                    val path = Path().apply {
+                        moveTo(startOffset.x, startOffset.y)
+                        cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, endOffset.x, endOffset.y)
+                    }
+
+                    drawPath(
+                        path,
+                        color = edgeColor.copy(alpha = edgeColor.alpha * 0.3f),
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    )
+
+                    if (!isDimmed) {
+                        if (targetIsDependency) {
+                            // Static dotted line for mount/dependency edges — no animation
+                            drawPath(
+                                path,
+                                color = edgeColor.copy(alpha = 0.4f),
+                                style = Stroke(
+                                    width = strokeWidth,
+                                    cap = StrokeCap.Round,
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 6f), phase = 0f),
+                                ),
+                            )
+                        } else {
+                            val dashLen = if (isHighlighted) 10f else 8f
+                            val gapLen = if (isHighlighted) 10f else 12f
+                            drawPath(
+                                path,
+                                color = edgeColor,
+                                style = Stroke(
+                                    width = strokeWidth,
+                                    cap = StrokeCap.Round,
+                                    pathEffect = PathEffect.dashPathEffect(
+                                        floatArrayOf(dashLen, gapLen),
+                                        phase = dashPhase,
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+
+                    drawCircle(
+                        color = edgeColor,
+                        radius = if (isHighlighted) 4f else 3f,
+                        center = endOffset,
+                    )
+
+                    // Packet animation — skip dependency edges (target is in the last column)
+                    if (packetAnimationEnabled && !isDimmed && !targetIsDependency) {
+                        val edgePhase = (edgeIndex * 0.37f) % 1f
+                        val t = (packetT + edgePhase) % 1f
+                        val pos = cubicBezier(t, startOffset, cp1, cp2, endOffset)
+                        drawCircle(color = edgeColor.copy(alpha = 0.9f), radius = 4.5f, center = pos)
+                        drawCircle(color = edgeColor.copy(alpha = 0.25f), radius = 9f, center = pos)
+                    }
+                }
+            }
+
+            // Lane order: when the flow direction is reversed (RIGHT_TO_LEFT or
+            // BOTTOM_TO_TOP) we walk the columns in reverse. We iterate by the original
+            // column index so the `key(colIndex)` identity stays stable across rotations
+            // and per-lane state (`lastVisible`, scroll position) survives a flip.
+            val orderedIndices = if (isReversedFlow) (columns.size - 1) downTo 0 else 0 until columns.size
+
+            if (isHorizontalFlow) {
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(60.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    orderedIndices.forEach { colIndex ->
+                        key(colIndex) {
+                            TopologyLane(
+                                allColNodes = columns[colIndex],
+                                isHorizontalFlow = true,
+                                visiblePodIds = visiblePodIds,
+                                podsByGroupId = podsByGroupId,
+                                expandedGroups = expandedGroups,
+                                selectedNodeId = selectedNodeId,
+                                onSelectNode = { id ->
+                                    selectedNodeId = if (selectedNodeId == id) null else id
+                                },
+                                hasSelection = hasSelection,
+                                connectedNodeIds = connectedNodeIds,
+                                showNamespaceLabel = showNamespaceLabel,
+                                boxCoords = boxCoords,
+                                nodeRects = nodeRects,
+                            )
                         }
                     }
                 }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(60.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    orderedIndices.forEach { colIndex ->
+                        key(colIndex) {
+                            TopologyLane(
+                                allColNodes = columns[colIndex],
+                                isHorizontalFlow = false,
+                                visiblePodIds = visiblePodIds,
+                                podsByGroupId = podsByGroupId,
+                                expandedGroups = expandedGroups,
+                                selectedNodeId = selectedNodeId,
+                                onSelectNode = { id ->
+                                    selectedNodeId = if (selectedNodeId == id) null else id
+                                },
+                                hasSelection = hasSelection,
+                                connectedNodeIds = connectedNodeIds,
+                                showNamespaceLabel = showNamespaceLabel,
+                                boxCoords = boxCoords,
+                                nodeRects = nodeRects,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopologyLane(
+    allColNodes: List<ResourceGraphNode>,
+    isHorizontalFlow: Boolean,
+    visiblePodIds: Set<String>,
+    podsByGroupId: Map<String, List<ResourceGraphNode>>,
+    expandedGroups: androidx.compose.runtime.MutableState<Set<String>>,
+    selectedNodeId: String?,
+    onSelectNode: (String) -> Unit,
+    hasSelection: Boolean,
+    connectedNodeIds: Set<String>,
+    showNamespaceLabel: Boolean,
+    boxCoords: LayoutCoordinates?,
+    nodeRects: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Rect>,
+) {
+    val colNodes = allColNodes.filter { it.kind != "Pod" || it.id in visiblePodIds }
+    val isVisible = colNodes.isNotEmpty()
+    // AnimatedVisibility keeps the composable mounted during the exit animation,
+    // so without holding onto the last non-empty list the lane would briefly
+    // render blank while it shrinks out.
+    var lastVisible by remember { mutableStateOf(colNodes) }
+    if (isVisible) lastVisible = colNodes
+    val displayNodes = if (isVisible) colNodes else lastVisible
+
+    val laneEnter = if (isHorizontalFlow) {
+        expandHorizontally(
+            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+            expandFrom = Alignment.Start,
+        ) + fadeIn(animationSpec = tween(durationMillis = 220))
+    } else {
+        expandVertically(
+            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+            expandFrom = Alignment.Top,
+        ) + fadeIn(animationSpec = tween(durationMillis = 220))
+    }
+    val laneExit = if (isHorizontalFlow) {
+        shrinkHorizontally(
+            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+            shrinkTowards = Alignment.Start,
+        ) + fadeOut(animationSpec = tween(durationMillis = 140))
+    } else {
+        shrinkVertically(
+            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+            shrinkTowards = Alignment.Top,
+        ) + fadeOut(animationSpec = tween(durationMillis = 140))
+    }
+
+    AnimatedVisibility(visible = isVisible, enter = laneEnter, exit = laneExit) {
+        // Lanes are intrinsic-sized (height = sum of card heights for horizontal
+        // flow, width = sum for vertical). No per-lane scroll: the outer Box
+        // owns both scroll axes plus pan, so every card stays reachable. The
+        // outer Row/Column's CenterVertically/CenterHorizontally alignment
+        // takes care of aligning shorter lanes against taller ones.
+        if (isHorizontalFlow) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(250.dp),
+            ) {
+                LaneNodes(
+                    nodes = displayNodes,
+                    podsByGroupId = podsByGroupId,
+                    expandedGroups = expandedGroups,
+                    selectedNodeId = selectedNodeId,
+                    onSelectNode = onSelectNode,
+                    hasSelection = hasSelection,
+                    connectedNodeIds = connectedNodeIds,
+                    showNamespaceLabel = showNamespaceLabel,
+                    boxCoords = boxCoords,
+                    nodeRects = nodeRects,
+                )
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LaneNodes(
+                    nodes = displayNodes,
+                    podsByGroupId = podsByGroupId,
+                    expandedGroups = expandedGroups,
+                    selectedNodeId = selectedNodeId,
+                    onSelectNode = onSelectNode,
+                    hasSelection = hasSelection,
+                    connectedNodeIds = connectedNodeIds,
+                    showNamespaceLabel = showNamespaceLabel,
+                    boxCoords = boxCoords,
+                    nodeRects = nodeRects,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LaneNodes(
+    nodes: List<ResourceGraphNode>,
+    podsByGroupId: Map<String, List<ResourceGraphNode>>,
+    expandedGroups: androidx.compose.runtime.MutableState<Set<String>>,
+    selectedNodeId: String?,
+    onSelectNode: (String) -> Unit,
+    hasSelection: Boolean,
+    connectedNodeIds: Set<String>,
+    showNamespaceLabel: Boolean,
+    boxCoords: LayoutCoordinates?,
+    nodeRects: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Rect>,
+) {
+    nodes.forEach { node ->
+        if (node.id == "__truncated__") return@forEach
+        key(node.id) {
+            // Tear down this node's cached rect when it leaves composition (e.g. pods
+            // collapse). Without this the rect map grew unbounded across expand /
+            // collapse cycles — visually harmless thanks to the edge filter, but a
+            // slow leak.
+            DisposableEffect(Unit) {
+                onDispose { nodeRects.remove(node.id) }
+            }
+            val dimmed = hasSelection &&
+                node.id != selectedNodeId &&
+                node.id !in connectedNodeIds
+            // Cards keep a fixed 250.dp width regardless of flow direction. In
+            // horizontal flow the lane Column is also 250.dp wide, so this is a
+            // no-op there; in vertical flow the lane Row has horizontalScroll and
+            // would otherwise hand the Surface unbounded width, breaking layout.
+            val cardModifier = Modifier
+                .width(250.dp)
+                .onGloballyPositioned { coords ->
+                    try {
+                        boxCoords?.let { parent ->
+                            val pos = parent.localPositionOf(coords, Offset.Zero)
+                            nodeRects[node.id] = Rect(
+                                left = pos.x,
+                                top = pos.y,
+                                right = pos.x + coords.size.width,
+                                bottom = pos.y + coords.size.height,
+                            )
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            if (node.kind == "WorkloadGroup") {
+                val pods = podsByGroupId[node.id] ?: emptyList()
+                val isExpanded = node.id in expandedGroups.value
+                val canExpand = pods.isNotEmpty()
+                WorkloadGroupCard(
+                    node = node,
+                    podCount = pods.size,
+                    expanded = isExpanded,
+                    canExpand = canExpand,
+                    selected = node.id == selectedNodeId,
+                    dimmed = dimmed,
+                    showNamespace = showNamespaceLabel,
+                    onClick = { onSelectNode(node.id) },
+                    onToggleExpand = {
+                        if (canExpand) {
+                            expandedGroups.value = if (isExpanded) {
+                                expandedGroups.value - node.id
+                            } else {
+                                expandedGroups.value + node.id
+                            }
+                        }
+                    },
+                    modifier = cardModifier,
+                )
+            } else {
+                GraphNodeCard(
+                    node = node,
+                    selected = node.id == selectedNodeId,
+                    dimmed = dimmed,
+                    showNamespace = showNamespaceLabel,
+                    onClick = { onSelectNode(node.id) },
+                    modifier = cardModifier,
+                )
             }
         }
     }
