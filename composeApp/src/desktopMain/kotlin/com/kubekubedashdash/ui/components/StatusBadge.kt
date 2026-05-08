@@ -1,11 +1,17 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -18,11 +24,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
+import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
@@ -128,6 +136,7 @@ fun StatusCell(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LabelChip(
     key: String,
@@ -143,15 +152,59 @@ fun LabelChip(
     } else {
         Modifier
     }
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = background,
-        modifier = baseModifier,
+    TooltipArea(
+        tooltip = { LabelChipTooltip(key, value) },
+        tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
-        Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = background,
+            modifier = baseModifier.widthIn(max = 360.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    key,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdPrimary,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Text("=", style = MaterialTheme.typography.labelSmall, color = sepColor)
+                Text(
+                    value,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = valueColor,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(2f, fill = false),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabelChipTooltip(key: String, value: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = KdSurface,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .widthIn(max = 600.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             Text(key, style = MaterialTheme.typography.labelSmall, color = KdPrimary)
-            Text("=", style = MaterialTheme.typography.labelSmall, color = sepColor)
-            Text(value, style = MaterialTheme.typography.labelSmall, color = valueColor)
+            Text(value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary)
         }
     }
 }

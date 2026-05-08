@@ -64,7 +64,7 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.LabelChip
+import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
@@ -294,38 +294,20 @@ private fun GenericOverviewTab(
 
         if (labels.isNotEmpty()) {
             Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                labels.entries.toList().chunked(2).forEach { chunk ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) ->
-                            LabelChip(
-                                key = k,
-                                value = v,
-                                active = activeLabels[k] == v,
-                                onClick = { onToggleLabel(k, v) },
-                            )
-                        }
-                    }
-                }
-            }
+            KeyValueChipFlow(
+                entries = labels,
+                activeFilter = activeLabels,
+                onToggle = onToggleLabel,
+            )
         }
 
         if (annotations.isNotEmpty()) {
             Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                annotations.entries.toList().chunked(2).forEach { chunk ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) ->
-                            LabelChip(
-                                key = k,
-                                value = v,
-                                active = activeAnnotations[k] == v,
-                                onClick = { onToggleAnnotation(k, v) },
-                            )
-                        }
-                    }
-                }
-            }
+            KeyValueChipFlow(
+                entries = annotations,
+                activeFilter = activeAnnotations,
+                onToggle = onToggleAnnotation,
+            )
         }
     }
 }

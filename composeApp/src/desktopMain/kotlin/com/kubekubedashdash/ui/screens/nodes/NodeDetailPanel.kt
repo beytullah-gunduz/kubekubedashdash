@@ -58,7 +58,7 @@ import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.view_list_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.LabelChip
+import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
@@ -313,20 +313,11 @@ private fun NodeOverviewCombinedTab(
                 Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    node.labels.entries.toList().chunked(2).forEach { chunk ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) ->
-                                LabelChip(
-                                    key = k,
-                                    value = v,
-                                    active = activeLabels[k] == v,
-                                    onClick = { onToggleLabel(k, v) },
-                                )
-                            }
-                        }
-                    }
-                }
+                KeyValueChipFlow(
+                    entries = node.labels,
+                    activeFilter = activeLabels,
+                    onToggle = onToggleLabel,
+                )
             }
         }
 
@@ -337,20 +328,11 @@ private fun NodeOverviewCombinedTab(
                 Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    node.annotations.entries.toList().chunked(2).forEach { chunk ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) ->
-                                LabelChip(
-                                    key = k,
-                                    value = v,
-                                    active = activeAnnotations[k] == v,
-                                    onClick = { onToggleAnnotation(k, v) },
-                                )
-                            }
-                        }
-                    }
-                }
+                KeyValueChipFlow(
+                    entries = node.annotations,
+                    activeFilter = activeAnnotations,
+                    onToggle = onToggleAnnotation,
+                )
             }
         }
 
@@ -464,20 +446,11 @@ private fun NodeDetailsOnlyTab(
                 Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    node.labels.entries.toList().chunked(2).forEach { chunk ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) ->
-                                LabelChip(
-                                    key = k,
-                                    value = v,
-                                    active = activeLabels[k] == v,
-                                    onClick = { onToggleLabel(k, v) },
-                                )
-                            }
-                        }
-                    }
-                }
+                KeyValueChipFlow(
+                    entries = node.labels,
+                    activeFilter = activeLabels,
+                    onToggle = onToggleLabel,
+                )
             }
         }
 
@@ -487,20 +460,11 @@ private fun NodeDetailsOnlyTab(
                 Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    node.annotations.entries.toList().chunked(2).forEach { chunk ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            chunk.forEach { (k, v) ->
-                                LabelChip(
-                                    key = k,
-                                    value = v,
-                                    active = activeAnnotations[k] == v,
-                                    onClick = { onToggleAnnotation(k, v) },
-                                )
-                            }
-                        }
-                    }
-                }
+                KeyValueChipFlow(
+                    entries = node.annotations,
+                    activeFilter = activeAnnotations,
+                    onToggle = onToggleAnnotation,
+                )
             }
         }
 
