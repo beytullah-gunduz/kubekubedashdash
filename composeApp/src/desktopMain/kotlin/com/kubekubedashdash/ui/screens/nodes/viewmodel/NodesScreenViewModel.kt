@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.nodes.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.NodeInfo
+import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.ui.screens.nodes.MAX_HISTORY_SIZE
@@ -51,6 +52,12 @@ class NodesScreenViewModel(
             if (state is ResourceState.Success) processNodeUpdate(state.data)
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ResourceState.Loading)
+
+    // Per-node CPU/memory usage, keyed by node name. Powers the "Pressure
+    // only" filter chip on the Nodes screen — without it the banner click
+    // can't deliver a filtered view (status alone doesn't imply pressure).
+    val nodeUsages: StateFlow<Map<String, NodeResourceUsage>> = reactiveClient.nodeUsages
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val resourceUsage: StateFlow<ResourceUsageSummary?> = reactiveClient.resourceUsage
         .onEach { state ->

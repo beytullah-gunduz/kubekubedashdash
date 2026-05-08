@@ -54,7 +54,7 @@ internal fun rememberPaletteEntries(
             paletteScreen("Namespaces", Res.drawable.folder_special_filled, Screen.Main.Namespaces, onNavigate),
             paletteScreen("Events", Res.drawable.notifications_filled, Screen.Main.Events(), onNavigate),
             paletteScreen("Pods", Res.drawable.view_in_ar_filled, Screen.Main.Pods(), onNavigate),
-            paletteScreen("Deployments", Res.drawable.layers_filled, Screen.Main.Deployments, onNavigate),
+            paletteScreen("Deployments", Res.drawable.layers_filled, Screen.Main.Deployments(), onNavigate),
             paletteScreen("StatefulSets", Res.drawable.storage_filled, Screen.Main.StatefulSets, onNavigate),
             paletteScreen("DaemonSets", Res.drawable.dynamic_feed_filled, Screen.Main.DaemonSets, onNavigate),
             paletteScreen("ReplicaSets", Res.drawable.content_copy_filled, Screen.Main.ReplicaSets, onNavigate),

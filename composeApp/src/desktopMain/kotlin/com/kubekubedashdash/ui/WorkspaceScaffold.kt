@@ -142,6 +142,7 @@ internal fun SessionPaneContent(
                             annotationQuery = annotationQuery,
                             onAnnotationQueryChange = sessionVm::setAnnotationQuery,
                             onNavigate = sessionVm::navigate,
+                            clusterHealth = clusterHealth,
                             onSelectCluster = onSelectCluster,
                             onDiscoverEks = onDiscoverEks,
                             onOpenLogsTab = onOpenLogsTab,

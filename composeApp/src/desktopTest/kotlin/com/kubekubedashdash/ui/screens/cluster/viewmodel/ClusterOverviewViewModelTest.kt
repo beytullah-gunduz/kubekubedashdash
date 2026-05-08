@@ -1,9 +1,12 @@
 package com.kubekubedashdash.ui.screens.cluster.viewmodel
 
 import com.kubekubedashdash.models.DeploymentInfo
+import com.kubekubedashdash.models.ResourceState
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -207,9 +210,11 @@ class ClusterOverviewViewModelTest {
         )
     }
 
-    private fun deployment(ready: String): DeploymentInfo = DeploymentInfo(
-        uid = "uid",
-        name = "test",
+    private fun deployment(ready: String): DeploymentInfo = deployment(uid = "uid", ready = ready)
+
+    private fun deployment(uid: String, ready: String): DeploymentInfo = DeploymentInfo(
+        uid = uid,
+        name = "test-$uid",
         namespace = "default",
         ready = ready,
         upToDate = 0,
@@ -220,4 +225,114 @@ class ClusterOverviewViewModelTest {
         annotations = emptyMap(),
         conditions = emptyList(),
     )
+
+    // ── reduceDegradation (stable-degraded threshold) ─────────────────────────
+
+    private val t0: Instant = Instant.parse("2026-01-01T00:00:00Z")
+    private fun at(seconds: Long): Instant = t0.plusSeconds(seconds)
+    private fun success(deployments: List<DeploymentInfo>): ResourceState<List<DeploymentInfo>> = ResourceState.Success(deployments)
+
+    @Test
+    fun `degradation initial state has null stableCount`() {
+        // Null distinguishes "informer not yet synced" from "synced, zero
+        // degraded". The cluster health gate relies on this distinction to
+        // avoid flashing "All healthy" before the first deployment list lands.
+        assertNull(DegradationState.initial.stableCount)
+    }
+
+    @Test
+    fun `non-Success state keeps previous accumulator`() {
+        val seeded = DegradationState(firstSeen = mapOf("d1" to t0), stableCount = 1)
+        val next = reduceDegradation(seeded, ResourceState.Loading, at(5), 60L)
+        assertEquals(seeded, next)
+    }
+
+    @Test
+    fun `freshly degraded deployment has stableCount zero`() {
+        // Just because a deployment IS degraded doesn't mean it counts —
+        // it has to stay degraded for the threshold first. This is the whole
+        // point of the timer (avoid flicker during rollouts).
+        val state = reduceDegradation(
+            DegradationState.initial,
+            success(listOf(deployment(uid = "d1", ready = "0/3"))),
+            now = t0,
+            stableThresholdSeconds = 60L,
+        )
+        assertEquals(setOf("d1"), state.firstSeen.keys)
+        assertEquals(0, state.stableCount)
+    }
+
+    @Test
+    fun `degraded deployment counts after threshold elapses`() {
+        var state = reduceDegradation(
+            DegradationState.initial,
+            success(listOf(deployment(uid = "d1", ready = "0/3"))),
+            now = t0,
+            stableThresholdSeconds = 60L,
+        )
+        // 30 s in: still degraded but under the threshold.
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "0/3"))), at(30), 60L)
+        assertEquals(0, state.stableCount)
+        // 60 s in: exactly at the threshold — counts.
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "0/3"))), at(60), 60L)
+        assertEquals(1, state.stableCount)
+        // 120 s in: stays counted.
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "0/3"))), at(120), 60L)
+        assertEquals(1, state.stableCount)
+    }
+
+    @Test
+    fun `recovered deployment drops its first-seen clock`() {
+        var state = reduceDegradation(
+            DegradationState.initial,
+            success(listOf(deployment(uid = "d1", ready = "0/3"))),
+            now = t0,
+            stableThresholdSeconds = 60L,
+        )
+        // d1 recovers at 30s.
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "3/3"))), at(30), 60L)
+        assertEquals(emptyMap(), state.firstSeen)
+        assertEquals(0, state.stableCount)
+        // d1 regresses again at 60s — the clock starts from 60s, NOT t0.
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "0/3"))), at(60), 60L)
+        assertEquals(0, state.stableCount)
+        // It needs another 60s before counting (so 120s absolute).
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "0/3"))), at(119), 60L)
+        assertEquals(0, state.stableCount)
+        state = reduceDegradation(state, success(listOf(deployment(uid = "d1", ready = "0/3"))), at(120), 60L)
+        assertEquals(1, state.stableCount)
+    }
+
+    @Test
+    fun `each degraded deployment tracks its own clock`() {
+        // d1 degrades at t=0, d2 at t=40. Threshold 60s.
+        var state = reduceDegradation(
+            DegradationState.initial,
+            success(listOf(deployment(uid = "d1", ready = "0/3"))),
+            now = t0,
+            stableThresholdSeconds = 60L,
+        )
+        state = reduceDegradation(
+            state,
+            success(listOf(deployment(uid = "d1", ready = "0/3"), deployment(uid = "d2", ready = "1/3"))),
+            now = at(40),
+            stableThresholdSeconds = 60L,
+        )
+        // At t=60 only d1 has hit the threshold.
+        state = reduceDegradation(
+            state,
+            success(listOf(deployment(uid = "d1", ready = "0/3"), deployment(uid = "d2", ready = "1/3"))),
+            now = at(60),
+            stableThresholdSeconds = 60L,
+        )
+        assertEquals(1, state.stableCount)
+        // At t=100 d2 also hits 60s.
+        state = reduceDegradation(
+            state,
+            success(listOf(deployment(uid = "d1", ready = "0/3"), deployment(uid = "d2", ready = "1/3"))),
+            now = at(100),
+            stableThresholdSeconds = 60L,
+        )
+        assertEquals(2, state.stableCount)
+    }
 }

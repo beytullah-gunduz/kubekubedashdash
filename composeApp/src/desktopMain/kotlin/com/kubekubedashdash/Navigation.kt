@@ -10,7 +10,16 @@ sealed class Screen(val title: String) {
 
     sealed class Main(title: String) : Screen(title) {
         data object ClusterOverview : Main("Cluster")
-        data class Nodes(val selectNodeName: String? = null) : Main("Nodes")
+        data class Nodes(
+            val selectNodeName: String? = null,
+            // Pre-seeds the existing status filter chip on entry. Driven by
+            // the NODES_NOT_READY banner click → setOf("NotReady").
+            val statusFilter: Set<String>? = null,
+            // When true, the Nodes screen hides nodes whose CPU- and memory-
+            // utilisation are both below NODE_PRESSURE_THRESHOLD. Driven by
+            // the NODES_UNDER_PRESSURE banner click. User can clear via chip.
+            val pressureOnly: Boolean = false,
+        ) : Main("Nodes")
         data object Namespaces : Main("Namespaces")
         data class Events(
             val selectEventUid: String? = null,
@@ -27,7 +36,12 @@ sealed class Screen(val title: String) {
             // health banner ("3 pods in error" → errorPodStatuses()).
             val statusFilter: Set<String>? = null,
         ) : Main("Pods")
-        data object Deployments : Main("Deployments")
+        data class Deployments(
+            // When true, the Deployments screen hides deployments whose
+            // ready/desired replica count is at quorum. Driven by the
+            // DEPLOYMENTS_DEGRADED banner click. User can clear via chip.
+            val degradedOnly: Boolean = false,
+        ) : Main("Deployments")
         data object StatefulSets : Main("StatefulSets")
         data object DaemonSets : Main("DaemonSets")
         data object ReplicaSets : Main("ReplicaSets")

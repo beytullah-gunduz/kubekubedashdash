@@ -187,15 +187,6 @@ class ClusterOverviewViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
 
-    // ── Cluster health summary (drives the banner above summary cards) ──────────
-    //
-    // The combine logic itself lives in [clusterHealthFlow] so SessionViewModel
-    // can use the same flow to drive the sidebar dot for the lifetime of the
-    // session. This screen-scoped subscription only emits while the cluster
-    // overview is visible.
-    val health: StateFlow<ClusterHealthSummary?> = reactiveClient.clusterHealthFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
     private fun ResourceState<List<NodeInfo>>.refreshNodeAges(now: Instant): ResourceState<List<NodeInfo>> = if (this is ResourceState.Success) {
         ResourceState.Success(data.map { it.copy(age = formatAge(it.creationTimestamp, now)) })
     } else {

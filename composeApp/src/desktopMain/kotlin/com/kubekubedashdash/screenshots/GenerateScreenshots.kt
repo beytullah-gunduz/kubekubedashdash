@@ -157,7 +157,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
             "03-namespaces" to Screen.Main.Namespaces,
             "04-events" to Screen.Main.Events(),
             "05-pods" to Screen.Main.Pods(),
-            "06-deployments" to Screen.Main.Deployments,
+            "06-deployments" to Screen.Main.Deployments(),
             "07-statefulsets" to Screen.Main.StatefulSets,
             "08-daemonsets" to Screen.Main.DaemonSets,
             "09-replicasets" to Screen.Main.ReplicaSets,
@@ -227,7 +227,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         val tab2Vm = initialWorkspace.activeSession!!.viewModel
         tab2Vm.isConnected.first { it }
         delay(800)
-        tab2Vm.navigate(Screen.Main.Deployments)
+        tab2Vm.navigate(Screen.Main.Deployments())
 
         WorkspaceManager.openCluster(
             initialWorkspace,

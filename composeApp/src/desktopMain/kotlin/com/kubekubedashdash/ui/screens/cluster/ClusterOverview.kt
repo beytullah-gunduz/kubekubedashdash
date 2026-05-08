@@ -46,12 +46,17 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.SummaryCard
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterOverviewViewModel
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.errorPodStatuses
 
 @Composable
 fun ClusterOverviewScreen(
     onNavigate: (Screen) -> Unit,
+    // Session-scoped health summary, owned by SessionViewModel so the
+    // per-deployment "stable-degraded for ≥60s" timer survives screen
+    // navigation. Threaded in by the router rather than re-derived here.
+    clusterHealth: ClusterHealthSummary?,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: ClusterOverviewViewModel = viewModel { ClusterOverviewViewModel(reactiveClient) }
@@ -74,7 +79,7 @@ fun ClusterOverviewScreen(
     val deploymentsCount by viewModel.deploymentsCount.collectAsState()
     val servicesCount by viewModel.servicesCount.collectAsState()
     val phaseCounts by viewModel.podPhaseCounts.collectAsState()
-    val health by viewModel.health.collectAsState()
+    val health = clusterHealth
 
     var statsExpanded by remember { mutableStateOf(true) }
 
@@ -112,11 +117,17 @@ fun ClusterOverviewScreen(
                         Screen.Main.Pods(statusFilter = errorPodStatuses()),
                     )
 
-                    HealthSegment.NODES_NOT_READY -> onNavigate(Screen.Main.Nodes())
+                    HealthSegment.NODES_NOT_READY -> onNavigate(
+                        Screen.Main.Nodes(statusFilter = setOf("NotReady")),
+                    )
 
-                    HealthSegment.DEPLOYMENTS_DEGRADED -> onNavigate(Screen.Main.Deployments)
+                    HealthSegment.DEPLOYMENTS_DEGRADED -> onNavigate(
+                        Screen.Main.Deployments(degradedOnly = true),
+                    )
 
-                    HealthSegment.NODES_UNDER_PRESSURE -> onNavigate(Screen.Main.Nodes())
+                    HealthSegment.NODES_UNDER_PRESSURE -> onNavigate(
+                        Screen.Main.Nodes(pressureOnly = true),
+                    )
 
                     HealthSegment.RECENT_WARNINGS -> onNavigate(
                         Screen.Main.Events(typeFilter = "Warning"),
@@ -161,7 +172,7 @@ fun ClusterOverviewScreen(
                 color = KdWarning,
                 modifier = Modifier.weight(1f),
                 trailingBadge = issueBadgeFor(health?.deploymentsDegraded, "degraded", KdWarning),
-                onClick = { onNavigate(Screen.Main.Deployments) },
+                onClick = { onNavigate(Screen.Main.Deployments()) },
             )
             SummaryCard(
                 title = "Services",

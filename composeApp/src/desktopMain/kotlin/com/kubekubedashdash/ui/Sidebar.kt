@@ -142,7 +142,7 @@ fun Sidebar(
 
             SidebarSection("Workloads", collapsed) {
                 SidebarItem(Res.drawable.view_in_ar_filled, "Pods", currentScreen is Screen.Main.Pods, collapsed) { onNavigate(Screen.Main.Pods()) }
-                SidebarItem(Res.drawable.layers_filled, "Deployments", currentScreen is Screen.Main.Deployments, collapsed) { onNavigate(Screen.Main.Deployments) }
+                SidebarItem(Res.drawable.layers_filled, "Deployments", currentScreen is Screen.Main.Deployments, collapsed) { onNavigate(Screen.Main.Deployments()) }
                 SidebarItem(Res.drawable.storage_filled, "StatefulSets", currentScreen is Screen.Main.StatefulSets, collapsed) { onNavigate(Screen.Main.StatefulSets) }
                 SidebarItem(Res.drawable.dynamic_feed_filled, "DaemonSets", currentScreen is Screen.Main.DaemonSets, collapsed) { onNavigate(Screen.Main.DaemonSets) }
                 SidebarItem(Res.drawable.content_copy_filled, "ReplicaSets", currentScreen is Screen.Main.ReplicaSets, collapsed) { onNavigate(Screen.Main.ReplicaSets) }

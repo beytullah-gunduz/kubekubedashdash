@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +33,7 @@ import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,11 +46,22 @@ fun DeploymentsScreen(
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
+    // When true, hide deployments at quorum on entry. The user can clear
+    // via the chip that appears above the table once active. Driven by the
+    // DEPLOYMENTS_DEGRADED banner click.
+    initialDegradedOnly: Boolean = false,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: DeploymentsScreenViewModel = viewModel { DeploymentsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var degradedOnly by rememberSaveable { mutableStateOf(initialDegradedOnly) }
+    LaunchedEffect(initialDegradedOnly) {
+        // Re-applies the seed if the user clicks the banner again after
+        // having cleared the chip. Without this, navigating from
+        // banner → here twice in a row only filters the first time.
+        if (initialDegradedOnly) degradedOnly = true
+    }
     val scope = rememberCoroutineScope()
     var pendingDelete by remember { mutableStateOf<DeploymentInfo?>(null) }
     var deleteInFlight by remember { mutableStateOf(false) }
@@ -69,7 +82,8 @@ fun DeploymentsScreen(
                 val passesLabels = labelSelector.isEmpty() || matchesMapSelector(dep.labels, labelSelector)
                 val passesAnnotations = annotationSelector.isEmpty() ||
                     matchesMapSelector(dep.annotations, annotationSelector)
-                passesSearch && passesLabels && passesAnnotations
+                val passesDegraded = !degradedOnly || deploymentDegraded(dep)
+                passesSearch && passesLabels && passesAnnotations && passesDegraded
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
@@ -88,7 +102,7 @@ fun DeploymentsScreen(
                             modifier = Modifier.padding(end = 8.dp),
                         )
                         AnimatedVisibility(
-                            visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                            visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
                             enter = expandHorizontally() + fadeIn(),
                             exit = shrinkHorizontally() + fadeOut(),
                         ) {
@@ -96,6 +110,7 @@ fun DeploymentsScreen(
                                 onClick = {
                                     onLabelQueryChange("")
                                     onAnnotationQueryChange("")
+                                    degradedOnly = false
                                 },
                                 modifier = Modifier.padding(end = 8.dp),
                             )
