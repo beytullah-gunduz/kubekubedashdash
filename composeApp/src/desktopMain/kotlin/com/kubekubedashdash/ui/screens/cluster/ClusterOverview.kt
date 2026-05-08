@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
@@ -125,11 +128,49 @@ fun ClusterOverviewScreen(
         Spacer(Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SummaryCard("Nodes", nodesCount.asCardValue(), Res.drawable.dns_filled, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Main.Nodes()) }
-            SummaryCard("Namespaces", namespacesCount.asCardValue(), Res.drawable.folder_special_filled, KdInfo, Modifier.weight(1f)) { onNavigate(Screen.Main.Namespaces) }
-            SummaryCard("Pods", podsCount.asCardValue(), Res.drawable.view_in_ar_filled, KdSuccess, Modifier.weight(1f)) { onNavigate(Screen.Main.Pods()) }
-            SummaryCard("Deployments", deploymentsCount.asCardValue(), Res.drawable.layers_filled, KdWarning, Modifier.weight(1f)) { onNavigate(Screen.Main.Deployments) }
-            SummaryCard("Services", servicesCount.asCardValue(), Res.drawable.cloud_filled, Color(0xFF9C27B0), Modifier.weight(1f)) { onNavigate(Screen.Main.Services) }
+            SummaryCard(
+                title = "Nodes",
+                value = nodesCount.asCardValue(),
+                icon = Res.drawable.dns_filled,
+                color = KdPrimary,
+                modifier = Modifier.weight(1f),
+                trailingBadge = issueBadgeFor(health?.nodesNotReady, "NotReady", KdError),
+                onClick = { onNavigate(Screen.Main.Nodes()) },
+            )
+            SummaryCard(
+                title = "Namespaces",
+                value = namespacesCount.asCardValue(),
+                icon = Res.drawable.folder_special_filled,
+                color = KdInfo,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigate(Screen.Main.Namespaces) },
+            )
+            SummaryCard(
+                title = "Pods",
+                value = podsCount.asCardValue(),
+                icon = Res.drawable.view_in_ar_filled,
+                color = KdSuccess,
+                modifier = Modifier.weight(1f),
+                trailingBadge = issueBadgeFor(health?.podsInError, "failed", KdError),
+                onClick = { onNavigate(Screen.Main.Pods()) },
+            )
+            SummaryCard(
+                title = "Deployments",
+                value = deploymentsCount.asCardValue(),
+                icon = Res.drawable.layers_filled,
+                color = KdWarning,
+                modifier = Modifier.weight(1f),
+                trailingBadge = issueBadgeFor(health?.deploymentsDegraded, "degraded", KdWarning),
+                onClick = { onNavigate(Screen.Main.Deployments) },
+            )
+            SummaryCard(
+                title = "Services",
+                value = servicesCount.asCardValue(),
+                icon = Res.drawable.cloud_filled,
+                color = Color(0xFF9C27B0),
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigate(Screen.Main.Services) },
+            )
         }
 
         Spacer(Modifier.height(24.dp))
@@ -166,6 +207,33 @@ fun ClusterOverviewScreen(
 }
 
 private fun Int?.asCardValue(): String = this?.toString() ?: "—"
+
+/**
+ * Returns a `trailingBadge` lambda for [SummaryCard] when [count] is
+ * non-null and positive, otherwise null. Hoisted out so the call sites
+ * stay readable (one line per card) and the bandaid-shaped chrome lives
+ * in one place.
+ */
+private fun issueBadgeFor(count: Int?, label: String, color: Color): (@Composable () -> Unit)? {
+    if (count == null || count <= 0) return null
+    return { IssueBadge(count, label, color) }
+}
+
+@Composable
+private fun IssueBadge(count: Int, label: String, color: Color) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = color.copy(alpha = 0.12f),
+    ) {
+        Text(
+            "$count $label",
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
 
 @Composable
 private fun ClusterHeader(name: String, server: String, version: String) {

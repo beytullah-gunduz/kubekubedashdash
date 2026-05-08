@@ -40,6 +40,11 @@ fun SummaryCard(
     icon: DrawableResource,
     color: Color = KdPrimary,
     modifier: Modifier = Modifier,
+    // Optional pill rendered at the trailing edge of the card. Used by the
+    // cluster overview to surface per-resource issue counts (failed pods,
+    // NotReady nodes, etc.) inline on the count card. The card stays
+    // domain-agnostic — callers compose whatever pill content they need.
+    trailingBadge: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
     Surface(
@@ -68,7 +73,11 @@ fun SummaryCard(
                 Icon(painterResource(icon), null, tint = color, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(14.dp))
-            Column {
+            // weight(1f) only when there's a badge, so cards without a badge
+            // keep their existing wrap-content layout (the badge variant
+            // pushes the badge to the right edge).
+            val columnModifier = if (trailingBadge != null) Modifier.weight(1f) else Modifier
+            Column(modifier = columnModifier) {
                 Text(
                     value,
                     style = MaterialTheme.typography.headlineSmall,
@@ -80,6 +89,10 @@ fun SummaryCard(
                     style = MaterialTheme.typography.labelMedium,
                     color = KdTextSecondary,
                 )
+            }
+            if (trailingBadge != null) {
+                Spacer(Modifier.width(8.dp))
+                trailingBadge()
             }
         }
     }
