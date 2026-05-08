@@ -79,7 +79,7 @@ import com.kubekubedashdash.resources.refresh_24
 import com.kubekubedashdash.resources.terminal_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.LabelChip
+import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.MetricsLineChart
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
@@ -297,38 +297,20 @@ private fun OverviewTab(
 
         if (pod.labels.isNotEmpty()) {
             SectionLabel("Labels")
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                pod.labels.entries.toList().chunked(2).forEach { chunk ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) ->
-                            LabelChip(
-                                key = k,
-                                value = v,
-                                active = activeLabels[k] == v,
-                                onClick = { onToggleLabel(k, v) },
-                            )
-                        }
-                    }
-                }
-            }
+            KeyValueChipFlow(
+                entries = pod.labels,
+                activeFilter = activeLabels,
+                onToggle = onToggleLabel,
+            )
         }
 
         if (pod.annotations.isNotEmpty()) {
             SectionLabel("Annotations")
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                pod.annotations.entries.toList().chunked(2).forEach { chunk ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        chunk.forEach { (k, v) ->
-                            LabelChip(
-                                key = k,
-                                value = v,
-                                active = activeAnnotations[k] == v,
-                                onClick = { onToggleAnnotation(k, v) },
-                            )
-                        }
-                    }
-                }
-            }
+            KeyValueChipFlow(
+                entries = pod.annotations,
+                activeFilter = activeAnnotations,
+                onToggle = onToggleAnnotation,
+            )
         }
     }
 }
