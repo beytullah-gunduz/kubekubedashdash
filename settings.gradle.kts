@@ -22,6 +22,11 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        // JediTerm (used by the in-app pod terminal; see
+        // .docs/feature/pod-terminal-tab.md) is published only to JetBrains'
+        // IntelliJ-dependencies repo, not Maven Central. Mirrors
+        // container-dashboard's settings.gradle.kts.
+        maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")
     }
 }
 

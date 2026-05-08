@@ -239,6 +239,19 @@ fun WindowTabStrip(
                                 onDragCancelled = { onDragCancelledTab() },
                             )
                         }
+
+                        is WorkspaceTab.Terminal -> {
+                            TerminalChip(
+                                modifier = chipModifier,
+                                label = tab.session.displayLabel,
+                                isActive = tab.key == activeTabKey,
+                                onClick = { onSelectTab(tab.key) },
+                                onClose = { onCloseTab(tab.key) },
+                                onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
+                                onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
+                                onDragCancelled = { onDragCancelledTab() },
+                            )
+                        }
                     }
                 }
             }

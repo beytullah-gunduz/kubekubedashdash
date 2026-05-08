@@ -14,4 +14,14 @@ sealed class WorkspaceTab {
     data object AllClusters : WorkspaceTab() {
         override val key: String = "all-clusters"
     }
+
+    /**
+     * One open `kubectl exec`-style terminal targeting a single container.
+     * Unlike [Logs], multiple terminal tabs coexist (one per pod/container).
+     * The session owns the underlying `ExecWatch`; closing the tab disposes
+     * it via [com.kubekubedashdash.services.WorkspaceManager.closeTab].
+     */
+    data class Terminal(val session: TerminalSession) : WorkspaceTab() {
+        override val key: String = "terminal:${session.id.value}"
+    }
 }

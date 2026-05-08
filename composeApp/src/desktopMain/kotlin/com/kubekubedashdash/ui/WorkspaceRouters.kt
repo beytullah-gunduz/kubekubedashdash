@@ -46,6 +46,7 @@ fun ContentRouter(
     onDiscoverEks: () -> Unit = {},
     onOpenLogsTab: () -> Unit = {},
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
+    onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
 
@@ -92,6 +93,7 @@ fun ContentRouter(
                 onAnnotationQueryChange = onAnnotationQueryChange,
                 onNavigate = onNavigate,
                 onOpenLogs = onOpenLogs,
+                onOpenTerminal = onOpenTerminal,
                 selectPodUid = target.selectPodUid,
             )
 
@@ -202,6 +204,7 @@ fun ExtraPaneRouter(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
+    onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
     labelQuery: String = "",
     onToggleLabel: (String, String) -> Unit = { _, _ -> },
     annotationQuery: String = "",
@@ -218,6 +221,7 @@ fun ExtraPaneRouter(
                 onClose = onClose,
                 onNavigateToNode = { nodeName -> onNavigate(Screen.Main.Nodes(selectNodeName = nodeName)) },
                 onOpenLogs = onOpenLogs,
+                onOpenTerminal = onOpenTerminal,
                 modifier = Modifier.fillMaxSize(),
                 labelQuery = labelQuery,
                 onToggleLabel = onToggleLabel,

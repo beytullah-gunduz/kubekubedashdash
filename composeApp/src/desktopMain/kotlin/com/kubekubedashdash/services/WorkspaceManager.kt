@@ -148,6 +148,12 @@ object WorkspaceManager {
         val behavior = PreferenceRepository.closeTabFocus.value
         when (val removed = workspace.removeTab(tabKey, behavior)) {
             is WorkspaceTab.Cluster -> removed.session.close()
+
+            is WorkspaceTab.Terminal -> {
+                removed.session.close()
+                TerminalSessionRegistry.close(removed.session.id)
+            }
+
             WorkspaceTab.Logs, WorkspaceTab.AllClusters, null -> { /* no resources to free */ }
         }
         if (workspace.tabs.value.isEmpty()) {
@@ -166,6 +172,7 @@ object WorkspaceManager {
         val key = "cluster:${sessionId.value}"
         closeTab(workspace, key)
         LogStreamRegistry.closeAllForSession(sessionId)
+        TerminalSessionRegistry.closeAllForSession(sessionId)
     }
 
     /** Open or focus the Logs tab in [workspace]. Singleton. */
@@ -208,6 +215,7 @@ object WorkspaceManager {
             when (tab) {
                 is WorkspaceTab.Logs -> target.openLogsTab()
                 is WorkspaceTab.Cluster -> target.addSession(tab.session, makeActive = true)
+                is WorkspaceTab.Terminal -> target.openTerminalTab(tab.session)
                 WorkspaceTab.AllClusters -> target.ensureAllClustersTabAt(0)
             }
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
@@ -219,6 +227,7 @@ object WorkspaceManager {
             when (tab) {
                 is WorkspaceTab.Logs -> newWorkspace.openLogsTab()
                 is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
+                is WorkspaceTab.Terminal -> newWorkspace.openTerminalTab(tab.session)
                 WorkspaceTab.AllClusters -> newWorkspace.ensureAllClustersTabAt(0)
             }
             _workspaces.update { it + newWorkspace }

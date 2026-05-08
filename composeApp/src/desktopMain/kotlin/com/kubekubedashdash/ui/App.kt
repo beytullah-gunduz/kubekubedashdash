@@ -58,7 +58,9 @@ import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.services.TerminalSessionRegistry
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
@@ -192,6 +194,14 @@ fun App(
                 activeSession?.let { session ->
                     LogStreamRegistry.openOrFocus(session, pod, ns, container)
                     if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
+                }
+            }
+        }
+        val onOpenTerminal: (String, String, String) -> Unit = remember(activeSession) {
+            { pod, ns, container ->
+                activeSession?.let { session ->
+                    val terminal = TerminalSessionRegistry.openOrFocus(session, pod, ns, container)
+                    workspace.openTerminalTab(terminal)
                 }
             }
         }
@@ -429,11 +439,17 @@ fun App(
                                     onDiscoverEks = { workspace.showEksDiscovery() },
                                     onOpenLogsTab = { workspace.openLogsTab() },
                                     onOpenLogs = onOpenLogs,
+                                    onOpenTerminal = onOpenTerminal,
                                 )
 
                                 WorkspaceTab.Logs -> LogsPaneContent()
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()
+
+                                is WorkspaceTab.Terminal -> JediTermPane(
+                                    session = tab.session,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
                             }
                         }
                         if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(DrawerHeaderHeight))

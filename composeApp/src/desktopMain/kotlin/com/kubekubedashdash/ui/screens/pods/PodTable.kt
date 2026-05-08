@@ -55,6 +55,7 @@ internal fun PodTable(
     selectedUid: String? = null,
     onPodClick: (PodInfo) -> Unit,
     onViewLogs: ((PodInfo) -> Unit)? = null,
+    onOpenTerminal: ((PodInfo) -> Unit)? = null,
     onDelete: ((PodInfo) -> Unit)? = null,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
@@ -70,6 +71,7 @@ internal fun PodTable(
                 cells = visible.map { it.cell(pod) },
                 actions = buildList {
                     if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
+                    if (onOpenTerminal != null) add(RowAction("Open terminal") { onOpenTerminal(pod) })
                     add(RowAction("Copy name") { copyToClipboard(pod.name) })
                     add(RowAction("Copy kubectl get") { copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}") })
                     add(RowAction("Copy kubectl describe") { copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}") })

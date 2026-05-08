@@ -242,6 +242,22 @@ class Workspace(
         }
     }
 
+    /**
+     * Append a Terminal tab and activate it, or — if a tab with the same
+     * [TerminalSession.id] already exists — focus that one. Each terminal is
+     * scoped to a single container; opening "the same terminal again" should
+     * land on the existing tab rather than spawn a duplicate.
+     */
+    fun openTerminalTab(session: TerminalSession) {
+        val key = "terminal:${session.id.value}"
+        val existing = _tabs.value.firstOrNull { it.key == key }
+        if (existing != null) {
+            _activeTabKey.value = existing.key
+        } else {
+            addTab(WorkspaceTab.Terminal(session), makeActive = true)
+        }
+    }
+
     fun showClusterSelector(defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW) {
         _clusterSelectorDefaultTarget.value = defaultTarget
         _showClusterSelector.value = true

@@ -56,6 +56,7 @@ fun PodsScreen(
     onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
+    onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
     selectPodUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
@@ -74,6 +75,7 @@ fun PodsScreen(
     var pendingDelete by remember { mutableStateOf<PodInfo?>(null) }
     var deleteInFlight by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var terminalPickerPod by remember { mutableStateOf<PodInfo?>(null) }
 
     LaunchedEffect(selectPodUid) {
         viewModel.setParams(selectPodUid)
@@ -189,6 +191,15 @@ fun PodsScreen(
                                 onNavigate(Screen.Detail.PodDetail(pod))
                             },
                             onViewLogs = { pod -> onOpenLogs(pod.name, pod.namespace, null) },
+                            onOpenTerminal = { pod ->
+                                when {
+                                    pod.containers.size == 1 ->
+                                        onOpenTerminal(pod.name, pod.namespace, pod.containers.first().name)
+
+                                    pod.containers.size > 1 -> terminalPickerPod = pod
+                                    // pod.containers.isEmpty() is unexpected for a running pod
+                                }
+                            },
                             onDelete = { pod ->
                                 pendingDelete = pod
                                 deleteError = null
@@ -225,6 +236,17 @@ fun PodsScreen(
                 pendingDelete = null
                 deleteError = null
             },
+        )
+    }
+
+    terminalPickerPod?.let { pod ->
+        TerminalContainerPickerDialog(
+            pod = pod,
+            onPick = { container ->
+                terminalPickerPod = null
+                onOpenTerminal(pod.name, pod.namespace, container)
+            },
+            onDismiss = { terminalPickerPod = null },
         )
     }
 }
