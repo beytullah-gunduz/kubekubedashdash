@@ -412,6 +412,27 @@ private fun TopologyGraphContent(
 
     val outerHorizontalScroll = rememberScrollState()
     val outerVerticalScroll = rememberScrollState()
+
+    // Anchor the scroll viewport at the vertical middle of the graph as
+    // soon as scroll bounds are known. Without this, the user lands on
+    // row 0 — which after the column-pyramid arrangement is a
+    // LEAST-connected node, the exact opposite of what you actually want
+    // to look at first. Keying on `maxValue` (rather than measured
+    // content/viewport sizes) is deliberate: maxValue is updated by
+    // verticalScroll *during* the layout pass that resolves the new
+    // bounds, so the scrollTo call here is guaranteed to clamp against
+    // the correct bound and not the previous frame's. Re-fires on
+    // rotation flip and on graph reshape; auto-refresh that changes
+    // overall height resets a manually-chosen scroll position — turn off
+    // auto-refresh in the toolbar to preserve manual scroll.
+    LaunchedEffect(direction, outerVerticalScroll.maxValue) {
+        if (outerVerticalScroll.maxValue <= 0) return@LaunchedEffect
+        outerVerticalScroll.animateScrollTo(
+            value = outerVerticalScroll.maxValue / 2,
+            animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+        )
+    }
+
     Box(
         modifier = modifier
             // Both scroll axes are active regardless of flow direction so wheel
