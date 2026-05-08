@@ -12,9 +12,21 @@ sealed class Screen(val title: String) {
         data object ClusterOverview : Main("Cluster")
         data class Nodes(val selectNodeName: String? = null) : Main("Nodes")
         data object Namespaces : Main("Namespaces")
-        data class Events(val selectEventUid: String? = null) : Main("Events")
+        data class Events(
+            val selectEventUid: String? = null,
+            // When non-null, the Events screen seeds its type-filter chip to
+            // this single type (typically "Warning") on entry. Cleared by
+            // user toggling. Driven by clicks on the cluster health banner.
+            val typeFilter: String? = null,
+        ) : Main("Events")
 
-        data class Pods(val selectPodUid: String? = null) : Main("Pods")
+        data class Pods(
+            val selectPodUid: String? = null,
+            // When non-null, the Pods screen seeds its status filter to
+            // this allowlist on entry. Driven by clicks on the cluster
+            // health banner ("3 pods in error" → errorPodStatuses()).
+            val statusFilter: Set<String>? = null,
+        ) : Main("Pods")
         data object Deployments : Main("Deployments")
         data object StatefulSets : Main("StatefulSets")
         data object DaemonSets : Main("DaemonSets")

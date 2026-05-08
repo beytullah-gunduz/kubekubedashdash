@@ -26,11 +26,27 @@ fun EventsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
     selectEventUid: String? = null,
+    // When a navigation target supplies a single type to focus on (e.g.
+    // "Warning" from the cluster-health banner), seed the type-filter chip
+    // to that single type on entry. User can broaden via the chip menu.
+    initialTypeFilter: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedEventUid by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // null = "all types" (default behavior). A non-null set is an explicit
+    // allowlist — set by the route param or by the user toggling chips.
+    // Hoisted out of the Success branch so the seed survives state
+    // transitions (Loading → Success won't wipe it).
+    var selectedTypes by rememberSaveable {
+        mutableStateOf<Set<String>?>(initialTypeFilter?.let { setOf(it) })
+    }
+    LaunchedEffect(initialTypeFilter) {
+        if (initialTypeFilter != null) selectedTypes = setOf(initialTypeFilter)
+    }
+    var selectedNodes by rememberSaveable { mutableStateOf<Set<String>?>(null) }
 
     LaunchedEffect(selectEventUid) {
         viewModel.setParams(selectEventUid)
@@ -49,16 +65,16 @@ fun EventsScreen(
 
         is ResourceState.Success -> {
             val availableTypes = remember(s.data) { s.data.map { it.type }.toSet() }
-            var selectedTypes by remember(availableTypes) { mutableStateOf(availableTypes) }
-
             val availableNodes = remember(s.data) {
                 s.data.map { it.node.ifEmpty { "-" } }.toSet()
             }
-            var selectedNodes by remember(availableNodes) { mutableStateOf(availableNodes) }
+
+            val effectiveTypes = selectedTypes ?: availableTypes
+            val effectiveNodes = selectedNodes ?: availableNodes
 
             val filtered = s.data.filter { ev ->
-                ev.type in selectedTypes &&
-                    (ev.node.ifEmpty { "-" }) in selectedNodes &&
+                ev.type in effectiveTypes &&
+                    (ev.node.ifEmpty { "-" }) in effectiveNodes &&
                     (
                         searchQuery.isBlank() ||
                             ev.reason.contains(searchQuery, ignoreCase = true) ||
@@ -72,26 +88,20 @@ fun EventsScreen(
                 EventTable(
                     events = filtered,
                     availableTypes = availableTypes,
-                    selectedTypes = selectedTypes,
+                    selectedTypes = effectiveTypes,
                     onToggleType = { type ->
-                        selectedTypes = if (type in selectedTypes) {
-                            selectedTypes - type
-                        } else {
-                            selectedTypes + type
-                        }
+                        val current = selectedTypes ?: availableTypes
+                        selectedTypes = if (type in current) current - type else current + type
                     },
-                    onSelectAllTypes = { selectedTypes = availableTypes },
+                    onSelectAllTypes = { selectedTypes = null },
                     onSelectNoTypes = { selectedTypes = emptySet() },
                     availableNodes = availableNodes,
-                    selectedNodes = selectedNodes,
+                    selectedNodes = effectiveNodes,
                     onToggleNode = { node ->
-                        selectedNodes = if (node in selectedNodes) {
-                            selectedNodes - node
-                        } else {
-                            selectedNodes + node
-                        }
+                        val current = selectedNodes ?: availableNodes
+                        selectedNodes = if (node in current) current - node else current + node
                     },
-                    onSelectAllNodes = { selectedNodes = availableNodes },
+                    onSelectAllNodes = { selectedNodes = null },
                     onSelectNoNodes = { selectedNodes = emptySet() },
                     selectedUid = selectedEventUid,
                     onEventClick = { event ->

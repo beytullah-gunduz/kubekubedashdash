@@ -44,6 +44,7 @@ import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.SummaryCard
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterOverviewViewModel
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.errorPodStatuses
 
 @Composable
 fun ClusterOverviewScreen(
@@ -70,6 +71,7 @@ fun ClusterOverviewScreen(
     val deploymentsCount by viewModel.deploymentsCount.collectAsState()
     val servicesCount by viewModel.servicesCount.collectAsState()
     val phaseCounts by viewModel.podPhaseCounts.collectAsState()
+    val health by viewModel.health.collectAsState()
 
     var statsExpanded by remember { mutableStateOf(true) }
 
@@ -97,7 +99,30 @@ fun ClusterOverviewScreen(
     ) {
         ClusterHeader(name = clusterName, server = clusterServer, version = clusterVersion)
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+
+        ClusterHealthBanner(
+            health = health,
+            onSegmentClick = { segment ->
+                when (segment) {
+                    HealthSegment.PODS_IN_ERROR -> onNavigate(
+                        Screen.Main.Pods(statusFilter = errorPodStatuses()),
+                    )
+
+                    HealthSegment.NODES_NOT_READY -> onNavigate(Screen.Main.Nodes())
+
+                    HealthSegment.DEPLOYMENTS_DEGRADED -> onNavigate(Screen.Main.Deployments)
+
+                    HealthSegment.NODES_UNDER_PRESSURE -> onNavigate(Screen.Main.Nodes())
+
+                    HealthSegment.RECENT_WARNINGS -> onNavigate(
+                        Screen.Main.Events(typeFilter = "Warning"),
+                    )
+                }
+            },
+        )
+
+        Spacer(Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             SummaryCard("Nodes", nodesCount.asCardValue(), Res.drawable.dns_filled, KdPrimary, Modifier.weight(1f)) { onNavigate(Screen.Main.Nodes()) }

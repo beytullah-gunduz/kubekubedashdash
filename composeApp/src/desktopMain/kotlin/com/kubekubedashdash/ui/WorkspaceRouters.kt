@@ -83,7 +83,12 @@ fun ContentRouter(
                 onNavigate = onNavigate,
             )
 
-            is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)
+            is Screen.Main.Events -> EventsScreen(
+                searchQuery = searchQuery,
+                onNavigate = onNavigate,
+                selectEventUid = target.selectEventUid,
+                initialTypeFilter = target.typeFilter,
+            )
 
             is Screen.Main.Pods -> PodsScreen(
                 searchQuery = searchQuery,
@@ -95,6 +100,7 @@ fun ContentRouter(
                 onOpenLogs = onOpenLogs,
                 onOpenTerminal = onOpenTerminal,
                 selectPodUid = target.selectPodUid,
+                initialStatusFilter = target.statusFilter,
             )
 
             is Screen.Main.Deployments -> DeploymentsScreen(
