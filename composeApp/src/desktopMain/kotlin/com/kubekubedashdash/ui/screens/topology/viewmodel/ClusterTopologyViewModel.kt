@@ -62,11 +62,99 @@ class ClusterTopologyViewModel(
 
         fun groupIntoColumns(graph: ResourceGraph): List<List<ResourceGraphNode>> {
             val columns = Array(6) { mutableListOf<ResourceGraphNode>() }
+            val nodeToCol = HashMap<String, Int>(graph.nodes.size)
             graph.nodes.forEach { node ->
                 val col = kindColumnOrder[node.kind] ?: 2
                 columns[col].add(node)
+                nodeToCol[node.id] = col
             }
-            return columns.map { it.toList() }
+
+            // Per-node "upstream connection count": edges where the other end
+            // sits in a column to this one's left. In big namespaces most
+            // workloads have no Service in front of them; without this the few
+            // workloads that *do* land at whatever index they happened to take
+            // in graph.nodes (often the top), forcing the user to scroll past
+            // a wall of unconnected workloads to find the ones the services
+            // actually point to. Downstream pod fan-out is excluded by the
+            // column-direction check — pods sit in a higher-indexed column
+            // than their workload, so a workload's edges to its own pods
+            // never bump its own upstream count.
+            val upstreamDegree = HashMap<String, Int>()
+            graph.edges.forEach { edge ->
+                val srcCol = nodeToCol[edge.sourceId] ?: return@forEach
+                val tgtCol = nodeToCol[edge.targetId] ?: return@forEach
+                when {
+                    srcCol < tgtCol -> upstreamDegree.merge(edge.targetId, 1) { a, b -> a + b }
+                    tgtCol < srcCol -> upstreamDegree.merge(edge.sourceId, 1) { a, b -> a + b }
+                }
+            }
+
+            // Pyramid-arrange columns 0–3 and 5; the pod column (4) gets a
+            // separate ordering below tied to the parent workload's column-3
+            // position.
+            val arranged = MutableList<List<ResourceGraphNode>>(6) { idx ->
+                val col = columns[idx]
+                if (idx == 4 || col.size <= 1) {
+                    col.toList()
+                } else {
+                    val degrees = col.map { upstreamDegree[it.id] ?: 0 }
+                    if (degrees.min() == degrees.max()) {
+                        col.toList()
+                    } else {
+                        arrangeAroundCenter(col.sortedByDescending { upstreamDegree[it.id] ?: 0 })
+                    }
+                }
+            }
+
+            // Pod column (4): order pods by their parent workload's index in
+            // arranged[3]. Without this, expanding two workloads that landed
+            // far apart in column 3 (one near the top, one near the bottom
+            // after the pyramid) drops their pods into column 4 in
+            // graph.nodes order — diagonal connector lines instead of the
+            // parallel flow the user expects from a Sankey-ish layout. Same
+            // ordering as a stable sort: pods of the same workload preserve
+            // their original order; pods without an identifiable workload
+            // parent fall through to the end.
+            if (arranged[3].isNotEmpty() && columns[4].isNotEmpty()) {
+                val workloadOrder = arranged[3]
+                    .mapIndexed { idx, node -> node.id to idx }
+                    .toMap()
+                val parentByPod = HashMap<String, String>()
+                for (edge in graph.edges) {
+                    val srcCol = nodeToCol[edge.sourceId]
+                    val tgtCol = nodeToCol[edge.targetId]
+                    when {
+                        srcCol == 4 && tgtCol == 3 -> parentByPod[edge.sourceId] = edge.targetId
+                        srcCol == 3 && tgtCol == 4 -> parentByPod[edge.targetId] = edge.sourceId
+                    }
+                }
+                arranged[4] = columns[4].sortedBy { pod ->
+                    parentByPod[pod.id]?.let { workloadOrder[it] } ?: Int.MAX_VALUE
+                }
+            }
+
+            return arranged
+        }
+
+        // Place sorted-desc nodes so the top item lands at the visual center
+        // and each subsequent item alternates one slot below, then above. The
+        // result is a pyramid: most-connected in the middle, least-connected
+        // at the edges. Even-sized columns bias upward by half a slot.
+        private fun <T> arrangeAroundCenter(sortedDesc: List<T>): List<T> {
+            val n = sortedDesc.size
+            if (n <= 1) return sortedDesc
+            val out = MutableList<T?>(n) { null }
+            val center = (n - 1) / 2
+            sortedDesc.forEachIndexed { i, item ->
+                val pos = when {
+                    i == 0 -> center
+                    i % 2 == 1 -> center + (i + 1) / 2
+                    else -> center - i / 2
+                }
+                out[pos] = item
+            }
+            @Suppress("UNCHECKED_CAST")
+            return out as List<T>
         }
     }
 }
