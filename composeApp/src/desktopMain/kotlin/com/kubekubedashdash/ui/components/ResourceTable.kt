@@ -260,22 +260,47 @@ fun ResourceTable(
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 Key.DirectionDown -> {
-                                    keyboardIndex = if (keyboardIndex < 0) {
-                                        0
+                                    if (event.isMetaPressed) {
+                                        // Cmd+Down on macOS = jump to end. Instant scroll
+                                        // (not animated) so it stays snappy on long lists.
+                                        keyboardIndex = sortedRows.lastIndex
+                                        coroutineScope.launch { lazyListState.scrollToItem(sortedRows.lastIndex) }
                                     } else {
-                                        (keyboardIndex + 1).coerceAtMost(sortedRows.lastIndex)
+                                        keyboardIndex = if (keyboardIndex < 0) {
+                                            0
+                                        } else {
+                                            (keyboardIndex + 1).coerceAtMost(sortedRows.lastIndex)
+                                        }
+                                        coroutineScope.launch { lazyListState.animateScrollToItem(keyboardIndex) }
                                     }
-                                    coroutineScope.launch { lazyListState.animateScrollToItem(keyboardIndex) }
                                     true
                                 }
 
                                 Key.DirectionUp -> {
-                                    if (keyboardIndex > 0) {
-                                        keyboardIndex -= 1
-                                    } else if (keyboardIndex < 0) {
+                                    if (event.isMetaPressed) {
+                                        // Cmd+Up on macOS = jump to top.
                                         keyboardIndex = 0
+                                        coroutineScope.launch { lazyListState.scrollToItem(0) }
+                                    } else {
+                                        if (keyboardIndex > 0) {
+                                            keyboardIndex -= 1
+                                        } else if (keyboardIndex < 0) {
+                                            keyboardIndex = 0
+                                        }
+                                        coroutineScope.launch { lazyListState.animateScrollToItem(maxOf(0, keyboardIndex)) }
                                     }
-                                    coroutineScope.launch { lazyListState.animateScrollToItem(maxOf(0, keyboardIndex)) }
+                                    true
+                                }
+
+                                Key.MoveHome -> {
+                                    keyboardIndex = 0
+                                    coroutineScope.launch { lazyListState.scrollToItem(0) }
+                                    true
+                                }
+
+                                Key.MoveEnd -> {
+                                    keyboardIndex = sortedRows.lastIndex
+                                    coroutineScope.launch { lazyListState.scrollToItem(sortedRows.lastIndex) }
                                     true
                                 }
 

@@ -2,7 +2,10 @@ package com.kubekubedashdash
 
 import androidx.compose.foundation.DefaultContextMenuRepresentation
 import androidx.compose.foundation.LocalContextMenuRepresentation
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -19,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.resources.Res
@@ -280,11 +284,30 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
             itemHoverColor = if (ThemeManager.isDarkTheme) KdHoverDark else KdHoverLight,
         )
     }
+    // Compose Desktop's default scrollbar is ~12% alpha and 8dp wide — close
+    // to invisible against KdSurface, so dense lists (events, pods, jobs)
+    // gave no signal that more rows were below the fold. Bump the thumb to
+    // ~35% / 65% alpha and 10dp so the thumb-to-track ratio communicates
+    // "there's a lot of content" at a glance, even when not hovered.
+    val scrollbarBase = if (ThemeManager.isDarkTheme) KdTextSecondaryDark else KdTextSecondaryLight
+    val scrollbarStyle = remember(ThemeManager.isDarkTheme) {
+        ScrollbarStyle(
+            minimalHeight = 24.dp,
+            thickness = 10.dp,
+            shape = RoundedCornerShape(5.dp),
+            hoverDurationMillis = 200,
+            unhoverColor = scrollbarBase.copy(alpha = 0.35f),
+            hoverColor = scrollbarBase.copy(alpha = 0.65f),
+        )
+    }
     MaterialTheme(
         colorScheme = colorScheme,
         typography = typography,
     ) {
-        CompositionLocalProvider(LocalContextMenuRepresentation provides contextMenuRepresentation) {
+        CompositionLocalProvider(
+            LocalContextMenuRepresentation provides contextMenuRepresentation,
+            LocalScrollbarStyle provides scrollbarStyle,
+        ) {
             content()
         }
     }
