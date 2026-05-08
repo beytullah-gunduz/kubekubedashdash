@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.allclusters
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,11 +24,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
@@ -45,8 +56,10 @@ import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.Sparkline
 import com.kubekubedashdash.ui.components.TableRow
+import com.kubekubedashdash.ui.components.kdFocusRing
 import com.kubekubedashdash.ui.screens.events.EventColumn
 import com.kubekubedashdash.ui.screens.events.EventTypeIcon
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -109,6 +122,11 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
 private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
     val expandedKeys = remember { mutableStateSetOf<GroupKey>() }
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(groups.isNotEmpty()) {
+        if (groups.isNotEmpty()) runCatching { focusRequester.requestFocus() }
+    }
 
     val rawColumns = buildRawColumns()
     val visibleRaw = rawColumns.filter { it.minTableWidth == null || tableWidth >= it.minTableWidth }
@@ -135,7 +153,52 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        // Total item count includes group headers + expanded
+                        // members; ask the LazyColumn directly so we don't have
+                        // to recompute it from `groups` and `expandedKeys`.
+                        val lastIndex = listState.layoutInfo.totalItemsCount - 1
+                        when (event.key) {
+                            Key.MoveHome -> {
+                                coroutineScope.launch { listState.scrollToItem(0) }
+                                true
+                            }
+
+                            Key.MoveEnd -> {
+                                if (lastIndex >= 0) {
+                                    coroutineScope.launch { listState.scrollToItem(lastIndex) }
+                                }
+                                true
+                            }
+
+                            Key.DirectionUp -> if (event.isMetaPressed) {
+                                coroutineScope.launch { listState.scrollToItem(0) }
+                                true
+                            } else {
+                                false
+                            }
+
+                            Key.DirectionDown -> if (event.isMetaPressed) {
+                                if (lastIndex >= 0) {
+                                    coroutineScope.launch { listState.scrollToItem(lastIndex) }
+                                }
+                                true
+                            } else {
+                                false
+                            }
+
+                            else -> false
+                        }
+                    }
+                    .kdFocusRing(),
+            ) {
                 groups.forEach { group ->
                     val isExpanded = group.key in expandedKeys
                     item(key = group.key) {
