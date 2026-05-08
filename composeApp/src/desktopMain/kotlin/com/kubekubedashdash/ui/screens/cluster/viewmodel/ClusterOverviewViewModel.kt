@@ -26,24 +26,12 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import java.time.Instant
-import java.time.format.DateTimeParseException
 
 internal const val CLUSTER_OVERVIEW_RECENT_LIMIT = 10
 internal const val CLUSTER_OVERVIEW_TOP_NODES = 3
 internal const val CLUSTER_OVERVIEW_HISTORY_SIZE = 20
 
 private const val AGE_TICK_INTERVAL_MS = 10_000L
-
-// Window over which Warning/Error events count toward the cluster health
-// banner. Older events stay visible in the Recent Events card but stop
-// driving the banner so a single past blip doesn't pin it amber forever.
-private const val HEALTH_WARNING_WINDOW_SECONDS = 15L * 60L
-
-// Per-node CPU-or-memory utilisation that flips it into "under pressure" on
-// the banner. 0.90 is intentionally past the comfortable-burst zone — at 0.85
-// many bursty workloads (CI runners, batch jobs) would stay flagged
-// continuously. Soft signal → WARNING tier, never CRITICAL.
-private const val NODE_PRESSURE_THRESHOLD = 0.90f
 
 class ClusterOverviewViewModel(
     private val reactiveClient: ReactiveKubeClient,
@@ -201,58 +189,12 @@ class ClusterOverviewViewModel(
 
     // ── Cluster health summary (drives the banner above summary cards) ──────────
     //
-    // Combines pod statuses, node conditions, deployment availability, node
-    // pressure, and recent Warning/Error events into a single
-    // ClusterHealthSummary. The banner reads only this flow so adding new
-    // signals is one combine source plus one field — UI doesn't change.
-    //
-    // ageTicker is folded into the events source so the warning-window
-    // recompute fires every AGE_TICK_INTERVAL_MS even if no informer emits.
-    // Otherwise an event aging past the 15-min cutoff wouldn't decrement the
-    // count until the next event arrived.
-    //
-    // Emits null until any of the four informers (pods/nodes/events/
-    // deployments) has synced. That avoids flashing "All healthy" during the
-    // initial connect, which would be a false positive (we just haven't seen
-    // the failing resources yet). nodeUsages is excluded from the gate
-    // because metrics-server may legitimately be absent on a cluster — we
-    // shouldn't block the banner forever waiting for it.
-
-    private val tickedEvents: Flow<ResourceState<List<EventInfo>>> =
-        combine(reactiveClient.events, ageTicker) { e, _ -> e }
-
-    val health: StateFlow<ClusterHealthSummary?> = combine(
-        reactiveClient.pods,
-        reactiveClient.nodes,
-        tickedEvents,
-        reactiveClient.deployments,
-        reactiveClient.nodeUsages,
-    ) { podsState, nodesState, eventsState, deploymentsState, nodeUsages ->
-        val pods = (podsState as? ResourceState.Success)?.data
-        val nodes = (nodesState as? ResourceState.Success)?.data
-        val events = (eventsState as? ResourceState.Success)?.data
-        val deployments = (deploymentsState as? ResourceState.Success)?.data
-        if (pods == null && nodes == null && events == null && deployments == null) {
-            null
-        } else {
-            val cutoff = Instant.now().minusSeconds(HEALTH_WARNING_WINDOW_SECONDS)
-            ClusterHealthSummary(
-                podsInError = pods?.count { podStatusSeverity(it.status) == HealthSeverity.ERROR } ?: 0,
-                nodesNotReady = nodes?.count { nodeStatusSeverity(it.status) == HealthSeverity.ERROR } ?: 0,
-                deploymentsDegraded = deployments?.count(::deploymentDegraded) ?: 0,
-                nodesUnderPressure = nodeUsages.values.count { it.pressureFraction >= NODE_PRESSURE_THRESHOLD },
-                recentWarnings = events?.count { e ->
-                    val sev = eventTypeSeverity(e.type)
-                    if (sev == HealthSeverity.OK) {
-                        false
-                    } else {
-                        val ts = parseInstantOrNull(e.lastSeenTimestamp)
-                        ts != null && ts.isAfter(cutoff)
-                    }
-                } ?: 0,
-            )
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    // The combine logic itself lives in [clusterHealthFlow] so SessionViewModel
+    // can use the same flow to drive the sidebar dot for the lifetime of the
+    // session. This screen-scoped subscription only emits while the cluster
+    // overview is visible.
+    val health: StateFlow<ClusterHealthSummary?> = reactiveClient.clusterHealthFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private fun ResourceState<List<NodeInfo>>.refreshNodeAges(now: Instant): ResourceState<List<NodeInfo>> = if (this is ResourceState.Success) {
         ResourceState.Success(data.map { it.copy(age = formatAge(it.creationTimestamp, now)) })
@@ -384,14 +326,4 @@ internal fun deploymentDegraded(d: DeploymentInfo): Boolean {
     val ready = parts[0].toIntOrNull() ?: return false
     val desired = parts[1].toIntOrNull() ?: return false
     return desired > 0 && ready < desired
-}
-
-private fun parseInstantOrNull(s: String): Instant? = if (s.isBlank()) {
-    null
-} else {
-    try {
-        Instant.parse(s)
-    } catch (_: DateTimeParseException) {
-        null
-    }
 }

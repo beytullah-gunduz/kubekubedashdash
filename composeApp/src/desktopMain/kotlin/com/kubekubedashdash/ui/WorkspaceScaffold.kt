@@ -68,6 +68,7 @@ internal fun SessionPaneContent(
     val annotationQuery by sessionVm.annotationQuery.collectAsState()
     val sessionIsConnected by sessionVm.isConnected.collectAsState()
     val sessionConnectionError by sessionVm.connectionError.collectAsState()
+    val clusterHealth by sessionVm.clusterHealth.collectAsState()
 
     val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
     val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
@@ -127,6 +128,7 @@ internal fun SessionPaneContent(
                             currentScreen = currentScreen,
                             onNavigate = { sessionVm.navigate(it) },
                             collapsed = sidebarCollapsed,
+                            clusterHealth = clusterHealth,
                         )
                     }
                 },

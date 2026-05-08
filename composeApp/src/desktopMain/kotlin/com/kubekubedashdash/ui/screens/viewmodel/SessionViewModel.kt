@@ -2,6 +2,8 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.clusterHealthFlow
 import com.kubekubedashdash.util.MockClusterProvider
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.CoroutineScope
@@ -9,9 +11,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -64,6 +68,16 @@ class SessionViewModel(
 
     private val _retryCountdown = MutableStateFlow(0)
     val retryCountdown: StateFlow<Int> = _retryCountdown.asStateFlow()
+
+    // Session-scoped health summary. Lives for the lifetime of this cluster
+    // session so the sidebar can show a dot on the Cluster nav item from any
+    // screen, not just when the cluster overview is visible. The cluster
+    // overview screen has its own screen-scoped subscription via
+    // [com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterOverviewViewModel.health];
+    // both subscribe to the same upstream informers so there's no extra
+    // network/api work — only the combine lambda runs in two places.
+    val clusterHealth: StateFlow<ClusterHealthSummary?> = reactiveClient.clusterHealthFlow()
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), null)
 
     private var retryJob: Job? = null
     private var connectJob: Job? = null

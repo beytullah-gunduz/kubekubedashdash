@@ -61,6 +61,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.models.ResourceState
@@ -90,6 +91,8 @@ import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
 import com.kubekubedashdash.ui.components.kdFocusRing
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -99,6 +102,10 @@ fun Sidebar(
     currentScreen: Screen,
     onNavigate: (Screen) -> Unit,
     collapsed: Boolean = false,
+    // Optional cluster health snapshot for the dot on the Cluster nav item.
+    // Null while informers are still syncing — treated the same as healthy
+    // so the dot doesn't flash during the initial connect.
+    clusterHealth: ClusterHealthSummary? = null,
 ) {
     Column(
         modifier = Modifier
@@ -112,9 +119,14 @@ fun Sidebar(
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 4.dp),
         ) {
-            SidebarItem(Res.drawable.dashboard_filled, "Cluster", currentScreen is Screen.Main.ClusterOverview, collapsed) {
-                onNavigate(Screen.Main.ClusterOverview)
-            }
+            SidebarItem(
+                icon = Res.drawable.dashboard_filled,
+                label = "Cluster",
+                selected = currentScreen is Screen.Main.ClusterOverview,
+                collapsed = collapsed,
+                badge = healthBadgeColor(clusterHealth),
+                onClick = { onNavigate(Screen.Main.ClusterOverview) },
+            )
             SidebarItem(Res.drawable.graph_3_24, "Topology", currentScreen is Screen.Main.ClusterTopology, collapsed) {
                 onNavigate(Screen.Main.ClusterTopology)
             }
@@ -196,6 +208,10 @@ fun SidebarItem(
     selected: Boolean,
     collapsed: Boolean = false,
     contextMenu: (@Composable (onDismiss: () -> Unit) -> Unit)? = null,
+    // Optional small filled-circle dot at the trailing edge of the row.
+    // Used today by the Cluster entry to surface health (KdWarning / KdError)
+    // so issues are visible from any screen, not only the cluster overview.
+    badge: Color? = null,
     onClick: () -> Unit,
 ) {
     var hovered by remember { mutableStateOf(false) }
@@ -274,6 +290,16 @@ fun SidebarItem(
                     )
                 }
             }
+            if (badge != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = if (collapsed) 4.dp else 10.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(badge),
+                )
+            }
         }
     }
 
@@ -348,4 +374,13 @@ fun SidebarSection(
             Column(content = content)
         }
     }
+}
+
+// Maps a cluster health snapshot to the dot color on the Cluster nav item.
+// Returns null when the cluster is HEALTHY or the snapshot hasn't loaded yet
+// — the SidebarItem omits the dot entirely in those cases.
+private fun healthBadgeColor(health: ClusterHealthSummary?): Color? = when (health?.level) {
+    HealthLevel.CRITICAL -> KdError
+    HealthLevel.WARNING -> KdWarning
+    HealthLevel.HEALTHY, null -> null
 }
