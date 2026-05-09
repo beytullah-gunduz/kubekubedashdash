@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 data class EksCluster(
     val name: String,
     val region: String,
+    val profile: String,
 )
 
 class CliInvocationFailure(val exitCode: Int, val stderrSnippet: String, message: String) : Exception(message)
@@ -80,7 +81,7 @@ object EksClusterDiscoverer {
                         ?.mapNotNull { it.jsonPrimitive.content }
                         ?: emptyList()
                     log.debug("Found {} clusters in {}", names.size, region)
-                    Result.success(names.map { EksCluster(name = it, region = region) })
+                    Result.success(names.map { EksCluster(name = it, region = region, profile = profile) })
                 } catch (e: Exception) {
                     log.warn("Failed to parse list-clusters output for region={}: {}", region, e.message)
                     Result.failure(e)

@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.modals
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,7 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -251,7 +255,7 @@ private fun AwsCliMissing(onDismiss: () -> Unit) {
 @Composable
 private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
     val profiles by viewModel.profiles.collectAsState()
-    val selected by viewModel.selectedProfile.collectAsState()
+    val selected by viewModel.selectedProfiles.collectAsState()
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         if (profiles.isEmpty()) {
@@ -267,31 +271,54 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                 style = MaterialTheme.typography.bodySmall,
             )
         } else {
-            Text(
-                "${profiles.size} profile${if (profiles.size != 1) "s" else ""} detected.",
-                color = KdTextSecondary,
-                style = MaterialTheme.typography.labelSmall,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${selected.size} of ${profiles.size} selected",
+                    color = KdTextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    "Select all",
+                    color = KdPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { viewModel.selectAllProfiles(true) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "None",
+                    color = KdPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { viewModel.selectAllProfiles(false) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
             Spacer(Modifier.height(8.dp))
+            val listState = rememberLazyListState()
             Box(modifier = Modifier.heightIn(max = 360.dp)) {
-                LazyColumn {
+                LazyColumn(state = listState) {
                     items(profiles, key = { it.name }) { profile ->
-                        val isSelected = selected == profile.name
+                        val isSelected = profile.name in selected
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) KdSelected else Color.Transparent)
-                                .clickable { viewModel.selectProfile(profile.name) }
+                                .clickable { viewModel.toggleProfile(profile.name) }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { viewModel.selectProfile(profile.name) },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = KdPrimary,
-                                    unselectedColor = KdTextSecondary,
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { viewModel.toggleProfile(profile.name) },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = KdPrimary,
+                                    uncheckedColor = KdTextSecondary,
                                 ),
                             )
                             Spacer(Modifier.width(8.dp))
@@ -314,6 +341,10 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                         }
                     }
                 }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
             }
         }
     }
@@ -322,32 +353,44 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
 @Composable
 private fun RegionStep(viewModel: EksDiscoveryViewModel) {
     val scope by viewModel.regionScope.collectAsState()
-    val profile by viewModel.selectedProfile.collectAsState()
+    val selectedProfiles by viewModel.selectedProfiles.collectAsState()
     val profiles by viewModel.profiles.collectAsState()
-    val defaultRegion = profiles.firstOrNull { it.name == profile }?.defaultRegion ?: "us-east-1"
+    val orderedSelection = selectedProfiles.toList().sorted()
+    val defaultRegionLabel = if (orderedSelection.size == 1) {
+        profiles.firstOrNull { it.name == orderedSelection[0] }?.defaultRegion ?: "us-east-1"
+    } else {
+        "each profile's default"
+    }
+    val profileLabel = when {
+        orderedSelection.isEmpty() -> "No profile selected"
+        orderedSelection.size == 1 -> "Profile: ${orderedSelection[0]}"
+        else -> "Profiles (${orderedSelection.size}): ${orderedSelection.joinToString(", ")}"
+    }
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         Text(
-            "Profile: $profile",
+            profileLabel,
             color = KdTextSecondary,
             style = MaterialTheme.typography.labelSmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(12.dp))
         RegionOption(
             label = "Default region only",
-            sub = "Just $defaultRegion · fastest",
+            sub = "Just $defaultRegionLabel · fastest",
             selected = scope == RegionScope.DEFAULT_ONLY,
             onClick = { viewModel.setRegionScope(RegionScope.DEFAULT_ONLY) },
         )
         RegionOption(
             label = "Common regions",
-            sub = "10 widely-used regions · ~5s",
+            sub = "10 widely-used regions per profile · ~5s",
             selected = scope == RegionScope.COMMON,
             onClick = { viewModel.setRegionScope(RegionScope.COMMON) },
         )
         RegionOption(
             label = "All enabled regions",
-            sub = "Every region your account has opted in · slowest",
+            sub = "Every region each account has opted in · slowest",
             selected = scope == RegionScope.ALL_ENABLED,
             onClick = { viewModel.setRegionScope(RegionScope.ALL_ENABLED) },
         )
@@ -385,22 +428,63 @@ private fun RegionOption(label: String, sub: String, selected: Boolean, onClick:
 @Composable
 private fun ScanningStep(viewModel: EksDiscoveryViewModel) {
     val rows by viewModel.scanRows.collectAsState()
+    val grouped = rows.groupBy { it.profile }
+    val showHeaders = grouped.size > 1
+    val profileOrder = grouped.keys.sorted()
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Text(
-            "Scanning ${rows.size} region${if (rows.size != 1) "s" else ""}…",
+            if (showHeaders) {
+                "Scanning ${rows.size} region${if (rows.size != 1) "s" else ""} across ${grouped.size} profiles…"
+            } else {
+                "Scanning ${rows.size} region${if (rows.size != 1) "s" else ""}…"
+            },
             color = KdTextSecondary,
             style = MaterialTheme.typography.labelSmall,
         )
         Spacer(Modifier.height(12.dp))
+        val listState = rememberLazyListState()
         Box(modifier = Modifier.heightIn(max = 360.dp)) {
-            LazyColumn {
-                items(rows, key = { it.region }) { row -> ScanRow(row) }
+            LazyColumn(state = listState) {
+                profileOrder.forEach { profile ->
+                    val profileRows = grouped.getValue(profile)
+                    if (showHeaders) {
+                        item(key = "header/$profile") { ProfileSectionHeader(profile, profileRows.size, "region") }
+                    }
+                    items(profileRows, key = { "${it.profile}/${it.region}" }) { row -> ScanRow(row) }
+                }
             }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
+    }
+}
+
+@Composable
+private fun ProfileSectionHeader(profile: String, count: Int, unit: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            profile,
+            color = KdTextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$count $unit${if (count != 1) "s" else ""}",
+            color = KdTextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
@@ -471,12 +555,15 @@ private fun ScanRow(row: RegionScanRow) {
 private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
     val candidates by viewModel.candidates.collectAsState()
     val selectedCount = candidates.count { it.selected }
+    val grouped = candidates.groupBy { it.cluster.profile }
+    val showHeaders = grouped.size > 1
+    val profileOrder = grouped.keys.sorted()
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         if (candidates.isEmpty()) {
             Text("No EKS clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Try widening the region scope, or pick a different AWS profile.",
+                "Try widening the region scope, or pick different AWS profiles.",
                 color = KdTextSecondary,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -509,12 +596,26 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
                 )
             }
             Spacer(Modifier.height(8.dp))
+            val listState = rememberLazyListState()
             Box(modifier = Modifier.heightIn(max = 360.dp)) {
-                LazyColumn {
-                    items(candidates, key = { it.cluster.region + "/" + it.cluster.name }) { candidate ->
-                        CandidateRow(candidate, viewModel)
+                LazyColumn(state = listState) {
+                    profileOrder.forEach { profile ->
+                        val profileItems = grouped.getValue(profile)
+                        if (showHeaders) {
+                            item(key = "header/$profile") { ProfileSectionHeader(profile, profileItems.size, "cluster") }
+                        }
+                        items(
+                            profileItems,
+                            key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
+                        ) { candidate ->
+                            CandidateRow(candidate, viewModel)
+                        }
                     }
                 }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
             }
         }
     }
@@ -585,10 +686,18 @@ private fun ImportingStep(viewModel: EksDiscoveryViewModel) {
             style = MaterialTheme.typography.labelSmall,
         )
         Spacer(Modifier.height(12.dp))
+        val listState = rememberLazyListState()
         Box(modifier = Modifier.heightIn(max = 360.dp)) {
-            LazyColumn {
-                items(rows, key = { it.cluster.region + "/" + it.cluster.name }) { row -> ImportRowView(row) }
+            LazyColumn(state = listState) {
+                items(
+                    rows,
+                    key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
+                ) { row -> ImportRowView(row) }
             }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
@@ -634,7 +743,7 @@ private fun ImportRowView(row: ImportRow) {
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "${row.cluster.name} · ${row.cluster.region}",
+                "${row.cluster.profile} · ${row.cluster.name} · ${row.cluster.region}",
                 color = KdTextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
@@ -689,10 +798,18 @@ private fun DoneStep(viewModel: EksDiscoveryViewModel, @Suppress("UNUSED_PARAMET
             )
         }
         Spacer(Modifier.height(8.dp))
+        val listState = rememberLazyListState()
         Box(modifier = Modifier.heightIn(max = 280.dp)) {
-            LazyColumn {
-                items(rows, key = { it.cluster.region + "/" + it.cluster.name }) { row -> ImportRowView(row) }
+            LazyColumn(state = listState) {
+                items(
+                    rows,
+                    key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
+                ) { row -> ImportRowView(row) }
             }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
@@ -712,7 +829,7 @@ private fun Footer(
     onCompleted: () -> Unit,
     hideOpenClustersButton: Boolean,
 ) {
-    val selectedProfile by viewModel.selectedProfile.collectAsState()
+    val selectedProfiles by viewModel.selectedProfiles.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
 
     Row(
@@ -741,7 +858,10 @@ private fun Footer(
 
         OutlinedButton(
             onClick = {
-                viewModel.cancel()
+                // Don't reset state on DONE: onDismiss is closeOrComplete, which reads
+                // `step` and `anyImportSucceeded` to decide whether to fire onCompleted
+                // (refreshes the parent's context list). cancel() would clear both.
+                if (step != EksDiscoveryStep.DONE) viewModel.cancel()
                 onDismiss()
             },
             shape = RoundedCornerShape(8.dp),
@@ -755,7 +875,7 @@ private fun Footer(
         when (step) {
             EksDiscoveryStep.PICK_PROFILE -> Button(
                 onClick = { viewModel.proceedFromProfile() },
-                enabled = selectedProfile != null,
+                enabled = selectedProfiles.isNotEmpty(),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) { Text("Next", color = Color.White) }

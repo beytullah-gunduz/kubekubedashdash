@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -245,213 +249,92 @@ fun ClusterSelectorModal(
                         }
                     }
                 } else {
-                    LazyColumn(
+                    val parsedContexts = remember(contexts, bindings) {
+                        contexts.map { ctx ->
+                            val awsProfile = bindings[ctx]?.awsProfile
+                            ctx to parseContext(ctx, awsProfile)
+                        }
+                    }
+                    val (mockItems, rest1) = parsedContexts.partition { it.second.isMock }
+                    val (eksItems, otherItems) = rest1.partition { it.second.isEks }
+                    val eksByAccount = eksItems.groupBy { it.second.awsAccount.orEmpty() }
+                    val accountOrder = eksByAccount.keys.sorted()
+                    val showAccountHeaders = accountOrder.size > 1
+                    val listState = rememberLazyListState()
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 700.dp)
-                            .padding(vertical = 8.dp),
+                            .heightIn(max = 700.dp),
                     ) {
-                        items(contexts, key = { it }) { ctx ->
-                            val awsProfile = bindings[ctx]?.awsProfile
-                            val parsed = remember(ctx, awsProfile) { parseContext(ctx, awsProfile) }
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                        ) {
                             // Light up the "Demo Cluster" picker row whenever any mock
                             // instance ("…#N") is the active session — otherwise the
                             // bare-prefix entry would never match a live label.
-                            val isSelected = ctx == selectedContext ||
-                                (parsed.isMock && MockClusterProvider.isMockContext(selectedContext))
-                            var hovered by remember { mutableStateOf(false) }
-                            val bg = when {
-                                isSelected -> KdSelected
-                                hovered -> KdHover
-                                else -> Color.Transparent
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItem()
-                                    .padding(horizontal = 8.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(bg)
-                                    .clickable {
-                                        onOpenCluster(ctx, defaultTarget)
-                                        onDismiss()
-                                    }
-                                    .onPointerEvent(PointerEventType.Enter) { hovered = true }
-                                    .onPointerEvent(PointerEventType.Exit) { hovered = false }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                if (parsed.isMock) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MockTeal),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            painterResource(Res.drawable.science_filled),
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                } else if (parsed.isEks) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(EksOrange),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text(
-                                            "EKS",
-                                            color = Color.White,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.5.sp,
-                                        )
-                                    }
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(
-                                                if (isSelected) {
-                                                    KdPrimary.copy(alpha = 0.15f)
-                                                } else {
-                                                    KdSurfaceVariant
-                                                },
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            painterResource(Res.drawable.dns_filled),
-                                            contentDescription = null,
-                                            tint = if (isSelected) KdPrimary else KdTextSecondary,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        parsed.clusterName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (isSelected) KdPrimary else KdTextPrimary,
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                            mockItems.forEach { (ctx, parsed) ->
+                                item(key = ctx) {
+                                    ClusterRow(
+                                        ctx = ctx,
+                                        parsed = parsed,
+                                        isSelected = ctx == selectedContext ||
+                                            MockClusterProvider.isMockContext(selectedContext),
+                                        canAddTab = canAddTab,
+                                        defaultTarget = defaultTarget,
+                                        onOpenCluster = onOpenCluster,
+                                        onDismiss = onDismiss,
+                                        modifier = Modifier.animateItem(),
                                     )
-                                    if (parsed.isMock) {
-                                        Text(
-                                            "In-memory mock cluster with sample data",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = KdTextSecondary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                }
+                            }
+                            otherItems.forEach { (ctx, parsed) ->
+                                item(key = ctx) {
+                                    ClusterRow(
+                                        ctx = ctx,
+                                        parsed = parsed,
+                                        isSelected = ctx == selectedContext,
+                                        canAddTab = canAddTab,
+                                        defaultTarget = defaultTarget,
+                                        onOpenCluster = onOpenCluster,
+                                        onDismiss = onDismiss,
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                            }
+                            accountOrder.forEach { account ->
+                                val list = eksByAccount.getValue(account)
+                                if (showAccountHeaders) {
+                                    item(key = "account-header/$account") {
+                                        AwsAccountSectionHeader(
+                                            account = account.ifBlank { "(unknown account)" },
+                                            count = list.size,
+                                            modifier = Modifier.animateItem(),
                                         )
-                                    } else if (parsed.isEks) {
-                                        val base = "${parsed.awsAccount} · ${parsed.awsRegion}"
-                                        val subtitle = parsed.awsProfile?.let { "$base · profile: $it" } ?: base
-                                        Text(
-                                            subtitle,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = KdTextSecondary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        if (parsed.awsProfile == null) {
-                                            Text(
-                                                "no profile bound — uses default credentials",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = KdTextSecondary.copy(alpha = 0.75f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
                                     }
                                 }
-                                if (canAddTab) {
-                                    Spacer(Modifier.width(8.dp))
-                                    // Hide the per-row tab button when row-click already
-                                    // does NEW_TAB (i.e. opened from the tab strip's
-                                    // + button); it would just duplicate the action.
-                                    if (defaultTarget != OpenTarget.NEW_TAB) {
-                                        TooltipArea(
-                                            tooltip = { ClusterActionTooltip("Open in a new tab") },
-                                            tooltipPlacement = TooltipPlacement.CursorPoint(
-                                                offset = DpOffset(0.dp, 16.dp),
-                                            ),
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(if (hovered) KdSurfaceVariant else Color.Transparent)
-                                                    .clickable {
-                                                        onOpenCluster(ctx, OpenTarget.NEW_TAB)
-                                                        onDismiss()
-                                                    },
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Icon(
-                                                    painterResource(Res.drawable.tab_filled),
-                                                    contentDescription = "Open $ctx in new tab",
-                                                    tint = KdTextSecondary,
-                                                    modifier = Modifier.size(16.dp),
-                                                )
-                                            }
-                                        }
-                                        Spacer(Modifier.width(4.dp))
-                                    }
-                                    TooltipArea(
-                                        tooltip = { ClusterActionTooltip("Open in a new window") },
-                                        tooltipPlacement = TooltipPlacement.CursorPoint(
-                                            offset = DpOffset(0.dp, 16.dp),
-                                        ),
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (hovered) KdSurfaceVariant else Color.Transparent)
-                                                .clickable {
-                                                    onOpenCluster(ctx, OpenTarget.NEW_WINDOW)
-                                                    onDismiss()
-                                                },
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Icon(
-                                                painterResource(Res.drawable.open_in_new_filled),
-                                                contentDescription = "Open $ctx in new window",
-                                                tint = KdTextSecondary,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                                // Always reserve the trailing slot so the
-                                // tab/window action icons stay vertically
-                                // aligned across selected and unselected rows.
-                                Spacer(Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier.size(18.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            painterResource(Res.drawable.check_filled),
-                                            contentDescription = null,
-                                            tint = KdPrimary,
-                                            modifier = Modifier.size(18.dp),
+                                list.forEach { (ctx, parsed) ->
+                                    item(key = ctx) {
+                                        ClusterRow(
+                                            ctx = ctx,
+                                            parsed = parsed,
+                                            isSelected = ctx == selectedContext,
+                                            canAddTab = canAddTab,
+                                            defaultTarget = defaultTarget,
+                                            onOpenCluster = onOpenCluster,
+                                            onDismiss = onDismiss,
+                                            modifier = Modifier.animateItem(),
                                         )
                                     }
                                 }
                             }
                         }
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(listState),
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        )
                     }
                 }
 
@@ -532,6 +415,247 @@ private fun ClusterActionTooltip(text: String) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.bodySmall,
             color = KdTextPrimary,
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LazyItemScope.ClusterRow(
+    ctx: String,
+    parsed: ParsedContext,
+    isSelected: Boolean,
+    canAddTab: Boolean,
+    defaultTarget: OpenTarget,
+    onOpenCluster: (String, OpenTarget) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var hovered by remember { mutableStateOf(false) }
+    val bg = when {
+        isSelected -> KdSelected
+        hovered -> KdHover
+        else -> Color.Transparent
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .clickable {
+                onOpenCluster(ctx, defaultTarget)
+                onDismiss()
+            }
+            .onPointerEvent(PointerEventType.Enter) { hovered = true }
+            .onPointerEvent(PointerEventType.Exit) { hovered = false }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (parsed.isMock) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MockTeal),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painterResource(Res.drawable.science_filled),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        } else if (parsed.isEks) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(EksOrange),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "EKS",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                )
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        if (isSelected) {
+                            KdPrimary.copy(alpha = 0.15f)
+                        } else {
+                            KdSurfaceVariant
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painterResource(Res.drawable.dns_filled),
+                    contentDescription = null,
+                    tint = if (isSelected) KdPrimary else KdTextSecondary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                parsed.clusterName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isSelected) KdPrimary else KdTextPrimary,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (parsed.isMock) {
+                Text(
+                    "In-memory mock cluster with sample data",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (parsed.isEks) {
+                val base = "${parsed.awsAccount} · ${parsed.awsRegion}"
+                val subtitle = parsed.awsProfile?.let { "$base · profile: $it" } ?: base
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (parsed.awsProfile == null) {
+                    Text(
+                        "no profile bound — uses default credentials",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KdTextSecondary.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        if (canAddTab) {
+            Spacer(Modifier.width(8.dp))
+            // Hide the per-row tab button when row-click already
+            // does NEW_TAB (i.e. opened from the tab strip's
+            // + button); it would just duplicate the action.
+            if (defaultTarget != OpenTarget.NEW_TAB) {
+                TooltipArea(
+                    tooltip = { ClusterActionTooltip("Open in a new tab") },
+                    tooltipPlacement = TooltipPlacement.CursorPoint(
+                        offset = DpOffset(0.dp, 16.dp),
+                    ),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                            .clickable {
+                                onOpenCluster(ctx, OpenTarget.NEW_TAB)
+                                onDismiss()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painterResource(Res.drawable.tab_filled),
+                            contentDescription = "Open $ctx in new tab",
+                            tint = KdTextSecondary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(4.dp))
+            }
+            TooltipArea(
+                tooltip = { ClusterActionTooltip("Open in a new window") },
+                tooltipPlacement = TooltipPlacement.CursorPoint(
+                    offset = DpOffset(0.dp, 16.dp),
+                ),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                        .clickable {
+                            onOpenCluster(ctx, OpenTarget.NEW_WINDOW)
+                            onDismiss()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painterResource(Res.drawable.open_in_new_filled),
+                        contentDescription = "Open $ctx in new window",
+                        tint = KdTextSecondary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+        // Always reserve the trailing slot so the tab/window action
+        // icons stay vertically aligned across selected and unselected rows.
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier.size(18.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (isSelected) {
+                Icon(
+                    painterResource(Res.drawable.check_filled),
+                    contentDescription = null,
+                    tint = KdPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AwsAccountSectionHeader(account: String, count: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(EksOrange.copy(alpha = 0.18f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(
+                "AWS",
+                color = EksOrange,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            account,
+            color = KdTextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$count cluster${if (count != 1) "s" else ""}",
+            color = KdTextSecondary,
+            style = MaterialTheme.typography.labelSmall,
         )
     }
 }

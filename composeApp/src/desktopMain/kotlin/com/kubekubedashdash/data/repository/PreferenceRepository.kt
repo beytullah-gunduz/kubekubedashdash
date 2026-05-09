@@ -38,7 +38,7 @@ object PreferenceRepository {
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val MCP_LOCALHOST_ONLY by lazy { booleanPreferencesKey("mcp_localhost_only") }
     private val MCP_REQUIRE_AUTH by lazy { booleanPreferencesKey("mcp_require_auth") }
-    private val LAST_AWS_PROFILE by lazy { stringPreferencesKey("last_aws_profile") }
+    private val LAST_AWS_PROFILES by lazy { stringPreferencesKey("last_aws_profiles") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
     private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
     private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
@@ -69,8 +69,8 @@ object PreferenceRepository {
     private val _mcpRequireAuth = MutableStateFlow(true)
     val mcpRequireAuth: StateFlow<Boolean> = _mcpRequireAuth.asStateFlow()
 
-    private val _lastAwsProfile = MutableStateFlow<String?>(null)
-    val lastAwsProfile: StateFlow<String?> = _lastAwsProfile.asStateFlow()
+    private val _lastAwsProfiles = MutableStateFlow<List<String>>(emptyList())
+    val lastAwsProfiles: StateFlow<List<String>> = _lastAwsProfiles.asStateFlow()
 
     private val _closeTabFocus = MutableStateFlow(CloseTabFocus.LEFT_NEIGHBOR)
     val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
@@ -116,7 +116,9 @@ object PreferenceRepository {
                 _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
                 _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
                 _mcpRequireAuth.value = p[MCP_REQUIRE_AUTH] ?: true
-                _lastAwsProfile.value = p[LAST_AWS_PROFILE]
+                _lastAwsProfiles.value = p[LAST_AWS_PROFILES]
+                    ?.split(",")?.filter { it.isNotBlank() }
+                    ?: emptyList()
                 _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
                 _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
                 _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
@@ -165,11 +167,12 @@ object PreferenceRepository {
         ioScope.launch { dataStore.edit { it[MCP_REQUIRE_AUTH] = value } }
     }
 
-    fun setLastAwsProfile(value: String?) {
-        _lastAwsProfile.value = value
+    fun setLastAwsProfiles(value: List<String>) {
+        val cleaned = value.filter { it.isNotBlank() }.distinct()
+        _lastAwsProfiles.value = cleaned
         ioScope.launch {
             dataStore.edit {
-                if (value.isNullOrBlank()) it.remove(LAST_AWS_PROFILE) else it[LAST_AWS_PROFILE] = value
+                if (cleaned.isEmpty()) it.remove(LAST_AWS_PROFILES) else it[LAST_AWS_PROFILES] = cleaned.joinToString(",")
             }
         }
     }
