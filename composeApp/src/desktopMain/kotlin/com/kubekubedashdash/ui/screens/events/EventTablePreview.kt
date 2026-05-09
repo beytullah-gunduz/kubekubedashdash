@@ -1,8 +1,6 @@
 package com.kubekubedashdash.ui.screens.events
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -15,11 +13,6 @@ fun main(): Unit = application {
         title = "EventTable Preview",
         state = rememberWindowState(width = 1200.dp, height = 600.dp),
     ) {
-        val types = setOf("Normal", "Warning", "Error")
-        val nodes = setOf("node-1", "node-2")
-        val selectedTypes = remember { mutableStateOf(types) }
-        val selectedNodes = remember { mutableStateOf(nodes) }
-
         val sampleEvents = listOf(
             EventInfo(
                 uid = "1",
@@ -76,31 +69,7 @@ fun main(): Unit = application {
         )
 
         MaterialTheme {
-            EventTable(
-                events = sampleEvents,
-                availableTypes = types,
-                selectedTypes = selectedTypes.value,
-                onToggleType = {
-                    selectedTypes.value = if (it in selectedTypes.value) {
-                        selectedTypes.value - it
-                    } else {
-                        selectedTypes.value + it
-                    }
-                },
-                onSelectAllTypes = { selectedTypes.value = types },
-                onSelectNoTypes = { selectedTypes.value = emptySet() },
-                availableNodes = nodes,
-                selectedNodes = selectedNodes.value,
-                onToggleNode = {
-                    selectedNodes.value = if (it in selectedNodes.value) {
-                        selectedNodes.value - it
-                    } else {
-                        selectedNodes.value + it
-                    }
-                },
-                onSelectAllNodes = { selectedNodes.value = nodes },
-                onSelectNoNodes = { selectedNodes.value = emptySet() },
-            )
+            EventTable(events = sampleEvents)
         }
     }
 }

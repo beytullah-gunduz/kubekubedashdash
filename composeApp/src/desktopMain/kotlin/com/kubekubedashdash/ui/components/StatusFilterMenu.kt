@@ -38,14 +38,20 @@ import com.kubekubedashdash.resources.filter_list_filled
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * Toolbar chip that filters a list by status. Shows "Status" when no filter
- * is applied and "Status: N" when at least one status is excluded. Clicking
- * opens a multi-select checklist of every status currently present in the
- * data set.
+ * Toolbar chip that filters a list by a string-keyed dimension (status,
+ * type, node, etc.). Shows the [label] when no filter is applied and
+ * "[label]: N/M" when at least one value is excluded. Clicking opens a
+ * multi-select checklist of every value currently present in the data
+ * set.
  *
  * The component is stateless — the screen owns the [selected] set and
  * applies it to the list. By convention, an empty [selected] set means
  * "show nothing" and a set equal to [available] means "no filter applied".
+ *
+ * [itemContent] renders each row in the dropdown next to its checkbox.
+ * The default uses [StatusCell] so callers filtering on Pod/Node status
+ * keep the colored-icon look. Override it for non-status dimensions
+ * (e.g. plain [Text] for node names, an icon-aware row for event types).
  */
 @Composable
 fun StatusFilterMenu(
@@ -55,6 +61,7 @@ fun StatusFilterMenu(
     onSelectAll: () -> Unit,
     onSelectNone: () -> Unit,
     label: String = "Status",
+    itemContent: @Composable (String) -> Unit = { value -> StatusCell(status = value) },
 ) {
     if (available.isEmpty()) return
 
@@ -128,7 +135,7 @@ fun StatusFilterMenu(
                                 onCheckedChange = { onToggle(value) },
                                 colors = CheckboxDefaults.colors(checkedColor = KdPrimary),
                             )
-                            StatusCell(status = value)
+                            itemContent(value)
                         }
                     },
                     onClick = { onToggle(value) },

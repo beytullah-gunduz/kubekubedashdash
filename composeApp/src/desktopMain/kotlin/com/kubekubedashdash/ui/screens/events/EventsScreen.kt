@@ -1,7 +1,11 @@
 package com.kubekubedashdash.ui.screens.events
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -10,7 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
@@ -18,6 +24,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.screens.events.viewmodel.EventsScreenViewModel
 import kotlinx.coroutines.flow.first
 
@@ -82,25 +89,45 @@ fun EventsScreen(
                         )
             }
             Column(modifier = Modifier.fillMaxSize()) {
-                ResourceCountHeader(filtered.size, "Events")
+                ResourceCountHeader(
+                    count = filtered.size,
+                    kind = "Events",
+                    actions = {
+                        StatusFilterMenu(
+                            available = availableTypes,
+                            selected = effectiveTypes,
+                            onToggle = { type ->
+                                val current = selectedTypes ?: availableTypes
+                                selectedTypes = if (type in current) current - type else current + type
+                            },
+                            onSelectAll = { selectedTypes = null },
+                            onSelectNone = { selectedTypes = emptySet() },
+                            label = "Type",
+                            itemContent = { value ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    EventTypeIcon(value)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(value)
+                                }
+                            },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        StatusFilterMenu(
+                            available = availableNodes,
+                            selected = effectiveNodes,
+                            onToggle = { node ->
+                                val current = selectedNodes ?: availableNodes
+                                selectedNodes = if (node in current) current - node else current + node
+                            },
+                            onSelectAll = { selectedNodes = null },
+                            onSelectNone = { selectedNodes = emptySet() },
+                            label = "Node",
+                            itemContent = { Text(it) },
+                        )
+                    },
+                )
                 EventTable(
                     events = filtered,
-                    availableTypes = availableTypes,
-                    selectedTypes = effectiveTypes,
-                    onToggleType = { type ->
-                        val current = selectedTypes ?: availableTypes
-                        selectedTypes = if (type in current) current - type else current + type
-                    },
-                    onSelectAllTypes = { selectedTypes = null },
-                    onSelectNoTypes = { selectedTypes = emptySet() },
-                    availableNodes = availableNodes,
-                    selectedNodes = effectiveNodes,
-                    onToggleNode = { node ->
-                        val current = selectedNodes ?: availableNodes
-                        selectedNodes = if (node in current) current - node else current + node
-                    },
-                    onSelectAllNodes = { selectedNodes = null },
-                    onSelectNoNodes = { selectedNodes = emptySet() },
                     selectedUid = selectedEventUid,
                     onEventClick = { event ->
                         selectedEventUid = event.uid

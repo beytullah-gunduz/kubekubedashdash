@@ -3,7 +3,6 @@ package com.kubekubedashdash.ui.screens.events
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -13,10 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -35,7 +31,6 @@ import com.kubekubedashdash.resources.info
 import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
-import com.kubekubedashdash.ui.components.ColumnFilterDropdown
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.TableRow
 import org.jetbrains.compose.resources.DrawableResource
@@ -44,24 +39,9 @@ import org.jetbrains.compose.resources.painterResource
 @Composable
 internal fun EventTable(
     events: List<EventInfo>,
-    availableTypes: Set<String>,
-    selectedTypes: Set<String>,
-    onToggleType: (String) -> Unit,
-    onSelectAllTypes: () -> Unit,
-    onSelectNoTypes: () -> Unit,
-    availableNodes: Set<String>,
-    selectedNodes: Set<String>,
-    onToggleNode: (String) -> Unit,
-    onSelectAllNodes: () -> Unit,
-    onSelectNoNodes: () -> Unit,
     selectedUid: String? = null,
     onEventClick: ((EventInfo) -> Unit)? = null,
 ) {
-    var showTypeFilter by remember { mutableStateOf(false) }
-    var showNodeFilter by remember { mutableStateOf(false) }
-    val allTypesSelected = selectedTypes.size == availableTypes.size
-    val allNodesSelected = selectedNodes.size == availableNodes.size
-
     BoxWithConstraints {
         val tableWidth = maxWidth
 
@@ -70,19 +50,6 @@ internal fun EventTable(
                 def = ColumnDef(
                     header = "Type",
                     width = 50.dp,
-                    headerExtra = {
-                        ColumnFilterDropdown(
-                            expanded = showTypeFilter,
-                            active = !allTypesSelected,
-                            onToggle = { showTypeFilter = !showTypeFilter },
-                            onDismiss = { showTypeFilter = false },
-                            availableValues = availableTypes,
-                            selectedValues = selectedTypes,
-                            onToggleValue = onToggleType,
-                            onSelectAll = onSelectAllTypes,
-                            onSelectNone = onSelectNoTypes,
-                        )
-                    },
                 ),
                 cell = { ev ->
                     CellData(
@@ -118,19 +85,6 @@ internal fun EventTable(
                 def = ColumnDef(
                     header = "Node",
                     weight = 1f,
-                    headerExtra = {
-                        ColumnFilterDropdown(
-                            expanded = showNodeFilter,
-                            active = !allNodesSelected,
-                            onToggle = { showNodeFilter = !showNodeFilter },
-                            onDismiss = { showNodeFilter = false },
-                            availableValues = availableNodes,
-                            selectedValues = selectedNodes,
-                            onToggleValue = onToggleNode,
-                            onSelectAll = onSelectAllNodes,
-                            onSelectNone = onSelectNoNodes,
-                        )
-                    },
                 ),
                 cell = { ev -> CellData(ev.node.ifEmpty { "-" }) },
                 minTableWidth = 800.dp,
