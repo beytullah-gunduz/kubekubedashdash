@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.cluster.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.ClusterInfo
+import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
@@ -149,19 +150,41 @@ class ClusterOverviewViewModel(
         }
     }
 
+    // Recent lists are sorted **severity-first**, then timestamp. The cluster
+    // overview is a triage surface — when something is wrong, the user wants
+    // the failing pod / NotReady node / Warning event to surface in the 10
+    // visible rows even if 50 healthy newer ones would otherwise fill the
+    // slice. Severity tier descending, then creation/last-seen descending
+    // within tier preserves "newest first" inside each severity band.
+
     val recentNodes: StateFlow<RecentSlice<NodeInfo>> = combine(reactiveClient.nodes, ageTicker) { s, _ ->
         val now = Instant.now()
-        sliceRecent(s.refreshNodeAges(now)) { sortedByDescending { it.creationTimestamp } }
+        sliceRecent(s.refreshNodeAges(now)) {
+            sortedWith(
+                compareByDescending<NodeInfo> { nodeStatusSeverity(it.status) }
+                    .thenByDescending { it.creationTimestamp },
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
 
     val recentPods: StateFlow<RecentSlice<PodInfo>> = combine(reactiveClient.pods, ageTicker) { s, _ ->
         val now = Instant.now()
-        sliceRecent(s.refreshPodAges(now)) { sortedByDescending { it.creationTimestamp } }
+        sliceRecent(s.refreshPodAges(now)) {
+            sortedWith(
+                compareByDescending<PodInfo> { podStatusSeverity(it.status) }
+                    .thenByDescending { it.creationTimestamp },
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
 
     val recentEvents: StateFlow<RecentSlice<EventInfo>> = combine(reactiveClient.events, ageTicker) { s, _ ->
         val now = Instant.now()
-        sliceRecent(s.refreshEventAges(now)) { sortedByDescending { it.lastSeenTimestamp } }
+        sliceRecent(s.refreshEventAges(now)) {
+            sortedWith(
+                compareByDescending<EventInfo> { eventTypeSeverity(it.type) }
+                    .thenByDescending { it.lastSeenTimestamp },
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
 
     private fun ResourceState<List<NodeInfo>>.refreshNodeAges(now: Instant): ResourceState<List<NodeInfo>> = if (this is ResourceState.Success) {
@@ -206,4 +229,92 @@ data class RecentSlice<T>(
     companion object {
         fun <T> empty(): RecentSlice<T> = RecentSlice(emptyList(), 0, loading = true, errorMessage = null)
     }
+}
+
+/**
+ * Aggregated cluster health for the overview banner. Counts come straight
+ * from the underlying informers — no thresholding beyond the 15-min window
+ * for warning events. `level` is derived so the banner doesn't have to
+ * re-encode the precedence rules.
+ */
+data class ClusterHealthSummary(
+    val podsInError: Int,
+    val nodesNotReady: Int,
+    val deploymentsDegraded: Int = 0,
+    val nodesUnderPressure: Int = 0,
+    val recentWarnings: Int = 0,
+) {
+    // CRITICAL = something is actively failing (pods crashing, nodes gone).
+    // WARNING = soft signals (deployments under-replicated mid-rollout, hot
+    // nodes, recent warning events) — the cluster is up but worth a look.
+    val level: HealthLevel = when {
+        podsInError > 0 || nodesNotReady > 0 -> HealthLevel.CRITICAL
+        deploymentsDegraded > 0 || nodesUnderPressure > 0 || recentWarnings > 0 -> HealthLevel.WARNING
+        else -> HealthLevel.HEALTHY
+    }
+}
+
+enum class HealthLevel { HEALTHY, WARNING, CRITICAL }
+
+// Order matters: ordinal drives the recent-activity sort. ERROR > WARNING > OK.
+internal enum class HealthSeverity { OK, WARNING, ERROR }
+
+internal fun podStatusSeverity(status: String): HealthSeverity = when (status.lowercase()) {
+    "failed", "error", "crashloopbackoff", "imagepullbackoff",
+    "errimagepull", "oomkilled", "terminated", "notready",
+    -> HealthSeverity.ERROR
+
+    "pending", "waiting", "containercreating", "terminating" -> HealthSeverity.WARNING
+
+    else -> HealthSeverity.OK
+}
+
+/**
+ * Canonical error-tier pod status strings, in the camel-cased form
+ * `PodInfo.status` reports them. The PodsScreen status filter compares
+ * against the literal status string (case-sensitive), so this set has to
+ * mirror what's actually produced upstream — keep in sync with
+ * [podStatusSeverity]'s ERROR branch above when adding new states.
+ */
+fun errorPodStatuses(): Set<String> = setOf(
+    "Failed",
+    "Error",
+    "CrashLoopBackOff",
+    "ImagePullBackOff",
+    "ErrImagePull",
+    "OOMKilled",
+    "Terminated",
+    "NotReady",
+)
+
+internal fun nodeStatusSeverity(status: String): HealthSeverity = when (status.lowercase()) {
+    "ready", "true" -> HealthSeverity.OK
+    "notready", "false" -> HealthSeverity.ERROR
+    else -> HealthSeverity.WARNING
+}
+
+internal fun eventTypeSeverity(type: String): HealthSeverity = when (type.lowercase()) {
+    "warning" -> HealthSeverity.WARNING
+
+    // Kubernetes core only emits Normal/Warning, but custom controllers can
+    // emit Error — treat it as WARNING for severity purposes (the banner
+    // doesn't need a separate tier for an extremely rare case).
+    "error" -> HealthSeverity.WARNING
+
+    else -> HealthSeverity.OK
+}
+
+// `ready` is the "X/Y" string `kubectl get deploy` shows. If X < Y and Y > 0
+// the deployment isn't fully serving its desired replica count. This will
+// flicker amber during normal rollouts (kubectl rollout restart, scale up)
+// — that's accepted noise for the real signal of "deployment is stuck under
+// quorum". A future iteration could exempt deployments younger than a
+// minute, but creationTimestamp here reflects the Deployment object, not
+// the in-flight ReplicaSet, so it isn't a reliable rollout indicator.
+internal fun deploymentDegraded(d: DeploymentInfo): Boolean {
+    val parts = d.ready.split('/')
+    if (parts.size != 2) return false
+    val ready = parts[0].toIntOrNull() ?: return false
+    val desired = parts[1].toIntOrNull() ?: return false
+    return desired > 0 && ready < desired
 }

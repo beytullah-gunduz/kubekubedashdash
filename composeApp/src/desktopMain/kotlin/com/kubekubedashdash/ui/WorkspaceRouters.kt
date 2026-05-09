@@ -17,6 +17,7 @@ import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
 import com.kubekubedashdash.ui.screens.ResourceDetailScreen
 import com.kubekubedashdash.ui.screens.cluster.ClusterOverviewScreen
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.deployments.DeploymentDetailScreen
 import com.kubekubedashdash.ui.screens.deployments.DeploymentsScreen
 import com.kubekubedashdash.ui.screens.events.EventDetailScreen
@@ -42,6 +43,11 @@ fun ContentRouter(
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
+    // Session-scoped health summary, threaded through so the cluster overview
+    // and the sidebar share a single source of truth (drives the per-deploy
+    // degradation timer continuously, not just while the cluster screen is
+    // visible — see clusterHealthFlow).
+    clusterHealth: ClusterHealthSummary?,
     onSelectCluster: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
     onOpenLogsTab: () -> Unit = {},
@@ -60,7 +66,10 @@ fun ContentRouter(
 
             is Screen.Main.ConnectionError -> ConnectionErrorScreen(target.error, target.retryCountdown)
 
-            is Screen.Main.ClusterOverview -> ClusterOverviewScreen(onNavigate)
+            is Screen.Main.ClusterOverview -> ClusterOverviewScreen(
+                onNavigate = onNavigate,
+                clusterHealth = clusterHealth,
+            )
 
             is Screen.Main.ClusterTopology -> ClusterTopologyScreen(onNavigate)
 
@@ -72,6 +81,8 @@ fun ContentRouter(
                 onAnnotationQueryChange = onAnnotationQueryChange,
                 onNavigate = onNavigate,
                 selectNodeName = target.selectNodeName,
+                initialStatusFilter = target.statusFilter,
+                initialPressureOnly = target.pressureOnly,
             )
 
             is Screen.Main.Namespaces -> NamespacesScreen(
@@ -83,7 +94,12 @@ fun ContentRouter(
                 onNavigate = onNavigate,
             )
 
-            is Screen.Main.Events -> EventsScreen(searchQuery, onNavigate, target.selectEventUid)
+            is Screen.Main.Events -> EventsScreen(
+                searchQuery = searchQuery,
+                onNavigate = onNavigate,
+                selectEventUid = target.selectEventUid,
+                initialTypeFilter = target.typeFilter,
+            )
 
             is Screen.Main.Pods -> PodsScreen(
                 searchQuery = searchQuery,
@@ -95,6 +111,7 @@ fun ContentRouter(
                 onOpenLogs = onOpenLogs,
                 onOpenTerminal = onOpenTerminal,
                 selectPodUid = target.selectPodUid,
+                initialStatusFilter = target.statusFilter,
             )
 
             is Screen.Main.Deployments -> DeploymentsScreen(
@@ -104,6 +121,7 @@ fun ContentRouter(
                 annotationQuery = annotationQuery,
                 onAnnotationQueryChange = onAnnotationQueryChange,
                 onNavigate = onNavigate,
+                initialDegradedOnly = target.degradedOnly,
             )
 
             is Screen.Main.Services -> ServicesScreen(

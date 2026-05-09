@@ -37,6 +37,7 @@ import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.NODE_PRESSURE_THRESHOLD
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
 import kotlinx.coroutines.flow.first
 
@@ -51,11 +52,19 @@ fun NodesScreen(
     onAnnotationQueryChange: (String) -> Unit,
     onNavigate: (Screen) -> Unit,
     selectNodeName: String? = null,
+    // Pre-seeds the status filter chip on entry. Driven by the
+    // NODES_NOT_READY banner click → setOf("NotReady").
+    initialStatusFilter: Set<String>? = null,
+    // When true, hide nodes whose pressureFraction is below the threshold.
+    // Driven by the NODES_UNDER_PRESSURE banner click. User can clear via
+    // the chip that surfaces while it's active.
+    initialPressureOnly: Boolean = false,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: NodesScreenViewModel = viewModel { NodesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     val resourceUsage by viewModel.resourceUsage.collectAsState()
+    val nodeUsages by viewModel.nodeUsages.collectAsState()
     val cpuHistory by viewModel.cpuHistory.collectAsState()
     val memHistory by viewModel.memHistory.collectAsState()
     val podsCount by viewModel.podsCount.collectAsState()
@@ -65,7 +74,12 @@ fun NodesScreen(
     val staleNodes by viewModel.staleNodes.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
-    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
+    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(initialStatusFilter) }
+    var pressureOnly by rememberSaveable { mutableStateOf(initialPressureOnly) }
+    LaunchedEffect(initialStatusFilter, initialPressureOnly) {
+        if (initialStatusFilter != null) statusFilter = initialStatusFilter
+        if (initialPressureOnly) pressureOnly = true
+    }
 
     LaunchedEffect(selectNodeName) {
         viewModel.setParams(selectNodeName)
@@ -99,7 +113,15 @@ fun NodesScreen(
                 val passesLabels = labelSelector.isEmpty() || matchesMapSelector(node.labels, labelSelector)
                 val passesAnnotations = annotationSelector.isEmpty() ||
                     matchesMapSelector(node.annotations, annotationSelector)
-                passesSearch && passesStatus && passesLabels && passesAnnotations
+                // Match the cluster banner's threshold so the count above
+                // (e.g. "3 nodes under pressure") and the post-click row
+                // count agree. A node with no usage entry (metrics-server
+                // missing) doesn't pass — the filter chip itself signals
+                // "viewing pressured nodes," and a node with unknown usage
+                // can't be claimed to be one.
+                val passesPressure = !pressureOnly ||
+                    (nodeUsages[node.name]?.pressureFraction ?: 0f) >= NODE_PRESSURE_THRESHOLD
+                passesSearch && passesStatus && passesLabels && passesAnnotations && passesPressure
             }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -150,7 +172,7 @@ fun NodesScreen(
                                 onSelectNone = { statusFilter = emptySet() },
                             )
                             AnimatedVisibility(
-                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || pressureOnly,
                                 enter = expandHorizontally() + fadeIn(),
                                 exit = shrinkHorizontally() + fadeOut(),
                             ) {
@@ -158,6 +180,7 @@ fun NodesScreen(
                                     onClick = {
                                         onLabelQueryChange("")
                                         onAnnotationQueryChange("")
+                                        pressureOnly = false
                                     },
                                     modifier = Modifier.padding(start = 8.dp),
                                 )

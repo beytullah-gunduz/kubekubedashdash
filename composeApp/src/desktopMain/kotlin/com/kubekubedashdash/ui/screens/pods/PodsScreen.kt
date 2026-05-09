@@ -58,6 +58,10 @@ fun PodsScreen(
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
     selectPodUid: String? = null,
+    // When a navigation target supplies a status allowlist (e.g. the
+    // cluster-health banner clicking "3 pods in error"), seed the filter
+    // chip with it. The user can clear or expand it via the existing menu.
+    initialStatusFilter: Set<String>? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: PodsScreenViewModel = viewModel { PodsScreenViewModel(reactiveClient) }
@@ -68,7 +72,13 @@ fun PodsScreen(
     var selectedPodUid by rememberSaveable { mutableStateOf<String?>(null) }
     // null sentinel = "no filter applied" (show every status that appears).
     // A non-null Set is the explicit allowlist after the user touched the menu.
-    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(null) }
+    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(initialStatusFilter) }
+    LaunchedEffect(initialStatusFilter) {
+        // Re-applies the seed if the user navigates back into Pods with a
+        // different filter (e.g. clicks a different banner segment after
+        // having drilled in once).
+        if (initialStatusFilter != null) statusFilter = initialStatusFilter
+    }
     val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
     val scope = rememberCoroutineScope()
 
