@@ -26,10 +26,10 @@ fun EventsScreen(
     searchQuery: String,
     onNavigate: (Screen) -> Unit,
     selectEventUid: String? = null,
-    // When a navigation target supplies a single type to focus on (e.g.
-    // "Warning" from the cluster-health banner), seed the type-filter chip
-    // to that single type on entry. User can broaden via the chip menu.
-    initialTypeFilter: String? = null,
+    // When a navigation target supplies an allowlist of types to focus on
+    // (e.g. setOf("Warning", "Error") from the cluster-health banner), seed
+    // the type-filter chip with it on entry. User can broaden via the menu.
+    initialTypeFilter: Set<String>? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(reactiveClient) }
@@ -40,11 +40,9 @@ fun EventsScreen(
     // allowlist — set by the route param or by the user toggling chips.
     // Hoisted out of the Success branch so the seed survives state
     // transitions (Loading → Success won't wipe it).
-    var selectedTypes by rememberSaveable {
-        mutableStateOf<Set<String>?>(initialTypeFilter?.let { setOf(it) })
-    }
+    var selectedTypes by rememberSaveable { mutableStateOf<Set<String>?>(initialTypeFilter) }
     LaunchedEffect(initialTypeFilter) {
-        if (initialTypeFilter != null) selectedTypes = setOf(initialTypeFilter)
+        if (initialTypeFilter != null) selectedTypes = initialTypeFilter
     }
     var selectedNodes by rememberSaveable { mutableStateOf<Set<String>?>(null) }
 

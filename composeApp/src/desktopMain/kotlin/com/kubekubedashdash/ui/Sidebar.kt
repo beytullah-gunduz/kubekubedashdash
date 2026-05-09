@@ -46,6 +46,8 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -125,6 +127,7 @@ fun Sidebar(
                 selected = currentScreen is Screen.Main.ClusterOverview,
                 collapsed = collapsed,
                 badge = healthBadgeColor(clusterHealth),
+                badgeContentDescription = healthBadgeDescription(clusterHealth),
                 onClick = { onNavigate(Screen.Main.ClusterOverview) },
             )
             SidebarItem(Res.drawable.graph_3_24, "Topology", currentScreen is Screen.Main.ClusterTopology, collapsed) {
@@ -212,6 +215,10 @@ fun SidebarItem(
     // Used today by the Cluster entry to surface health (KdWarning / KdError)
     // so issues are visible from any screen, not only the cluster overview.
     badge: Color? = null,
+    // Screen-reader description for the badge dot. Read alongside the
+    // item's label so e.g. "Cluster" becomes "Cluster, cluster health
+    // critical" when there's a non-null badge. Required if badge is set.
+    badgeContentDescription: String? = null,
     onClick: () -> Unit,
 ) {
     var hovered by remember { mutableStateOf(false) }
@@ -297,7 +304,14 @@ fun SidebarItem(
                         .padding(end = if (collapsed) 4.dp else 10.dp)
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(badge),
+                        .background(badge)
+                        .then(
+                            if (badgeContentDescription != null) {
+                                Modifier.semantics { contentDescription = badgeContentDescription }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
             }
         }
@@ -382,5 +396,14 @@ fun SidebarSection(
 private fun healthBadgeColor(health: ClusterHealthSummary?): Color? = when (health?.level) {
     HealthLevel.CRITICAL -> KdError
     HealthLevel.WARNING -> KdWarning
+    HealthLevel.HEALTHY, null -> null
+}
+
+// Screen-reader description that pairs with the dot. Read alongside the
+// item's "Cluster" label so SR users hear "Cluster, cluster health
+// critical" instead of just "Cluster" when issues are present.
+private fun healthBadgeDescription(health: ClusterHealthSummary?): String? = when (health?.level) {
+    HealthLevel.CRITICAL -> "cluster health critical"
+    HealthLevel.WARNING -> "cluster health warning"
     HealthLevel.HEALTHY, null -> null
 }

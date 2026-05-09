@@ -23,10 +23,12 @@ sealed class Screen(val title: String) {
         data object Namespaces : Main("Namespaces")
         data class Events(
             val selectEventUid: String? = null,
-            // When non-null, the Events screen seeds its type-filter chip to
-            // this single type (typically "Warning") on entry. Cleared by
-            // user toggling. Driven by clicks on the cluster health banner.
-            val typeFilter: String? = null,
+            // When non-null, the Events screen seeds its type-filter chip
+            // allowlist to this set on entry. Driven by clicks on the
+            // cluster health banner — currently `setOf("Warning", "Error")`
+            // since the banner counts both as warnings (custom controllers
+            // occasionally emit Error). User can broaden via the chip menu.
+            val typeFilter: Set<String>? = null,
         ) : Main("Events")
 
         data class Pods(

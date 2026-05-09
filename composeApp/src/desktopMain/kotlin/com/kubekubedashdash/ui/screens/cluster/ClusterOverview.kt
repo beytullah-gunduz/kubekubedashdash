@@ -129,8 +129,13 @@ fun ClusterOverviewScreen(
                         Screen.Main.Nodes(pressureOnly = true),
                     )
 
+                    // Banner counts Warning + Error type events together
+                    // (eventTypeSeverity collapses both to WARNING tier),
+                    // so the destination filter has to include both —
+                    // otherwise the count and the post-click row count
+                    // disagree on clusters with custom-controller Errors.
                     HealthSegment.RECENT_WARNINGS -> onNavigate(
-                        Screen.Main.Events(typeFilter = "Warning"),
+                        Screen.Main.Events(typeFilter = setOf("Warning", "Error")),
                     )
                 }
             },

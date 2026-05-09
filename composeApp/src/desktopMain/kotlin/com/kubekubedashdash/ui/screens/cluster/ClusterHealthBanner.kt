@@ -21,6 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -80,8 +84,18 @@ internal fun ClusterHealthBanner(
     }
 
     val visual = bannerVisual(health.level)
+    val a11yDescription = health.accessibilityDescription()
     Surface(
-        modifier = modifier.fillMaxWidth().height(BANNER_HEIGHT),
+        // liveRegion + a synthesized contentDescription on the parent
+        // surface — when the cluster goes critical/warning/healthy, the
+        // screen reader announces the new state without the user having to
+        // find the banner. Polite (not Assertive) so it doesn't interrupt
+        // the user mid-sentence; this isn't a modal alert.
+        modifier = modifier.fillMaxWidth().height(BANNER_HEIGHT)
+            .semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = a11yDescription
+            },
         shape = RoundedCornerShape(10.dp),
         color = visual.accent.copy(
             alpha = if (health.level == HealthLevel.HEALTHY) HEALTHY_TINT_ALPHA else ALERT_TINT_ALPHA,
@@ -154,6 +168,22 @@ private fun bannerVisual(level: HealthLevel): BannerVisual = when (level) {
     HealthLevel.HEALTHY -> BannerVisual(KdSuccess, Res.drawable.check_circle_filled, "All systems healthy")
     HealthLevel.WARNING -> BannerVisual(KdWarning, Res.drawable.warning_filled, "Warnings detected")
     HealthLevel.CRITICAL -> BannerVisual(KdError, Res.drawable.error_filled, "Issues detected")
+}
+
+// Sentence form of the same data, used as the banner's contentDescription
+// for screen readers. Matches the visual order in [segments].
+private fun ClusterHealthSummary.accessibilityDescription(): String = when (level) {
+    HealthLevel.HEALTHY -> "Cluster health: all systems healthy"
+
+    else -> {
+        val prefix = if (level == HealthLevel.CRITICAL) {
+            "Cluster health critical"
+        } else {
+            "Cluster health warning"
+        }
+        val parts = segments().map { (_, label) -> label }
+        if (parts.isEmpty()) prefix else "$prefix: ${parts.joinToString(", ")}"
+    }
 }
 
 // Order: CRITICAL signals first (failing pods/nodes), then WARNING (degraded
