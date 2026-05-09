@@ -127,6 +127,19 @@
 # the dependency is optional.
 -dontwarn org.apache.commons.compress.**
 
+# json-path ships pluggable SPI adapters for Gson, Jakarta JSON, Jettison,
+# JSON-Java, and Tapestry5. We use the default JsonSmartJsonProvider
+# (net.minidev:json-smart) and bundle none of these alternative backends.
+# The trailing rule on `jsonpath.spi.json.**` silences follow-on warnings
+# about inherited members in adapter classes whose superclasses are also
+# missing (e.g. JettisonProvider$JettisonTokener extending JSONTokener).
+-dontwarn com.google.gson.**
+-dontwarn jakarta.json.**
+-dontwarn org.codehaus.jettison.**
+-dontwarn org.json.**
+-dontwarn org.apache.tapestry5.**
+-dontwarn com.jayway.jsonpath.spi.json.**
+
 # ---------------------------------------------------------------------------
 # fabric8 kubernetes-client — heavy Jackson reflection.
 # ---------------------------------------------------------------------------
