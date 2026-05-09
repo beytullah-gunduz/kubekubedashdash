@@ -430,6 +430,13 @@ fun App(
                             // compose alongside the new one when the user
                             // switches tabs.
                             beyondViewportPageCount = 0,
+                            // Tab nav is driven entirely by the tab strip +
+                            // pagerState.scrollToPage. Letting the pager also
+                            // capture horizontal drags meant any drag that
+                            // escaped a child gesture handler (e.g. starting
+                            // on a node card in the topology graph) would
+                            // swipe to an adjacent tab.
+                            userScrollEnabled = false,
                         ) { page ->
                             when (val tab = tabs[page]) {
                                 is WorkspaceTab.Cluster -> SessionPaneContent(
