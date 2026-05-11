@@ -90,8 +90,8 @@ fun LogDrawer(
 
     AnimatedVisibility(
         visible = state != LogDrawerState.HIDDEN,
-        enter = slideInVertically(initialOffsetY = { it }),
-        exit = slideOutVertically(targetOffsetY = { it }),
+        enter = slideInVertically(initialOffsetY = { it }) + expandVertically(expandFrom = Alignment.Bottom),
+        exit = slideOutVertically(targetOffsetY = { it }) + shrinkVertically(shrinkTowards = Alignment.Bottom),
         modifier = modifier,
     ) {
         Column(modifier = Modifier.fillMaxWidth().background(KdSurface)) {

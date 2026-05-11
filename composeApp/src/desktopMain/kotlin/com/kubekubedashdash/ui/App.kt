@@ -459,7 +459,7 @@ fun App(
                                 )
                             }
                         }
-                        if (drawerState != LogDrawerState.HIDDEN) Spacer(Modifier.height(DrawerHeaderHeight))
+                        LogDrawer(state = drawerState, onStateChange = { drawerState = it })
                     }
                 } // end if (showFirstRun) else
 
@@ -522,10 +522,6 @@ fun App(
                         entries = paletteEntries,
                         onDismiss = { paletteOpen = false },
                     )
-                }
-
-                Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                    LogDrawer(state = drawerState, onStateChange = { drawerState = it })
                 }
             }
         }
