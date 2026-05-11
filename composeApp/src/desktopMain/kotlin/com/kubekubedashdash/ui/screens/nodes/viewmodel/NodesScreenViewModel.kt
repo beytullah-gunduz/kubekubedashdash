@@ -40,6 +40,22 @@ class NodesScreenViewModel(
     private val _staleNodes = MutableStateFlow<Map<String, NodeInfo>>(emptyMap())
     val staleNodes: StateFlow<Map<String, NodeInfo>> = _staleNodes.asStateFlow()
 
+    // null = "no explicit allowlist" (= show every status). Non-null Set is
+    // the explicit allowlist. Survives screen navigation (session-scoped VM).
+    private val _statusFilter = MutableStateFlow<Set<String>?>(null)
+    val statusFilter: StateFlow<Set<String>?> = _statusFilter.asStateFlow()
+
+    private val _pressureOnly = MutableStateFlow(false)
+    val pressureOnly: StateFlow<Boolean> = _pressureOnly.asStateFlow()
+
+    fun setStatusFilter(value: Set<String>?) {
+        _statusFilter.value = value
+    }
+
+    fun setPressureOnly(value: Boolean) {
+        _pressureOnly.value = value
+    }
+
     private var previousNodesByUid: Map<String, NodeInfo> = emptyMap()
     private var pendingSelectName: String? = null
 

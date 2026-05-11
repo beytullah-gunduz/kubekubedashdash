@@ -16,7 +16,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * Stable key identifying a resource-kind screen (e.g. "Pods", "Deployments")
+ * used to scope label/annotation filters per-screen on [SessionViewModel].
+ * Returns an empty string for transient screens (Connecting, ConnectionError, etc.)
+ * which means filters there share a single "" slot — harmless because those
+ * screens never render the filter chips.
+ */
+fun screenKeyOf(screen: Screen): String = if (screen is Screen.Main) screen::class.simpleName.orEmpty() else ""
 
 /**
  * Per-cluster-session UI state. One instance per [com.kubekubedashdash.model.ClusterSession]
@@ -57,14 +67,13 @@ class SessionViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // Cross-kind selectors shared by Pod and Node screens so users can track
-    // a workload (e.g. topology.kubernetes.io/zone=…) across resource kinds
-    // without re-typing.
-    private val _labelQuery = MutableStateFlow("")
-    val labelQuery: StateFlow<String> = _labelQuery.asStateFlow()
+    // Per-screen label/annotation selectors, keyed by Screen.Main subclass simpleName
+    // so each resource-kind screen keeps its own filter independent of others.
+    private val _labelQueries = MutableStateFlow<Map<String, String>>(emptyMap())
+    val labelQueries: StateFlow<Map<String, String>> = _labelQueries.asStateFlow()
 
-    private val _annotationQuery = MutableStateFlow("")
-    val annotationQuery: StateFlow<String> = _annotationQuery.asStateFlow()
+    private val _annotationQueries = MutableStateFlow<Map<String, String>>(emptyMap())
+    val annotationQueries: StateFlow<Map<String, String>> = _annotationQueries.asStateFlow()
 
     private val _retryCountdown = MutableStateFlow(0)
     val retryCountdown: StateFlow<Int> = _retryCountdown.asStateFlow()
@@ -222,11 +231,11 @@ class SessionViewModel(
         _searchQuery.value = query
     }
 
-    fun setLabelQuery(query: String) {
-        _labelQuery.value = query
+    fun setLabelQuery(screenKey: String, query: String) {
+        _labelQueries.update { it + (screenKey to query) }
     }
 
-    fun setAnnotationQuery(query: String) {
-        _annotationQuery.value = query
+    fun setAnnotationQuery(screenKey: String, query: String) {
+        _annotationQueries.update { it + (screenKey to query) }
     }
 }

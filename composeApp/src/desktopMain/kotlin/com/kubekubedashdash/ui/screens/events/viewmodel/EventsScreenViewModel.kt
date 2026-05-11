@@ -19,6 +19,22 @@ class EventsScreenViewModel(
     private val _selected = MutableStateFlow<EventInfo?>(null)
     val selected: StateFlow<EventInfo?> = _selected.asStateFlow()
 
+    // null = "no explicit allowlist" (= show all). Non-null = user-chosen
+    // allowlist. Survives screen navigation because this VM is session-scoped.
+    private val _typeFilter = MutableStateFlow<Set<String>?>(null)
+    val typeFilter: StateFlow<Set<String>?> = _typeFilter.asStateFlow()
+
+    private val _nodeFilter = MutableStateFlow<Set<String>?>(null)
+    val nodeFilter: StateFlow<Set<String>?> = _nodeFilter.asStateFlow()
+
+    fun setTypeFilter(value: Set<String>?) {
+        _typeFilter.value = value
+    }
+
+    fun setNodeFilter(value: Set<String>?) {
+        _nodeFilter.value = value
+    }
+
     private var pendingSelectUid: String? = null
 
     val state: StateFlow<ResourceState<List<EventInfo>>> = reactiveClient.events

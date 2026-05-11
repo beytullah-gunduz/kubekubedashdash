@@ -45,6 +45,8 @@ fun DeploymentsScreen(
     onLabelQueryChange: (String) -> Unit,
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
+    pulseLabelsOnEntry: Boolean = false,
+    pulseAnnotationsOnEntry: Boolean = false,
     onNavigate: (Screen) -> Unit,
     // When true, hide deployments at quorum on entry. The user can clear
     // via the chip that appears above the table once active. Driven by the
@@ -95,11 +97,13 @@ fun DeploymentsScreen(
                             query = labelQuery,
                             onQueryChange = onLabelQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
+                            pulseOnEntry = pulseLabelsOnEntry,
                         )
                         AnnotationSelectorChip(
                             query = annotationQuery,
                             onQueryChange = onAnnotationQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
+                            pulseOnEntry = pulseAnnotationsOnEntry,
                         )
                         AnimatedVisibility(
                             visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,

@@ -1,5 +1,8 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,11 +66,30 @@ fun StatusFilterMenu(
     onSelectNone: () -> Unit,
     label: String = "Status",
     itemContent: @Composable (String) -> Unit = { value -> StatusCell(status = value) },
+    pulseOnEntry: Boolean = false,
 ) {
     if (available.isEmpty()) return
 
     var expanded by remember { mutableStateOf(false) }
     val active = selected.size != available.size
+
+    // Pulse 0f..1f, fires once on first composition if pulseOnEntry — matches
+    // the MapSelectorChip animation so cross-screen filter cues feel consistent.
+    val pulse = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        if (pulseOnEntry) {
+            repeat(2) {
+                pulse.animateTo(1f, tween(150, easing = LinearOutSlowInEasing))
+                pulse.animateTo(0f, tween(150, easing = LinearOutSlowInEasing))
+            }
+        }
+    }
+
+    val baseBg = if (active) KdPrimary.copy(alpha = 0.08f) else KdSurface
+    val pulseBg = KdPrimary.copy(alpha = 0.08f + 0.42f * pulse.value)
+    val bgColor = if (pulse.value > 0f) pulseBg else baseBg
+    val baseBorder = if (active) KdPrimary.copy(alpha = 0.6f) else KdBorder
+    val borderColor = if (pulse.value > 0f) KdPrimary.copy(alpha = 0.6f + 0.4f * pulse.value) else baseBorder
 
     Box {
         Row(
@@ -74,10 +97,10 @@ fun StatusFilterMenu(
                 .clip(RoundedCornerShape(6.dp))
                 .border(
                     width = 1.dp,
-                    color = if (active) KdPrimary.copy(alpha = 0.6f) else KdBorder,
+                    color = borderColor,
                     shape = RoundedCornerShape(6.dp),
                 )
-                .background(if (active) KdPrimary.copy(alpha = 0.08f) else KdSurface)
+                .background(bgColor)
                 .clickable { expanded = !expanded }
                 .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,

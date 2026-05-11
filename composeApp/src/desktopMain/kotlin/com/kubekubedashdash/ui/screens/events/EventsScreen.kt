@@ -1,9 +1,15 @@
 package com.kubekubedashdash.ui.screens.events
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -41,17 +48,15 @@ fun EventsScreen(
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
+    val typeFilter by viewModel.typeFilter.collectAsState()
+    val nodeFilter by viewModel.nodeFilter.collectAsState()
     var selectedEventUid by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // null = "all types" (default behavior). A non-null set is an explicit
-    // allowlist — set by the route param or by the user toggling chips.
-    // Hoisted out of the Success branch so the seed survives state
-    // transitions (Loading → Success won't wipe it).
-    var selectedTypes by rememberSaveable { mutableStateOf<Set<String>?>(initialTypeFilter) }
+    // Nav-driven seed: if the route arrives with an explicit type allowlist
+    // (e.g. from a banner click), write it into VM state so the chip shows it.
     LaunchedEffect(initialTypeFilter) {
-        if (initialTypeFilter != null) selectedTypes = initialTypeFilter
+        if (initialTypeFilter != null) viewModel.setTypeFilter(initialTypeFilter)
     }
-    var selectedNodes by rememberSaveable { mutableStateOf<Set<String>?>(null) }
 
     LaunchedEffect(selectEventUid) {
         viewModel.setParams(selectEventUid)
@@ -74,8 +79,8 @@ fun EventsScreen(
                 s.data.map { it.node.ifEmpty { "-" } }.toSet()
             }
 
-            val effectiveTypes = selectedTypes ?: availableTypes
-            val effectiveNodes = selectedNodes ?: availableNodes
+            val effectiveTypes = typeFilter ?: availableTypes
+            val effectiveNodes = nodeFilter ?: availableNodes
 
             val filtered = s.data.filter { ev ->
                 ev.type in effectiveTypes &&
@@ -97,11 +102,11 @@ fun EventsScreen(
                             available = availableTypes,
                             selected = effectiveTypes,
                             onToggle = { type ->
-                                val current = selectedTypes ?: availableTypes
-                                selectedTypes = if (type in current) current - type else current + type
+                                val current = typeFilter ?: availableTypes
+                                viewModel.setTypeFilter(if (type in current) current - type else current + type)
                             },
-                            onSelectAll = { selectedTypes = null },
-                            onSelectNone = { selectedTypes = emptySet() },
+                            onSelectAll = { viewModel.setTypeFilter(null) },
+                            onSelectNone = { viewModel.setTypeFilter(emptySet()) },
                             label = "Type",
                             itemContent = { value ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -110,20 +115,35 @@ fun EventsScreen(
                                     Text(value)
                                 }
                             },
+                            pulseOnEntry = typeFilter != null,
                         )
                         Spacer(Modifier.width(8.dp))
                         StatusFilterMenu(
                             available = availableNodes,
                             selected = effectiveNodes,
                             onToggle = { node ->
-                                val current = selectedNodes ?: availableNodes
-                                selectedNodes = if (node in current) current - node else current + node
+                                val current = nodeFilter ?: availableNodes
+                                viewModel.setNodeFilter(if (node in current) current - node else current + node)
                             },
-                            onSelectAll = { selectedNodes = null },
-                            onSelectNone = { selectedNodes = emptySet() },
+                            onSelectAll = { viewModel.setNodeFilter(null) },
+                            onSelectNone = { viewModel.setNodeFilter(emptySet()) },
                             label = "Node",
                             itemContent = { Text(it) },
+                            pulseOnEntry = nodeFilter != null,
                         )
+                        AnimatedVisibility(
+                            visible = typeFilter != null || nodeFilter != null,
+                            enter = expandHorizontally() + fadeIn(),
+                            exit = shrinkHorizontally() + fadeOut(),
+                        ) {
+                            ClearFiltersChip(
+                                onClick = {
+                                    viewModel.setTypeFilter(null)
+                                    viewModel.setNodeFilter(null)
+                                },
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
                     },
                 )
                 EventTable(
