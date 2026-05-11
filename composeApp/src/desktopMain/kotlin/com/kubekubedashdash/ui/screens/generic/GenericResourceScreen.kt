@@ -33,6 +33,7 @@ import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.lock_filled
+import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
@@ -151,18 +152,20 @@ fun GenericResourceScreen(
                         liveDot = {
                             LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                         },
-                        actions = {
+                        actions = { compact ->
                             LabelSelectorChip(
                                 query = labelQuery,
                                 onQueryChange = onLabelQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
                                 pulseOnEntry = pulseLabelsOnEntry,
+                                compact = compact,
                             )
                             AnnotationSelectorChip(
                                 query = annotationQuery,
                                 onQueryChange = onAnnotationQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
                                 pulseOnEntry = pulseAnnotationsOnEntry,
+                                compact = compact,
                             )
                             if (availableStatuses.isNotEmpty()) {
                                 StatusFilterMenu(
@@ -174,6 +177,8 @@ fun GenericResourceScreen(
                                     },
                                     onSelectAll = { statusFilter = null },
                                     onSelectNone = { statusFilter = emptySet() },
+                                    compact = compact,
+                                    icon = Res.drawable.monitor_heart_filled,
                                 )
                             }
                             AnimatedVisibility(
@@ -187,6 +192,7 @@ fun GenericResourceScreen(
                                         onAnnotationQueryChange("")
                                     },
                                     modifier = Modifier.padding(start = 8.dp),
+                                    compact = compact,
                                 )
                             }
                         },

@@ -92,18 +92,20 @@ fun DeploymentsScreen(
                 ResourceCountHeader(
                     count = filtered.size,
                     kind = "Deployments",
-                    actions = {
+                    actions = { compact ->
                         LabelSelectorChip(
                             query = labelQuery,
                             onQueryChange = onLabelQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
                             pulseOnEntry = pulseLabelsOnEntry,
+                            compact = compact,
                         )
                         AnnotationSelectorChip(
                             query = annotationQuery,
                             onQueryChange = onAnnotationQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
                             pulseOnEntry = pulseAnnotationsOnEntry,
+                            compact = compact,
                         )
                         AnimatedVisibility(
                             visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
@@ -117,6 +119,7 @@ fun DeploymentsScreen(
                                     degradedOnly = false
                                 },
                                 modifier = Modifier.padding(end = 8.dp),
+                                compact = compact,
                             )
                         }
                     },

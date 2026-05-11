@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -648,36 +649,39 @@ fun ResourceCountHeader(
     count: Int,
     kind: String,
     liveDot: @Composable () -> Unit = {},
-    actions: (@Composable RowScope.() -> Unit)? = null,
+    actions: (@Composable RowScope.(compact: Boolean) -> Unit)? = null,
 ) {
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                kind,
-                style = MaterialTheme.typography.titleMedium,
-                color = KdTextPrimary,
-            )
-            liveDot()
-            Spacer(Modifier.width(8.dp))
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = KdPrimary.copy(alpha = 0.15f),
+        BoxWithConstraints {
+            val compact = maxWidth < 480.dp
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    formatCount(count),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = KdPrimary,
+                    kind,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = KdTextPrimary,
                 )
-            }
-            if (actions != null) {
-                Spacer(Modifier.weight(1f))
-                actions()
+                liveDot()
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = KdPrimary.copy(alpha = 0.15f),
+                ) {
+                    Text(
+                        formatCount(count),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = KdPrimary,
+                    )
+                }
+                if (actions != null) {
+                    Spacer(Modifier.weight(1f))
+                    actions(compact)
+                }
             }
         }
         HorizontalDivider(color = KdBorder, thickness = 1.dp)

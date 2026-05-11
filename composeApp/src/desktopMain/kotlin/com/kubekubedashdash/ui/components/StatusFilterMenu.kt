@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
@@ -39,6 +40,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.filter_list_filled
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -67,6 +69,8 @@ fun StatusFilterMenu(
     label: String = "Status",
     itemContent: @Composable (String) -> Unit = { value -> StatusCell(status = value) },
     pulseOnEntry: Boolean = false,
+    compact: Boolean = false,
+    icon: DrawableResource = Res.drawable.filter_list_filled,
 ) {
     if (available.isEmpty()) return
 
@@ -106,24 +110,29 @@ fun StatusFilterMenu(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                painter = painterResource(Res.drawable.filter_list_filled),
+                painter = painterResource(icon),
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
                 tint = if (active) KdPrimary else KdTextSecondary,
             )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = if (active) "$label: ${selected.size}/${available.size}" else label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (active) KdPrimary else KdTextPrimary,
-            )
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                painter = painterResource(Res.drawable.expand_more_filled),
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = if (active) KdPrimary else KdTextSecondary,
-            )
+            if (!compact) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (active) "$label: ${selected.size}/${available.size}" else label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (active) KdPrimary else KdTextPrimary,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    painter = painterResource(Res.drawable.expand_more_filled),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = if (active) KdPrimary else KdTextSecondary,
+                )
+            }
         }
 
         DropdownMenu(

@@ -84,18 +84,20 @@ fun NamespacesScreen(
                     liveDot = {
                         LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                     },
-                    actions = {
+                    actions = { compact ->
                         LabelSelectorChip(
                             query = labelQuery,
                             onQueryChange = onLabelQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
                             pulseOnEntry = pulseLabelsOnEntry,
+                            compact = compact,
                         )
                         AnnotationSelectorChip(
                             query = annotationQuery,
                             onQueryChange = onAnnotationQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
                             pulseOnEntry = pulseAnnotationsOnEntry,
+                            compact = compact,
                         )
                         AnimatedVisibility(
                             visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
@@ -108,6 +110,7 @@ fun NamespacesScreen(
                                     onAnnotationQueryChange("")
                                 },
                                 modifier = Modifier.padding(end = 8.dp),
+                                compact = compact,
                             )
                         }
                     },
