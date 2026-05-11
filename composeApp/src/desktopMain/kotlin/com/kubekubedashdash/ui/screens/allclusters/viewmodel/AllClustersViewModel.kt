@@ -21,6 +21,7 @@ import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -54,6 +56,23 @@ class AllClustersViewModel private constructor() : ViewModel() {
         val namespaceCount: Int,
         val recentErrorCount: Int,
     )
+
+    private data class ClusterSummaryBase(
+        val sessionId: SessionId,
+        val ctx: String,
+        val connected: Boolean,
+        val connecting: Boolean,
+        val info: ClusterInfo?,
+    )
+
+    // 30s tick so the per-cluster error count ages out old events as the
+    // selected time window (15m / 1h / 24h) slides, even when no new event arrives.
+    private val timeWindowTicker: Flow<Unit> = flow {
+        while (true) {
+            emit(Unit)
+            delay(30_000)
+        }
+    }
 
     /**
      * Emits the live list of [WorkspaceTab.Cluster] tabs whenever any workspace's
@@ -223,24 +242,35 @@ class AllClustersViewModel private constructor() : ViewModel() {
             if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
             combine(
                 clusterTabs.map { tab ->
-                    combine(
+                    val base = combine(
                         tab.session.viewModel.selectedContext,
                         tab.session.viewModel.isConnected,
                         tab.session.viewModel.isConnecting,
                         tab.session.reactiveClient.nodes,
                         tab.session.reactiveClient.clusterInfo,
-                    ) { ctx, connected, connecting, nodesState, clusterState ->
-                        val info = (clusterState as? ResourceState.Success)?.data
-                        val recentErrors = aggregatedEvents.value.count {
-                            it.cluster == ctx && (it.type == "Warning" || it.type == "Error")
+                    ) { ctx, connected, connecting, _, clusterState ->
+                        ClusterSummaryBase(
+                            sessionId = tab.session.id,
+                            ctx = ctx,
+                            connected = connected,
+                            connecting = connecting,
+                            info = (clusterState as? ResourceState.Success)?.data,
+                        )
+                    }
+                    combine(base, aggregatedEvents, _filters, timeWindowTicker) { b, events, filters, _ ->
+                        val cutoff = Instant.now().minusSeconds(filters.timeWindow.minutes * 60)
+                        val recentErrors = events.count { ev ->
+                            ev.cluster == b.ctx &&
+                                (ev.type == "Warning" || ev.type == "Error") &&
+                                (ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true)
                         }
                         ClusterSummary(
-                            sessionId = tab.session.id,
-                            contextName = ctx.ifBlank { "Loading…" },
-                            isConnected = connected,
-                            isConnecting = connecting,
-                            nodeCount = info?.nodesCount ?: 0,
-                            namespaceCount = info?.namespacesCount ?: 0,
+                            sessionId = b.sessionId,
+                            contextName = b.ctx.ifBlank { "Loading…" },
+                            isConnected = b.connected,
+                            isConnecting = b.connecting,
+                            nodeCount = b.info?.nodesCount ?: 0,
+                            namespaceCount = b.info?.namespacesCount ?: 0,
                             recentErrorCount = recentErrors,
                         )
                     }
