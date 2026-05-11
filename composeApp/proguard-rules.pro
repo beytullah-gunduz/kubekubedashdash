@@ -139,6 +139,12 @@
 -dontwarn org.json.**
 -dontwarn org.apache.tapestry5.**
 -dontwarn com.jayway.jsonpath.spi.json.**
+# Keep json-path itself: Configuration.defaultConfiguration() calls
+# EnumSet.noneOf(Option.class) via reflection, which reads $VALUES / values().
+# ProGuard strips those from enums with no direct user-code reference,
+# causing ClassCastException: "not an enum" at CrdJsonPath.<clinit>.
+-keep class com.jayway.jsonpath.** { *; }
+-keepclassmembers enum com.jayway.jsonpath.** { *; }
 
 # ---------------------------------------------------------------------------
 # fabric8 kubernetes-client — heavy Jackson reflection.
