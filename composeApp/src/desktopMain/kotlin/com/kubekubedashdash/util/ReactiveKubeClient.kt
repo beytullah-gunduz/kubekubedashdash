@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -1317,7 +1318,40 @@ class ReactiveKubeClient(
         "Error fetching logs: ${e.message}"
     }
 
-    fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
+    fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = flow {
+        // Probe phase once so terminal pods (Succeeded/Failed) get a one-shot
+        // historical read instead of watchLog() with follow=true, which on a
+        // terminated container can return immediately with no data.
+        val phase = try {
+            k8s.pods().inNamespace(namespace).withName(name).get()?.status?.phase
+        } catch (e: Exception) {
+            log.debug(
+                "Pod phase probe failed pod={} namespace={}: {} — falling back to live stream",
+                name,
+                namespace,
+                e.message,
+            )
+            null
+        }
+        if (phase == "Succeeded" || phase == "Failed") {
+            log.debug("Reading historical logs pod={} namespace={} phase={}", name, namespace, phase)
+            try {
+                val op = k8s.pods().inNamespace(namespace).withName(name)
+                val withC = if (container != null) op.inContainer(container) else op
+                val text = withC.tailingLines(5_000).log
+                if (!text.isNullOrEmpty()) {
+                    text.lineSequence().forEach { emit(it) }
+                }
+            } catch (e: Exception) {
+                log.warn("Failed to fetch historical logs pod={} namespace={}: {}", name, namespace, e.message)
+                emit("[fetch error: ${e.message}]")
+            }
+        } else {
+            emitAll(streamLivePodLogs(name, namespace, container))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun streamLivePodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
         log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
         val watch = try {
             val op = k8s.pods().inNamespace(namespace).withName(name)
