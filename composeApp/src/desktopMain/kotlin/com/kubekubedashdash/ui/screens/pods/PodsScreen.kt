@@ -28,6 +28,8 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -157,18 +159,20 @@ fun PodsScreen(
                             liveDot = {
                                 LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                             },
-                            actions = {
+                            actions = { compact ->
                                 LabelSelectorChip(
                                     query = labelQuery,
                                     onQueryChange = onLabelQueryChange,
                                     modifier = Modifier.padding(end = 8.dp),
                                     pulseOnEntry = pulseLabelsOnEntry,
+                                    compact = compact,
                                 )
                                 AnnotationSelectorChip(
                                     query = annotationQuery,
                                     onQueryChange = onAnnotationQueryChange,
                                     modifier = Modifier.padding(end = 8.dp),
                                     pulseOnEntry = pulseAnnotationsOnEntry,
+                                    compact = compact,
                                 )
                                 StatusFilterMenu(
                                     available = availableStatuses,
@@ -180,6 +184,8 @@ fun PodsScreen(
                                     onSelectAll = { viewModel.setStatusFilter(null) },
                                     onSelectNone = { viewModel.setStatusFilter(emptySet()) },
                                     pulseOnEntry = statusFilter != null,
+                                    compact = compact,
+                                    icon = Res.drawable.monitor_heart_filled,
                                 )
                                 AnimatedVisibility(
                                     visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
@@ -193,6 +199,7 @@ fun PodsScreen(
                                             viewModel.setStatusFilter(null)
                                         },
                                         modifier = Modifier.padding(start = 8.dp),
+                                        compact = compact,
                                     )
                                 }
                             },

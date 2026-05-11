@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.category_filled
+import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -97,7 +100,7 @@ fun EventsScreen(
                 ResourceCountHeader(
                     count = filtered.size,
                     kind = "Events",
-                    actions = {
+                    actions = { compact ->
                         StatusFilterMenu(
                             available = availableTypes,
                             selected = effectiveTypes,
@@ -116,6 +119,8 @@ fun EventsScreen(
                                 }
                             },
                             pulseOnEntry = typeFilter != null,
+                            compact = compact,
+                            icon = Res.drawable.category_filled,
                         )
                         Spacer(Modifier.width(8.dp))
                         StatusFilterMenu(
@@ -130,6 +135,8 @@ fun EventsScreen(
                             label = "Node",
                             itemContent = { Text(it) },
                             pulseOnEntry = nodeFilter != null,
+                            compact = compact,
+                            icon = Res.drawable.dns_filled,
                         )
                         AnimatedVisibility(
                             visible = typeFilter != null || nodeFilter != null,
@@ -142,6 +149,7 @@ fun EventsScreen(
                                     viewModel.setNodeFilter(null)
                                 },
                                 modifier = Modifier.padding(start = 8.dp),
+                                compact = compact,
                             )
                         }
                     },

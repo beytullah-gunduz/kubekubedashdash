@@ -34,14 +34,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
+import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.filter_list_filled
+import com.kubekubedashdash.resources.sell_filled
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 fun parseMapSelector(query: String): Map<String, String> {
@@ -80,6 +84,8 @@ fun MapSelectorChip(
     placeholder: String,
     modifier: Modifier = Modifier,
     pulseOnEntry: Boolean = false,
+    compact: Boolean = false,
+    icon: DrawableResource = Res.drawable.filter_list_filled,
 ) {
     val active = query.isNotBlank()
     val matchCount = remember(query) { parseMapSelector(query).size }
@@ -122,28 +128,33 @@ fun MapSelectorChip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    painterResource(Res.drawable.filter_list_filled),
+                    painterResource(icon),
                     contentDescription = "Filter by ${title.lowercase()}",
                     modifier = Modifier.size(14.dp),
                     tint = if (active) KdPrimary else KdTextSecondary,
                 )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    if (active) "$title: $matchCount" else title,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (active) KdPrimary else KdTextSecondary,
-                )
-                if (active) {
+                if (!compact) {
                     Spacer(Modifier.width(4.dp))
-                    Icon(
-                        painterResource(Res.drawable.close_filled),
-                        contentDescription = "Clear ${title.lowercase()} filter",
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clickable { onQueryChange("") }
-                            .pointerHoverIcon(PointerIcon.Hand),
-                        tint = KdPrimary,
+                    Text(
+                        if (active) "$title: $matchCount" else title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (active) KdPrimary else KdTextSecondary,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
                     )
+                    if (active) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            painterResource(Res.drawable.close_filled),
+                            contentDescription = "Clear ${title.lowercase()} filter",
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clickable { onQueryChange("") }
+                                .pointerHoverIcon(PointerIcon.Hand),
+                            tint = KdPrimary,
+                        )
+                    }
                 }
             }
         }
@@ -190,6 +201,7 @@ fun LabelSelectorChip(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     pulseOnEntry: Boolean = false,
+    compact: Boolean = false,
 ) = MapSelectorChip(
     query = query,
     onQueryChange = onQueryChange,
@@ -197,6 +209,8 @@ fun LabelSelectorChip(
     placeholder = "app=nginx, tier=backend",
     modifier = modifier,
     pulseOnEntry = pulseOnEntry,
+    compact = compact,
+    icon = Res.drawable.sell_filled,
 )
 
 @Composable
@@ -205,6 +219,7 @@ fun AnnotationSelectorChip(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     pulseOnEntry: Boolean = false,
+    compact: Boolean = false,
 ) = MapSelectorChip(
     query = query,
     onQueryChange = onQueryChange,
@@ -212,6 +227,8 @@ fun AnnotationSelectorChip(
     placeholder = "owner=team-a, prometheus.io/scrape=true",
     modifier = modifier,
     pulseOnEntry = pulseOnEntry,
+    compact = compact,
+    icon = Res.drawable.description_filled,
 )
 
 /**
@@ -223,6 +240,7 @@ fun AnnotationSelectorChip(
 fun ClearFiltersChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -241,12 +259,14 @@ fun ClearFiltersChip(
                 modifier = Modifier.size(12.dp),
                 tint = KdTextSecondary,
             )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "Clear",
-                style = MaterialTheme.typography.labelSmall,
-                color = KdTextSecondary,
-            )
+            if (!compact) {
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Clear",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                )
+            }
         }
     }
 }
