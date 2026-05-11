@@ -46,6 +46,8 @@ fun NamespacesScreen(
     onLabelQueryChange: (String) -> Unit,
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
+    pulseLabelsOnEntry: Boolean = false,
+    pulseAnnotationsOnEntry: Boolean = false,
     onNavigate: (Screen) -> Unit,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
@@ -87,11 +89,13 @@ fun NamespacesScreen(
                             query = labelQuery,
                             onQueryChange = onLabelQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
+                            pulseOnEntry = pulseLabelsOnEntry,
                         )
                         AnnotationSelectorChip(
                             query = annotationQuery,
                             onQueryChange = onAnnotationQueryChange,
                             modifier = Modifier.padding(end = 8.dp),
+                            pulseOnEntry = pulseAnnotationsOnEntry,
                         )
                         AnimatedVisibility(
                             visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),

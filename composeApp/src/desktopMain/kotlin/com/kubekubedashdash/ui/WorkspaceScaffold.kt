@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -40,6 +41,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.logs.LogsScreen
+import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 
 /**
  * Per-session content area: sidebar + ContentRouter + optional ExtraPane.
@@ -64,11 +66,26 @@ internal fun SessionPaneContent(
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
-    val labelQuery by sessionVm.labelQuery.collectAsState()
-    val annotationQuery by sessionVm.annotationQuery.collectAsState()
+    val labelMap by sessionVm.labelQueries.collectAsState()
+    val annotationMap by sessionVm.annotationQueries.collectAsState()
     val sessionIsConnected by sessionVm.isConnected.collectAsState()
     val sessionConnectionError by sessionVm.connectionError.collectAsState()
     val clusterHealth by sessionVm.clusterHealth.collectAsState()
+
+    val screenKey = screenKeyOf(currentScreen)
+    val labelQuery by remember(screenKey) {
+        derivedStateOf { labelMap[screenKey].orEmpty() }
+    }
+    val annotationQuery by remember(screenKey) {
+        derivedStateOf { annotationMap[screenKey].orEmpty() }
+    }
+
+    // Each chip evaluates pulseOnEntry on its own first composition, so the
+    // pulse is intrinsic to "this chip just mounted with a non-empty filter".
+    // No shared Channel/Flow — that would race with AnimatedContent briefly
+    // composing both the outgoing and incoming screen's chips concurrently.
+    val pulseLabelsOnEntry = labelQuery.isNotBlank()
+    val pulseAnnotationsOnEntry = annotationQuery.isNotBlank()
 
     val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
     val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
@@ -138,9 +155,11 @@ internal fun SessionPaneContent(
                             screen = currentScreen,
                             searchQuery = searchQuery,
                             labelQuery = labelQuery,
-                            onLabelQueryChange = sessionVm::setLabelQuery,
+                            onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
                             annotationQuery = annotationQuery,
-                            onAnnotationQueryChange = sessionVm::setAnnotationQuery,
+                            onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
+                            pulseLabelsOnEntry = pulseLabelsOnEntry,
+                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
                             onNavigate = sessionVm::navigate,
                             clusterHealth = clusterHealth,
                             onSelectCluster = onSelectCluster,
@@ -174,11 +193,17 @@ internal fun SessionPaneContent(
                         onOpenTerminal = onOpenTerminal,
                         labelQuery = labelQuery,
                         onToggleLabel = { k, v ->
-                            sessionVm.setLabelQuery(toggleSelectorEntry(sessionVm.labelQuery.value, k, v))
+                            sessionVm.setLabelQuery(
+                                screenKey,
+                                toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
+                            )
                         },
                         annotationQuery = annotationQuery,
                         onToggleAnnotation = { k, v ->
-                            sessionVm.setAnnotationQuery(toggleSelectorEntry(sessionVm.annotationQuery.value, k, v))
+                            sessionVm.setAnnotationQuery(
+                                screenKey,
+                                toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
+                            )
                         },
                     )
                 }

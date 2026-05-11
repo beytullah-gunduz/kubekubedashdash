@@ -54,6 +54,8 @@ fun PodsScreen(
     onLabelQueryChange: (String) -> Unit,
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
+    pulseLabelsOnEntry: Boolean = false,
+    pulseAnnotationsOnEntry: Boolean = false,
     onNavigate: (Screen) -> Unit,
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
@@ -68,16 +70,14 @@ fun PodsScreen(
     val state by viewModel.state.collectAsState()
     val resourceUsage by viewModel.resourceUsage.collectAsState()
     val stalePods by viewModel.stalePods.collectAsState()
+    val statusFilter by viewModel.statusFilter.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedPodUid by rememberSaveable { mutableStateOf<String?>(null) }
-    // null sentinel = "no filter applied" (show every status that appears).
-    // A non-null Set is the explicit allowlist after the user touched the menu.
-    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(initialStatusFilter) }
     LaunchedEffect(initialStatusFilter) {
-        // Re-applies the seed if the user navigates back into Pods with a
-        // different filter (e.g. clicks a different banner segment after
-        // having drilled in once).
-        if (initialStatusFilter != null) statusFilter = initialStatusFilter
+        // Nav-driven seed: a banner click landing on Pods with a typed status
+        // allowlist writes through to VM state. The persistent value is the
+        // source of truth from there on.
+        if (initialStatusFilter != null) viewModel.setStatusFilter(initialStatusFilter)
     }
     val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
     val scope = rememberCoroutineScope()
@@ -162,24 +162,27 @@ fun PodsScreen(
                                     query = labelQuery,
                                     onQueryChange = onLabelQueryChange,
                                     modifier = Modifier.padding(end = 8.dp),
+                                    pulseOnEntry = pulseLabelsOnEntry,
                                 )
                                 AnnotationSelectorChip(
                                     query = annotationQuery,
                                     onQueryChange = onAnnotationQueryChange,
                                     modifier = Modifier.padding(end = 8.dp),
+                                    pulseOnEntry = pulseAnnotationsOnEntry,
                                 )
                                 StatusFilterMenu(
                                     available = availableStatuses,
                                     selected = activeStatusFilter ?: availableStatuses,
                                     onToggle = { value ->
                                         val current = activeStatusFilter ?: availableStatuses
-                                        statusFilter = if (value in current) current - value else current + value
+                                        viewModel.setStatusFilter(if (value in current) current - value else current + value)
                                     },
-                                    onSelectAll = { statusFilter = null },
-                                    onSelectNone = { statusFilter = emptySet() },
+                                    onSelectAll = { viewModel.setStatusFilter(null) },
+                                    onSelectNone = { viewModel.setStatusFilter(emptySet()) },
+                                    pulseOnEntry = statusFilter != null,
                                 )
                                 AnimatedVisibility(
-                                    visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                                    visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
                                     enter = expandHorizontally() + fadeIn(),
                                     exit = shrinkHorizontally() + fadeOut(),
                                 ) {
@@ -187,6 +190,7 @@ fun PodsScreen(
                                         onClick = {
                                             onLabelQueryChange("")
                                             onAnnotationQueryChange("")
+                                            viewModel.setStatusFilter(null)
                                         },
                                         modifier = Modifier.padding(start = 8.dp),
                                     )

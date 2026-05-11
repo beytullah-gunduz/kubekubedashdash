@@ -1,5 +1,9 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,12 +23,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
@@ -34,6 +41,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.filter_list_filled
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 fun parseMapSelector(query: String): Map<String, String> {
@@ -71,18 +79,43 @@ fun MapSelectorChip(
     title: String,
     placeholder: String,
     modifier: Modifier = Modifier,
+    pulseOnEntry: Boolean = false,
 ) {
     val active = query.isNotBlank()
     val matchCount = remember(query) { parseMapSelector(query).size }
     var expanded by remember { mutableStateOf(false) }
 
+    // Pulse intensity 0f..1f. Two 300 ms cycles fire once when this chip first
+    // enters composition with pulseOnEntry=true (no scale/translation motion).
+    // Driving from a per-instance LaunchedEffect avoids races with AnimatedContent
+    // briefly composing both the outgoing and incoming screen's chips at once.
+    val pulse = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        if (pulseOnEntry) {
+            repeat(2) {
+                pulse.animateTo(1f, tween(150, easing = LinearOutSlowInEasing))
+                pulse.animateTo(0f, tween(150, easing = LinearOutSlowInEasing))
+            }
+        }
+    }
+
+    val baseColor = if (active) KdPrimary.copy(alpha = 0.15f) else KdSurfaceVariant
+    val pulseColor = KdPrimary.copy(alpha = 0.15f + 0.35f * pulse.value)
+    val surfaceColor = if (pulse.value > 0f) pulseColor else baseColor
+    val borderColor = if (pulse.value > 0f) KdPrimary.copy(alpha = pulse.value) else Color.Transparent
+
     Box(modifier = modifier) {
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = if (active) KdPrimary.copy(alpha = 0.15f) else KdSurfaceVariant,
+            color = surfaceColor,
             modifier = Modifier
-                .clickable { expanded = !expanded }
-                .pointerHoverIcon(PointerIcon.Hand),
+                .clickable {
+                    if (pulse.value > 0f) scope.launch { pulse.snapTo(0f) }
+                    expanded = !expanded
+                }
+                .pointerHoverIcon(PointerIcon.Hand)
+                .border(1.5.dp, borderColor, RoundedCornerShape(16.dp)),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -156,12 +189,14 @@ fun LabelSelectorChip(
     query: String,
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    pulseOnEntry: Boolean = false,
 ) = MapSelectorChip(
     query = query,
     onQueryChange = onQueryChange,
     title = "Labels",
     placeholder = "app=nginx, tier=backend",
     modifier = modifier,
+    pulseOnEntry = pulseOnEntry,
 )
 
 @Composable
@@ -169,12 +204,14 @@ fun AnnotationSelectorChip(
     query: String,
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    pulseOnEntry: Boolean = false,
 ) = MapSelectorChip(
     query = query,
     onQueryChange = onQueryChange,
     title = "Annotations",
     placeholder = "owner=team-a, prometheus.io/scrape=true",
     modifier = modifier,
+    pulseOnEntry = pulseOnEntry,
 )
 
 /**

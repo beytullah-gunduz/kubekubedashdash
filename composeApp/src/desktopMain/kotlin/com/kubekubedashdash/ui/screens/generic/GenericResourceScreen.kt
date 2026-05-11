@@ -98,6 +98,8 @@ fun GenericResourceScreen(
     onLabelQueryChange: (String) -> Unit,
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
+    pulseLabelsOnEntry: Boolean = false,
+    pulseAnnotationsOnEntry: Boolean = false,
     namespacedKind: Boolean = true,
     sourceFlow: StateFlow<ResourceState<List<GenericResourceInfo>>>,
     apiGroup: String? = null,
@@ -154,11 +156,13 @@ fun GenericResourceScreen(
                                 query = labelQuery,
                                 onQueryChange = onLabelQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
+                                pulseOnEntry = pulseLabelsOnEntry,
                             )
                             AnnotationSelectorChip(
                                 query = annotationQuery,
                                 onQueryChange = onAnnotationQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
+                                pulseOnEntry = pulseAnnotationsOnEntry,
                             )
                             if (availableStatuses.isNotEmpty()) {
                                 StatusFilterMenu(

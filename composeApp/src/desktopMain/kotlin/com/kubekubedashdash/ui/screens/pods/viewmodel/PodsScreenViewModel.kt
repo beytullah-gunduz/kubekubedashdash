@@ -24,6 +24,15 @@ class PodsScreenViewModel(
     private val _stalePods = MutableStateFlow<Map<String, PodInfo>>(emptyMap())
     val stalePods: StateFlow<Map<String, PodInfo>> = _stalePods.asStateFlow()
 
+    // null = "no explicit allowlist" (= show every status). Non-null Set is
+    // the explicit allowlist. Survives screen navigation (session-scoped VM).
+    private val _statusFilter = MutableStateFlow<Set<String>?>(null)
+    val statusFilter: StateFlow<Set<String>?> = _statusFilter.asStateFlow()
+
+    fun setStatusFilter(value: Set<String>?) {
+        _statusFilter.value = value
+    }
+
     private var previousPodsByUid: Map<String, PodInfo> = emptyMap()
     private var pendingSelectUid: String? = null
 

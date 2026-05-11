@@ -50,6 +50,8 @@ fun NodesScreen(
     onLabelQueryChange: (String) -> Unit,
     annotationQuery: String,
     onAnnotationQueryChange: (String) -> Unit,
+    pulseLabelsOnEntry: Boolean = false,
+    pulseAnnotationsOnEntry: Boolean = false,
     onNavigate: (Screen) -> Unit,
     selectNodeName: String? = null,
     // Pre-seeds the status filter chip on entry. Driven by the
@@ -72,13 +74,13 @@ fun NodesScreen(
     val podsLoaded by viewModel.podsLoaded.collectAsState()
     val podsHistory by viewModel.podsHistory.collectAsState()
     val staleNodes by viewModel.staleNodes.collectAsState()
+    val statusFilter by viewModel.statusFilter.collectAsState()
+    val pressureOnly by viewModel.pressureOnly.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
-    var statusFilter by rememberSaveable { mutableStateOf<Set<String>?>(initialStatusFilter) }
-    var pressureOnly by rememberSaveable { mutableStateOf(initialPressureOnly) }
     LaunchedEffect(initialStatusFilter, initialPressureOnly) {
-        if (initialStatusFilter != null) statusFilter = initialStatusFilter
-        if (initialPressureOnly) pressureOnly = true
+        if (initialStatusFilter != null) viewModel.setStatusFilter(initialStatusFilter)
+        if (initialPressureOnly) viewModel.setPressureOnly(true)
     }
 
     LaunchedEffect(selectNodeName) {
@@ -155,24 +157,27 @@ fun NodesScreen(
                                 query = labelQuery,
                                 onQueryChange = onLabelQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
+                                pulseOnEntry = pulseLabelsOnEntry,
                             )
                             AnnotationSelectorChip(
                                 query = annotationQuery,
                                 onQueryChange = onAnnotationQueryChange,
                                 modifier = Modifier.padding(end = 8.dp),
+                                pulseOnEntry = pulseAnnotationsOnEntry,
                             )
                             StatusFilterMenu(
                                 available = availableStatuses,
                                 selected = activeStatusFilter ?: availableStatuses,
                                 onToggle = { value ->
                                     val current = activeStatusFilter ?: availableStatuses
-                                    statusFilter = if (value in current) current - value else current + value
+                                    viewModel.setStatusFilter(if (value in current) current - value else current + value)
                                 },
-                                onSelectAll = { statusFilter = null },
-                                onSelectNone = { statusFilter = emptySet() },
+                                onSelectAll = { viewModel.setStatusFilter(null) },
+                                onSelectNone = { viewModel.setStatusFilter(emptySet()) },
+                                pulseOnEntry = statusFilter != null,
                             )
                             AnimatedVisibility(
-                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || pressureOnly,
+                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || pressureOnly || statusFilter != null,
                                 enter = expandHorizontally() + fadeIn(),
                                 exit = shrinkHorizontally() + fadeOut(),
                             ) {
@@ -180,7 +185,8 @@ fun NodesScreen(
                                     onClick = {
                                         onLabelQueryChange("")
                                         onAnnotationQueryChange("")
-                                        pressureOnly = false
+                                        viewModel.setPressureOnly(false)
+                                        viewModel.setStatusFilter(null)
                                     },
                                     modifier = Modifier.padding(start = 8.dp),
                                 )
