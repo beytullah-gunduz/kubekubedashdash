@@ -226,8 +226,9 @@ fun LogDrawer(
                             label = "log-tab-switch",
                             modifier = Modifier.fillMaxSize(),
                         ) { key ->
+                            val stream = streams[key] ?: return@AnimatedContent
                             DrawerLogPane(
-                                stream = streams.getValue(key),
+                                stream = stream,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
