@@ -120,7 +120,8 @@ fun AllClustersScreen() {
             onToggleHeatmap = { viewModel.updateFilters { f -> f.copy(heatmapVisible = !f.heatmapVisible) } },
         )
         AnimatedVisibility(
-            visible = filters.heatmapVisible,
+            // Mirrors the disabled toggle: without this, a previously-on heatmap stays stuck open when clusters drop below 2.
+            visible = filters.heatmapVisible && availableClusters.size > 1,
             enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
             exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(animationSpec = tween(200)),
         ) {

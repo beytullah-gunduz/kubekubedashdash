@@ -1,5 +1,8 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,12 +31,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
@@ -222,14 +229,13 @@ internal fun AllClustersEventsFilterBar(
             onToggle = { onUpdateFilters { f -> f.copy(mode = if (f.mode == ViewMode.GROUPED) ViewMode.RAW else ViewMode.GROUPED) } },
         )
 
-        // Heatmap toggle (only shown when multiple clusters are available)
-        if (availableClusters.size > 1) {
-            Spacer(Modifier.width(4.dp))
-            HeatmapToggle(
-                active = heatmapVisible,
-                onToggle = onToggleHeatmap,
-            )
-        }
+        // Disabled below 2 clusters: a single-row "heatmap" is just a histogram.
+        Spacer(Modifier.width(4.dp))
+        HeatmapToggle(
+            active = heatmapVisible,
+            enabled = availableClusters.size > 1,
+            onToggle = onToggleHeatmap,
+        )
     }
 }
 
@@ -390,33 +396,70 @@ private fun ViewModeToggle(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HeatmapToggle(
     active: Boolean,
+    enabled: Boolean,
     onToggle: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .border(1.dp, if (active) KdPrimary else KdBorder, RoundedCornerShape(4.dp))
-            .background(
-                if (active) KdPrimary.copy(alpha = 0.08f) else Color.Transparent,
-                shape = RoundedCornerShape(4.dp),
+    val foreground = if (active) KdPrimary else KdTextSecondary
+    val toggle: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier
+                .then(if (!enabled) Modifier.alpha(0.38f) else Modifier)
+                .border(
+                    width = 1.dp,
+                    color = if (active) KdPrimary else KdBorder,
+                    shape = RoundedCornerShape(4.dp),
+                )
+                .background(
+                    color = if (active) KdPrimary.copy(alpha = 0.08f) else Color.Transparent,
+                    shape = RoundedCornerShape(4.dp),
+                )
+                .clickable(enabled = enabled, onClick = onToggle)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                painterResource(Res.drawable.dashboard_filled),
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = foreground,
             )
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            Text(
+                text = "Heatmap",
+                style = MaterialTheme.typography.labelSmall,
+                color = foreground,
+            )
+        }
+    }
+    if (enabled) {
+        toggle()
+    } else {
+        TooltipArea(
+            tooltip = { HeatmapDisabledTooltip() },
+            tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
+        ) {
+            toggle()
+        }
+    }
+}
+
+@Composable
+private fun HeatmapDisabledTooltip() {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = KdSurface,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp,
     ) {
-        Icon(
-            painterResource(Res.drawable.dashboard_filled),
-            contentDescription = null,
-            modifier = Modifier.size(14.dp),
-            tint = if (active) KdPrimary else KdTextSecondary,
-        )
         Text(
-            text = "Heatmap",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (active) KdPrimary else KdTextSecondary,
+            text = "Needs events from 2+ clusters",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = KdTextPrimary,
         )
     }
 }
