@@ -21,10 +21,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
 
 class NodesScreenViewModel(
     private val reactiveClient: ReactiveKubeClient,
 ) : ViewModel() {
+    private val log = LoggerFactory.getLogger(NodesScreenViewModel::class.java)
     private val _selected = MutableStateFlow<NodeInfo?>(null)
     val selected: StateFlow<NodeInfo?> = _selected.asStateFlow()
 
@@ -115,6 +117,7 @@ class NodesScreenViewModel(
                     }
                     PodStats(totalPods, totalCapacity)
                 }
+                log.debug("Pod stats refreshed: {}/{} pods across {} nodes", stats.count, stats.capacity, nodes.size)
                 emit(stats)
                 delay(5_000)
             }

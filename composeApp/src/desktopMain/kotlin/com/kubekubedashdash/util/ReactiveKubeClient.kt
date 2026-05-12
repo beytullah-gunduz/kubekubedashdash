@@ -1537,42 +1537,42 @@ class ReactiveKubeClient(
     // ── On-demand: Pods by Node / Events for Node ───────────────────────────────
 
     fun getPodsByNode(nodeName: String): List<PodInfo> {
-        log.debug("Fetching pods for node={}", nodeName)
+        log.trace("Fetching pods for node={}", nodeName)
         return k8s.pods().inAnyNamespace().list().items
             .filter { it.spec?.nodeName == nodeName || it.status?.nominatedNodeName == nodeName }
             .map(::mapPod)
-            .also { log.debug("Found {} pods on node={}", it.size, nodeName) }
+            .also { log.trace("Found {} pods on node={}", it.size, nodeName) }
     }
 
     fun getEventsForNode(nodeName: String): List<EventInfo> {
-        log.debug("Fetching events for node={}", nodeName)
+        log.trace("Fetching events for node={}", nodeName)
         return k8s.v1().events().inAnyNamespace().list().items
             .filter { it.involvedObject?.kind == "Node" && it.involvedObject?.name == nodeName }
             .sortedByDescending { it.metadata?.creationTimestamp }
             .mapNotNull(::mapEvent)
-            .also { log.debug("Found {} events for node={}", it.size, nodeName) }
+            .also { log.trace("Found {} events for node={}", it.size, nodeName) }
     }
 
     fun getEventsOnNode(nodeName: String): List<EventInfo> {
-        log.debug("Fetching events on node={}", nodeName)
+        log.trace("Fetching events on node={}", nodeName)
         return k8s.v1().events().inAnyNamespace().list().items
             .filter { it.source?.host == nodeName }
             .sortedByDescending { it.metadata?.creationTimestamp }
             .mapNotNull(::mapEvent)
-            .also { log.debug("Found {} events on node={}", it.size, nodeName) }
+            .also { log.trace("Found {} events on node={}", it.size, nodeName) }
     }
 
     fun getEventsForObject(kind: String, name: String, namespace: String?): List<EventInfo> {
-        log.debug("Fetching events for object kind={} name={} namespace={}", kind, name, namespace)
+        log.trace("Fetching events for object kind={} name={} namespace={}", kind, name, namespace)
         return k8s.v1().events().inAnyNamespace().list().items
             .filter { it.involvedObject?.kind == kind && it.involvedObject?.name == name }
             .sortedByDescending { it.metadata?.creationTimestamp }
             .mapNotNull(::mapEvent)
-            .also { log.debug("Found {} events for {}/{}", it.size, kind, name) }
+            .also { log.trace("Found {} events for {}/{}", it.size, kind, name) }
     }
 
     fun getPodByName(name: String, namespace: String): PodInfo? {
-        log.debug("Fetching pod name={} namespace={}", name, namespace)
+        log.trace("Fetching pod name={} namespace={}", name, namespace)
         return try {
             k8s.pods().inNamespace(namespace).withName(name).get()?.let(::mapPod)
         } catch (e: Exception) {
