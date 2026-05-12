@@ -253,6 +253,18 @@
 -dontwarn org.yaml.snakeyaml.**
 
 # ---------------------------------------------------------------------------
+# JediTerm — embedded terminal widget used by the pod console.
+# TextStyle.<clinit> calls EnumSet.noneOf(TextStyle$Option.class), which
+# reflectively reads values()/$VALUES off the enum. ProGuard strips those
+# methods on enums with no direct user-code reference (same failure mode
+# as json-path above), so without this keep the first JediTermWidget
+# construction throws ClassCastException: "com.jediterm.terminal.TextStyle
+# $Option not an enum" and kills the EDT.
+-keep class com.jediterm.** { *; }
+-keepclassmembers enum com.jediterm.** { *; }
+-dontwarn com.jediterm.**
+
+# ---------------------------------------------------------------------------
 # App entry point — already kept by Compose's auto-generated config, but
 # being explicit doesn't hurt and survives any future plugin changes.
 # ---------------------------------------------------------------------------
