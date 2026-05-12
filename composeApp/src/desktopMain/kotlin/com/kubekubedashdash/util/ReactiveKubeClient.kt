@@ -168,7 +168,7 @@ class ReactiveKubeClient(
                                 if (!informer.hasSynced()) return@collect
                                 try {
                                     val items = informer.store.list()
-                                    log.debug("Informer emitting {} items from store", items.size)
+                                    log.trace("Informer emitting {} items from store", items.size)
                                     send(ResourceState.Success(items.map(mapper)))
                                     reportSuccess()
                                 } catch (e: CancellationException) {
@@ -245,7 +245,7 @@ class ReactiveKubeClient(
                                 if (!informer.hasSynced()) return@collect
                                 try {
                                     val items = informer.store.list()
-                                    log.debug("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
+                                    log.trace("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
                                     send(ResourceState.Success(items.mapNotNull(mapper)))
                                     reportSuccess()
                                 } catch (e: CancellationException) {
