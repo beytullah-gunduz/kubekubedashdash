@@ -140,8 +140,8 @@ object WorkspaceManager {
     }
 
     /**
-     * Close a tab by its key. Cluster tabs dispose their session; the Logs and
-     * AllClusters tabs have no resources to free. Empty workspace cascades to
+     * Close a tab by its key. Cluster tabs dispose their session; the
+     * AllClusters tab has no resources to free. Empty workspace cascades to
      * window close per Decision 2 of `.docs/multi-cluster-plan.md`.
      */
     fun closeTab(workspace: Workspace, tabKey: String) {
@@ -154,7 +154,7 @@ object WorkspaceManager {
                 TerminalSessionRegistry.close(removed.session.id)
             }
 
-            WorkspaceTab.Logs, WorkspaceTab.AllClusters, null -> { /* no resources to free */ }
+            WorkspaceTab.AllClusters, null -> { /* no resources to free */ }
         }
         if (workspace.tabs.value.isEmpty()) {
             closeWorkspace(workspace.id)
@@ -175,15 +175,10 @@ object WorkspaceManager {
         TerminalSessionRegistry.closeAllForSession(sessionId)
     }
 
-    /** Open or focus the Logs tab in [workspace]. Singleton. */
-    fun openLogsTab(workspace: Workspace) {
-        workspace.openLogsTab()
-    }
-
     /**
-     * Called by any tab's drag handler (including Logs) each time the cursor
-     * moves past the drag threshold. Updates [dragTarget] exactly like
-     * [notifyDragMove], but keyed by tab key rather than [SessionId].
+     * Called by any tab's drag handler each time the cursor moves past the
+     * drag threshold. Updates [dragTarget] exactly like [notifyDragMove], but
+     * keyed by tab key rather than [SessionId].
      */
     fun notifyDragMoveTab(tabKey: String, screenX: Int, screenY: Int) {
         val source = _workspaces.value.firstOrNull { ws ->
@@ -196,10 +191,10 @@ object WorkspaceManager {
     }
 
     /**
-     * Drag-end dispatcher for any tab type (cluster, Logs, or AllClusters). Mirrors
-     * [handleChipRelease] but works with any [WorkspaceTab]. Merge drops
-     * are always allowed; tear-out is refused when the source has only one
-     * tab (same rule as [tearOutSession]).
+     * Drag-end dispatcher for any tab type (cluster, terminal, or
+     * AllClusters). Mirrors [handleChipRelease] but works with any
+     * [WorkspaceTab]. Merge drops are always allowed; tear-out is refused
+     * when the source has only one tab (same rule as [tearOutSession]).
      */
     fun handleTabRelease(tabKey: String, screenX: Int, screenY: Int) {
         _dragTarget.value = null
@@ -213,7 +208,6 @@ object WorkspaceManager {
             val target = workspaceById(targetId) ?: return
             val tab = source.removeTab(tabKey) ?: return
             when (tab) {
-                is WorkspaceTab.Logs -> target.openLogsTab()
                 is WorkspaceTab.Cluster -> target.addSession(tab.session, makeActive = true)
                 is WorkspaceTab.Terminal -> target.openTerminalTab(tab.session)
                 WorkspaceTab.AllClusters -> target.ensureAllClustersTabAt(0)
@@ -225,7 +219,6 @@ object WorkspaceManager {
                 initialPosition = WindowPosition.Absolute(screenX.dp, screenY.dp),
             )
             when (tab) {
-                is WorkspaceTab.Logs -> newWorkspace.openLogsTab()
                 is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
                 is WorkspaceTab.Terminal -> newWorkspace.openTerminalTab(tab.session)
                 WorkspaceTab.AllClusters -> newWorkspace.ensureAllClustersTabAt(0)

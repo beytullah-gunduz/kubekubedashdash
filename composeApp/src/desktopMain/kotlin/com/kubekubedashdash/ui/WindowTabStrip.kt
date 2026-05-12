@@ -58,8 +58,8 @@ private data class ClusterDisplay(
 /**
  * Tab strip rendered between the title bar and the content scaffold when the
  * workspace has ≥2 tabs or any non-cluster tab. Each cluster tab is a
- * [ClusterChip] with a close ×; the Logs tab is a [LogsChip]; plus a trailing
- * `+` button that opens the cluster picker.
+ * [ClusterChip] with a close ×; terminal and all-clusters tabs render their
+ * own chips. Plus a trailing `+` button that opens the cluster picker.
  *
  * Tab labels use the kubeconfig context name, with `(2)`, `(3)`, … appended on
  * collisions within the workspace (Decision 4).
@@ -208,18 +208,6 @@ fun WindowTabStrip(
                                 onDragMove = { x, y -> onDragMoveSession(tab.session.id, x, y) },
                                 onDragRelease = { x, y -> onDragReleaseSession(tab.session.id, x, y) },
                                 onDragCancelled = { onDragCancelled(tab.session.id) },
-                            )
-                        }
-
-                        WorkspaceTab.Logs -> {
-                            LogsChip(
-                                modifier = chipModifier,
-                                isActive = tab.key == activeTabKey,
-                                onClick = { onSelectTab(tab.key) },
-                                onClose = { onCloseTab(tab.key) },
-                                onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
-                                onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
-                                onDragCancelled = { onDragCancelledTab() },
                             )
                         }
 

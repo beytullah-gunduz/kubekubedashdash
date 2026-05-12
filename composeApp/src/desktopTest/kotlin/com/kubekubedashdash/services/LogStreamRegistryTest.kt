@@ -23,23 +23,23 @@ class LogStreamRegistryTest {
 
         val returned1 = LogStreamRegistry.openOrFocusStream(id, "pod1") { emptyFlow() }
         assertEquals(id, returned1)
-        assertEquals(1, LogStreamRegistry.streams.value.size)
+        assertEquals(1, LogStreamRegistry.tabs.value.size)
 
         // Second call with same params — must return the same id without adding a new entry
         val returned2 = LogStreamRegistry.openOrFocusStream(id, "pod1") { emptyFlow() }
         assertEquals(id, returned2)
-        assertEquals(1, LogStreamRegistry.streams.value.size)
+        assertEquals(1, LogStreamRegistry.tabs.value.size)
     }
 
     @Test
     fun `close removes stream`() = runBlocking {
         val id = LogStreamId("session1", "pod1", "default", null)
         LogStreamRegistry.openOrFocusStream(id, "pod1") { emptyFlow() }
-        assertTrue(id.key in LogStreamRegistry.streams.value)
+        assertTrue(id.key in LogStreamRegistry.tabs.value)
 
         LogStreamRegistry.close(id)
-        assertFalse(id.key in LogStreamRegistry.streams.value)
-        assertTrue(LogStreamRegistry.streams.value.isEmpty())
+        assertFalse(id.key in LogStreamRegistry.tabs.value)
+        assertTrue(LogStreamRegistry.tabs.value.isEmpty())
     }
 
     @Test
@@ -69,7 +69,7 @@ class LogStreamRegistryTest {
         // without creating a duplicate tab.
         LogStreamRegistry.openOrFocusStream(id1, "pod1") { emptyFlow() }
         assertEquals(id1.key, LogStreamRegistry.focusedKey.value)
-        assertEquals(2, LogStreamRegistry.streams.value.size)
+        assertEquals(2, LogStreamRegistry.tabs.value.size)
     }
 
     @Test
@@ -106,11 +106,11 @@ class LogStreamRegistryTest {
         LogStreamRegistry.openOrFocusStream(idA1, "pod1") { emptyFlow() }
         LogStreamRegistry.openOrFocusStream(idA2, "pod2") { emptyFlow() }
         LogStreamRegistry.openOrFocusStream(idB1, "pod1") { emptyFlow() }
-        assertEquals(3, LogStreamRegistry.streams.value.size)
+        assertEquals(3, LogStreamRegistry.tabs.value.size)
 
         LogStreamRegistry.closeAllForSession(sessionA)
 
-        val remaining = LogStreamRegistry.streams.value
+        val remaining = LogStreamRegistry.tabs.value
         assertEquals(1, remaining.size)
         assertTrue(idB1.key in remaining)
         assertFalse(idA1.key in remaining)

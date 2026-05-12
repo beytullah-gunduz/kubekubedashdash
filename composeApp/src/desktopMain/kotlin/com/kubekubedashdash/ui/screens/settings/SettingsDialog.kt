@@ -34,7 +34,7 @@ import com.kubekubedashdash.KdSurface
 fun SettingsDialog(
     onDismiss: () -> Unit,
     onDiscoverEks: () -> Unit,
-    onOpenLogsTab: () -> Unit,
+    onShowAppLogs: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -78,7 +78,7 @@ fun SettingsDialog(
         ) {
             SettingsScreen(
                 onDiscoverEks = onDiscoverEks,
-                onOpenLogsTab = onOpenLogsTab,
+                onShowAppLogs = onShowAppLogs,
                 onClose = onDismiss,
             )
         }

@@ -40,7 +40,6 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
-import com.kubekubedashdash.ui.screens.logs.LogsScreen
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 
 /**
@@ -58,7 +57,6 @@ internal fun SessionPaneContent(
     sidebarCollapsed: Boolean,
     onSelectCluster: () -> Unit,
     onDiscoverEks: () -> Unit,
-    onOpenLogsTab: () -> Unit,
     onOpenLogs: (String, String, String?) -> Unit,
     onOpenTerminal: (String, String, String) -> Unit,
 ) {
@@ -164,7 +162,6 @@ internal fun SessionPaneContent(
                             clusterHealth = clusterHealth,
                             onSelectCluster = onSelectCluster,
                             onDiscoverEks = onDiscoverEks,
-                            onOpenLogsTab = onOpenLogsTab,
                             onOpenLogs = onOpenLogs,
                             onOpenTerminal = onOpenTerminal,
                         )
@@ -210,10 +207,4 @@ internal fun SessionPaneContent(
             }
         }
     }
-}
-
-/** Pane content for the Logs tab. Renders [LogsScreen] without any cluster Locals. */
-@Composable
-internal fun LogsPaneContent() {
-    LogsScreen()
 }
