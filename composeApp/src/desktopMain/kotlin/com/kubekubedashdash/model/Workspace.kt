@@ -117,7 +117,7 @@ class Workspace(
      */
     @Volatile var awtWindow: java.awt.Window? = null
 
-    /** Snapshot accessor — the active cluster session at this instant, or null if empty or Logs tab active. */
+    /** Snapshot accessor — the active cluster session at this instant, or null if empty or a non-cluster tab is active. */
     val activeSession: ClusterSession?
         get() {
             val key = _activeTabKey.value ?: return null
@@ -226,19 +226,6 @@ class Workspace(
         _tabs.value = _tabs.value.filterNot { it.key == key }
         if (_activeTabKey.value == key) {
             _activeTabKey.value = _tabs.value.firstOrNull()?.key
-        }
-    }
-
-    /**
-     * Append a Logs tab and activate it, or — if a Logs tab already exists —
-     * just activate the existing one. Singleton: at most one Logs tab per window.
-     */
-    fun openLogsTab() {
-        val existing = _tabs.value.firstOrNull { it is WorkspaceTab.Logs }
-        if (existing != null) {
-            _activeTabKey.value = existing.key
-        } else {
-            addTab(WorkspaceTab.Logs, makeActive = true)
         }
     }
 

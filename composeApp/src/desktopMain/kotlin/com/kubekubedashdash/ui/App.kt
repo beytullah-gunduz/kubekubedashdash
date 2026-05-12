@@ -216,7 +216,7 @@ fun App(
 
         // Provide the title session's locals at App scope for modals and the
         // title bar. SessionPaneContent re-provides per-page locals so each
-        // cluster page sees its own session. LogsPaneContent needs neither.
+        // cluster page sees its own session.
         MaybeProvideSessionLocals(titleSession) {
             Box(
                 modifier = Modifier
@@ -289,11 +289,12 @@ fun App(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                     ) {
                         // isMultiTab: show the strip when there are ≥2 tabs, OR
-                        // when any non-cluster tab (Logs) is present — so the user
+                        // when any non-cluster tab is present — so the user
                         // always sees the strip and its + button even with a single
-                        // cluster tab alongside the Logs tab. The user can also
-                        // force the strip on regardless via the Tab strip preference
-                        // (see §6.1 in .docs/gui-audit-2026-05-03.md).
+                        // cluster tab alongside another (e.g. terminal or
+                        // all-clusters). The user can also force the strip on
+                        // regardless via the Tab strip preference (see §6.1 in
+                        // .docs/gui-audit-2026-05-03.md).
                         val hasNonClusterTab = tabs.any { it !is WorkspaceTab.Cluster }
                         val isMultiTab =
                             tabs.size >= 2 ||
@@ -444,12 +445,9 @@ fun App(
                                     sidebarCollapsed = sidebarCollapsed,
                                     onSelectCluster = { workspace.showClusterSelector() },
                                     onDiscoverEks = { workspace.showEksDiscovery() },
-                                    onOpenLogsTab = { workspace.openLogsTab() },
                                     onOpenLogs = onOpenLogs,
                                     onOpenTerminal = onOpenTerminal,
                                 )
-
-                                WorkspaceTab.Logs -> LogsPaneContent()
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()
 
@@ -510,9 +508,12 @@ fun App(
                             workspace.dismissSettings()
                             workspace.showEksDiscovery()
                         },
-                        onOpenLogsTab = {
+                        onShowAppLogs = {
                             workspace.dismissSettings()
-                            workspace.openLogsTab()
+                            LogStreamRegistry.openOrFocusAppLog()
+                            if (drawerState == LogDrawerState.HIDDEN) {
+                                drawerState = LogDrawerState.EXPANDED
+                            }
                         },
                     )
                 }

@@ -52,7 +52,6 @@ fun ContentRouter(
     pulseAnnotationsOnEntry: Boolean = false,
     onSelectCluster: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
-    onOpenLogsTab: () -> Unit = {},
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
 ) {

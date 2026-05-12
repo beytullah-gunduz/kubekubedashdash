@@ -327,7 +327,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
 @Composable
 fun SettingsScreen(
     onDiscoverEks: () -> Unit = {},
-    onOpenLogsTab: () -> Unit = {},
+    onShowAppLogs: () -> Unit = {},
     onClose: () -> Unit = {},
     viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
 ) {
@@ -779,13 +779,13 @@ fun SettingsScreen(
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Open the in-app log viewer in a new tab to inspect application events.",
+                                "Open the in-app log viewer in the bottom log panel to inspect application events.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = KdTextSecondary,
                             )
                             Spacer(Modifier.height(12.dp))
                             OutlinedButton(
-                                onClick = onOpenLogsTab,
+                                onClick = onShowAppLogs,
                                 shape = RoundedCornerShape(8.dp),
                                 border = BorderStroke(1.dp, KdBorder),
                             ) {

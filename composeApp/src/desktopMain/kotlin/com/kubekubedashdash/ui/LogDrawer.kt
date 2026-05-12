@@ -56,7 +56,10 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
+import com.kubekubedashdash.services.ActiveAppLog
+import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
+import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
@@ -73,7 +76,7 @@ fun LogDrawer(
     onStateChange: (LogDrawerState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val streams by LogStreamRegistry.streams.collectAsState()
+    val tabs by LogStreamRegistry.tabs.collectAsState()
     val focusedKey by LogStreamRegistry.focusedKey.collectAsState()
     val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
     val density = LocalDensity.current
@@ -108,23 +111,23 @@ fun LogDrawer(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.weight(1f)) {
-                    if (streams.isNotEmpty()) {
-                        val streamList = streams.values.sortedBy { it.openedAt }
-                        val displayedKey = focusedKey?.takeIf { it in streams }
-                            ?: streamList.first().id.key
-                        val selectedIndex = streamList
-                            .indexOfFirst { it.id.key == displayedKey }
+                    if (tabs.isNotEmpty()) {
+                        val tabList = tabs.values.sortedBy { it.openedAt }
+                        val displayedKey = focusedKey?.takeIf { it in tabs }
+                            ?: tabList.first().key
+                        val selectedIndex = tabList
+                            .indexOfFirst { it.key == displayedKey }
                             .coerceAtLeast(0)
                         PrimaryScrollableTabRow(
                             selectedTabIndex = selectedIndex,
                             edgePadding = 0.dp,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            streamList.forEach { stream ->
+                            tabList.forEach { tab ->
                                 Tab(
-                                    selected = stream.id.key == displayedKey,
+                                    selected = tab.key == displayedKey,
                                     onClick = {
-                                        LogStreamRegistry.focus(stream.id)
+                                        LogStreamRegistry.focus(tab.key)
                                         if (state == LogDrawerState.COLLAPSED) {
                                             onStateChange(LogDrawerState.EXPANDED)
                                         }
@@ -135,7 +138,7 @@ fun LogDrawer(
                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
                                             Text(
-                                                stream.displayLabel,
+                                                tab.displayLabel,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 style = MaterialTheme.typography.labelMedium,
@@ -143,14 +146,14 @@ fun LogDrawer(
                                             Box(
                                                 modifier = Modifier
                                                     .size(16.dp)
-                                                    .pointerInput(stream.id) {
-                                                        detectTapGestures(onTap = { LogStreamRegistry.close(stream.id) })
+                                                    .pointerInput(tab.key) {
+                                                        detectTapGestures(onTap = { LogStreamRegistry.close(tab.key) })
                                                     },
                                                 contentAlignment = Alignment.Center,
                                             ) {
                                                 Icon(
                                                     painter = painterResource(Res.drawable.close_filled),
-                                                    contentDescription = "Close ${stream.displayLabel}",
+                                                    contentDescription = "Close ${tab.displayLabel}",
                                                     modifier = Modifier.size(10.dp),
                                                 )
                                             }
@@ -208,29 +211,36 @@ fun LogDrawer(
                     modifier = Modifier.fillMaxWidth().height(liveHeightDp.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (streams.isEmpty()) {
+                    if (tabs.isEmpty()) {
                         Text(
-                            "Log streams stay open across navigation.\nOpen one from a pod's row menu — Cmd/Ctrl+J reopens this drawer.",
+                            "Log tabs stay open across navigation.\nOpen one from a pod's row menu, or open application logs from Settings — Cmd/Ctrl+J reopens this drawer.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = KdTextSecondary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(32.dp),
                         )
                     } else {
-                        val streamList = streams.values.sortedBy { it.openedAt }
-                        val displayedKey = focusedKey?.takeIf { it in streams }
-                            ?: streamList.first().id.key
+                        val tabList = tabs.values.sortedBy { it.openedAt }
+                        val displayedKey = focusedKey?.takeIf { it in tabs }
+                            ?: tabList.first().key
                         AnimatedContent(
                             targetState = displayedKey,
                             transitionSpec = { fadeIn() togetherWith fadeOut() },
                             label = "log-tab-switch",
                             modifier = Modifier.fillMaxSize(),
                         ) { key ->
-                            val stream = streams[key] ?: return@AnimatedContent
-                            DrawerLogPane(
-                                stream = stream,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                            when (val tab = tabs[key]) {
+                                is ActiveLogStream -> DrawerLogPane(
+                                    stream = tab,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                is ActiveAppLog -> DrawerAppLogPane(
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                null -> Unit
+                            }
                         }
                     }
                 }

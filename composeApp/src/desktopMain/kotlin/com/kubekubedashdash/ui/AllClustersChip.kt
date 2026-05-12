@@ -48,7 +48,7 @@ import kotlin.math.sqrt
 private const val ALL_CLUSTERS_DRAG_THRESHOLD_PX = 30.0
 
 /**
- * Tab-strip chip for the AllClusters (utility) tab. Mirrors the layout of [LogsChip] —
+ * Tab-strip chip for the AllClusters (utility) tab. Mirrors the layout of [ClusterChip] —
  * same height, same active underline, same drag-to-new-window gesture — with a circular
  * avatar (static ring + hub icon) that visually echoes [ClusterChip].
  *

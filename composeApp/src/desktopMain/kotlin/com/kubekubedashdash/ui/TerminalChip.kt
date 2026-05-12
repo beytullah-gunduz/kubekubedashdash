@@ -42,7 +42,7 @@ import kotlin.math.sqrt
 private const val TERMINAL_DRAG_THRESHOLD_PX = 30.0
 
 /**
- * Tab-strip chip for an open terminal. Mirrors [LogsChip] — same height,
+ * Tab-strip chip for an open terminal. Mirrors [ClusterChip] — same height,
  * same active underline, same close ×, same drag-to-new-window gesture.
  * Difference: the terminal icon, the dynamic [label] (pod · container),
  * and a max-width cap so long pod names don't blow out the strip.
