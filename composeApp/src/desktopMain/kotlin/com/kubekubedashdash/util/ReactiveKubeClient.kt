@@ -52,6 +52,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
@@ -997,6 +999,71 @@ class ReactiveKubeClient(
             if (major.isNotBlank() && minor.isNotBlank()) "$major.$minor" else ""
         },
     )
+
+    /**
+     * Liveness probe — fixes the A6 silent-disconnect bug
+     * (.docs/a6-connection-state-finding-2026-05-16.md). After their initial
+     * sync, informers park in `awaitCancellation()` and do NOT surface a
+     * watch-time connection loss, so once a session was connected
+     * `connectionError` could stay stale-OK forever on a silent disconnect
+     * (network drop, API-server restart, credential expiry) — the ring never
+     * went red and no retry fired until the user forced a reconnect.
+     *
+     * This low-frequency `/version` GET keeps `reportSuccess`/`reportError`
+     * honest while connected, so the existing
+     * `SessionViewModel.observeConnectionHealth` path (→ ConnectionError
+     * screen + `scheduleRetry`) now detects a dead cluster exactly like it
+     * already does for an explicit connect failure — NO new connection-state
+     * writer is introduced; the fix feeds the existing pipeline.
+     * `reportError`'s ≥3-consecutive threshold debounces transient blips, so
+     * worst-case detection is ~3× the interval.
+     *
+     * `Eagerly` (not `WhileSubscribed`): liveness must run whenever the
+     * session is connected, independent of which screen is visible.
+     * `connectedTrigger` gates it (idle until the first successful connect;
+     * `flatMapLatest` restarts it on cluster switch / reconnect — the same
+     * lifecycle every other flow here uses, and the namespace selector does
+     * NOT feed it, so a namespace switch can't trip a spurious error).
+     */
+    val isReachable: StateFlow<Boolean> = connectedTrigger
+        .flatMapLatest {
+            flow {
+                while (true) {
+                    val ok = try {
+                        // A real round-trip every tick: kubernetesVersion is
+                        // cached by fabric8 after the first call (useless as a
+                        // liveness signal); namespaces are few and always
+                        // re-listed. MUST be time-bounded: fabric8 retries a
+                        // failed request with its own backoff, so a call to a
+                        // dead cluster can block far longer than the probe
+                        // interval — without this timeout the probe never
+                        // even reports the first failure.
+                        val reached = withTimeoutOrNull(4_000) {
+                            // runInterruptible: list() is a blocking JVM call
+                            // with no suspension point, so withTimeoutOrNull
+                            // alone can't preempt it (it would wait for
+                            // fabric8's retry budget to exhaust). This makes
+                            // the timeout interrupt the worker thread, which
+                            // OkHttp honors by throwing.
+                            runInterruptible(Dispatchers.IO) { k8s.namespaces().list() }
+                            true
+                        } ?: false
+                        if (reached) reportSuccess() else reportError("Cluster liveness probe timed out")
+                        reached
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        reportError(e.message ?: "Cluster unreachable")
+                        false
+                    }
+                    emit(ok)
+                    delay(4_000)
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, true)
 
     /**
      * Derived from the informer-backed `nodes`, `namespaceNames`, `pods`,

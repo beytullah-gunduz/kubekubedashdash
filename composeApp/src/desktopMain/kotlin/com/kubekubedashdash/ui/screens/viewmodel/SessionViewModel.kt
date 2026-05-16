@@ -120,14 +120,25 @@ class SessionViewModel(
         }
     }
 
-    // Project clusterInfo's polling state onto the tab-ring's _isConnected
-    // flag so the ring tracks actual reachability (red within one polling
-    // tick after the cluster dies), not just the 3-failure connectionError
-    // threshold which only governs navigation. Loading is intentionally
-    // ignored — connectToCluster() owns _isConnecting, and Loading also
-    // fires on the first subscription emission and on every connection-
-    // version bump from connect()/scheduleRetry(), so reacting to it would
-    // race those explicit writes.
+    // clusterInfo Success → mark connected (the first successful sync after
+    // connect() lands here). The Success path is verified by
+    // SessionViewModelConnectionTest.
+    //
+    // The Error branch is a best-effort fast path only: informers park in
+    // awaitCancellation() after sync and DON'T surface a watch-time loss, so
+    // clusterInfo stays stale-Success on a silent disconnect and this Error
+    // case rarely fires. Silent-disconnect detection is owned by
+    // ReactiveKubeClient.isReachable (the /version liveness probe) →
+    // connectionError → observeConnectionHealth. (This corrects the old
+    // comment here that claimed "red within one polling tick" — that was the
+    // pre-informer polling design; see
+    // .docs/a6-connection-state-finding-2026-05-16.md.)
+    //
+    // Loading is intentionally ignored — connectToCluster() owns
+    // _isConnecting, and Loading also fires on the first subscription
+    // emission and on every connection-version bump from
+    // connect()/scheduleRetry(), so reacting to it would race those explicit
+    // writes. (Verified by SessionViewModelConnectionTest.)
     private fun observeClusterInfoHealth() {
         scope.launch {
             reactiveClient.clusterInfo.collect { state ->
