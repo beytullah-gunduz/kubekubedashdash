@@ -566,6 +566,13 @@ fun SettingsScreen(
                             title = "Integrations",
                             onLayoutTop = { y -> sectionOffsets["Integrations"] = y },
                         ) {
+                            // Audit A5: observe PreferenceRepository-backed flows
+                            // (single source of truth) instead of VM Compose state.
+                            val mcpEnabled by viewModel.isMcpServerEnabled.collectAsState()
+                            val mcpPort by viewModel.mcpServerPort.collectAsState()
+                            val mcpLocalhostOnly by viewModel.mcpLocalhostOnly.collectAsState()
+                            val mcpRequireAuth by viewModel.mcpRequireAuth.collectAsState()
+                            val mcpBearerToken by viewModel.mcpBearerToken.collectAsState()
                             Text(
                                 "MCP Server",
                                 style = MaterialTheme.typography.titleMedium,
@@ -583,17 +590,17 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 Switch(
-                                    checked = viewModel.isMcpServerEnabled,
+                                    checked = mcpEnabled,
                                     onCheckedChange = { viewModel.toggleMcpServer(it) },
                                 )
                                 Text(
-                                    if (viewModel.isMcpServerEnabled) {
-                                        "Running on http://127.0.0.1:${viewModel.mcpServerPort}"
+                                    if (mcpEnabled) {
+                                        "Running on http://127.0.0.1:$mcpPort"
                                     } else {
                                         "Disabled"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (viewModel.isMcpServerEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    color = if (mcpEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
@@ -607,7 +614,7 @@ fun SettingsScreen(
                                     color = KdTextSecondary,
                                 )
                                 OutlinedTextField(
-                                    value = viewModel.mcpServerPort.toString(),
+                                    value = mcpPort.toString(),
                                     onValueChange = { text ->
                                         text.toIntOrNull()?.let { port ->
                                             if (port in 1..65535) {
@@ -627,14 +634,14 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 Switch(
-                                    checked = viewModel.mcpLocalhostOnly,
+                                    checked = mcpLocalhostOnly,
                                     onCheckedChange = { viewModel.updateMcpLocalhostOnly(it) },
-                                    enabled = !viewModel.isMcpServerEnabled,
+                                    enabled = !mcpEnabled,
                                 )
                                 Column {
                                     Text("Localhost only", style = MaterialTheme.typography.bodyMedium)
                                     Text(
-                                        if (viewModel.isMcpServerEnabled) "Stop MCP server to change." else "Bind to 127.0.0.1. Recommended for local-only workflows.",
+                                        if (mcpEnabled) "Stop MCP server to change." else "Bind to 127.0.0.1. Recommended for local-only workflows.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = KdTextSecondary,
                                     )
@@ -646,20 +653,20 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 Switch(
-                                    checked = viewModel.mcpRequireAuth,
+                                    checked = mcpRequireAuth,
                                     onCheckedChange = { viewModel.updateMcpRequireAuth(it) },
-                                    enabled = !viewModel.isMcpServerEnabled,
+                                    enabled = !mcpEnabled,
                                 )
                                 Column {
                                     Text("Require authentication", style = MaterialTheme.typography.bodyMedium)
                                     Text(
-                                        if (viewModel.isMcpServerEnabled) "Stop MCP server to change." else "Generate a bearer token each time the server starts.",
+                                        if (mcpEnabled) "Stop MCP server to change." else "Generate a bearer token each time the server starts.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = KdTextSecondary,
                                     )
                                 }
                             }
-                            if (!viewModel.mcpLocalhostOnly && !viewModel.mcpRequireAuth) {
+                            if (!mcpLocalhostOnly && !mcpRequireAuth) {
                                 Spacer(Modifier.height(8.dp))
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
@@ -674,7 +681,7 @@ fun SettingsScreen(
                                     )
                                 }
                             }
-                            if (viewModel.isMcpServerEnabled && viewModel.mcpBearerToken != null) {
+                            if (mcpEnabled && mcpBearerToken != null) {
                                 Spacer(Modifier.height(12.dp))
                                 Text(
                                     "Bearer token (regenerated each start)",
@@ -687,7 +694,7 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     OutlinedTextField(
-                                        value = viewModel.mcpBearerToken.orEmpty(),
+                                        value = mcpBearerToken.orEmpty(),
                                         onValueChange = {},
                                         readOnly = true,
                                         singleLine = true,
@@ -696,7 +703,7 @@ fun SettingsScreen(
                                     )
                                     IconButton(
                                         onClick = {
-                                            val sel = java.awt.datatransfer.StringSelection(viewModel.mcpBearerToken.orEmpty())
+                                            val sel = java.awt.datatransfer.StringSelection(mcpBearerToken.orEmpty())
                                             java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
                                         },
                                     ) {
