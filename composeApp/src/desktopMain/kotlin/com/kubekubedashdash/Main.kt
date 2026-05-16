@@ -16,6 +16,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.kubekubedashdash.mcp.McpServerManager
+import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
 import com.kubekubedashdash.util.ShellEnvironment
@@ -41,6 +43,24 @@ fun main() {
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
         crashLogger.error("Uncaught exception in thread {}", thread.name, throwable)
     }
+
+    // Graceful shutdown (audit C2). exitApplication() (fired when the last
+    // window closes) — and every other JVM exit path — otherwise just
+    // abandons the embedded MCP Ktor server (accept loop + thread pool) and
+    // the live pod-log watch HTTP connections to abrupt process death. A
+    // shutdown hook stops them on EVERY exit route, in one place that can't
+    // be bypassed. Both calls are idempotent and no-ops when nothing is
+    // running, so registering unconditionally is safe.
+    Runtime.getRuntime().addShutdownHook(
+        Thread({
+            val shutdownLog = LoggerFactory.getLogger("Shutdown")
+            shutdownLog.info("Shutdown hook: stopping MCP server and log streams")
+            runCatching { McpServerManager.stop() }
+                .onFailure { shutdownLog.warn("MCP server stop failed: {}", it.message) }
+            runCatching { LogStreamRegistry.clearAll() }
+                .onFailure { shutdownLog.warn("Log stream teardown failed: {}", it.message) }
+        }, "app-shutdown"),
+    )
 
     application {
         val workspaces by WorkspaceManager.workspaces.collectAsState()
