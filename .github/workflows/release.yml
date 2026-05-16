@@ -76,6 +76,13 @@ jobs:
       - name: Verify formatting
         run: ./gradlew spotlessCheck
 
+      # Release gate: never ship a tagged installer with red tests. The
+      # matrix is fail-fast, so a test failure on any OS aborts the whole
+      # release before any artifact is built — keeps the release atomic,
+      # consistent with the fail-fast rationale documented above.
+      - name: Run tests
+        run: ./gradlew :composeApp:desktopTest
+
       - name: Build installer
         run: ./gradlew :composeApp:${{ matrix.task }} -Papp.version=${{ steps.version.outputs.version }}
 
