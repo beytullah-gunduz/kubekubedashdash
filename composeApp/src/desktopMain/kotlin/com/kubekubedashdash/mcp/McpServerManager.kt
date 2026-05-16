@@ -60,7 +60,14 @@ object McpServerManager {
         }
 
         val localhostOnly = PreferenceRepository.mcpLocalhostOnly.value
-        _requireAuth = PreferenceRepository.mcpRequireAuth.value
+        val requestedAuth = PreferenceRepository.mcpRequireAuth.value
+        // Security hardening (audit S2): a non-localhost bind exposes the
+        // connected cluster to the LAN. Authentication is then NOT optional —
+        // force it on even if the user turned it off, so the "0.0.0.0 + no
+        // token" combination is unreachable at runtime. localhost-only + no
+        // auth is still permitted (loopback, low risk). The Settings UI still
+        // shows its inline warning; this is the non-bypassable backstop.
+        _requireAuth = requestedAuth || !localhostOnly
         val bindHost = if (localhostOnly) "127.0.0.1" else "0.0.0.0"
 
         _bearerToken = if (_requireAuth) {
@@ -71,8 +78,12 @@ object McpServerManager {
             null
         }
 
-        if (!localhostOnly && !_requireAuth) {
-            log.warn("MCP server starting with NEITHER localhost-only nor authentication. Open to LAN, no token required.")
+        if (!localhostOnly && !requestedAuth) {
+            log.warn(
+                "MCP server bound to {} (LAN-exposed); authentication was force-enabled " +
+                    "despite the 'require auth' preference being off (audit S2).",
+                bindHost,
+            )
         }
 
         log.info("Starting MCP server host={} port={} auth={} localhostOnly={}", bindHost, port, _requireAuth, localhostOnly)
