@@ -1,16 +1,12 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ClusterInfo
-import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
-import com.kubekubedashdash.models.ResourceGraph
-import com.kubekubedashdash.models.ResourceGraphEdge
-import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.models.ServiceInfo
 import io.fabric8.kubernetes.api.model.Pod
@@ -81,47 +77,14 @@ class KubeClient(
         .filter { it.spec?.nodeName == nodeName || it.status?.nominatedNodeName == nodeName }
         .map(::mapPod)
 
-    private fun mapPod(pod: Pod): PodInfo {
-        val containers = pod.spec?.containers?.map { c ->
-            val cs = pod.status?.containerStatuses?.find { it.name == c.name }
-            ContainerInfo(
-                name = c.name,
-                image = c.image ?: "",
-                ready = cs?.ready ?: false,
-                restartCount = cs?.restartCount ?: 0,
-                state = when {
-                    cs?.state?.running != null -> "Running"
-                    cs?.state?.waiting != null -> cs.state.waiting.reason ?: "Waiting"
-                    cs?.state?.terminated != null -> cs.state.terminated.reason ?: "Terminated"
-                    else -> "Unknown"
-                },
-            )
-        } ?: emptyList()
-        return PodInfo(
-            uid = pod.metadata.uid ?: "",
-            name = pod.metadata.name,
-            namespace = pod.metadata.namespace ?: "",
-            status = effectivePodStatus(pod),
-            ready = "${containers.count { it.ready }}/${containers.size}",
-            restarts = containers.sumOf { it.restartCount },
-            age = formatAge(pod.metadata.creationTimestamp),
-            node = pod.spec?.nodeName ?: "<none>",
-            ip = pod.status?.podIP ?: "<none>",
-            labels = pod.metadata.labels ?: emptyMap(),
-            annotations = pod.metadata.annotations ?: emptyMap(),
-            containers = containers,
-            phase = pod.status?.phase ?: "",
-        )
-    }
-
-    private fun effectivePodStatus(pod: Pod): String {
-        val phase = pod.status?.phase ?: return "Unknown"
-        pod.status?.containerStatuses?.forEach { cs ->
-            cs.state?.waiting?.reason?.let { return it }
-            cs.state?.terminated?.reason?.let { if (phase != "Succeeded") return it }
-        }
-        return phase
-    }
+    // Audit A2: deduplicated against ReactiveKubeClient — both now share
+    // the single pure implementation in ResourceMappers. The old local
+    // copy here had drifted (it omitted `creationTimestamp`); routing
+    // through ResourceMappers fixes that drift, which means pods returned
+    // by getPods()/getPodsByNode() now carry creationTimestamp. Observable
+    // change: the MCP `list_resources pod` JSON gains a creationTimestamp
+    // field (additive). NodeDetailPanel is unaffected (UI ignores it).
+    private fun mapPod(pod: Pod): PodInfo = ResourceMappers.mapPod(pod)
 
     // ── Deployments ─────────────────────────────────────────────────────────────
 
@@ -152,175 +115,6 @@ class KubeClient(
                 conditions = dep.status?.conditions?.map { "${it.type}=${it.status}" } ?: emptyList(),
             )
         }
-    }
-
-    // ── Deployment Resource Graph ────────────────────────────────────────────────
-
-    fun getDeploymentResourceGraph(name: String, namespace: String): ResourceGraph {
-        log.debug("Building resource graph for deployment={} namespace={}", name, namespace)
-        val deployment = client.apps().deployments().inNamespace(namespace).withName(name).get()
-            ?: run {
-                log.warn("Deployment not found name={} namespace={}", name, namespace)
-                return ResourceGraph(emptyList(), emptyList())
-            }
-
-        val nodes = mutableListOf<ResourceGraphNode>()
-        val edges = mutableListOf<ResourceGraphEdge>()
-        val addedNodeIds = mutableSetOf<String>()
-
-        fun addNode(node: ResourceGraphNode) {
-            if (addedNodeIds.add(node.id)) nodes.add(node)
-        }
-
-        val depUid = deployment.metadata.uid ?: return ResourceGraph(emptyList(), emptyList())
-        val depId = "Deployment:$depUid"
-        val matchLabels = deployment.spec?.selector?.matchLabels ?: emptyMap()
-        val readyReplicas = deployment.status?.readyReplicas ?: 0
-        val desiredReplicas = deployment.spec?.replicas ?: 0
-        addNode(
-            ResourceGraphNode(
-                id = depId,
-                name = name,
-                kind = "Deployment",
-                status = if (readyReplicas >= desiredReplicas && desiredReplicas > 0) "Available" else "Progressing",
-            ),
-        )
-
-        try {
-            val allRS = client.apps().replicaSets().inNamespace(namespace).list().items ?: emptyList()
-            val ownedRS = allRS.filter { rs ->
-                rs.metadata?.ownerReferences?.any { it.uid == depUid } == true
-            }
-            val allPods = client.pods().inNamespace(namespace).list().items ?: emptyList()
-
-            for (rs in ownedRS) {
-                val rsUid = rs.metadata?.uid ?: continue
-                val r = rs.status?.readyReplicas ?: 0
-                val d = rs.spec?.replicas ?: 0
-                if (d == 0 && r == 0) continue
-
-                val rsId = "ReplicaSet:$rsUid"
-                addNode(ResourceGraphNode(rsId, rs.metadata.name, "ReplicaSet", "$r/$d"))
-                edges.add(ResourceGraphEdge(depId, rsId))
-
-                val rsPods = allPods.filter { pod ->
-                    pod.metadata?.ownerReferences?.any { it.uid == rsUid } == true
-                }
-                for (pod in rsPods) {
-                    val podUid = pod.metadata?.uid ?: continue
-                    val podId = "Pod:$podUid"
-                    addNode(ResourceGraphNode(podId, pod.metadata.name, "Pod", effectivePodStatus(pod)))
-                    edges.add(ResourceGraphEdge(rsId, podId))
-                }
-            }
-        } catch (e: Exception) {
-            log.warn("Failed to fetch ReplicaSets/Pods for deployment graph: {}", e.message)
-        }
-
-        try {
-            val allSvcs = client.services().inNamespace(namespace).list().items ?: emptyList()
-            for (svc in allSvcs) {
-                val selector = svc.spec?.selector ?: continue
-                if (selector.isEmpty()) continue
-                if (!selector.all { (k, v) -> matchLabels[k] == v }) continue
-
-                val svcUid = svc.metadata?.uid ?: continue
-                val svcId = "Service:$svcUid"
-                addNode(ResourceGraphNode(svcId, svc.metadata.name, "Service", svc.spec?.type))
-                edges.add(ResourceGraphEdge(svcId, depId))
-
-                try {
-                    val allIngresses = client.network().v1().ingresses().inNamespace(namespace).list().items ?: emptyList()
-                    for (ing in allIngresses) {
-                        val matches = ing.spec?.rules?.any { rule ->
-                            rule.http?.paths?.any { path ->
-                                path.backend?.service?.name == svc.metadata.name
-                            } == true
-                        } == true
-                        if (matches) {
-                            val ingUid = ing.metadata?.uid ?: continue
-                            val ingId = "Ingress:$ingUid"
-                            addNode(ResourceGraphNode(ingId, ing.metadata.name, "Ingress", null))
-                            edges.add(ResourceGraphEdge(ingId, svcId))
-                        }
-                    }
-                } catch (e: Exception) {
-                    log.warn("Failed to fetch Ingresses for service graph: {}", e.message)
-                }
-            }
-        } catch (e: Exception) {
-            log.warn("Failed to fetch Services for deployment graph: {}", e.message)
-        }
-
-        val podSpec = deployment.spec?.template?.spec
-        val cmNames = mutableSetOf<String>()
-        val secretNames = mutableSetOf<String>()
-        val pvcNames = mutableSetOf<String>()
-
-        podSpec?.volumes?.forEach { vol ->
-            vol.configMap?.name?.let { cmNames.add(it) }
-            vol.secret?.secretName?.let { secretNames.add(it) }
-            vol.persistentVolumeClaim?.claimName?.let { pvcNames.add(it) }
-        }
-        val allContainers = (podSpec?.containers ?: emptyList()) + (podSpec?.initContainers ?: emptyList())
-        for (c in allContainers) {
-            c.envFrom?.forEach { ef ->
-                ef.configMapRef?.name?.let { cmNames.add(it) }
-                ef.secretRef?.name?.let { secretNames.add(it) }
-            }
-            c.env?.forEach { ev ->
-                ev.valueFrom?.configMapKeyRef?.name?.let { cmNames.add(it) }
-                ev.valueFrom?.secretKeyRef?.name?.let { secretNames.add(it) }
-            }
-        }
-
-        val podNodeIds = nodes.filter { it.kind == "Pod" }.map { it.id }
-        val podLevelParent = podNodeIds.firstOrNull() ?: depId
-
-        for (cm in cmNames) {
-            val cmId = "ConfigMap:$cm"
-            addNode(ResourceGraphNode(cmId, cm, "ConfigMap", null))
-            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, cmId)) }
-            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, cmId))
-        }
-        for (s in secretNames) {
-            val sId = "Secret:$s"
-            addNode(ResourceGraphNode(sId, s, "Secret", null))
-            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, sId)) }
-            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, sId))
-        }
-        for (pvc in pvcNames) {
-            val pvcId = "PVC:$pvc"
-            addNode(ResourceGraphNode(pvcId, pvc, "PVC", null))
-            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, pvcId)) }
-            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, pvcId))
-        }
-
-        val saName = podSpec?.serviceAccountName ?: podSpec?.serviceAccount
-        if (saName != null && saName != "default") {
-            val saId = "ServiceAccount:$saName"
-            addNode(ResourceGraphNode(saId, saName, "ServiceAccount", null))
-            podNodeIds.forEach { pid -> edges.add(ResourceGraphEdge(pid, saId)) }
-            if (podNodeIds.isEmpty()) edges.add(ResourceGraphEdge(depId, saId))
-        }
-
-        try {
-            val hpas = client.autoscaling().v2().horizontalPodAutoscalers()
-                .inNamespace(namespace).list().items ?: emptyList()
-            for (hpa in hpas) {
-                if (hpa.spec?.scaleTargetRef?.kind == "Deployment" && hpa.spec?.scaleTargetRef?.name == name) {
-                    val hpaUid = hpa.metadata?.uid ?: continue
-                    val hpaId = "HPA:$hpaUid"
-                    addNode(ResourceGraphNode(hpaId, hpa.metadata.name, "HPA", null))
-                    edges.add(ResourceGraphEdge(hpaId, depId))
-                }
-            }
-        } catch (e: Exception) {
-            log.warn("Failed to fetch HPAs for deployment graph: {}", e.message)
-        }
-
-        log.debug("Resource graph built: {} nodes, {} edges", nodes.size, edges.size)
-        return ResourceGraph(nodes, edges)
     }
 
     // ── Services ────────────────────────────────────────────────────────────────
