@@ -28,25 +28,20 @@ import kotlin.test.assertTrue
  * multi-paragraph comment in `observeClusterInfoHealth` documents as
  * race-sensitive.
  *
- * These pin the CURRENT observable behavior of the `clusterInfo` →
- * `isConnected` projection: the connect direction works (clusterInfo
- * Success ⇒ connected) and the deliberate "Loading is ignored" rule
- * holds.
+ * Pins the connect direction (clusterInfo Success ⇒ connected), the
+ * deliberate "Loading is ignored" rule, AND the disconnect direction.
  *
- * CHARACTERIZATION FINDING (A6): the DISCONNECT direction is intentionally
- * NOT asserted here. Empirically, after the session is connected, neither
- * `server.destroy()` nor `manager.close()` flips `isConnected` back to
- * false within 20s. fabric8 SharedIndexInformers keep their stale store
- * contents on connection loss and stay parked in `awaitCancellation()`, so
- * the informer-backed `clusterInfo` never emits `ResourceState.Error` and
- * no `reportError` fires from the parked informers. The
- * `observeClusterInfoHealth` Error branch and `observeConnectionHealth`
- * are therefore effectively unreachable on silent connection loss — the
- * code comment's "ring tracks reachability within one poll tick" describes
- * the pre-informer polling design and is no longer accurate. This is a
- * likely latent disconnect-detection bug, separate from (and larger than)
- * A6's "tidy the triple-truth" scope; pinning it would enshrine a bug, so
- * it is documented rather than asserted.
+ * History (A6): the disconnect test was written first and FAILED against
+ * the then-current code — after connecting, neither `server.destroy()` nor
+ * `manager.close()` flipped `isConnected` within 20s, because fabric8
+ * informers park in `awaitCancellation()` and keep stale store contents on
+ * connection loss (so `clusterInfo` never errored and parked informers
+ * never `reportError`'d). That exposed a latent silent-disconnect bug
+ * (.docs/a6-connection-state-finding-2026-05-16.md). The fix added
+ * `ReactiveKubeClient.isReachable` — a `/version` liveness probe that keeps
+ * `reportError`/`reportSuccess` honest while connected, so the existing
+ * `observeConnectionHealth` path detects a dead cluster. The disconnect
+ * test below now passes and guards that fix.
  */
 class SessionViewModelConnectionTest {
 
@@ -109,8 +104,17 @@ class SessionViewModelConnectionTest {
         assertEquals(null, viewModel.connectionError.value)
     }
 
-    // NOTE: a "connection loss flips isConnected=false" test deliberately
-    // omitted — see the class KDoc. The current code does not exhibit that
-    // behavior on silent loss (a latent bug to be triaged on its own), and
-    // a characterization test must pin real behavior, not aspirational.
+    @Test
+    fun `silent cluster loss flips isConnected back to false (A6 fix)`() = runBlocking {
+        // Reach the connected state first.
+        withTimeout(15_000) { viewModel.isConnected.first { it } }
+        // Cluster silently goes away — informers just park with stale data.
+        // The isReachable /version probe must keep reporting errors so the
+        // ≥3-failure threshold trips connectionError and observeConnection-
+        // Health drops isConnected. Probe interval 5s, threshold 3 ⇒ ~15s
+        // worst case; allow generous margin.
+        server.destroy()
+        withTimeout(45_000) { viewModel.isConnected.first { !it } }
+        assertFalse(viewModel.isConnected.value)
+    }
 }
