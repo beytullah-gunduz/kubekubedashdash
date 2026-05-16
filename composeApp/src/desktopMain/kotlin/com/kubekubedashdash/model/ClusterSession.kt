@@ -7,8 +7,11 @@ import com.kubekubedashdash.util.KubeClient
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.Closeable
 
 /**
@@ -52,7 +55,39 @@ class ClusterSession(
 
     override fun close() {
         viewModelStore.clear()
-        connectionManager.close()
+        val job = sessionScope.coroutineContext[Job]
+        val sessionId = id.value
         sessionScope.cancel()
+        // Close the cluster connection only AFTER the cancelled session
+        // flows have run their `finally { informer.close() }`. Closing the
+        // OkHttp client first (the old order) made fabric8 watch threads
+        // briefly hammer a dead client and spam the log on every tab/window
+        // close — the teardown sibling of audit C1.
+        //
+        // sessionScope owns every flow in this session, so joining its job
+        // after cancel is a deterministic "all informers are closed" signal
+        // (better than C1's timer, which couldn't join a single owning job).
+        // Done on a daemon thread so the EDT caller isn't blocked; the
+        // timeout is a safety net against a wedged informer.close().
+        Thread {
+            runCatching {
+                runBlocking { withTimeoutOrNull(CLOSE_JOIN_TIMEOUT_MS) { job?.join() } }
+            }
+            connectionManager.close()
+        }.apply {
+            name = "session-close-$sessionId"
+            isDaemon = true
+            start()
+        }
+    }
+
+    companion object {
+        /**
+         * Upper bound on waiting for a closing session's cancelled flows to
+         * finish `informer.close()` before the client is shut. Generous;
+         * informer teardown is normally sub-second. The thread is a daemon,
+         * so even an over-run never blocks JVM exit.
+         */
+        private const val CLOSE_JOIN_TIMEOUT_MS = 3_000L
     }
 }
