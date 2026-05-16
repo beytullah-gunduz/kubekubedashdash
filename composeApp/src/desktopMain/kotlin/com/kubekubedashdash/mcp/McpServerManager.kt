@@ -1,7 +1,6 @@
 package com.kubekubedashdash.mcp
 
 import com.kubekubedashdash.data.repository.PreferenceRepository
-import com.kubekubedashdash.services.KubeClientService
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -16,9 +15,11 @@ import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.TextResourceContents
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
 
 object McpServerManager {
@@ -27,6 +28,10 @@ object McpServerManager {
     private val json = Json { prettyPrint = true }
 
     const val DEFAULT_PORT = 3001
+
+    private const val CONTEXT_ARG_DESC =
+        "Target cluster kube-context. Optional when exactly one cluster is open; " +
+            "when several are open, call the list_clusters tool and pass one of its contexts."
 
     private val MCP_YAML_ALLOWLIST = setOf(
         "pod", "deployment", "service", "namespace",
@@ -105,11 +110,29 @@ object McpServerManager {
         }
     }
 
-    private fun resolveClient() = try {
-        KubeClientService.client
-    } catch (e: IllegalStateException) {
-        null
+    // Audit A3: MCP is a single endpoint but the app is multi-window, so it
+    // cannot infer which open cluster a call means. Callers discover clusters
+    // via `list_clusters` and pass `context`; resolution is explicit.
+    private fun resolutionErrorJson(r: McpClusterResolver.ClusterResolution<*>): String = when (r) {
+        McpClusterResolver.ClusterResolution.NoneConnected ->
+            """{"error":"No cluster connected. Open a cluster tab first."}"""
+
+        is McpClusterResolver.ClusterResolution.Ambiguous ->
+            buildJsonObject {
+                put("error", "Multiple clusters are open — pass a 'context' argument (call the list_clusters tool to discover them).")
+                putJsonArray("availableContexts") { r.available.forEach { add(it) } }
+            }.toString()
+
+        is McpClusterResolver.ClusterResolution.UnknownContext ->
+            buildJsonObject {
+                put("error", "No open cluster matches context '${r.requested}'. Pass one of availableContexts (call list_clusters).")
+                putJsonArray("availableContexts") { r.available.forEach { add(it) } }
+            }.toString()
+
+        is McpClusterResolver.ClusterResolution.Resolved<*> -> "" // not an error; unused
     }
+
+    private fun toolResolutionError(r: McpClusterResolver.ClusterResolution<*>) = CallToolResult(content = listOf(TextContent(text = resolutionErrorJson(r))), isError = true)
 
     private fun createMcpServer(): Server {
         val mcpServer = Server(
@@ -128,14 +151,21 @@ object McpServerManager {
         // ── Resources ───────────────────────────────────────────────────────────
 
         registerResource(mcpServer, "kubedash://cluster/overview", "Cluster Overview", "Cluster overview information including node/pod counts and status") {
-            val kubeClient = resolveClient()
-                ?: return@registerResource """{"error":"No cluster connected. Open a cluster tab first."}"""
+            // Resources take no arguments, so they can only serve the single
+            // open cluster. With several open the caller must use the
+            // context-addressable tools instead (audit A3).
+            val kubeClient = when (val r = McpClusterResolver.resolve(null)) {
+                is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                else -> return@registerResource resolutionErrorJson(r)
+            }
             json.encodeToString(kubeClient.getClusterInfo(namespace = null))
         }
 
         registerResource(mcpServer, "kubedash://resource-usage", "Resource Usage", "Cluster CPU and memory usage summary") {
-            val kubeClient = resolveClient()
-                ?: return@registerResource """{"error":"No cluster connected. Open a cluster tab first."}"""
+            val kubeClient = when (val r = McpClusterResolver.resolve(null)) {
+                is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                else -> return@registerResource resolutionErrorJson(r)
+            }
             json.encodeToString(kubeClient.getResourceUsage(namespace = null))
         }
 
@@ -167,15 +197,22 @@ object McpServerManager {
                             put("description", "Resource namespace (optional for cluster-scoped resources)")
                         },
                     )
+                    put(
+                        "context",
+                        buildJsonObject {
+                            put("type", "string")
+                            put("description", CONTEXT_ARG_DESC)
+                        },
+                    )
                 },
                 required = listOf("kind", "name"),
             ),
         ) { request ->
-            val kubeClient = resolveClient()
-                ?: return@addTool CallToolResult(
-                    content = listOf(TextContent(text = """{"error":"No cluster connected. Open a cluster tab first."}""")),
-                    isError = true,
-                )
+            val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
+            val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
+                is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                else -> return@addTool toolResolutionError(r)
+            }
             val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
             if (kind.lowercase() !in MCP_YAML_ALLOWLIST) {
                 return@addTool CallToolResult(
@@ -222,15 +259,22 @@ object McpServerManager {
                             put("description", "Number of lines to fetch from the end (default: 100)")
                         },
                     )
+                    put(
+                        "context",
+                        buildJsonObject {
+                            put("type", "string")
+                            put("description", CONTEXT_ARG_DESC)
+                        },
+                    )
                 },
                 required = listOf("name", "namespace"),
             ),
         ) { request ->
-            val kubeClient = resolveClient()
-                ?: return@addTool CallToolResult(
-                    content = listOf(TextContent(text = """{"error":"No cluster connected. Open a cluster tab first."}""")),
-                    isError = true,
-                )
+            val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
+            val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
+                is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                else -> return@addTool toolResolutionError(r)
+            }
             val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
             val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content ?: ""
             val container = request.arguments?.get("container")?.jsonPrimitive?.content
@@ -263,15 +307,22 @@ object McpServerManager {
                             put("description", "Namespace to filter by (optional, omit for all namespaces or cluster-scoped resources)")
                         },
                     )
+                    put(
+                        "context",
+                        buildJsonObject {
+                            put("type", "string")
+                            put("description", CONTEXT_ARG_DESC)
+                        },
+                    )
                 },
                 required = listOf("kind"),
             ),
         ) { request ->
-            val kubeClient = resolveClient()
-                ?: return@addTool CallToolResult(
-                    content = listOf(TextContent(text = """{"error":"No cluster connected. Open a cluster tab first."}""")),
-                    isError = true,
-                )
+            val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
+            val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
+                is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                else -> return@addTool toolResolutionError(r)
+            }
             val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
             val ns = request.arguments?.get("namespace")?.jsonPrimitive?.content
             val result = when (kind.lowercase()) {
@@ -297,6 +348,21 @@ object McpServerManager {
                 else -> """{ "error": "Unknown resource kind: $kind" }"""
             }
             CallToolResult(content = listOf(TextContent(text = result)))
+        }
+
+        mcpServer.addTool(
+            name = "list_clusters",
+            description = "List the Kubernetes clusters (kube contexts) currently open in KubeKubeDashDash. " +
+                "When more than one is open, pass one of these as the 'context' argument to the other tools/resources.",
+            inputSchema = ToolSchema(properties = buildJsonObject {}, required = emptyList()),
+        ) { _ ->
+            val ctxs = McpClusterResolver.listContexts()
+            val payload = buildJsonObject {
+                putJsonArray("clusters") { ctxs.forEach { add(it) } }
+                // true ⇒ a 'context' arg is required by the other tools.
+                put("ambiguous", ctxs.size > 1)
+            }
+            CallToolResult(content = listOf(TextContent(text = payload.toString())))
         }
 
         return mcpServer
