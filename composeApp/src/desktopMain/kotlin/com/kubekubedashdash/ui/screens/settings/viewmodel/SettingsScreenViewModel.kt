@@ -1,8 +1,5 @@
 package com.kubekubedashdash.ui.screens.settings.viewmodel
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.ThemeManager
@@ -27,53 +24,55 @@ class SettingsScreenViewModel : ViewModel() {
         ThemeManager.setMode(mode)
     }
 
-    var isMcpServerEnabled: Boolean by mutableStateOf(McpServerManager.isRunning)
-        private set
+    // Audit A5: single source of truth. PreferenceRepository already exposes
+    // these as DataStore-backed StateFlows; the VM previously held Compose
+    // `mutableStateOf` copies seeded once in init, which made the VM
+    // untestable without the Compose runtime and could desync from the
+    // persisted prefs. Delegate straight through — setters write the repo
+    // (synchronously updating its in-memory flow), the repo's flow drives
+    // the UI.
+    val isMcpServerEnabled: StateFlow<Boolean> = PreferenceRepository.mcpServerEnabled
+    val mcpServerPort: StateFlow<Int> = PreferenceRepository.mcpServerPort
+    val mcpLocalhostOnly: StateFlow<Boolean> = PreferenceRepository.mcpLocalhostOnly
+    val mcpRequireAuth: StateFlow<Boolean> = PreferenceRepository.mcpRequireAuth
 
-    var mcpServerPort: Int by mutableStateOf(McpServerManager.DEFAULT_PORT)
-        private set
-
-    var mcpLocalhostOnly: Boolean by mutableStateOf(true)
-        private set
-
-    var mcpRequireAuth: Boolean by mutableStateOf(true)
-        private set
-
-    var mcpBearerToken: String? by mutableStateOf(McpServerManager.bearerToken)
-        private set
+    // Runtime-only: McpServerManager regenerates the token on every start and
+    // exposes no flow, so this is genuine VM-owned state — a StateFlow for
+    // consistency with the rest of this VM, not Compose state.
+    private val _mcpBearerToken = MutableStateFlow(McpServerManager.bearerToken)
+    val mcpBearerToken: StateFlow<String?> = _mcpBearerToken.asStateFlow()
 
     fun toggleMcpServer(enabled: Boolean) {
-        isMcpServerEnabled = enabled
+        // Synchronous: setMcpServerEnabled updates the in-memory flow
+        // instantly (persistence is fire-and-forget), so the switch reflects
+        // immediately; only the blocking server start/stop goes to IO.
+        PreferenceRepository.setMcpServerEnabled(enabled)
         viewModelScope.launch(Dispatchers.IO) {
-            PreferenceRepository.setMcpServerEnabled(enabled)
             if (enabled) {
-                McpServerManager.start(mcpServerPort)
-                mcpBearerToken = McpServerManager.bearerToken
+                McpServerManager.start(mcpServerPort.value)
+                _mcpBearerToken.value = McpServerManager.bearerToken
             } else {
                 McpServerManager.stop()
-                mcpBearerToken = null
+                _mcpBearerToken.value = null
             }
         }
     }
 
     fun updateMcpServerPort(port: Int) {
-        mcpServerPort = port
+        PreferenceRepository.setMcpServerPort(port)
         viewModelScope.launch(Dispatchers.IO) {
-            PreferenceRepository.setMcpServerPort(port)
-            if (isMcpServerEnabled) {
+            if (isMcpServerEnabled.value) {
                 McpServerManager.start(port)
-                mcpBearerToken = McpServerManager.bearerToken
+                _mcpBearerToken.value = McpServerManager.bearerToken
             }
         }
     }
 
     fun updateMcpLocalhostOnly(v: Boolean) {
-        mcpLocalhostOnly = v
         PreferenceRepository.setMcpLocalhostOnly(v)
     }
 
     fun updateMcpRequireAuth(v: Boolean) {
-        mcpRequireAuth = v
         PreferenceRepository.setMcpRequireAuth(v)
     }
 
@@ -146,16 +145,14 @@ class SettingsScreenViewModel : ViewModel() {
     }
 
     init {
+        // State now lives in PreferenceRepository's flows; init only needs to
+        // honor the persisted "MCP enabled" intent on startup and seed the
+        // runtime bearer token.
         viewModelScope.launch(Dispatchers.IO) {
-            mcpServerPort = PreferenceRepository.mcpServerPort.value
-            mcpLocalhostOnly = PreferenceRepository.mcpLocalhostOnly.value
-            mcpRequireAuth = PreferenceRepository.mcpRequireAuth.value
-            val enabled = PreferenceRepository.mcpServerEnabled.value
-            if (enabled && !McpServerManager.isRunning) {
-                McpServerManager.start(mcpServerPort)
+            if (PreferenceRepository.mcpServerEnabled.value && !McpServerManager.isRunning) {
+                McpServerManager.start(PreferenceRepository.mcpServerPort.value)
             }
-            isMcpServerEnabled = enabled
-            mcpBearerToken = McpServerManager.bearerToken
+            _mcpBearerToken.value = McpServerManager.bearerToken
         }
     }
 }
