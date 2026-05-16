@@ -8,11 +8,12 @@ import com.kubekubedashdash.util.ReactiveKubeClient
  * [androidx.compose.runtime.CompositionLocalProvider] in [App].
  *
  * Screens and their ViewModels MUST reach the kube client through this local
- * — the legacy [com.kubekubedashdash.services.KubeClientService] facade is a
- * single global pointer and would tie every window to the same cluster
- * connection, defeating multi-window. Read it in the screen composable, then
- * pass it to the screen's ViewModel via the `viewModel { … }` initializer so
- * the VM constructor captures the right client.
+ * — a process-global "active session" pointer is a single global handle that
+ * would tie every window to the same cluster connection, defeating
+ * multi-window (the same class of bug audit A3 fixed for the MCP server, which
+ * now resolves clusters explicitly by context). Read it in the screen
+ * composable, then pass it to the screen's ViewModel via the `viewModel { … }`
+ * initializer so the VM constructor captures the right client.
  *
  * Uses [compositionLocalOf] (not `staticCompositionLocalOf`) because the
  * provided value swaps every time the active session changes — opening a new
