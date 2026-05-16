@@ -22,6 +22,18 @@ class KubeConnectionManager : Closeable {
 
     private val log = LoggerFactory.getLogger(KubeConnectionManager::class.java)
 
+    companion object {
+        /**
+         * Grace period before a connect-time replaced client is closed
+         * (audit C1). Must comfortably exceed the time for a
+         * `_connectionVersion` bump to propagate through ReactiveKubeClient's
+         * `flatMapLatest` and run the old `informer.close()`. ~1s; the cost
+         * is one discarded OkHttp client living slightly longer on a manual
+         * cluster switch.
+         */
+        private const val RETIRE_GRACE_MS = 1_000L
+    }
+
     private var _client: KubernetesClient? = null
     private var _mockHandle: MockClusterHandle? = null
     val isConnected: Boolean get() = _client != null
@@ -68,15 +80,64 @@ class KubeConnectionManager : Closeable {
 
     private val connectLock = Any()
 
+    /**
+     * Retire the connection a `connect*` call is replacing — WITHOUT closing
+     * the old client synchronously (audit C1).
+     *
+     * The old fix order was: `close()` (→ old OkHttp client closed) THEN
+     * `_connectionVersion++`. But ReactiveKubeClient's informers only tear
+     * down (running `informer.close()` in their `flatMapLatest` `finally`)
+     * *after* the version bump propagates through the flow. So between the
+     * synchronous `close()` and that async cancellation, fabric8 watch
+     * threads kept hitting a dead client, threw, and spammed
+     * `reportError`/`ResourceState.Error` — a "Unable to connect" flash on
+     * every cluster switch (and the reconnect loop the team already fought).
+     *
+     * Now every `connect*` bumps `_connectionVersion` FIRST (cancels the old
+     * informers) and hands the previous client/mock here. We close it on a
+     * daemon thread after a short grace period, by which time the informer
+     * cancellation has run `informer.close()` against a still-open client.
+     * The old client lingering ~1s is harmless — it is being discarded and
+     * no new work is routed to it (`_client` already points at the new one).
+     *
+     * The `Closeable.close()` path (session/window teardown) is deliberately
+     * left synchronous: there the session scope is cancelled around it, and
+     * making teardown async has far wider blast radius.
+     */
+    private fun retirePrevious(prevClient: KubernetesClient?, prevMock: MockClusterHandle?) {
+        if (prevClient == null && prevMock == null) return
+        Thread {
+            try {
+                Thread.sleep(RETIRE_GRACE_MS)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            // Same teardown order as close(): mock handle first (ref-count
+            // release, also closes its client), then the client (a no-op for
+            // mock, real cleanup otherwise).
+            runCatching { prevMock?.close() }
+                .onFailure { log.warn("Error retiring previous mock handle: {}", it.message) }
+            runCatching { prevClient?.close() }
+                .onFailure { log.warn("Error retiring previous client: {}", it.message) }
+            log.debug("Retired previous Kubernetes connection")
+        }.apply {
+            name = "kube-conn-retire"
+            isDaemon = true
+            start()
+        }
+    }
+
     fun connect(context: String? = null): Result<String> = synchronized(connectLock) {
+        val prevClient = _client
+        val prevMock = _mockHandle
         try {
             log.info("Connecting to cluster context={}", context ?: "<default>")
-            close()
             log.debug("connect step 1/4: Config.autoConfigure")
             val config = Config.autoConfigure(context)
             log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", redactUrl(config.masterUrl))
             val c = KubernetesClientBuilder().withConfig(config).build()
             _client = c
+            _mockHandle = null
             _connectedContext = context ?: config.currentContext?.name
             log.debug("connect step 3/4: clearConnectionError")
             clearConnectionError()
@@ -84,45 +145,65 @@ class KubeConnectionManager : Closeable {
             val v = c.kubernetesVersion
             log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, redactUrl(config.masterUrl))
             _cachedFallbackContext = null
+            // Bump version FIRST so the old informers cancel, THEN retire the
+            // previous client off-thread after a grace period (audit C1).
             _connectionVersion.update { it + 1 }
+            retirePrevious(prevClient, prevMock)
             Result.success("${v.major}.${v.minor}")
         } catch (t: Throwable) {
             // Catch Throwable, not just Exception, so that NoClassDefFoundError /
             // LinkageError / OutOfMemoryError surface in the log + UI instead of
             // disappearing into the void and leaving the app stuck on the spinner.
             log.error("Failed to connect to cluster context={}", context, t)
+            _client = null
+            _mockHandle = null
+            _connectedContext = null
+            retirePrevious(prevClient, prevMock)
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
 
     fun connectWithClient(client: KubernetesClient, label: String): Result<String> = synchronized(connectLock) {
+        val prevClient = _client
+        val prevMock = _mockHandle
         try {
             log.info("Connecting with pre-built client label={}", label)
-            close()
             _client = client
+            _mockHandle = null
             _connectedContext = label
             clearConnectionError()
             log.info("Connected via pre-built client label={}", label)
             _connectionVersion.update { it + 1 }
+            retirePrevious(prevClient, prevMock)
             Result.success("mock")
         } catch (t: Throwable) {
             log.error("Failed to connect with pre-built client label={}", label, t)
+            _client = null
+            _mockHandle = null
+            _connectedContext = null
+            retirePrevious(prevClient, prevMock)
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
 
     fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = synchronized(connectLock) {
+        val prevClient = _client
+        val prevMock = _mockHandle
         try {
             log.info("Connecting via mock handle '{}'", handle.label)
-            close()
             _client = handle.client
             _mockHandle = handle
             _connectedContext = handle.label
             clearConnectionError()
             _connectionVersion.update { it + 1 }
+            retirePrevious(prevClient, prevMock)
             Result.success("mock")
         } catch (t: Throwable) {
             log.error("Failed to connect via mock handle", t)
+            _client = null
+            _mockHandle = null
+            _connectedContext = null
+            retirePrevious(prevClient, prevMock)
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
