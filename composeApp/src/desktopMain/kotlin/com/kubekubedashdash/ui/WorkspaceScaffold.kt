@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.layout.AnimatedPane
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldDefaults
@@ -85,7 +85,7 @@ internal fun SessionPaneContent(
     val pulseLabelsOnEntry = labelQuery.isNotBlank()
     val pulseAnnotationsOnEntry = annotationQuery.isNotBlank()
 
-    val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfo())
+    val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2())
     val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
         scaffoldDirective = defaultDirective,
         adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),

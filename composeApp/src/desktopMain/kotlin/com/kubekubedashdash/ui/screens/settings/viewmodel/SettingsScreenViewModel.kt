@@ -76,20 +76,21 @@ class SettingsScreenViewModel : ViewModel() {
         PreferenceRepository.setMcpRequireAuth(v)
     }
 
-    private val _closeTabFocus = MutableStateFlow(PreferenceRepository.closeTabFocus.value)
-    val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
+    // Single source of truth — delegate straight to PreferenceRepository's
+    // DataStore-backed flows (same A5 rationale: the old local
+    // MutableStateFlow mirror was seeded once from `.value` and could go
+    // stale if the prefs reloaded). Setters update the repo's in-memory flow
+    // synchronously, so the UI still reacts immediately.
+    val closeTabFocus: StateFlow<CloseTabFocus> = PreferenceRepository.closeTabFocus
 
     fun setCloseTabFocus(value: CloseTabFocus) {
         PreferenceRepository.setCloseTabFocus(value)
-        _closeTabFocus.value = value
     }
 
-    private val _tabStripVisibility = MutableStateFlow(PreferenceRepository.tabStripVisibility.value)
-    val tabStripVisibility: StateFlow<TabStripVisibility> = _tabStripVisibility.asStateFlow()
+    val tabStripVisibility: StateFlow<TabStripVisibility> = PreferenceRepository.tabStripVisibility
 
     fun setTabStripVisibility(value: TabStripVisibility) {
         PreferenceRepository.setTabStripVisibility(value)
-        _tabStripVisibility.value = value
     }
 
     // ── Demo cluster simulator ─────────────────────────────────────────────────
