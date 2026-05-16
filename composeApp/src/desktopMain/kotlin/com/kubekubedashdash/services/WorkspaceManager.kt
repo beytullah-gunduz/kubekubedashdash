@@ -130,13 +130,25 @@ object WorkspaceManager {
                 session.viewModel.connectToCluster(ctx)
             }
         }
-        // Defer the AllClusters tab insertion off the click frame. When opening
-        // the second cluster, totalClusters just hit 2 → reconcile would insert
-        // AllClusters at index 0, which shifts existing pages' indices. That
-        // structural reordering forces the pager to compose the previous active
-        // session's pane alongside the new one (doubled first-composition).
-        // Deferring by a frame keeps the click-driven recomposition focused on
-        // the new cluster only.
+        scheduleAllClustersReconcile()
+    }
+
+    /**
+     * Defer the AllClusters tab insertion off the click frame. When opening
+     * the second cluster, totalClusters just hit 2 → reconcile would insert
+     * AllClusters at index 0, which shifts existing pages' indices. That
+     * structural reordering forces the pager to compose the previous active
+     * session's pane alongside the new one (doubled first-composition).
+     * Deferring by a frame keeps the click-driven recomposition focused on
+     * the new cluster only. See `.docs/feature/second-cluster-pick-perf.md`.
+     *
+     * Deliberate, perf-tuned timing — NOT incidental. The 50 ms delay is the
+     * documented workaround; do not inline or shorten it without re-checking
+     * second-cluster-pick recomposition cost (there is no automated guard).
+     * Extracted from [openCluster] only to give the hack a name + single
+     * home (audit A4, scoped slice — behaviour/timing unchanged).
+     */
+    private fun scheduleAllClustersReconcile() {
         managerScope.launch {
             delay(50)
             reconcileAllClustersTab()
