@@ -9,6 +9,7 @@ import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -91,7 +92,21 @@ class SessionViewModel(
     private var retryJob: Job? = null
     private var connectJob: Job? = null
 
+    // Audit A6 (final step): every connection transition is funneled through
+    // this channel and applied by ONE consumer coroutine, so the reducer is
+    // now truly single-threaded — the read-modify-write in
+    // applyConnectionEvent (e.g. `if (_isConnected.value) { … }`) can no
+    // longer interleave with another source. UNLIMITED + trySend: FIFO, no
+    // drops, no suspension at the (low-frequency) call sites. Declared before
+    // `init` so the consumer launch below can reference it.
+    private val connEvents = Channel<ConnEvent>(Channel.UNLIMITED)
+
     init {
+        // Start the single reducer consumer first so no event is processed
+        // out of order (UNLIMITED buffers anything emitted before it spins up).
+        scope.launch {
+            for (event in connEvents) applyConnectionEvent(event)
+        }
         observeConnectionHealth()
         observeNamespaces()
         observeClusterInfoHealth()
@@ -112,14 +127,21 @@ class SessionViewModel(
     // `_isConnected` / `_connectionError` / `_currentScreen` used to be poked
     // from three places (connectToCluster, the connectionError observer, the
     // clusterInfo observer) each with ad-hoc `if (_x.value != …)` guards —
-    // the "connection state computed 3 ways" the audit flagged. They now have
-    // a SINGLE writer: every connection transition goes through
-    // [applyConnectionEvent]. This is a clarity/maintainability change with a
-    // 1:1-preserved transition table — NOT a concurrency-semantics change:
-    // the three sources still call it from their own coroutines exactly as
-    // before (full Channel-serialization remains a separate optional step).
-    // Behavior is guarded by SessionViewModelConnectionTest +
-    // ReactiveKubeClientCancellationTest + the full suite.
+    // the "connection state computed 3 ways" the audit flagged.
+    //
+    // Now there is exactly one writer AND it is single-threaded: the three
+    // sources only [emitConnEvent] onto [connEvents]; the lone consumer
+    // coroutine (started in init) runs [applyConnectionEvent] serially, so
+    // the read-modify-write transitions can't interleave. The transition
+    // table is transcribed 1:1 from the original code. Behaviour is guarded
+    // by SessionViewModelConnectionTest + ReactiveKubeClientCancellationTest
+    // (the reconnect-loop guard) + the full suite.
+    //
+    // Trade-off: a transition is now applied one dispatch after it is
+    // emitted (vs. the old synchronous call). connectToCluster() still flips
+    // _isConnecting synchronously; the screen/error/connected trio lands a
+    // beat later. The connect path is async anyway and all consumers observe
+    // via collectAsState, so the skew is imperceptible.
     private sealed interface ConnEvent {
         /** connectToCluster() began an attempt. */
         data object ConnectStarted : ConnEvent
@@ -138,6 +160,12 @@ class SessionViewModel(
 
         /** clusterInfo reached Error (rare on silent loss — see note below). */
         data object ClusterUnreachable : ConnEvent
+    }
+
+    /** The only way the three sources mutate connection state — enqueue an
+     *  event for the single [applyConnectionEvent] consumer (audit A6). */
+    private fun emitConnEvent(event: ConnEvent) {
+        connEvents.trySend(event)
     }
 
     private fun applyConnectionEvent(event: ConnEvent) {
@@ -196,7 +224,7 @@ class SessionViewModel(
     private fun observeConnectionHealth() {
         scope.launch {
             reactiveClient.connectionError.filterNotNull().collect { error ->
-                applyConnectionEvent(ConnEvent.HealthErrorReported(error))
+                emitConnEvent(ConnEvent.HealthErrorReported(error))
             }
         }
     }
@@ -210,8 +238,8 @@ class SessionViewModel(
         scope.launch {
             reactiveClient.clusterInfo.collect { state ->
                 when (state) {
-                    is ResourceState.Success -> applyConnectionEvent(ConnEvent.ClusterReachable)
-                    is ResourceState.Error -> applyConnectionEvent(ConnEvent.ClusterUnreachable)
+                    is ResourceState.Success -> emitConnEvent(ConnEvent.ClusterReachable)
+                    is ResourceState.Error -> emitConnEvent(ConnEvent.ClusterUnreachable)
                     is ResourceState.Loading -> Unit
                 }
             }
@@ -255,7 +283,7 @@ class SessionViewModel(
         connectJob?.cancel()
         _selectedContext.value = ctx
         _isConnecting.value = true
-        applyConnectionEvent(ConnEvent.ConnectStarted)
+        emitConnEvent(ConnEvent.ConnectStarted)
         connectJob = scope.launch(Dispatchers.IO) {
             val isMock = MockClusterProvider.isMockContext(ctx)
             val result = if (isMock) {
@@ -275,12 +303,12 @@ class SessionViewModel(
                         // off the live label.
                         _selectedContext.value = reactiveClient.getCurrentContext()
                     }
-                    applyConnectionEvent(ConnEvent.ConnectSucceeded)
+                    emitConnEvent(ConnEvent.ConnectSucceeded)
                     _selectedNamespace.value = "All Namespaces"
                     reactiveClient.setSelectedNamespace(null)
                 },
                 onFailure = { e ->
-                    applyConnectionEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock))
+                    emitConnEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock))
                 },
             )
             _isConnecting.value = false
