@@ -107,34 +107,101 @@ class SessionViewModel(
         }
     }
 
-    private fun observeConnectionHealth() {
-        scope.launch {
-            reactiveClient.connectionError.filterNotNull().collect { error ->
+    // ── Connection-state reducer (audit A6) ─────────────────────────────────
+    //
+    // `_isConnected` / `_connectionError` / `_currentScreen` used to be poked
+    // from three places (connectToCluster, the connectionError observer, the
+    // clusterInfo observer) each with ad-hoc `if (_x.value != …)` guards —
+    // the "connection state computed 3 ways" the audit flagged. They now have
+    // a SINGLE writer: every connection transition goes through
+    // [applyConnectionEvent]. This is a clarity/maintainability change with a
+    // 1:1-preserved transition table — NOT a concurrency-semantics change:
+    // the three sources still call it from their own coroutines exactly as
+    // before (full Channel-serialization remains a separate optional step).
+    // Behavior is guarded by SessionViewModelConnectionTest +
+    // ReactiveKubeClientCancellationTest + the full suite.
+    private sealed interface ConnEvent {
+        /** connectToCluster() began an attempt. */
+        data object ConnectStarted : ConnEvent
+
+        /** connectToCluster() succeeded. */
+        data object ConnectSucceeded : ConnEvent
+
+        /** connectToCluster() failed; [retry] mirrors the old `if (!isMock)`. */
+        data class ConnectFailed(val message: String?, val retry: Boolean) : ConnEvent
+
+        /** A non-null connectionError surfaced (≥3-failure threshold / liveness probe). */
+        data class HealthErrorReported(val message: String) : ConnEvent
+
+        /** clusterInfo reached Success. */
+        data object ClusterReachable : ConnEvent
+
+        /** clusterInfo reached Error (rare on silent loss — see note below). */
+        data object ClusterUnreachable : ConnEvent
+    }
+
+    private fun applyConnectionEvent(event: ConnEvent) {
+        when (event) {
+            ConnEvent.ConnectStarted -> {
+                _retryCountdown.value = 0
+                _connectionError.value = null
+                _currentScreen.value = Screen.Main.Connecting
+            }
+
+            ConnEvent.ConnectSucceeded -> {
+                _isConnected.value = true
+                _connectionError.value = null
+                _currentScreen.value = Screen.Main.ClusterOverview
+            }
+
+            is ConnEvent.ConnectFailed -> {
+                _isConnected.value = false
+                _connectionError.value = event.message
+                _currentScreen.value = Screen.Main.ConnectionError(event.message, 10)
+                if (event.retry) scheduleRetry()
+            }
+
+            // Only acts when currently connected — same guard the old
+            // observeConnectionHealth had (a connectionError while already
+            // disconnected, e.g. mid-connect, must not stomp the in-flight
+            // attempt's screen).
+            is ConnEvent.HealthErrorReported -> {
                 if (_isConnected.value) {
                     _isConnected.value = false
-                    _connectionError.value = error
-                    _currentScreen.value = Screen.Main.ConnectionError(error, 10)
+                    _connectionError.value = event.message
+                    _currentScreen.value = Screen.Main.ConnectionError(event.message, 10)
                     scheduleRetry()
                 }
+            }
+
+            // clusterInfo Success → connected (the first sync after connect()
+            // lands here; verified by SessionViewModelConnectionTest).
+            ConnEvent.ClusterReachable -> {
+                if (!_isConnected.value) _isConnected.value = true
+            }
+
+            // Best-effort fast path only: informers park in
+            // awaitCancellation() after sync and DON'T surface a watch-time
+            // loss, so clusterInfo stays stale-Success on a silent disconnect
+            // and this rarely fires. Silent-disconnect detection is owned by
+            // ReactiveKubeClient.isReachable (the liveness probe) →
+            // connectionError → HealthErrorReported. See
+            // .docs/a6-connection-state-finding-2026-05-16.md.
+            ConnEvent.ClusterUnreachable -> {
+                if (_isConnected.value) _isConnected.value = false
             }
         }
     }
 
-    // clusterInfo Success → mark connected (the first successful sync after
-    // connect() lands here). The Success path is verified by
-    // SessionViewModelConnectionTest.
-    //
-    // The Error branch is a best-effort fast path only: informers park in
-    // awaitCancellation() after sync and DON'T surface a watch-time loss, so
-    // clusterInfo stays stale-Success on a silent disconnect and this Error
-    // case rarely fires. Silent-disconnect detection is owned by
-    // ReactiveKubeClient.isReachable (the /version liveness probe) →
-    // connectionError → observeConnectionHealth. (This corrects the old
-    // comment here that claimed "red within one polling tick" — that was the
-    // pre-informer polling design; see
-    // .docs/a6-connection-state-finding-2026-05-16.md.)
-    //
-    // Loading is intentionally ignored — connectToCluster() owns
+    private fun observeConnectionHealth() {
+        scope.launch {
+            reactiveClient.connectionError.filterNotNull().collect { error ->
+                applyConnectionEvent(ConnEvent.HealthErrorReported(error))
+            }
+        }
+    }
+
+    // clusterInfo Loading is intentionally ignored — connectToCluster() owns
     // _isConnecting, and Loading also fires on the first subscription
     // emission and on every connection-version bump from
     // connect()/scheduleRetry(), so reacting to it would race those explicit
@@ -143,14 +210,8 @@ class SessionViewModel(
         scope.launch {
             reactiveClient.clusterInfo.collect { state ->
                 when (state) {
-                    is ResourceState.Success -> {
-                        if (!_isConnected.value) _isConnected.value = true
-                    }
-
-                    is ResourceState.Error -> {
-                        if (_isConnected.value) _isConnected.value = false
-                    }
-
+                    is ResourceState.Success -> applyConnectionEvent(ConnEvent.ClusterReachable)
+                    is ResourceState.Error -> applyConnectionEvent(ConnEvent.ClusterUnreachable)
                     is ResourceState.Loading -> Unit
                 }
             }
@@ -192,11 +253,9 @@ class SessionViewModel(
     fun connectToCluster(ctx: String) {
         retryJob?.cancel()
         connectJob?.cancel()
-        _retryCountdown.value = 0
         _selectedContext.value = ctx
         _isConnecting.value = true
-        _connectionError.value = null
-        _currentScreen.value = Screen.Main.Connecting
+        applyConnectionEvent(ConnEvent.ConnectStarted)
         connectJob = scope.launch(Dispatchers.IO) {
             val isMock = MockClusterProvider.isMockContext(ctx)
             val result = if (isMock) {
@@ -216,17 +275,12 @@ class SessionViewModel(
                         // off the live label.
                         _selectedContext.value = reactiveClient.getCurrentContext()
                     }
-                    _isConnected.value = true
-                    _connectionError.value = null
-                    _currentScreen.value = Screen.Main.ClusterOverview
+                    applyConnectionEvent(ConnEvent.ConnectSucceeded)
                     _selectedNamespace.value = "All Namespaces"
                     reactiveClient.setSelectedNamespace(null)
                 },
                 onFailure = { e ->
-                    _isConnected.value = false
-                    _connectionError.value = e.message
-                    _currentScreen.value = Screen.Main.ConnectionError(e.message, 10)
-                    if (!isMock) scheduleRetry()
+                    applyConnectionEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock))
                 },
             )
             _isConnecting.value = false
