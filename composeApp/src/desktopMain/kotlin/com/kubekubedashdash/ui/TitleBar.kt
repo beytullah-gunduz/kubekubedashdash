@@ -8,35 +8,21 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.window.WindowDraggableArea
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,7 +30,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -52,7 +37,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,20 +44,11 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import com.kubekubedashdash.KdBorder
-import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
-import com.kubekubedashdash.KdSurfaceVariant
-import com.kubekubedashdash.KdTextPlaceholder
-import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.check_filled
-import com.kubekubedashdash.resources.close_filled
-import com.kubekubedashdash.resources.expand_more_filled
-import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
-import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.settings_filled
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
@@ -92,11 +67,6 @@ fun WindowScope.TitleBar(
     title: String,
     windowState: WindowState,
     onClose: () -> Unit,
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    selectedNamespace: String,
-    namespaces: List<String>,
-    onNamespaceChange: (String) -> Unit,
     sidebarCollapsed: Boolean,
     onToggleSidebar: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -186,13 +156,6 @@ fun WindowScope.TitleBar(
 
             Spacer(Modifier.weight(1f))
 
-            CompactSearchField(searchQuery, onSearchChange)
-
-            Spacer(Modifier.width(8.dp))
-
-            CompactNamespaceSelector(selectedNamespace, namespaces, onNamespaceChange)
-
-            Spacer(Modifier.width(8.dp))
             SettingsButton(onClick = onOpenSettings)
 
             if (!isMacOS) {
@@ -282,141 +245,6 @@ private fun SettingsButton(onClick: () -> Unit) {
             modifier = Modifier.size(16.dp),
             tint = KdTextSecondary,
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CompactSearchField(
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val colors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = KdPrimary,
-        unfocusedBorderColor = KdBorder,
-        cursorColor = KdPrimary,
-        focusedContainerColor = KdSurfaceVariant,
-        unfocusedContainerColor = KdSurfaceVariant,
-    )
-    BasicTextField(
-        value = searchQuery,
-        onValueChange = onSearchChange,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
-        cursorBrush = SolidColor(KdPrimary),
-        interactionSource = interactionSource,
-        modifier = Modifier.width(200.dp).height(if (isMacOS) 30.dp else 32.dp),
-        decorationBox = { innerTextField ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = searchQuery,
-                innerTextField = innerTextField,
-                enabled = true,
-                singleLine = true,
-                visualTransformation = VisualTransformation.None,
-                interactionSource = interactionSource,
-                placeholder = {
-                    Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextPlaceholder)
-                },
-                leadingIcon = {
-                    Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextPlaceholder)
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp)) {
-                            Icon(painterResource(Res.drawable.close_filled), "Clear search", Modifier.size(12.dp), tint = KdTextSecondary)
-                        }
-                    }
-                },
-                colors = colors,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                container = {
-                    OutlinedTextFieldDefaults.Container(
-                        enabled = true,
-                        isError = false,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        shape = RoundedCornerShape(4.dp),
-                    )
-                },
-            )
-        },
-    )
-}
-
-@Composable
-private fun CompactNamespaceSelector(
-    selectedNamespace: String,
-    namespaces: List<String>,
-    onNamespaceChange: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        OutlinedButton(
-            onClick = { expanded = true },
-            modifier = Modifier.height(28.dp),
-            shape = RoundedCornerShape(4.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
-            border = ButtonDefaults.outlinedButtonBorder(true).copy(
-                brush = SolidColor(KdBorder),
-            ),
-            contentPadding = PaddingValues(horizontal = 8.dp),
-        ) {
-            Icon(painterResource(Res.drawable.folder_special_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
-            Spacer(Modifier.width(4.dp))
-            Text(selectedNamespace, style = MaterialTheme.typography.labelSmall)
-            Spacer(Modifier.width(2.dp))
-            Icon(painterResource(Res.drawable.expand_more_filled), "Show namespaces", Modifier.size(12.dp))
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .background(KdSurface)
-                .heightIn(max = 400.dp),
-        ) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        "All Namespaces",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (selectedNamespace == "All Namespaces") KdPrimary else KdTextPrimary,
-                    )
-                },
-                onClick = {
-                    onNamespaceChange("All Namespaces")
-                    expanded = false
-                },
-                leadingIcon = {
-                    if (selectedNamespace == "All Namespaces") {
-                        Icon(painterResource(Res.drawable.check_filled), null, tint = KdPrimary, modifier = Modifier.size(16.dp))
-                    }
-                },
-            )
-            HorizontalDivider(color = KdBorder)
-            namespaces.forEach { ns ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            ns,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (ns == selectedNamespace) KdPrimary else KdTextPrimary,
-                        )
-                    },
-                    onClick = {
-                        onNamespaceChange(ns)
-                        expanded = false
-                    },
-                    leadingIcon = {
-                        if (ns == selectedNamespace) {
-                            Icon(painterResource(Res.drawable.check_filled), null, tint = KdPrimary, modifier = Modifier.size(16.dp))
-                        }
-                    },
-                )
-            }
-        }
     }
 }
 

@@ -122,9 +122,10 @@ fun App(
         val hasRealContexts by appViewModel.hasRealContexts.collectAsState()
         val awsCliAvailable = remember { ShellEnvironment.resolveCommand("aws") != null }
 
-        // For title-bar context use the active cluster session; fall back to the
-        // first cluster tab when the Logs tab is active, so the namespace picker
-        // and search remain usable while switching.
+        // The title bar powers the cluster chip + connection state for the
+        // active cluster tab; fall back to the first cluster tab when a
+        // non-cluster tab (Logs / All Clusters) is active so the chip persists.
+        // Namespace + search now live in the per-tab content header.
         val titleSession = activeSession
             ?: tabs.filterIsInstance<WorkspaceTab.Cluster>().firstOrNull()?.session
         val titleVm = titleSession?.viewModel
@@ -132,14 +133,10 @@ fun App(
         // Stable empty-state flows so collected Compose states don't change type.
         val emptyString = remember { MutableStateFlow("") }
         val emptyBool = remember { MutableStateFlow(false) }
-        val emptyList = remember { MutableStateFlow(emptyList<String>()) }
 
-        val selectedNamespace by (titleVm?.selectedNamespace ?: emptyString).collectAsState()
         val selectedContext by (titleVm?.selectedContext ?: emptyString).collectAsState()
-        val namespaces by (titleVm?.namespaces ?: emptyList).collectAsState()
         val isConnected by (titleVm?.isConnected ?: emptyBool).collectAsState()
         val isConnecting by (titleVm?.isConnecting ?: emptyBool).collectAsState()
-        val searchQuery by (titleVm?.searchQuery ?: emptyString).collectAsState()
         val showFirstRun = !hasRealContexts && !isConnected
 
         // Pager state mirrors workspace.activeTabKey. Tab clicks / drag-drop
@@ -315,11 +312,6 @@ fun App(
                                     title = "KubeKubeDashDash",
                                     windowState = windowState,
                                     onClose = onClose,
-                                    searchQuery = searchQuery,
-                                    onSearchChange = { titleVm?.setSearchQuery(it) },
-                                    selectedNamespace = selectedNamespace,
-                                    namespaces = namespaces,
-                                    onNamespaceChange = { titleVm?.setSelectedNamespace(it) },
                                     sidebarCollapsed = sidebarCollapsed,
                                     onToggleSidebar = {
                                         PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
