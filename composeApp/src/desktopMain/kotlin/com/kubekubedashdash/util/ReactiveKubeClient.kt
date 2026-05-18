@@ -1506,6 +1506,24 @@ class ReactiveKubeClient(
             .also { log.trace("Found {} pods on node={}", it.size, nodeName) }
     }
 
+    // Pod-per-node tallies for the Nodes usage panel: one cluster-wide list
+    // instead of getPodsByNode() per node. A pod counts toward both its
+    // assigned and nominated node (when they differ), so summing this map
+    // over the node set matches looping getPodsByNode().size per node.
+    fun getPodCountsByNode(): Map<String, Int> {
+        val counts = mutableMapOf<String, Int>()
+        k8s.pods().inAnyNamespace().list().items.forEach { pod ->
+            val assigned = pod.spec?.nodeName
+            val nominated = pod.status?.nominatedNodeName
+            if (assigned != null) counts[assigned] = (counts[assigned] ?: 0) + 1
+            if (nominated != null && nominated != assigned) {
+                counts[nominated] = (counts[nominated] ?: 0) + 1
+            }
+        }
+        log.trace("Pod counts computed across {} node buckets", counts.size)
+        return counts
+    }
+
     fun getEventsForNode(nodeName: String): List<EventInfo> {
         log.trace("Fetching events for node={}", nodeName)
         return k8s.v1().events().inAnyNamespace().list().items

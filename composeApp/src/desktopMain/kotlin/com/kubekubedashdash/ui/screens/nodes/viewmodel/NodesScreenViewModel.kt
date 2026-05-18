@@ -106,13 +106,15 @@ class NodesScreenViewModel(
             val nodes = (s as? ResourceState.Success)?.data ?: return@transformLatest
             while (true) {
                 val stats = withContext(Dispatchers.IO) {
+                    val countsByNode = try {
+                        reactiveClient.getPodCountsByNode()
+                    } catch (_: Exception) {
+                        emptyMap<String, Int>()
+                    }
                     var totalPods = 0
                     var totalCapacity = 0
                     nodes.forEach { node ->
-                        try {
-                            totalPods += reactiveClient.getPodsByNode(node.name).size
-                        } catch (_: Exception) {
-                        }
+                        totalPods += countsByNode[node.name] ?: 0
                         totalCapacity += node.pods.toIntOrNull() ?: 0
                     }
                     PodStats(totalPods, totalCapacity)
