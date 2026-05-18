@@ -6,9 +6,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.VerticalDragHandle
@@ -64,6 +67,9 @@ internal fun SessionPaneContent(
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
+    val selectedNamespace by sessionVm.selectedNamespace.collectAsState()
+    val namespaceList by sessionVm.namespaces.collectAsState()
+    val clusterContext by sessionVm.selectedContext.collectAsState()
     val labelMap by sessionVm.labelQueries.collectAsState()
     val annotationMap by sessionVm.annotationQueries.collectAsState()
     val sessionIsConnected by sessionVm.isConnected.collectAsState()
@@ -149,22 +155,35 @@ internal fun SessionPaneContent(
                 },
                 detailPane = {
                     AnimatedPane {
-                        ContentRouter(
-                            screen = currentScreen,
-                            searchQuery = searchQuery,
-                            labelQuery = labelQuery,
-                            onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
-                            annotationQuery = annotationQuery,
-                            onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
-                            pulseLabelsOnEntry = pulseLabelsOnEntry,
-                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                            onNavigate = sessionVm::navigate,
-                            clusterHealth = clusterHealth,
-                            onSelectCluster = onSelectCluster,
-                            onDiscoverEks = onDiscoverEks,
-                            onOpenLogs = onOpenLogs,
-                            onOpenTerminal = onOpenTerminal,
-                        )
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            SessionContentHeader(
+                                screen = currentScreen,
+                                clusterContext = clusterContext,
+                                selectedNamespace = selectedNamespace,
+                                namespaces = namespaceList,
+                                onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
+                                searchQuery = searchQuery,
+                                onSearchChange = { sessionVm.setSearchQuery(it) },
+                            )
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                ContentRouter(
+                                    screen = currentScreen,
+                                    searchQuery = searchQuery,
+                                    labelQuery = labelQuery,
+                                    onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
+                                    annotationQuery = annotationQuery,
+                                    onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
+                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                    onNavigate = sessionVm::navigate,
+                                    clusterHealth = clusterHealth,
+                                    onSelectCluster = onSelectCluster,
+                                    onDiscoverEks = onDiscoverEks,
+                                    onOpenLogs = onOpenLogs,
+                                    onOpenTerminal = onOpenTerminal,
+                                )
+                            }
+                        }
                     }
                 },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
