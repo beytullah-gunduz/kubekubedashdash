@@ -1544,7 +1544,19 @@ class ReactiveKubeClient(
 
     fun getEventsForObject(kind: String, name: String, namespace: String?): List<EventInfo> {
         log.trace("Fetching events for object kind={} name={} namespace={}", kind, name, namespace)
-        return k8s.v1().events().inAnyNamespace().list().items
+        // Honor the namespace parameter when given — Events are namespaced
+        // (an Event lives in the same namespace as its involvedObject for
+        // namespaced kinds), so .inNamespace(ns) scopes the LIST server-side
+        // instead of dragging every cluster event over the wire to be
+        // post-filtered. namespace == null is reserved for cluster-scoped
+        // involved objects (Node, PV, etc.) where there's no narrower scope
+        // to ask for.
+        val items = if (namespace != null) {
+            k8s.v1().events().inNamespace(namespace).list().items
+        } else {
+            k8s.v1().events().inAnyNamespace().list().items
+        }
+        return items
             .filter { it.involvedObject?.kind == kind && it.involvedObject?.name == name }
             .sortedByDescending { it.metadata?.creationTimestamp }
             .mapNotNull(::mapEvent)
