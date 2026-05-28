@@ -153,6 +153,7 @@ private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.Endpoints,
     is Screen.Main.NetworkPolicies,
     is Screen.Main.PersistentVolumeClaims,
+    is Screen.Main.ClusterTopology,
     -> true
 
     is Screen.Main.CustomResource -> namespaced
