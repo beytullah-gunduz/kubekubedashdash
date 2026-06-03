@@ -289,7 +289,11 @@ class ReactiveKubeClient(
                 var loaded = false
                 while (true) {
                     try {
-                        val data = fetch(ns)
+                        // runInterruptible: fetch is a blocking fabric8 call with no
+                        // suspension point, so flatMapLatest cancellation (namespace /
+                        // connection change) can't preempt it otherwise — it would pin
+                        // an IO thread until fabric8's own retry budget exhausts.
+                        val data = runInterruptible(Dispatchers.IO) { fetch(ns) }
                         reportSuccess()
                         emit(ResourceState.Success(data))
                         loaded = true
@@ -318,7 +322,7 @@ class ReactiveKubeClient(
                 var loaded = false
                 while (true) {
                     try {
-                        val data = fetch()
+                        val data = runInterruptible(Dispatchers.IO) { fetch() }
                         reportSuccess()
                         emit(ResourceState.Success(data))
                         loaded = true
@@ -345,7 +349,7 @@ class ReactiveKubeClient(
                 emit(initial)
                 while (true) {
                     try {
-                        emit(fetch())
+                        emit(runInterruptible(Dispatchers.IO) { fetch() })
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
