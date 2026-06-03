@@ -82,6 +82,18 @@ object ShellEnvironment {
         }
     }
 
+    /**
+     * Drop cached command-resolution results so a tool installed after launch
+     * is re-discovered on the next [resolveCommand] — without this the "install
+     * the CLI, then try again" flow never works in-session because a negative
+     * ("not found") result is cached for the JVM's lifetime. The resolved PATH
+     * is left intact: standard installers (brew, system dirs) land in
+     * directories already on it.
+     */
+    fun invalidate() {
+        commandCache.clear()
+    }
+
     fun resolveCommand(command: String): String? {
         val cached = commandCache[command]
         if (cached != null) return cached.orElse(null)

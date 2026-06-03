@@ -43,6 +43,10 @@ object PrerequisiteChecker {
 
     fun runAll(): PrerequisiteResult {
         log.info("Starting prerequisite checks")
+        // Re-scan command resolution from scratch so a CLI installed since the
+        // last run (the "install it, then try again" flow) is picked up instead
+        // of a stale "not found" result cached for the JVM's lifetime.
+        ShellEnvironment.invalidate()
         val checks = mutableListOf<PrerequisiteCheck>()
 
         val kubeconfigCheck = checkKubeconfig()
