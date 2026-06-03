@@ -163,7 +163,19 @@ object WorkspaceManager {
     fun closeTab(workspace: Workspace, tabKey: String) {
         val behavior = PreferenceRepository.closeTabFocus.value
         when (val removed = workspace.removeTab(tabKey, behavior)) {
-            is WorkspaceTab.Cluster -> removed.session.close()
+            is WorkspaceTab.Cluster -> {
+                // Release the cluster's exec + log streams and tear down any
+                // terminal tabs that belonged to it — otherwise they linger in
+                // the strip pointing at a now-closed session (use-after-close
+                // when reactivated).
+                LogStreamRegistry.closeAllForSession(removed.session.id)
+                TerminalSessionRegistry.closeAllForSession(removed.session.id)
+                workspace.tabs.value
+                    .filterIsInstance<WorkspaceTab.Terminal>()
+                    .filter { it.session.clusterSession.id == removed.session.id }
+                    .forEach { workspace.removeTab(it.key, behavior) }
+                removed.session.close()
+            }
 
             is WorkspaceTab.Terminal -> {
                 removed.session.close()
@@ -253,7 +265,25 @@ object WorkspaceManager {
      */
     fun closeWorkspace(workspaceId: WorkspaceId) {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
-        workspace.tabs.value.filterIsInstance<WorkspaceTab.Cluster>().forEach { it.session.close() }
+        // Release every tab's resources, not just cluster sessions: terminal
+        // sessions and the cluster's log/exec registry entries would otherwise
+        // leak in the process-wide registries when an OS window closes.
+        workspace.tabs.value.forEach { tab ->
+            when (tab) {
+                is WorkspaceTab.Cluster -> {
+                    LogStreamRegistry.closeAllForSession(tab.session.id)
+                    TerminalSessionRegistry.closeAllForSession(tab.session.id)
+                    tab.session.close()
+                }
+
+                is WorkspaceTab.Terminal -> {
+                    tab.session.close()
+                    TerminalSessionRegistry.close(tab.session.id)
+                }
+
+                WorkspaceTab.AllClusters -> { /* no resources to free */ }
+            }
+        }
         _workspaces.update { list -> list.filterNot { it.id == workspaceId } }
         reconcileAllClustersTab()
     }
