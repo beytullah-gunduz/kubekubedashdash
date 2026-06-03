@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.time.Duration
 import java.time.Instant
+import kotlin.math.roundToLong
 
 class KubeClient(
     private val connectionManager: KubeConnectionManager,
@@ -768,31 +769,32 @@ class KubeClient(
 
 fun parseCpuToMillis(value: String): Long {
     if (value.isBlank() || value == "0") return 0
+    // Parse via Double and round, not integer division: nanocore/microcore
+    // values below one millicore (e.g. "500000n" = 0.5m) truncated to 0, and
+    // fractional core values ("0.5") parsed to 0 — both understated cluster CPU.
     return when {
-        value.endsWith("n") -> value.removeSuffix("n").toLongOrNull()?.div(1_000_000) ?: 0
-
-        value.endsWith("u") -> value.removeSuffix("u").toLongOrNull()?.div(1_000) ?: 0
-
-        value.endsWith("m") -> {
-            val n = value.removeSuffix("m")
-            n.toLongOrNull() ?: n.toDoubleOrNull()?.toLong() ?: 0L
-        }
-
-        else -> (value.toDoubleOrNull()?.times(1000))?.toLong() ?: 0
+        value.endsWith("n") -> value.removeSuffix("n").toDoubleOrNull()?.div(1_000_000.0)?.roundToLong() ?: 0
+        value.endsWith("u") -> value.removeSuffix("u").toDoubleOrNull()?.div(1_000.0)?.roundToLong() ?: 0
+        value.endsWith("m") -> value.removeSuffix("m").toDoubleOrNull()?.roundToLong() ?: 0
+        else -> value.toDoubleOrNull()?.times(1_000.0)?.roundToLong() ?: 0
     }
 }
 
 fun parseMemoryToBytes(value: String): Long {
     if (value.isBlank() || value == "0") return 0
+    // Parse the magnitude via Double so fractional quantities (e.g. "1.5Gi",
+    // "0.5G") scale correctly instead of `toLongOrNull()` returning null -> 0,
+    // which under-counted node/pod memory capacity.
+    fun scaled(suffix: String, factor: Double): Long = value.removeSuffix(suffix).toDoubleOrNull()?.times(factor)?.toLong() ?: 0
     return when {
-        value.endsWith("Ti") -> (value.removeSuffix("Ti").toLongOrNull() ?: 0) * 1024L * 1024 * 1024 * 1024
-        value.endsWith("Gi") -> (value.removeSuffix("Gi").toLongOrNull() ?: 0) * 1024L * 1024 * 1024
-        value.endsWith("Mi") -> (value.removeSuffix("Mi").toLongOrNull() ?: 0) * 1024L * 1024
-        value.endsWith("Ki") -> (value.removeSuffix("Ki").toLongOrNull() ?: 0) * 1024L
-        value.endsWith("T") -> (value.removeSuffix("T").toLongOrNull() ?: 0) * 1_000_000_000_000L
-        value.endsWith("G") -> (value.removeSuffix("G").toLongOrNull() ?: 0) * 1_000_000_000L
-        value.endsWith("M") -> (value.removeSuffix("M").toLongOrNull() ?: 0) * 1_000_000L
-        value.endsWith("K") || value.endsWith("k") -> (value.dropLast(1).toLongOrNull() ?: 0) * 1_000L
+        value.endsWith("Ti") -> scaled("Ti", 1024.0 * 1024 * 1024 * 1024)
+        value.endsWith("Gi") -> scaled("Gi", 1024.0 * 1024 * 1024)
+        value.endsWith("Mi") -> scaled("Mi", 1024.0 * 1024)
+        value.endsWith("Ki") -> scaled("Ki", 1024.0)
+        value.endsWith("T") -> scaled("T", 1_000_000_000_000.0)
+        value.endsWith("G") -> scaled("G", 1_000_000_000.0)
+        value.endsWith("M") -> scaled("M", 1_000_000.0)
+        value.endsWith("K") || value.endsWith("k") -> scaled(value.takeLast(1), 1_000.0)
         else -> value.toLongOrNull() ?: value.toDoubleOrNull()?.toLong() ?: 0
     }
 }
