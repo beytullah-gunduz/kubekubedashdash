@@ -18,6 +18,8 @@ import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthSeverity
+import com.kubekubedashdash.ui.screens.cluster.viewmodel.podStatusSeverity
 
 private class PodColumn(
     val header: String,
@@ -61,8 +63,10 @@ internal fun PodTable(
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
     // UIDs of pods that have left the cluster but are briefly retained (see
-    // PodsScreenViewModel.stalePods). Rendered greyed with a "Terminating"
-    // status so the lingering row reads as on-its-way-out, not live.
+    // PodsScreenViewModel.stalePods). Rendered greyed: a clean departure shows
+    // "Terminating", while one that left in an error state keeps its real cause
+    // (e.g. "OOMKilled") in red on a subtle red row background so a problem pod
+    // is easy to catch before it ages out.
     staleUids: Set<String> = emptySet(),
 ) {
     val copyToClipboard = rememberCopyToClipboard()
@@ -71,19 +75,27 @@ internal fun PodTable(
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = pods.map { pod ->
             val isStale = pod.uid in staleUids
+            // The stored status is the pod's last-seen value before it vanished;
+            // an error there means it died badly (OOMKilled / CrashLoop / …).
+            val staleError = isStale && podStatusSeverity(pod.status) == HealthSeverity.ERROR
             TableRow(
                 id = pod.uid,
                 pinId = "pod:${pod.namespace}:${pod.name}",
+                backgroundColor = if (staleError) KdError.copy(alpha = 0.10f) else null,
                 cells = visible.map { col ->
-                    val base = col.cell(pod)
                     when {
-                        !isStale -> base
+                        !isStale -> col.cell(pod)
 
-                        // Drop the live status/colors; the stored values are a
-                        // frozen snapshot of a pod that no longer exists.
-                        col.header == "Status" -> CellData("Terminating", KdTextSecondary)
+                        col.header == "Status" ->
+                            if (staleError) {
+                                // Preserve the death cause instead of flattening to "Terminating".
+                                CellData(pod.status, KdError)
+                            } else {
+                                CellData("Terminating", KdTextSecondary)
+                            }
 
-                        else -> base.copy(color = KdTextSecondary, content = null)
+                        // Identity columns greyed: this row is a departed pod.
+                        else -> col.cell(pod).copy(color = KdTextSecondary, content = null)
                     }
                 },
                 actions = buildList {

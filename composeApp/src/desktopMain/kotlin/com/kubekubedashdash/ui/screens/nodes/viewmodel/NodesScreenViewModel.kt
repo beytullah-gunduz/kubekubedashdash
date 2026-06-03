@@ -30,13 +30,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import java.time.Duration
 import java.time.Instant
 
 class NodesScreenViewModel(
     private val reactiveClient: ReactiveKubeClient,
     private val now: () -> Instant = { Instant.now() },
-    private val ttl: Duration = DEFAULT_STALE_TTL,
 ) : ViewModel() {
     private val log = LoggerFactory.getLogger(NodesScreenViewModel::class.java)
     private val _selected = MutableStateFlow<NodeInfo?>(null)
@@ -52,7 +50,7 @@ class NodesScreenViewModel(
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
 
     // Nodes that have left the live watch stream, kept briefly with the instant
-    // they went stale, then evicted [ttl] later (prune ticker below / next
+    // they went stale, then evicted after the TTL (prune ticker below / next
     // snapshot via reduceStale). The frozen NodeInfo is never refreshed — the
     // node is gone from the stream. Public flow exposes just NodeInfo so callers
     // keep `s.data + staleNodes.values`; `staleNodes.keys` is the stale UID set.
@@ -172,7 +170,7 @@ class NodesScreenViewModel(
                 .collectLatest { hasStale ->
                     while (hasStale) {
                         delay(STALE_PRUNE_INTERVAL_MS)
-                        _staleNodes.update { pruneExpiredStale(it, now(), ttl) }
+                        _staleNodes.update { pruneExpiredStale(it, now()) }
                     }
                 }
         }
@@ -202,7 +200,9 @@ class NodesScreenViewModel(
 
     private fun processNodeUpdate(current: List<NodeInfo>) {
         val currentByUid = current.associateBy { it.uid }
-        val updatedStale = reduceStale(_staleNodes.value, currentByUid, previousNodesByUid, now(), ttl)
+        // Nodes use the uniform window — a vanished node is a vanished node,
+        // there's no "error departure" distinction like pods have.
+        val updatedStale = reduceStale(_staleNodes.value, currentByUid, previousNodesByUid, now()) { DEFAULT_STALE_TTL }
 
         previousNodesByUid = currentByUid
         _staleNodes.value = updatedStale
