@@ -207,6 +207,7 @@ fun NodesScreen(
                             selectedNodeUid = node.uid
                             onNavigate(Screen.Detail.NodeDetail(node))
                         },
+                        staleUids = staleNodes.keys,
                     )
                 }
             }

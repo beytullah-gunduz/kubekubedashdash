@@ -227,6 +227,7 @@ fun PodsScreen(
                             },
                             pinnedIds = pinnedIds,
                             onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
+                            staleUids = stalePods.keys,
                         )
                     }
                 }

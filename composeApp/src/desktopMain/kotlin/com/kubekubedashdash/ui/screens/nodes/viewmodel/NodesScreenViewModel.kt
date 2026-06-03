@@ -7,7 +7,12 @@ import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.ui.screens.nodes.MAX_HISTORY_SIZE
+import com.kubekubedashdash.util.DEFAULT_STALE_TTL
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.STALE_PRUNE_INTERVAL_MS
+import com.kubekubedashdash.util.StaleEntry
+import com.kubekubedashdash.util.pruneExpiredStale
+import com.kubekubedashdash.util.reduceStale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -15,16 +20,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import java.time.Duration
+import java.time.Instant
 
 class NodesScreenViewModel(
     private val reactiveClient: ReactiveKubeClient,
+    private val now: () -> Instant = { Instant.now() },
+    private val ttl: Duration = DEFAULT_STALE_TTL,
 ) : ViewModel() {
     private val log = LoggerFactory.getLogger(NodesScreenViewModel::class.java)
     private val _selected = MutableStateFlow<NodeInfo?>(null)
@@ -39,8 +51,15 @@ class NodesScreenViewModel(
     private val _podsHistory = MutableStateFlow<List<Float>>(emptyList())
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
 
-    private val _staleNodes = MutableStateFlow<Map<String, NodeInfo>>(emptyMap())
-    val staleNodes: StateFlow<Map<String, NodeInfo>> = _staleNodes.asStateFlow()
+    // Nodes that have left the live watch stream, kept briefly with the instant
+    // they went stale, then evicted [ttl] later (prune ticker below / next
+    // snapshot via reduceStale). The frozen NodeInfo is never refreshed — the
+    // node is gone from the stream. Public flow exposes just NodeInfo so callers
+    // keep `s.data + staleNodes.values`; `staleNodes.keys` is the stale UID set.
+    private val _staleNodes = MutableStateFlow<Map<String, StaleEntry<NodeInfo>>>(emptyMap())
+    val staleNodes: StateFlow<Map<String, NodeInfo>> = _staleNodes
+        .map { stale -> stale.mapValues { (_, entry) -> entry.info } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // null = "no explicit allowlist" (= show every status). Non-null Set is
     // the explicit allowlist. Survives screen navigation (session-scoped VM).
@@ -142,6 +161,23 @@ class NodesScreenViewModel(
         .map { it != null }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    init {
+        // Age stale entries out independently of informer traffic (see the
+        // matching ticker in PodsScreenViewModel). Loops only while the stale
+        // set is non-empty.
+        viewModelScope.launch {
+            _staleNodes
+                .map { it.isNotEmpty() }
+                .distinctUntilChanged()
+                .collectLatest { hasStale ->
+                    while (hasStale) {
+                        delay(STALE_PRUNE_INTERVAL_MS)
+                        _staleNodes.update { pruneExpiredStale(it, now(), ttl) }
+                    }
+                }
+        }
+    }
+
     fun setParams(selectNodeName: String? = null) {
         _selected.value = null
         _staleNodes.value = emptyMap()
@@ -166,14 +202,7 @@ class NodesScreenViewModel(
 
     private fun processNodeUpdate(current: List<NodeInfo>) {
         val currentByUid = current.associateBy { it.uid }
-
-        val updatedStale = _staleNodes.value.toMutableMap()
-        updatedStale.keys.removeAll(currentByUid.keys)
-        for ((uid, node) in previousNodesByUid) {
-            if (uid !in currentByUid && uid !in updatedStale) {
-                updatedStale[uid] = node
-            }
-        }
+        val updatedStale = reduceStale(_staleNodes.value, currentByUid, previousNodesByUid, now(), ttl)
 
         previousNodesByUid = currentByUid
         _staleNodes.value = updatedStale
@@ -181,11 +210,11 @@ class NodesScreenViewModel(
         val name = pendingSelectName
         if (name != null) {
             _selected.value = current.firstOrNull { it.name == name }
-                ?: updatedStale.values.firstOrNull { it.name == name }
+                ?: updatedStale.values.firstOrNull { it.info.name == name }?.info
             pendingSelectName = null
         } else {
             _selected.value = _selected.value?.let { sel ->
-                currentByUid[sel.uid] ?: updatedStale[sel.uid]
+                currentByUid[sel.uid] ?: updatedStale[sel.uid]?.info
             }
         }
     }
