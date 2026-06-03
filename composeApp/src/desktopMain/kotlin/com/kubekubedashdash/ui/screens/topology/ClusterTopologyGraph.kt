@@ -336,7 +336,16 @@ private fun TopologyGraphContent(
     // currently expanded. When no group is expanded, the column ends up empty and the
     // render loop skips it (no horizontal gap).
     val columns = remember(graph) { ClusterTopologyViewModel.groupIntoColumns(graph) }
-    var selectedNodeId by remember(graph) { mutableStateOf<String?>(null) }
+    var selectedNodeId by remember { mutableStateOf<String?>(null) }
+    // Keep the highlighted dependency chain across the topology auto-refresh
+    // (each tick mints a new ResourceGraph object). Drop the selection only when
+    // the selected node has actually disappeared from the refreshed graph —
+    // keying the state on `graph` would clear it on every refresh.
+    LaunchedEffect(graph) {
+        selectedNodeId?.let { id ->
+            if (graph.nodes.none { it.id == id }) selectedNodeId = null
+        }
+    }
     val expandedGroups = remember { mutableStateOf(setOf<String>()) }
 
     val connectedNodeIds = remember(selectedNodeId, graph) {
