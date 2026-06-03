@@ -21,6 +21,11 @@ object TerminalSessionRegistry {
     private val _sessions = MutableStateFlow<Map<String, TerminalSession>>(emptyMap())
     val sessions: StateFlow<Map<String, TerminalSession>> = _sessions.asStateFlow()
 
+    // @Synchronized: read-then-insert must be atomic. Two concurrent opens for
+    // the same id would otherwise both miss the lookup, both create a
+    // TerminalSession, and the second update would orphan the first (its
+    // ExecWatch leaks, unreachable via the registry).
+    @Synchronized
     fun openOrFocus(
         cluster: ClusterSession,
         podName: String,
@@ -34,6 +39,7 @@ object TerminalSessionRegistry {
         return session
     }
 
+    @Synchronized
     fun close(id: TerminalSessionId) {
         _sessions.update { current ->
             current[id.value]?.close()
@@ -41,6 +47,7 @@ object TerminalSessionRegistry {
         }
     }
 
+    @Synchronized
     fun closeAllForSession(sessionId: SessionId) {
         val toClose = _sessions.value.values.filter { it.clusterSession.id == sessionId }
         toClose.forEach { it.close() }
