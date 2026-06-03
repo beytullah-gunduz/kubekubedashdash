@@ -617,17 +617,27 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = KdTextSecondary,
                                 )
+                                var portText by remember(mcpPort) { mutableStateOf(mcpPort.toString()) }
+                                val portValid = portText.toIntOrNull()?.let { it in 1..65535 } ?: false
                                 OutlinedTextField(
-                                    value = mcpPort.toString(),
+                                    value = portText,
                                     onValueChange = { text ->
-                                        text.toIntOrNull()?.let { port ->
-                                            if (port in 1..65535) {
-                                                viewModel.updateMcpServerPort(port)
-                                            }
+                                        // Allow transient empty / partial input so the user can
+                                        // clear and retype; apply to the VM only when valid.
+                                        if (text.isEmpty() || (text.length <= 5 && text.all(Char::isDigit))) {
+                                            portText = text
+                                            text.toIntOrNull()?.takeIf { it in 1..65535 }
+                                                ?.let { viewModel.updateMcpServerPort(it) }
                                         }
                                     },
                                     modifier = Modifier.width(120.dp),
                                     singleLine = true,
+                                    isError = portText.isNotEmpty() && !portValid,
+                                    supportingText = if (portText.isNotEmpty() && !portValid) {
+                                        { Text("Enter a port 1–65535", style = MaterialTheme.typography.labelSmall) }
+                                    } else {
+                                        null
+                                    },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     textStyle = MaterialTheme.typography.bodyMedium,
                                 )
