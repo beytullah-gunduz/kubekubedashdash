@@ -266,7 +266,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
             shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, KdBorder),
         ) {
-            Text("Stop all nodes & pods", color = MaterialTheme.colorScheme.error)
+            Text("Reset to baseline", color = MaterialTheme.colorScheme.error)
         }
         OutlinedButton(
             onClick = { showKillServerDialog = true },
@@ -280,9 +280,13 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
     if (showStopAllDialog) {
         AlertDialog(
             onDismissRequest = { showStopAllDialog = false },
-            title = { Text("Stop all nodes & pods?") },
+            title = { Text("Reset the demo cluster to its baseline?") },
             text = {
-                Text("Delete every node and pod in the demo cluster, including the protected baseline. The simulator will start rebuilding immediately.")
+                Text(
+                    "Delete the simulator's churn — the generated pods, jobs and extra nodes — " +
+                        "while keeping the baseline (mock-node-1 and the seeded core workloads, services " +
+                        "and storage). The simulator refills toward the target counts immediately.",
+                )
             },
             confirmButton = {
                 TextButton(
@@ -291,7 +295,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
                         showStopAllDialog = false
                     },
                 ) {
-                    Text("Stop all", color = MaterialTheme.colorScheme.error)
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {

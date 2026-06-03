@@ -179,13 +179,26 @@ class DemoClusterSimulator(
 
     fun stopAll() {
         log.warn("Demo cluster: stopAll requested")
-        podFates.clear()
+        // Keep the curated baseline — mock-node-1 and the seeded core pods — so
+        // the demo stays coherent (its deployments, topology and storage all
+        // survive); clear only the simulator's churn, which the loops refill
+        // toward the target counts. Deleting the baseline too left the demo
+        // permanently degraded because nothing re-seeds it (audit C6).
+        podFates.keys.retainAll(protectedPods)
         jobFates.clear()
         nodeMetricsState.clear()
         podMetricsState.clear()
-        runCatching { client.pods().inAnyNamespace().delete() }
+        runCatching {
+            client.pods().inAnyNamespace().list().items
+                .filterNot { "${it.metadata.namespace}/${it.metadata.name}" in protectedPods }
+                .forEach { p -> runCatching { client.pods().inNamespace(p.metadata.namespace).withName(p.metadata.name).delete() } }
+        }
         runCatching { client.batch().v1().jobs().inAnyNamespace().delete() }
-        runCatching { client.nodes().list().items.forEach { client.nodes().withName(it.metadata.name).delete() } }
+        runCatching {
+            client.nodes().list().items
+                .filterNot { it.metadata.name in protectedNodes }
+                .forEach { n -> runCatching { client.nodes().withName(n.metadata.name).delete() } }
+        }
     }
 
     // ── Node loop ─────────────────────────────────────────────────────────────
