@@ -190,8 +190,11 @@ print(f"Saved Linux icon: {linux_path}")
 
 ico_path = os.path.join(script_dir, "icon.ico")
 ico_sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-ico_images = [master.resize(s, Image.LANCZOS) for s in ico_sizes]
-ico_images[0].save(ico_path, format='ICO', sizes=ico_sizes, append_images=ico_images[1:])
+# NB: passing both `sizes=` and `append_images=` with a 16x16 base image
+# collapsed to a single 16x16 entry on Pillow 12 (it won't upscale past the
+# base). Save the high-res master with `sizes` so Pillow embeds every
+# resolution by downscaling from 1024px.
+master.save(ico_path, format='ICO', sizes=ico_sizes)
 print(f"Saved Windows icon: {ico_path}")
 
 iconset_dir = os.path.join(script_dir, "icon.iconset")
