@@ -236,7 +236,14 @@ private fun ClusterPodsGauge(podsCount: Int?, podsCapacity: Int, podsLoaded: Boo
         GaugePlaceholder(loading = true)
         return
     }
-    val frac = if (podsCapacity > 0) podsCount.toFloat() / podsCapacity.toFloat() else 0f
+    if (podsCapacity <= 0) {
+        // Capacity unknown (no node allocatable reported — e.g. RBAC can't list
+        // nodes). Show the count alone instead of a misleading "0%" gauge that
+        // reads "247 / 0".
+        PodCountWithoutCapacity(podsCount)
+        return
+    }
+    val frac = podsCount.toFloat() / podsCapacity.toFloat()
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         HalfCircularUsageIndicator(
             fraction = frac,
@@ -246,6 +253,19 @@ private fun ClusterPodsGauge(podsCount: Int?, podsCapacity: Int, podsLoaded: Boo
         )
         Spacer(Modifier.height(6.dp))
         UsageHistoryBar(history = podsHistory, modifier = Modifier.width(120.dp).height(36.dp))
+    }
+}
+
+@Composable
+private fun PodCountWithoutCapacity(podsCount: Int) {
+    Column(
+        modifier = Modifier.size(width = 120.dp, height = 96.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("$podsCount", style = MaterialTheme.typography.titleLarge, color = KdTextPrimary)
+        Text("Pods", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
+        Text("capacity unknown", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
     }
 }
 
