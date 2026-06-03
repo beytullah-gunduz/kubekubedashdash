@@ -9,7 +9,6 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
@@ -18,6 +17,7 @@ import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthSeverity
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.podStatusSeverity
 
@@ -36,16 +36,7 @@ private val podColumns = listOf(
     },
     PodColumn("Ready", 0.6f, 300.dp) { CellData(it.ready) },
     PodColumn("Restarts", 0.7f, 500.dp) { pod ->
-        CellData(
-            "${pod.restarts}",
-            if (pod.restarts > 50) {
-                KdError
-            } else if (pod.restarts > 10) {
-                KdWarning
-            } else {
-                null
-            },
-        )
+        CellData("${pod.restarts}", restartCountColor(pod.restarts))
     },
     PodColumn("Node", 1.2f, 600.dp) { CellData(it.node) },
     PodColumn("IP", 1.0f, 750.dp) { CellData(it.ip) },

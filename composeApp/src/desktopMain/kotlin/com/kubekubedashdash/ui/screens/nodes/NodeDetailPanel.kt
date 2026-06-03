@@ -61,6 +61,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.GenericYamlTab
@@ -565,7 +566,7 @@ private fun NodePodItem(pod: PodInfo, onClick: () -> Unit) {
                     Text(
                         "Restarts ${pod.restarts}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (pod.restarts > 10) KdWarning else KdTextSecondary,
+                        color = restartCountColor(pod.restarts) ?: KdTextSecondary,
                     )
                     Text(
                         pod.age,
