@@ -85,16 +85,18 @@ fun EventsScreen(
             val effectiveTypes = typeFilter ?: availableTypes
             val effectiveNodes = nodeFilter ?: availableNodes
 
-            val filtered = s.data.filter { ev ->
-                ev.type in effectiveTypes &&
-                    (ev.node.ifEmpty { "-" }) in effectiveNodes &&
-                    (
-                        searchQuery.isBlank() ||
-                            ev.reason.contains(searchQuery, ignoreCase = true) ||
-                            ev.message.contains(searchQuery, ignoreCase = true) ||
-                            ev.objectRef.contains(searchQuery, ignoreCase = true) ||
-                            ev.type.contains(searchQuery, ignoreCase = true)
-                        )
+            val filtered = remember(s.data, effectiveTypes, effectiveNodes, searchQuery) {
+                s.data.filter { ev ->
+                    ev.type in effectiveTypes &&
+                        (ev.node.ifEmpty { "-" }) in effectiveNodes &&
+                        (
+                            searchQuery.isBlank() ||
+                                ev.reason.contains(searchQuery, ignoreCase = true) ||
+                                ev.message.contains(searchQuery, ignoreCase = true) ||
+                                ev.objectRef.contains(searchQuery, ignoreCase = true) ||
+                                ev.type.contains(searchQuery, ignoreCase = true)
+                            )
+                }
             }
             Column(modifier = Modifier.fillMaxSize()) {
                 ResourceCountHeader(

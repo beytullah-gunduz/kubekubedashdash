@@ -58,15 +58,17 @@ fun ServicesScreen(
         is ResourceState.Success -> {
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-            val filtered = s.data.filter { svc ->
-                val passesSearch = searchQuery.isBlank() ||
-                    svc.name.contains(searchQuery, ignoreCase = true) ||
-                    svc.namespace.contains(searchQuery, ignoreCase = true) ||
-                    svc.type.contains(searchQuery, ignoreCase = true)
-                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(svc.labels, labelSelector)
-                val passesAnnotations = annotationSelector.isEmpty() ||
-                    matchesMapSelector(svc.annotations, annotationSelector)
-                passesSearch && passesLabels && passesAnnotations
+            val filtered = remember(s.data, searchQuery, labelSelector, annotationSelector) {
+                s.data.filter { svc ->
+                    val passesSearch = searchQuery.isBlank() ||
+                        svc.name.contains(searchQuery, ignoreCase = true) ||
+                        svc.namespace.contains(searchQuery, ignoreCase = true) ||
+                        svc.type.contains(searchQuery, ignoreCase = true)
+                    val passesLabels = labelSelector.isEmpty() || matchesMapSelector(svc.labels, labelSelector)
+                    val passesAnnotations = annotationSelector.isEmpty() ||
+                        matchesMapSelector(svc.annotations, annotationSelector)
+                    passesSearch && passesLabels && passesAnnotations
+                }
             }
 
             Column(modifier = Modifier.fillMaxSize()) {

@@ -131,17 +131,19 @@ fun GenericResourceScreen(
             val activeStatusFilter = statusFilter
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-            val filtered = s.data.filter { r ->
-                val passesSearch = searchQuery.isBlank() ||
-                    r.name.contains(searchQuery, ignoreCase = true) ||
-                    (r.namespace?.contains(searchQuery, ignoreCase = true) ?: false) ||
-                    (r.status?.contains(searchQuery, ignoreCase = true) ?: false)
-                val passesStatus = activeStatusFilter == null ||
-                    (r.status != null && r.status in activeStatusFilter)
-                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(r.labels, labelSelector)
-                val passesAnnotations = annotationSelector.isEmpty() ||
-                    matchesMapSelector(r.annotations, annotationSelector)
-                passesSearch && passesStatus && passesLabels && passesAnnotations
+            val filtered = remember(s.data, searchQuery, activeStatusFilter, labelSelector, annotationSelector) {
+                s.data.filter { r ->
+                    val passesSearch = searchQuery.isBlank() ||
+                        r.name.contains(searchQuery, ignoreCase = true) ||
+                        (r.namespace?.contains(searchQuery, ignoreCase = true) ?: false) ||
+                        (r.status?.contains(searchQuery, ignoreCase = true) ?: false)
+                    val passesStatus = activeStatusFilter == null ||
+                        (r.status != null && r.status in activeStatusFilter)
+                    val passesLabels = labelSelector.isEmpty() || matchesMapSelector(r.labels, labelSelector)
+                    val passesAnnotations = annotationSelector.isEmpty() ||
+                        matchesMapSelector(r.annotations, annotationSelector)
+                    passesSearch && passesStatus && passesLabels && passesAnnotations
+                }
             }
 
             Row(modifier = Modifier.fillMaxSize()) {

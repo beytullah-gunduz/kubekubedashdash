@@ -108,24 +108,34 @@ fun NodesScreen(
             val activeStatusFilter = statusFilter
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-            val filtered = allNodes.filter { node ->
-                val passesSearch = searchQuery.isBlank() ||
-                    node.name.contains(searchQuery, ignoreCase = true) ||
-                    node.roles.contains(searchQuery, ignoreCase = true) ||
-                    node.status.contains(searchQuery, ignoreCase = true)
-                val passesStatus = activeStatusFilter == null || node.status in activeStatusFilter
-                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(node.labels, labelSelector)
-                val passesAnnotations = annotationSelector.isEmpty() ||
-                    matchesMapSelector(node.annotations, annotationSelector)
-                // Match the cluster banner's threshold so the count above
-                // (e.g. "3 nodes under pressure") and the post-click row
-                // count agree. A node with no usage entry (metrics-server
-                // missing) doesn't pass — the filter chip itself signals
-                // "viewing pressured nodes," and a node with unknown usage
-                // can't be claimed to be one.
-                val passesPressure = !pressureOnly ||
-                    (nodeUsages[node.name]?.pressureFraction ?: 0f) >= NODE_PRESSURE_THRESHOLD
-                passesSearch && passesStatus && passesLabels && passesAnnotations && passesPressure
+            val filtered = remember(
+                allNodes,
+                searchQuery,
+                activeStatusFilter,
+                labelSelector,
+                annotationSelector,
+                pressureOnly,
+                nodeUsages,
+            ) {
+                allNodes.filter { node ->
+                    val passesSearch = searchQuery.isBlank() ||
+                        node.name.contains(searchQuery, ignoreCase = true) ||
+                        node.roles.contains(searchQuery, ignoreCase = true) ||
+                        node.status.contains(searchQuery, ignoreCase = true)
+                    val passesStatus = activeStatusFilter == null || node.status in activeStatusFilter
+                    val passesLabels = labelSelector.isEmpty() || matchesMapSelector(node.labels, labelSelector)
+                    val passesAnnotations = annotationSelector.isEmpty() ||
+                        matchesMapSelector(node.annotations, annotationSelector)
+                    // Match the cluster banner's threshold so the count above
+                    // (e.g. "3 nodes under pressure") and the post-click row
+                    // count agree. A node with no usage entry (metrics-server
+                    // missing) doesn't pass — the filter chip itself signals
+                    // "viewing pressured nodes," and a node with unknown usage
+                    // can't be claimed to be one.
+                    val passesPressure = !pressureOnly ||
+                        (nodeUsages[node.name]?.pressureFraction ?: 0f) >= NODE_PRESSURE_THRESHOLD
+                    passesSearch && passesStatus && passesLabels && passesAnnotations && passesPressure
+                }
             }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {

@@ -67,14 +67,16 @@ fun NamespacesScreen(
         is ResourceState.Success -> {
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-            val filtered = s.data.filter { ns ->
-                val passesSearch = searchQuery.isBlank() ||
-                    ns.name.contains(searchQuery, ignoreCase = true) ||
-                    (ns.status?.contains(searchQuery, ignoreCase = true) ?: false)
-                val passesLabels = labelSelector.isEmpty() || matchesMapSelector(ns.labels, labelSelector)
-                val passesAnnotations = annotationSelector.isEmpty() ||
-                    matchesMapSelector(ns.annotations, annotationSelector)
-                passesSearch && passesLabels && passesAnnotations
+            val filtered = remember(s.data, searchQuery, labelSelector, annotationSelector) {
+                s.data.filter { ns ->
+                    val passesSearch = searchQuery.isBlank() ||
+                        ns.name.contains(searchQuery, ignoreCase = true) ||
+                        (ns.status?.contains(searchQuery, ignoreCase = true) ?: false)
+                    val passesLabels = labelSelector.isEmpty() || matchesMapSelector(ns.labels, labelSelector)
+                    val passesAnnotations = annotationSelector.isEmpty() ||
+                        matchesMapSelector(ns.annotations, annotationSelector)
+                    passesSearch && passesLabels && passesAnnotations
+                }
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
