@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
@@ -42,15 +43,31 @@ internal fun NodeTable(
     nodes: List<NodeInfo>,
     selectedUid: String? = null,
     onClick: (NodeInfo) -> Unit,
+    // UIDs of nodes that have left the cluster but are briefly retained (see
+    // NodesScreenViewModel.staleNodes). Rendered greyed with a "Removed"
+    // status so the lingering row reads as gone, not live.
+    staleUids: Set<String> = emptySet(),
 ) {
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nodeColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = nodes.map { node ->
+            val isStale = node.uid in staleUids
             TableRow(
                 id = node.uid,
-                cells = visible.map { it.cell(node) },
+                cells = visible.map { col ->
+                    val base = col.cell(node)
+                    when {
+                        !isStale -> base
+
+                        // Frozen snapshot of a node that no longer exists —
+                        // drop the live status/colors.
+                        col.header == "Status" -> CellData("Removed", KdTextSecondary)
+
+                        else -> base.copy(color = KdTextSecondary, content = null)
+                    }
+                },
                 actions = listOf(
                     RowAction("Copy name") {
                         copyToClipboard(node.name)

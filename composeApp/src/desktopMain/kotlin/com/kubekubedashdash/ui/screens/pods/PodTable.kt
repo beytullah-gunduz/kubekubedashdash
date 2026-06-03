@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.components.CellData
@@ -59,16 +60,32 @@ internal fun PodTable(
     onDelete: ((PodInfo) -> Unit)? = null,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
+    // UIDs of pods that have left the cluster but are briefly retained (see
+    // PodsScreenViewModel.stalePods). Rendered greyed with a "Terminating"
+    // status so the lingering row reads as on-its-way-out, not live.
+    staleUids: Set<String> = emptySet(),
 ) {
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = podColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = pods.map { pod ->
+            val isStale = pod.uid in staleUids
             TableRow(
                 id = pod.uid,
                 pinId = "pod:${pod.namespace}:${pod.name}",
-                cells = visible.map { it.cell(pod) },
+                cells = visible.map { col ->
+                    val base = col.cell(pod)
+                    when {
+                        !isStale -> base
+
+                        // Drop the live status/colors; the stored values are a
+                        // frozen snapshot of a pod that no longer exists.
+                        col.header == "Status" -> CellData("Terminating", KdTextSecondary)
+
+                        else -> base.copy(color = KdTextSecondary, content = null)
+                    }
+                },
                 actions = buildList {
                     if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
                     if (onOpenTerminal != null) add(RowAction("Open terminal") { onOpenTerminal(pod) })
