@@ -115,10 +115,74 @@ draw.ellipse([(C - inner_hub, C - inner_hub), (C + inner_hub, C + inner_hub)], f
 
 master = img.resize((1024, 1024), Image.LANCZOS)
 
+# ---------------------------------------------------------------------------
+# macOS app-icon body.
+#
+# Unlike iOS, macOS does NOT round or pad app-bundle icons for you — it draws
+# the .icns exactly as authored, edge-to-edge in the Dock tile. A full-bleed
+# square therefore looks oversized and square next to native apps, which bake
+# Apple's icon grid into the artwork: the icon "body" is a rounded rectangle
+# inset inside a transparent margin (~10% per side), with a subtle shadow.
+#
+# Apple grid for a 1024px canvas: 824x824 body, ~100px margin per side,
+# ~185px corner radius. (PIL's rounded_rectangle is a circular-arc approx of
+# Apple's continuous "squircle" — close enough at icon sizes.)
+#
+# Only the macOS icns uses this inset/rounded body. Windows (.ico) and Linux
+# (.png) keep the full-bleed square, which is the correct convention there,
+# and the runtime Dock icon (desktopMain/resources/icon.png) is left untouched
+# because AppKit already insets runtime-assigned icons into the Dock footprint.
+# ---------------------------------------------------------------------------
+MAC_CANVAS = 1024
+MAC_MARGIN = 100
+MAC_BODY = MAC_CANVAS - 2 * MAC_MARGIN          # 824
+MAC_RADIUS = 185
+MAC_SHADOW = True
+MAC_SHADOW_ALPHA = 80                            # 0-255, opacity of the baked shadow
+MAC_SHADOW_OFFSET = 8                            # px the shadow sits below the body
+MAC_SHADOW_BLUR = 18                             # px gaussian blur of the shadow
+
+
+def build_macos_icon(square_src):
+    ss = 4  # supersample so the rounded corners are crisply antialiased
+    mask = Image.new("L", (MAC_BODY * ss, MAC_BODY * ss), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [(0, 0), (MAC_BODY * ss - 1, MAC_BODY * ss - 1)],
+        radius=MAC_RADIUS * ss,
+        fill=255,
+    )
+    mask = mask.resize((MAC_BODY, MAC_BODY), Image.LANCZOS)
+
+    body = square_src.resize((MAC_BODY, MAC_BODY), Image.LANCZOS).convert("RGBA")
+    body.putalpha(mask)
+
+    out = Image.new("RGBA", (MAC_CANVAS, MAC_CANVAS), (0, 0, 0, 0))
+
+    if MAC_SHADOW:
+        shadow = Image.new("RGBA", (MAC_CANVAS, MAC_CANVAS), (0, 0, 0, 0))
+        stamp = Image.new("RGBA", (MAC_BODY, MAC_BODY), (0, 0, 0, 255))
+        stamp.putalpha(mask)
+        shadow.paste(stamp, (MAC_MARGIN, MAC_MARGIN + MAC_SHADOW_OFFSET), stamp)
+        shadow = shadow.filter(ImageFilter.GaussianBlur(MAC_SHADOW_BLUR))
+        faded = shadow.split()[3].point(lambda a: a * MAC_SHADOW_ALPHA // 255)
+        shadow.putalpha(faded)
+        out = Image.alpha_composite(out, shadow)
+
+    out.paste(body, (MAC_MARGIN, MAC_MARGIN), body)
+    return out
+
+
+# Built from the full-res 2048px artwork for the cleanest downscale.
+macos_master = build_macos_icon(img)
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
 master_path = os.path.join(script_dir, "icon_1024.png")
 master.save(master_path)
 print(f"Saved master icon: {master_path}")
+
+macos_preview_path = os.path.join(script_dir, "icon_macos_1024.png")
+macos_master.save(macos_preview_path)
+print(f"Saved macOS preview icon: {macos_preview_path}")
 
 linux_path = os.path.join(script_dir, "icon_512.png")
 master.resize((512, 512), Image.LANCZOS).save(linux_path)
@@ -147,12 +211,12 @@ iconset_sizes = {
 }
 
 for name, size in iconset_sizes.items():
-    resized = master.resize((size, size), Image.LANCZOS)
+    resized = macos_master.resize((size, size), Image.LANCZOS)
     resized.save(os.path.join(iconset_dir, name))
 
 icns_path = os.path.join(script_dir, "icon.icns")
 subprocess.run(["iconutil", "-c", "icns", iconset_dir, "-o", icns_path], check=True)
-print(f"Saved macOS icon: {icns_path}")
+print(f"Saved macOS icon (rounded, inset): {icns_path}")
 
 shutil.rmtree(iconset_dir)
 print("Cleaned up iconset directory")
