@@ -12,6 +12,13 @@ import java.time.Instant
 internal val DEFAULT_STALE_TTL: Duration = Duration.ofSeconds(20)
 
 /**
+ * Longer TTL for a resource that left in an *error* state (e.g. a pod that
+ * was OOMKilled / CrashLoopBackOff / Failed when it disappeared). These are
+ * worth catching, so they linger longer than a clean departure.
+ */
+internal val ERROR_STALE_TTL: Duration = Duration.ofSeconds(60)
+
+/**
  * How often the owning ViewModel re-evaluates its stale set to drop expired
  * entries. Deliberately independent of informer events so eviction still
  * happens on a quiet cluster (no watch traffic) without the user leaving the
@@ -20,56 +27,53 @@ internal val DEFAULT_STALE_TTL: Duration = Duration.ofSeconds(20)
 internal const val STALE_PRUNE_INTERVAL_MS: Long = 1_000L
 
 /**
- * A resource that left the live list, paired with the instant it went stale.
- * [info] is a frozen snapshot: the resource is gone from the watch stream, so
- * nothing refreshes it after this point — which is why callers relabel it
- * (e.g. "Terminating") rather than trusting its last-seen status.
+ * A resource that left the live list. [staleSince] is when it vanished and
+ * [ttl] is how long to keep showing it — chosen per-entry at capture time
+ * (error departures get a longer window). [info] is a frozen snapshot: the
+ * resource is gone from the watch stream, so nothing refreshes it after this
+ * point.
  */
-internal data class StaleEntry<T>(val info: T, val staleSince: Instant)
+internal data class StaleEntry<T>(val info: T, val staleSince: Instant, val ttl: Duration)
 
 /**
  * Recompute the stale set after a fresh list snapshot. Pure: the clock is
  * passed in via [now] so the eviction window is unit-testable.
  *
  *  - entries whose UID reappeared in [currentByUid] are dropped (resource is back);
- *  - entries older than [ttl] are dropped (expired);
+ *  - entries past their own [StaleEntry.ttl] are dropped (expired);
  *  - UIDs present in [previousByUid] but absent from [currentByUid] are added,
- *    stamped [now] (newly vanished).
+ *    stamped [now] with the TTL [ttlFor] returns for that item.
  *
- * An already-tracked stale UID keeps its original [StaleEntry.staleSince], so
- * the TTL clock isn't reset on every snapshot.
+ * An already-tracked stale UID keeps its original [StaleEntry.staleSince] and
+ * [StaleEntry.ttl], so neither the clock nor the chosen window is reset on a
+ * later snapshot.
  */
 internal fun <T> reduceStale(
     currentStale: Map<String, StaleEntry<T>>,
     currentByUid: Map<String, T>,
     previousByUid: Map<String, T>,
     now: Instant,
-    ttl: Duration,
+    ttlFor: (T) -> Duration,
 ): Map<String, StaleEntry<T>> {
-    val cutoff = now.minus(ttl)
     val result = LinkedHashMap<String, StaleEntry<T>>()
     for ((uid, entry) in currentStale) {
         if (uid in currentByUid) continue // reappeared
-        if (!entry.staleSince.isAfter(cutoff)) continue // expired
+        if (!entry.staleSince.plus(entry.ttl).isAfter(now)) continue // expired
         result[uid] = entry
     }
     for ((uid, info) in previousByUid) {
         if (uid !in currentByUid && uid !in result) {
-            result[uid] = StaleEntry(info, now)
+            result[uid] = StaleEntry(info, now, ttlFor(info))
         }
     }
     return result
 }
 
 /**
- * Drop stale entries older than [ttl]. Used by the periodic prune ticker, which
- * has no new snapshot to diff against — it only ages entries out.
+ * Drop stale entries past their own TTL. Used by the periodic prune ticker,
+ * which has no new snapshot to diff against — it only ages entries out.
  */
 internal fun <T> pruneExpiredStale(
     currentStale: Map<String, StaleEntry<T>>,
     now: Instant,
-    ttl: Duration,
-): Map<String, StaleEntry<T>> {
-    val cutoff = now.minus(ttl)
-    return currentStale.filterValues { it.staleSince.isAfter(cutoff) }
-}
+): Map<String, StaleEntry<T>> = currentStale.filterValues { it.staleSince.plus(it.ttl).isAfter(now) }
