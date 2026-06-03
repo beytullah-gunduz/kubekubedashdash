@@ -64,7 +64,6 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
@@ -84,6 +83,7 @@ import com.kubekubedashdash.ui.components.MetricsLineChart
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.highlightYamlLine
 import com.kubekubedashdash.ui.screens.logviewer.LogLine
@@ -279,17 +279,7 @@ private fun OverviewTab(
             ClickableInfoRow("Node", pod.node) { onNavigateToNode?.invoke(pod.node) }
             InfoRow("IP", pod.ip)
             InfoRow("Ready", pod.ready)
-            InfoRow(
-                "Restarts",
-                "${pod.restarts}",
-                if (pod.restarts > 10) {
-                    KdWarning
-                } else if (pod.restarts > 50) {
-                    KdError
-                } else {
-                    null
-                },
-            )
+            InfoRow("Restarts", "${pod.restarts}", restartCountColor(pod.restarts))
             InfoRow("Age", pod.age)
         }
 

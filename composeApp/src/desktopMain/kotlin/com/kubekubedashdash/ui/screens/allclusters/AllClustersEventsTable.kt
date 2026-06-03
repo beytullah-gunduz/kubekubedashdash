@@ -128,9 +128,6 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
         if (groups.isNotEmpty()) runCatching { focusRequester.requestFocus() }
     }
 
-    val rawColumns = buildRawColumns()
-    val visibleRaw = rawColumns.filter { it.minTableWidth == null || tableWidth >= it.minTableWidth }
-
     Column(modifier = Modifier.fillMaxSize()) {
         // Header row (mirrors ResourceTable header style)
         Row(
@@ -213,7 +210,7 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
                     }
                     if (isExpanded) {
                         items(group.members, key = { ev -> "member:${ev.sessionId.orEmpty()}:${ev.uid}" }) { ev ->
-                            MemberRow(ev = ev, tableWidth = tableWidth, visibleColumns = visibleRaw)
+                            MemberRow(ev = ev, tableWidth = tableWidth)
                         }
                     }
                 }
@@ -319,27 +316,33 @@ private fun GroupHeaderRow(
 private fun MemberRow(
     ev: EventInfo,
     tableWidth: Dp,
-    visibleColumns: List<EventColumn>,
 ) {
     val bg = rowBackground(ev.type)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg ?: androidx.compose.ui.graphics.Color.Transparent)
-            .padding(start = 40.dp, end = 16.dp, top = 5.dp, bottom = 5.dp),
+            .padding(horizontal = 16.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        visibleColumns.forEach { col ->
-            val cell = col.cell(ev)
-            Box(
-                modifier = if (col.def.width != null) Modifier.width(col.def.width) else Modifier.weight(col.def.weight ?: 1f),
-            ) {
-                if (cell.content != null) {
-                    cell.content.invoke()
-                } else {
-                    CellText(cell.text, color = cell.color)
-                }
-            }
+        // Mirror GroupHeaderRow's column layout exactly (gating, widths, weights
+        // and the 16dp chevron-width leading spacer) so expanded member rows
+        // line up under the same column headers as their group header.
+        Box(modifier = Modifier.width(16.dp))
+        Box(modifier = Modifier.width(50.dp)) { EventTypeIcon(ev.type) }
+        Box(modifier = Modifier.width(150.dp)) { CellText(ev.reason) }
+        if (tableWidth >= 800.dp) {
+            Box(modifier = Modifier.weight(1.5f)) { CellText(ev.objectRef, color = KdPrimary) }
+        }
+        Box(modifier = Modifier.weight(3f)) { CellText(ev.message) }
+        if (tableWidth >= 1100.dp) {
+            Box(modifier = Modifier.weight(0.2f)) { CellText("${ev.count}") }
+        }
+        if (tableWidth >= 950.dp) {
+            Box(modifier = Modifier.weight(0.35f)) { CellText(ev.lastSeen) }
+        }
+        if (tableWidth >= 650.dp) {
+            Box(modifier = Modifier.weight(1f)) { CellText(ev.cluster ?: "—") }
         }
     }
 }

@@ -85,6 +85,11 @@ object LogStreamRegistry {
         }
     }
 
+    // @Synchronized: the check-then-launch-then-insert below must be atomic.
+    // Two concurrent opens for the same key would otherwise both pass the guard
+    // and both launch a collector on the same pod-log watch, and the second
+    // `jobs[key] =` would orphan the first coroutine + its watchLog connection.
+    @Synchronized
     internal fun openOrFocusStream(
         id: LogStreamId,
         displayLabel: String,
@@ -113,6 +118,7 @@ object LogStreamRegistry {
      * open. Has no streaming job — the pane reads [com.kubekubedashdash.logging.AppLogStore]
      * directly — so closing this tab does not need to cancel anything.
      */
+    @Synchronized
     fun openOrFocusAppLog() {
         val key = ActiveAppLog.APP_LOG_KEY
         if (key in _tabs.value) {
@@ -125,12 +131,14 @@ object LogStreamRegistry {
         _focusedKey.value = key
     }
 
+    @Synchronized
     fun focus(key: String) {
         if (key in _tabs.value) _focusedKey.value = key
     }
 
     fun focus(id: LogStreamId) = focus(id.key)
 
+    @Synchronized
     fun close(key: String) {
         jobs.remove(key)?.cancel()
         _tabs.update { it - key }
@@ -139,6 +147,7 @@ object LogStreamRegistry {
 
     fun close(id: LogStreamId) = close(id.key)
 
+    @Synchronized
     fun closeAllForSession(sessionId: SessionId) {
         _tabs.value
             .values

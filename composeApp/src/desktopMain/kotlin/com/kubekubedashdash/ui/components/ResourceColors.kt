@@ -91,3 +91,15 @@ fun kindStatusColor(kind: String, status: String?): Color? {
         else -> null
     }
 }
+
+/**
+ * Severity color for a pod's restart count, shared by the pod table and every
+ * detail panel that shows restarts so the same pod never renders two different
+ * severities. Red above 50, amber above 10, otherwise `null` (meaning: use the
+ * caller's default text color).
+ */
+fun restartCountColor(restarts: Int): Color? = when {
+    restarts > 50 -> KdError
+    restarts > 10 -> KdWarning
+    else -> null
+}

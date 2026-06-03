@@ -134,6 +134,12 @@ fun WindowTabStrip(
     val scrollState = rememberScrollState()
     val requesters = remember { mutableMapOf<String, BringIntoViewRequester>() }
 
+    // Drop requesters for closed tabs so the map doesn't grow unbounded over a
+    // long-lived window's open/close/tear-out churn (getOrPut below only adds).
+    LaunchedEffect(tabs) {
+        requesters.keys.retainAll(tabs.mapTo(mutableSetOf()) { it.key })
+    }
+
     LaunchedEffect(activeTabKey) {
         val target = requesters[activeTabKey] ?: return@LaunchedEffect
         target.bringIntoView()

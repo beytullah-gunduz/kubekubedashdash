@@ -38,7 +38,6 @@ import com.kubekubedashdash.services.TerminalSessionRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.swing.JComponent
 
 /**
  * Compose host for an in-app terminal targeting a Kubernetes pod/container.
@@ -57,6 +56,10 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
     var connector by remember(session.id) { mutableStateOf<KubectlExecTtyConnector?>(null) }
     var isConnecting by remember(session.id) { mutableStateOf(true) }
     var error by remember(session.id) { mutableStateOf<String?>(null) }
+    // Retained so it can be close()d on dispose: JediTermWidget.start() spins up
+    // per-widget thread pools that only close() reclaims. Without this the
+    // widget leaked on every tab switch-away / theme flip (audit C4).
+    var widget by remember(session.id) { mutableStateOf<JediTermWidget?>(null) }
 
     fun connect() {
         scope.launch {
@@ -84,7 +87,13 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
     DisposableEffect(session.id) {
         connect()
         onDispose {
+            // Close the connector first so JediTerm's blocked read()/waitFor()
+            // return, then close the widget so its executor shutdown doesn't
+            // wait on a live read. widget.close() double-closes the connector
+            // via its terminal starter, which is idempotent.
             connector?.close()
+            runCatching { widget?.close() }
+            widget = null
             connector = null
             TerminalSessionRegistry.close(session.id)
         }
@@ -106,7 +115,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                 SwingPanel(
                     background = Color.Black,
                     modifier = Modifier.fillMaxSize(),
-                    factory = { createTerminalWidget(conn, ThemeManager.isDarkTheme) },
+                    factory = { createTerminalWidget(conn, ThemeManager.isDarkTheme).also { widget = it }.component },
                 )
             }
 
@@ -143,7 +152,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
 private fun createTerminalWidget(
     connector: KubectlExecTtyConnector,
     darkTheme: Boolean,
-): JComponent {
+): JediTermWidget {
     val settings = object : DefaultSettingsProvider() {
         @Suppress("OVERRIDE_DEPRECATION")
         override fun getDefaultStyle(): TextStyle = if (darkTheme) {
@@ -167,5 +176,5 @@ private fun createTerminalWidget(
     val widget = JediTermWidget(settings)
     widget.setTtyConnector(connector)
     widget.start()
-    return widget.component
+    return widget
 }

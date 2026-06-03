@@ -43,16 +43,24 @@ object McpServerManager {
         //           "node"      (kubelet bootstrap details).
     )
 
-    private var server: EmbeddedServer<*, *>? = null
+    // @Volatile + @Synchronized start/stop: these are mutated from start/stop
+    // (invoked on Dispatchers.IO from SettingsScreenViewModel and from the JVM
+    // shutdown hook) and read from other threads via the getters below. Without
+    // this, rapid enable/disable/port-change toggles could interleave two
+    // start()/stop() calls — binding two servers to one port, leaking a server
+    // + its thread pool, or showing a bearerToken that doesn't match the
+    // running server.
+    @Volatile private var server: EmbeddedServer<*, *>? = null
 
-    private var _bearerToken: String? = null
+    @Volatile private var _bearerToken: String? = null
     val bearerToken: String? get() = _bearerToken
 
-    private var _requireAuth: Boolean = true
+    @Volatile private var _requireAuth: Boolean = true
     val requireAuth: Boolean get() = _requireAuth
 
     val isRunning: Boolean get() = server != null
 
+    @Synchronized
     fun start(port: Int = DEFAULT_PORT) {
         if (server != null) {
             log.info("MCP server already running, stopping first")
@@ -106,6 +114,7 @@ object McpServerManager {
         }
     }
 
+    @Synchronized
     fun stop() {
         server?.let {
             log.info("Stopping MCP server")

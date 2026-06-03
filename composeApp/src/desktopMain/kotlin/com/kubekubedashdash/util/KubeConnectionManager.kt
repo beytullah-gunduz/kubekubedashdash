@@ -34,8 +34,13 @@ class KubeConnectionManager : Closeable {
         private const val RETIRE_GRACE_MS = 1_000L
     }
 
-    private var _client: KubernetesClient? = null
-    private var _mockHandle: MockClusterHandle? = null
+    // @Volatile: written under `connectLock` but read unsynchronized from every
+    // informer/polling flow on Dispatchers.IO (client getter, isConnected,
+    // getClusterServer). Without it a reader can observe a stale/torn client
+    // right after a cluster switch.
+    @Volatile private var _client: KubernetesClient? = null
+
+    @Volatile private var _mockHandle: MockClusterHandle? = null
     val isConnected: Boolean get() = _client != null
 
     val client: KubernetesClient
@@ -45,7 +50,7 @@ class KubeConnectionManager : Closeable {
     // multi-window: each session has its own KubeConnectionManager and must
     // report ITS context, not the kubeconfig file's `current-context` default
     // (which is the same for every session in the process).
-    private var _connectedContext: String? = null
+    @Volatile private var _connectedContext: String? = null
 
     // ── Connection version (incremented on each connect, used by reactive flows) ─
     private val _connectionVersion = MutableStateFlow(0L)

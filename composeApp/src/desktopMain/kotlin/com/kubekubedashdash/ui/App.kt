@@ -416,7 +416,10 @@ fun App(
                         HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
-                            key = { idx -> tabs[idx].key },
+                            // getOrNull: pagerState isn't keyed on `tabs`, so during the
+                            // recomposition window after a close/merge/tear-out the pager
+                            // can still query an index past the now-shorter list.
+                            key = { idx -> tabs.getOrNull(idx)?.key ?: idx },
                             // Only compose the active page. Without this the
                             // pager pre-composes adjacent pages, which forces
                             // the previous active session's pane to first-
@@ -431,7 +434,7 @@ fun App(
                             // swipe to an adjacent tab.
                             userScrollEnabled = false,
                         ) { page ->
-                            when (val tab = tabs[page]) {
+                            when (val tab = tabs.getOrNull(page)) {
                                 is WorkspaceTab.Cluster -> SessionPaneContent(
                                     session = tab.session,
                                     sidebarCollapsed = sidebarCollapsed,
@@ -447,9 +450,21 @@ fun App(
                                     session = tab.session,
                                     modifier = Modifier.fillMaxSize(),
                                 )
+
+                                // Index past the (just-shrunk) tab list; the pager
+                                // settles to a valid page on the next frame.
+                                null -> Unit
                             }
                         }
-                        LogDrawer(state = drawerState, onStateChange = { drawerState = it })
+                        LogDrawer(
+                            state = drawerState,
+                            onStateChange = { drawerState = it },
+                            // Scope pod-log tabs to this window's clusters so they
+                            // don't bleed across windows (the registry is global).
+                            visibleSessionIds = remember(tabs) {
+                                tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(mutableSetOf()) { it.session.id.value }
+                            },
+                        )
                     }
                 } // end if (showFirstRun) else
 

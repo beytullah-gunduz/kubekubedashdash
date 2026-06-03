@@ -15,6 +15,7 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
+import com.kubekubedashdash.ui.screens.LiveDetailPane
 import com.kubekubedashdash.ui.screens.ResourceDetailScreen
 import com.kubekubedashdash.ui.screens.cluster.ClusterOverviewScreen
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
@@ -245,55 +246,111 @@ fun ExtraPaneRouter(
     annotationQuery: String = "",
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
+    val reactiveClient = LocalReactiveKubeClient.current
+    // null == "All Namespaces". Authoritative scope the list flows below are
+    // built from, so detail panels re-resolve against exactly the same data.
+    val selectedNamespace by reactiveClient.selectedNamespace.collectAsState()
     Box(modifier = modifier) {
         when (screen) {
             is Screen.Detail.EventDetail -> EventDetailScreen(screen.event, onNavigate, onOpenLogs, onClose)
 
             is Screen.Detail.ResourceDetail -> ResourceDetailScreen(screen.kind, screen.name, screen.namespace, onNavigate, onOpenLogs, onClose)
 
-            is Screen.Detail.PodDetail -> PodDetailPanel(
-                pod = screen.pod,
-                onClose = onClose,
-                onNavigateToNode = { nodeName -> onNavigate(Screen.Main.Nodes(selectNodeName = nodeName)) },
-                onOpenLogs = onOpenLogs,
-                onOpenTerminal = onOpenTerminal,
-                modifier = Modifier.fillMaxSize(),
-                labelQuery = labelQuery,
-                onToggleLabel = onToggleLabel,
-                annotationQuery = annotationQuery,
-                onToggleAnnotation = onToggleAnnotation,
-            )
+            is Screen.Detail.PodDetail -> {
+                val pods by reactiveClient.pods.collectAsState()
+                LiveDetailPane(
+                    initial = screen.pod,
+                    state = pods,
+                    uid = screen.pod.uid,
+                    inScope = selectedNamespace == null || selectedNamespace == screen.pod.namespace,
+                    kind = "Pod",
+                    name = screen.pod.name,
+                    uidOf = { it.uid },
+                ) { pod ->
+                    PodDetailPanel(
+                        pod = pod,
+                        onClose = onClose,
+                        onNavigateToNode = { nodeName -> onNavigate(Screen.Main.Nodes(selectNodeName = nodeName)) },
+                        onOpenLogs = onOpenLogs,
+                        onOpenTerminal = onOpenTerminal,
+                        modifier = Modifier.fillMaxSize(),
+                        labelQuery = labelQuery,
+                        onToggleLabel = onToggleLabel,
+                        annotationQuery = annotationQuery,
+                        onToggleAnnotation = onToggleAnnotation,
+                    )
+                }
+            }
 
-            is Screen.Detail.NodeDetail -> NodeDetailPanel(
-                node = screen.node,
-                onClose = onClose,
-                onPodClick = { pod -> onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) },
-                modifier = Modifier.fillMaxSize(),
-                labelQuery = labelQuery,
-                onToggleLabel = onToggleLabel,
-                annotationQuery = annotationQuery,
-                onToggleAnnotation = onToggleAnnotation,
-            )
+            is Screen.Detail.NodeDetail -> {
+                val nodes by reactiveClient.nodes.collectAsState()
+                LiveDetailPane(
+                    initial = screen.node,
+                    state = nodes,
+                    uid = screen.node.uid,
+                    inScope = true, // nodes are cluster-scoped
+                    kind = "Node",
+                    name = screen.node.name,
+                    uidOf = { it.uid },
+                ) { node ->
+                    NodeDetailPanel(
+                        node = node,
+                        onClose = onClose,
+                        onPodClick = { pod -> onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) },
+                        modifier = Modifier.fillMaxSize(),
+                        labelQuery = labelQuery,
+                        onToggleLabel = onToggleLabel,
+                        annotationQuery = annotationQuery,
+                        onToggleAnnotation = onToggleAnnotation,
+                    )
+                }
+            }
 
-            is Screen.Detail.DeploymentDetail -> DeploymentDetailScreen(
-                deployment = screen.deployment,
-                onNavigate = onNavigate,
-                onClose = onClose,
-                labelQuery = labelQuery,
-                onToggleLabel = onToggleLabel,
-                annotationQuery = annotationQuery,
-                onToggleAnnotation = onToggleAnnotation,
-            )
+            is Screen.Detail.DeploymentDetail -> {
+                val deployments by reactiveClient.deployments.collectAsState()
+                LiveDetailPane(
+                    initial = screen.deployment,
+                    state = deployments,
+                    uid = screen.deployment.uid,
+                    inScope = selectedNamespace == null || selectedNamespace == screen.deployment.namespace,
+                    kind = "Deployment",
+                    name = screen.deployment.name,
+                    uidOf = { it.uid },
+                ) { deployment ->
+                    DeploymentDetailScreen(
+                        deployment = deployment,
+                        onNavigate = onNavigate,
+                        onClose = onClose,
+                        labelQuery = labelQuery,
+                        onToggleLabel = onToggleLabel,
+                        annotationQuery = annotationQuery,
+                        onToggleAnnotation = onToggleAnnotation,
+                    )
+                }
+            }
 
-            is Screen.Detail.ServiceDetail -> ServiceDetailScreen(
-                service = screen.service,
-                onNavigate = onNavigate,
-                onClose = onClose,
-                labelQuery = labelQuery,
-                onToggleLabel = onToggleLabel,
-                annotationQuery = annotationQuery,
-                onToggleAnnotation = onToggleAnnotation,
-            )
+            is Screen.Detail.ServiceDetail -> {
+                val services by reactiveClient.services.collectAsState()
+                LiveDetailPane(
+                    initial = screen.service,
+                    state = services,
+                    uid = screen.service.uid,
+                    inScope = selectedNamespace == null || selectedNamespace == screen.service.namespace,
+                    kind = "Service",
+                    name = screen.service.name,
+                    uidOf = { it.uid },
+                ) { service ->
+                    ServiceDetailScreen(
+                        service = service,
+                        onNavigate = onNavigate,
+                        onClose = onClose,
+                        labelQuery = labelQuery,
+                        onToggleLabel = onToggleLabel,
+                        annotationQuery = annotationQuery,
+                        onToggleAnnotation = onToggleAnnotation,
+                    )
+                }
+            }
 
             is Screen.Detail.NamespaceDetail -> NamespaceDetailScreen(
                 namespace = screen.namespace,

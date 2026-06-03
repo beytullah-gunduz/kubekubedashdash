@@ -69,6 +69,7 @@ import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
@@ -386,7 +387,7 @@ private fun EventOverviewTab(
                                 Text(
                                     "Restarts ${podInfo.restarts}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (podInfo.restarts > 10) KdWarning else KdTextSecondary,
+                                    color = restartCountColor(podInfo.restarts) ?: KdTextSecondary,
                                 )
                             }
                         }

@@ -21,7 +21,7 @@ class GenericResourceScreenViewModel(
         .onEach { state ->
             if (state is ResourceState.Success) syncSelection(state.data)
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ResourceState.Loading)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
 
     fun selectItem(item: GenericResourceInfo?) {
         _selected.value = if (_selected.value?.uid == item?.uid) null else item

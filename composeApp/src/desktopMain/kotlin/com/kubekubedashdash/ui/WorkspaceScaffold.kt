@@ -32,7 +32,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -189,7 +188,7 @@ internal fun SessionPaneContent(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
 
-            var extraPaneWidth by remember { mutableFloatStateOf(800f) }
+            val extraPaneWidth by sessionVm.extraPaneWidth.collectAsState()
 
             AnimatedVisibility(
                 visible = extraPaneScreen != null,
@@ -198,7 +197,7 @@ internal fun SessionPaneContent(
             ) {
                 Row(modifier = Modifier.fillMaxHeight()) {
                     com.kubekubedashdash.ui.components.ResizeHandle { delta ->
-                        extraPaneWidth = (extraPaneWidth - delta).coerceIn(400f, 1200f)
+                        sessionVm.setExtraPaneWidth(extraPaneWidth - delta)
                     }
                     ExtraPaneRouter(
                         screen = extraPaneScreen,

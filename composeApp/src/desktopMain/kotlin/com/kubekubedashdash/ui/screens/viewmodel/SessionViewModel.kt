@@ -47,6 +47,16 @@ class SessionViewModel(
     private val _extraPaneScreen = MutableStateFlow<Screen?>(null)
     val extraPaneScreen: StateFlow<Screen?> = _extraPaneScreen.asStateFlow()
 
+    // Width of the detail/extra pane, in dp. Held on the session (not as a
+    // pane-local remember) so a user-dragged width survives switching tabs —
+    // the pager disposes inactive pages (beyondViewportPageCount = 0).
+    private val _extraPaneWidth = MutableStateFlow(800f)
+    val extraPaneWidth: StateFlow<Float> = _extraPaneWidth.asStateFlow()
+
+    fun setExtraPaneWidth(width: Float) {
+        _extraPaneWidth.value = width.coerceIn(400f, 1200f)
+    }
+
     private val _selectedNamespace = MutableStateFlow("All Namespaces")
     val selectedNamespace: StateFlow<String> = _selectedNamespace.asStateFlow()
 
