@@ -173,5 +173,21 @@ private fun CpuUsageSummary(usage: ResourceUsageSummary?) {
             usedText = formatCpuCores(usage.cpuUsedMillis),
             totalText = formatCpuCores(usage.cpuCapacityMillis),
         )
+    } else if (usage == null) {
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = KdPrimary,
+            )
+        }
+    } else {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                "Metrics server unavailable",
+                style = MaterialTheme.typography.bodySmall,
+                color = KdTextSecondary,
+            )
+        }
     }
 }

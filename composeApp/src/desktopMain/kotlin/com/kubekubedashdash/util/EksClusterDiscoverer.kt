@@ -7,6 +7,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
+import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 data class EksCluster(
@@ -116,6 +120,30 @@ object EksClusterDiscoverer {
             log.info("Imported cluster {} (region={}, profile={})", clusterName, region, profile)
             stdout.ifBlank { clusterName }
         }
+    }
+
+    /**
+     * Best-effort timestamped backup of the kubeconfig before an import session
+     * mutates it via `aws eks update-kubeconfig`. Returns the backup file, or
+     * null when there's nothing to back up or the copy fails — a backup failure
+     * must never block the import.
+     */
+    fun backupKubeconfig(kubeconfigPath: String): File? = try {
+        val src = File(kubeconfigPath)
+        if (!src.isFile || src.length() == 0L) {
+            null
+        } else {
+            val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
+                .withZone(ZoneId.systemDefault())
+                .format(Instant.now())
+            File(src.parentFile, "${src.name}.$stamp.bak").also { backup ->
+                src.copyTo(backup, overwrite = false)
+                log.info("Backed up kubeconfig to {}", backup.absolutePath)
+            }
+        }
+    } catch (e: Exception) {
+        log.warn("Could not back up kubeconfig before import: {}", e.message)
+        null
     }
 
     private fun safeCmd(args: List<String>): String = "${args.firstOrNull() ?: "?"} ${args.getOrNull(1).orEmpty()} ${args.getOrNull(2).orEmpty()}".trim()

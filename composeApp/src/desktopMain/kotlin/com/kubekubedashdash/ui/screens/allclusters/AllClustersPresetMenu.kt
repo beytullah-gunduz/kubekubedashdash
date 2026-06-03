@@ -123,8 +123,9 @@ internal fun AllClustersPresetMenu(
                 )
             }
 
-            // Divider only when both sections have content
-            if (builtIns.isNotEmpty() && (userPresets.isNotEmpty() || true)) {
+            // Divider after the built-in presets — user presets or the
+            // "Save current filters as…" footer always follow.
+            if (builtIns.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
             }
 

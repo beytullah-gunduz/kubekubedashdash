@@ -261,6 +261,9 @@ class EksDiscoveryViewModel(
 
         activeJob = viewModelScope.launch(Dispatchers.IO) {
             val kubeconfigPath = KubeconfigLocator.activePath()
+            // Snapshot the kubeconfig once before the first update-kubeconfig
+            // mutates it, so a bad merge is recoverable.
+            EksClusterDiscoverer.backupKubeconfig(kubeconfigPath)
             for (cluster in toImport) {
                 updateImportRow(cluster) { ImportRowState.Importing }
                 val result = withContext(Dispatchers.IO) {
