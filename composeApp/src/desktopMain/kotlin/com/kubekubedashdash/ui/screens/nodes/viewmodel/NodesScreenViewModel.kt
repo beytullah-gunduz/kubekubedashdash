@@ -57,7 +57,7 @@ class NodesScreenViewModel(
     private val _staleNodes = MutableStateFlow<Map<String, StaleEntry<NodeInfo>>>(emptyMap())
     val staleNodes: StateFlow<Map<String, NodeInfo>> = _staleNodes
         .map { stale -> stale.mapValues { (_, entry) -> entry.info } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     // null = "no explicit allowlist" (= show every status). Non-null Set is
     // the explicit allowlist. Survives screen navigation (session-scoped VM).
@@ -86,13 +86,13 @@ class NodesScreenViewModel(
             }
             if (state is ResourceState.Success) processNodeUpdate(state.data)
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ResourceState.Loading)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
 
     // Per-node CPU/memory usage, keyed by node name. Powers the "Pressure
     // only" filter chip on the Nodes screen — without it the banner click
     // can't deliver a filtered view (status alone doesn't imply pressure).
     val nodeUsages: StateFlow<Map<String, NodeResourceUsage>> = reactiveClient.nodeUsages
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     val resourceUsage: StateFlow<ResourceUsageSummary?> = reactiveClient.resourceUsage
         .onEach { state ->
@@ -113,7 +113,7 @@ class NodesScreenViewModel(
             }
         }
         .map { state -> if (state is ResourceState.Success) state.data else null }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private data class PodStats(val count: Int, val capacity: Int)
 
@@ -145,19 +145,19 @@ class NodesScreenViewModel(
             val frac = if (stats.capacity > 0) stats.count.toFloat() / stats.capacity.toFloat() else 0f
             _podsHistory.update { (it + frac).takeLast(MAX_HISTORY_SIZE) }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val podsCount: StateFlow<Int> = podStats
         .map { it?.count ?: 0 }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val podsCapacity: StateFlow<Int> = podStats
         .map { it?.capacity ?: 0 }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val podsLoaded: StateFlow<Boolean> = podStats
         .map { it != null }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     init {
         // Age stale entries out independently of informer traffic (see the
