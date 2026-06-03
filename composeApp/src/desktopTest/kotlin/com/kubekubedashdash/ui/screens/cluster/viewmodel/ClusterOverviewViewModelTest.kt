@@ -335,4 +335,34 @@ class ClusterOverviewViewModelTest {
         )
         assertEquals(2, state.stableCount)
     }
+
+    // ── appendDistinctSample (usage-history de-dup, M9) ────────────────────────
+
+    @Test
+    fun `append grows the series with distinct samples`() {
+        var h = appendDistinctSample(emptyList(), 0.1f, 20)
+        h = appendDistinctSample(h, 0.2f, 20)
+        h = appendDistinctSample(h, 0.3f, 20)
+        assertEquals(listOf(0.1f, 0.2f, 0.3f), h)
+    }
+
+    @Test
+    fun `append skips a sample equal to the last point (StateFlow replay on revisit)`() {
+        assertEquals(listOf(0.4f, 0.5f), appendDistinctSample(listOf(0.4f, 0.5f), 0.5f, 20))
+    }
+
+    @Test
+    fun `append keeps a repeat that is not consecutive`() {
+        // Only consecutive duplicates are dropped; an earlier-seen value still appends.
+        assertEquals(listOf(0.5f, 0.6f, 0.5f), appendDistinctSample(listOf(0.5f, 0.6f), 0.5f, 20))
+    }
+
+    @Test
+    fun `append caps the series length`() {
+        val full = (1..20).map { it.toFloat() }
+        val h = appendDistinctSample(full, 21f, 20)
+        assertEquals(20, h.size)
+        assertEquals(2f, h.first())
+        assertEquals(21f, h.last())
+    }
 }

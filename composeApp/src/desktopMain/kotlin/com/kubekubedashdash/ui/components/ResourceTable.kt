@@ -158,8 +158,10 @@ fun ResourceTable(
     }
 
     var selectedIds by remember { mutableStateOf(emptySet<String>()) }
-    // Reset anchor when the row list changes so stale indexes don't produce wrong ranges.
-    var lastSelectedIndex by remember(sortedRows) { mutableStateOf(-1) }
+    // Shift-range anchor tracked by row id (not index) so it survives the 5s
+    // live-data refresh / re-sorts. Keying it on sortedRows reset it to -1 every
+    // tick, so the first shift-click after a refresh degraded to a single toggle.
+    var lastSelectedId by remember { mutableStateOf<String?>(null) }
     // Tracks whether Shift is held so checkbox clicks can extend the selection range.
     var isShiftHeld by remember { mutableStateOf(false) }
 
@@ -361,16 +363,20 @@ fun ResourceTable(
                                 isChecked = row.id in selectedIds,
                                 onSelectClick = if (selectable) {
                                     {
-                                        val newIds = if (isShiftHeld && lastSelectedIndex >= 0) {
-                                            val start = minOf(lastSelectedIndex, index)
-                                            val end = maxOf(lastSelectedIndex, index)
+                                        // Resolve the anchor's CURRENT index by id so a range stays
+                                        // correct across re-sorts / refreshes; -1 (anchor gone) falls
+                                        // back to a single toggle.
+                                        val anchorIndex = lastSelectedId?.let { id -> sortedRows.indexOfFirst { it.id == id } } ?: -1
+                                        val newIds = if (isShiftHeld && anchorIndex >= 0) {
+                                            val start = minOf(anchorIndex, index)
+                                            val end = maxOf(anchorIndex, index)
                                             val rangeIds = sortedRows.slice(start..end).map { it.id }.toSet()
                                             if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
                                         } else {
                                             if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
                                         }
                                         selectedIds = newIds
-                                        lastSelectedIndex = index
+                                        lastSelectedId = row.id
                                         onSelectionChange?.invoke(newIds)
                                     }
                                 } else {

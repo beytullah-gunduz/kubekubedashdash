@@ -71,7 +71,12 @@ fun AllClustersScreen() {
                 memHistory = memHistory,
                 podsCount = info.podsCount,
                 podsCapacity = podsCapacity,
-                podsLoaded = true,
+                // Real signal (mirrors the single-cluster overview): "loaded"
+                // once the aggregate has any capacity or pod count, so the gauge
+                // shows a spinner only while genuinely empty mid-aggregation, not
+                // a misleading ratio. capacity-unknown-but-pods-present then
+                // renders count-only (see ClusterPodsGauge).
+                podsLoaded = podsCapacity > 0 || info.podsCount > 0,
                 podsHistory = podsHistory,
                 topNodes = topNodes,
                 expanded = statsExpanded,

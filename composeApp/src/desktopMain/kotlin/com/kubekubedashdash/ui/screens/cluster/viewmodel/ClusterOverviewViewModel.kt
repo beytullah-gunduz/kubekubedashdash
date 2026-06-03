@@ -97,8 +97,8 @@ class ClusterOverviewViewModel(
             if (u != null && u.metricsAvailable) {
                 val cpuF = if (u.cpuCapacityMillis > 0) u.cpuUsedMillis.toFloat() / u.cpuCapacityMillis else 0f
                 val memF = if (u.memoryCapacityBytes > 0) u.memoryUsedBytes.toFloat() / u.memoryCapacityBytes else 0f
-                _cpuHistory.update { (it + cpuF).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
-                _memHistory.update { (it + memF).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
+                _cpuHistory.update { appendDistinctSample(it, cpuF, CLUSTER_OVERVIEW_HISTORY_SIZE) }
+                _memHistory.update { appendDistinctSample(it, memF, CLUSTER_OVERVIEW_HISTORY_SIZE) }
             }
         }
         .map { s -> if (s is ResourceState.Success) s.data else null }
@@ -122,7 +122,7 @@ class ClusterOverviewViewModel(
         val cInt = c ?: 0
         if (cap > 0) {
             val frac = cInt.toFloat() / cap.toFloat()
-            _podsHistory.update { (it + frac).takeLast(CLUSTER_OVERVIEW_HISTORY_SIZE) }
+            _podsHistory.update { appendDistinctSample(it, frac, CLUSTER_OVERVIEW_HISTORY_SIZE) }
         }
         cap > 0 || cInt > 0
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -318,3 +318,13 @@ internal fun deploymentDegraded(d: DeploymentInfo): Boolean {
     val desired = parts[1].toIntOrNull() ?: return false
     return desired > 0 && ready < desired
 }
+
+/**
+ * Append [sample] to a bounded usage-history series, skipping it when it equals
+ * the last point. The history is fed from WhileSubscribed flows, which replay
+ * their latest value to each new collector — so revisiting the overview would
+ * otherwise re-append the same reading and duplicate the sparkline's tail
+ * (audit M9). Real CPU/memory fractions jitter every poll, so an exact-equal
+ * sample is a replay, not a genuine new reading.
+ */
+internal fun appendDistinctSample(history: List<Float>, sample: Float, max: Int): List<Float> = if (history.lastOrNull() == sample) history else (history + sample).takeLast(max)
