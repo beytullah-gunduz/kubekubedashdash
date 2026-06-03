@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 
@@ -45,13 +45,16 @@ class LogViewerScreenViewModel(
         resetTrigger,
     ) { pod, ns, container, _ -> Triple(pod, ns, container) }
         .flatMapLatest { (pod, ns, container) ->
-            if (pod.isBlank()) {
-                flowOf(emptyList())
+            val source = if (pod.isBlank()) {
+                flowOf(emptyList<String>())
             } else {
                 reactiveClient.streamPodLogs(pod, ns, container)
                     .runningFold(emptyList<String>()) { acc, line -> (acc + line).takeLast(MAX_BUFFERED_LINES) }
-                    .onEach { if (it.isNotEmpty()) _loading.value = false }
             }
+            // Clear the spinner once the stream is established, not when the
+            // first line arrives — a healthy pod that has emitted no logs yet
+            // would otherwise spin forever.
+            source.onStart { _loading.value = false }
         }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
