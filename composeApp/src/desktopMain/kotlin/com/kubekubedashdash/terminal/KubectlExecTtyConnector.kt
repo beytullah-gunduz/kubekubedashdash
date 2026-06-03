@@ -112,17 +112,21 @@ class KubectlExecTtyConnector(
 
     override fun close() {
         connected = false
+        // Order matters. The emulator thread may be parked inside reader.read(),
+        // holding the StreamDecoder lock; closing the InputStreamReader first
+        // deadlocks waiting for that same lock (and then watch.close() below
+        // would never run, leaking the server-side exec session). Close the
+        // watch + underlying streams first so the blocked read returns EOF and
+        // releases the lock — the reader only wraps `output`, so closing that is
+        // sufficient and it needs no (deadlock-prone) explicit close().
         try {
-            input?.close()
-        } catch (_: Throwable) {}
-        try {
-            reader?.close() // also closes the underlying output stream
+            watch?.close()
         } catch (_: Throwable) {}
         try {
             output?.close()
         } catch (_: Throwable) {}
         try {
-            watch?.close()
+            input?.close()
         } catch (_: Throwable) {}
         watch = null
         reader = null
