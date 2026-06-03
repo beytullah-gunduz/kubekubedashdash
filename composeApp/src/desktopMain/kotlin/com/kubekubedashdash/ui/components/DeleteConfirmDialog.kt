@@ -43,7 +43,7 @@ fun DeleteConfirmDialog(
     onDismiss: () -> Unit,
 ) {
     var typed by remember(name) { mutableStateOf("") }
-    val typeMatches = !requireTypedConfirm || typed == name
+    val typeMatches = !requireTypedConfirm || typed.trim() == name
     val canConfirm = !inFlight && typeMatches
     val nsLabel = if (namespace != null) " in namespace $namespace" else ""
     val defaultBody = "Delete $kind \"$name\"$nsLabel? This cannot be undone."
@@ -67,6 +67,13 @@ fun DeleteConfirmDialog(
                         enabled = !inFlight,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (typed.isNotEmpty() && !typeMatches) {
+                        Text(
+                            "Name doesn't match",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdError,
+                        )
+                    }
                 }
                 if (errorMessage != null) {
                     Text(
