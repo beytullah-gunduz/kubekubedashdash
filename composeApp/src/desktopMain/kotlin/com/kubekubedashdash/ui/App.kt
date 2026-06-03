@@ -456,7 +456,15 @@ fun App(
                                 null -> Unit
                             }
                         }
-                        LogDrawer(state = drawerState, onStateChange = { drawerState = it })
+                        LogDrawer(
+                            state = drawerState,
+                            onStateChange = { drawerState = it },
+                            // Scope pod-log tabs to this window's clusters so they
+                            // don't bleed across windows (the registry is global).
+                            visibleSessionIds = remember(tabs) {
+                                tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(mutableSetOf()) { it.session.id.value }
+                            },
+                        )
                     }
                 } // end if (showFirstRun) else
 

@@ -75,9 +75,16 @@ fun LogDrawer(
     state: LogDrawerState,
     onStateChange: (LogDrawerState) -> Unit,
     modifier: Modifier = Modifier,
+    // Pod-log tabs belong to a specific cluster session; show only this
+    // window's sessions so logs don't bleed across windows (the registry is a
+    // process-global singleton). The shared application-log tab always shows.
+    visibleSessionIds: Set<String> = emptySet(),
 ) {
-    val tabs by LogStreamRegistry.tabs.collectAsState()
+    val allTabs by LogStreamRegistry.tabs.collectAsState()
     val focusedKey by LogStreamRegistry.focusedKey.collectAsState()
+    val tabs = remember(allTabs, visibleSessionIds) {
+        allTabs.filterValues { tab -> tab !is ActiveLogStream || tab.id.sessionId in visibleSessionIds }
+    }
     val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
     val density = LocalDensity.current
     var liveHeightDp by remember { mutableFloatStateOf(persistedHeightDp.toFloat()) }
