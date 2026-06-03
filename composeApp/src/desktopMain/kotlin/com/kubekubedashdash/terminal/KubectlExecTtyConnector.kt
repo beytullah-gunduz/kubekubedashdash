@@ -6,6 +6,7 @@ import io.fabric8.kubernetes.client.dsl.ExecWatch
 import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.io.InputStream
+import java.io.InputStreamReader
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 
@@ -34,6 +35,8 @@ class KubectlExecTtyConnector(
 
     @Volatile private var output: InputStream? = null
 
+    @Volatile private var reader: InputStreamReader? = null
+
     @Volatile private var connected: Boolean = false
 
     fun start() {
@@ -42,28 +45,25 @@ class KubectlExecTtyConnector(
         session.attach(w)
         input = w.input
         output = w.output
+        // Decode bytes -> chars through one stateful reader so a multi-byte
+        // UTF-8 sequence split across reads is reassembled rather than each
+        // half decoding to U+FFFD.
+        reader = output?.let { InputStreamReader(it, StandardCharsets.UTF_8) }
         connected = true
         log.info("Exec session started for {}", session.displayLabel)
     }
 
     override fun read(buf: CharArray, offset: Int, length: Int): Int {
         if (!connected) return -1
-        val stream = output ?: return -1
-        // JediTerm's contract: return number of CHARS read, or -1 on EOF.
-        // The watch stream is bytes (UTF-8); decode in-place. Reading at most
-        // `length` bytes guarantees we won't write more than `length` chars
-        // (UTF-8 is at most 4 bytes per char, so chars ≤ bytes).
+        val r = reader ?: return -1
+        // JediTerm's contract: return the number of CHARS read, or -1 on EOF.
+        // InputStreamReader retains the bytes of an incomplete UTF-8 sequence
+        // between calls, so a multi-byte character that spans a read boundary
+        // decodes correctly instead of becoming two U+FFFD replacement chars.
         return try {
-            val bytes = ByteArray(length)
-            val read = stream.read(bytes, 0, length)
-            if (read <= 0) {
-                connected = false
-                read
-            } else {
-                val chars = String(bytes, 0, read, StandardCharsets.UTF_8)
-                chars.toCharArray(buf, offset, 0, chars.length)
-                chars.length
-            }
+            val read = r.read(buf, offset, length)
+            if (read < 0) connected = false
+            read
         } catch (e: IOException) {
             log.debug("Exec read interrupted: {}", e.message)
             connected = false
@@ -103,7 +103,7 @@ class KubectlExecTtyConnector(
     }
 
     override fun ready(): Boolean = try {
-        connected && (output?.available() ?: 0) > 0
+        connected && (reader?.ready() ?: false)
     } catch (_: IOException) {
         false
     }
@@ -116,12 +116,16 @@ class KubectlExecTtyConnector(
             input?.close()
         } catch (_: Throwable) {}
         try {
+            reader?.close() // also closes the underlying output stream
+        } catch (_: Throwable) {}
+        try {
             output?.close()
         } catch (_: Throwable) {}
         try {
             watch?.close()
         } catch (_: Throwable) {}
         watch = null
+        reader = null
         log.info("Exec session closed for {}", session.displayLabel)
     }
 
