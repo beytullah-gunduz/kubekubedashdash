@@ -3,6 +3,9 @@ package com.kubekubedashdash.util
 import io.fabric8.kubernetes.client.Config
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 enum class CheckStatus { CHECKING, PASSED, FAILED, WARN }
 
@@ -40,6 +43,10 @@ object PrerequisiteChecker {
     const val NAME_CONTEXTS = "Cluster Contexts"
 
     private val log = LoggerFactory.getLogger(PrerequisiteChecker::class.java)
+
+    // Upper bound on Config.autoConfigure, which can invoke a kubeconfig `exec`
+    // credential plugin; without it a hanging plugin would stall bootstrap.
+    private const val AUTOCONFIGURE_TIMEOUT_SECONDS = 10L
 
     fun runAll(): PrerequisiteResult {
         log.info("Starting prerequisite checks")
@@ -121,12 +128,30 @@ object PrerequisiteChecker {
         }
     }
 
-    private fun readContextNames(): List<String> = try {
-        Config.autoConfigure(null)
-            .contexts?.map { it.name } ?: emptyList()
-    } catch (e: Exception) {
-        log.error("Failed to read kube contexts", e)
-        emptyList()
+    private fun readContextNames(): List<String> {
+        // autoConfigure parses the kubeconfig and, for a context with an `exec`
+        // credential block, can invoke the external auth binary. Run it on a
+        // daemon thread with a timeout so a hanging plugin can't stall bootstrap
+        // forever — on timeout we proceed without contexts.
+        val executor = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "prereq-autoconfigure").apply { isDaemon = true }
+        }
+        return try {
+            executor.submit<List<String>> {
+                Config.autoConfigure(null).contexts?.map { it.name } ?: emptyList()
+            }.get(AUTOCONFIGURE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (e: TimeoutException) {
+            log.warn(
+                "Reading kube contexts timed out after {}s — a kubeconfig exec credential plugin may be hanging; proceeding without contexts",
+                AUTOCONFIGURE_TIMEOUT_SECONDS,
+            )
+            emptyList()
+        } catch (e: Exception) {
+            log.error("Failed to read kube contexts", e)
+            emptyList()
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     private fun checkContextsExist(contexts: List<String>): PrerequisiteCheck = if (contexts.isNotEmpty()) {
