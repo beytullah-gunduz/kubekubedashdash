@@ -7,6 +7,7 @@ import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,8 +26,13 @@ class ClusterTopologyViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private var loadJob: Job? = null
+
     fun load(namespace: String) {
-        viewModelScope.launch {
+        // Cancel any in-flight load so a slow earlier namespace can't finish
+        // after a newer one and overwrite its graph (last-request-wins).
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _loading.value = true
             _error.value = null
             try {
@@ -41,9 +47,10 @@ class ClusterTopologyViewModel(
                 // Only the first load will leave _graph null, so the screen can
                 // still distinguish "no graph yet" from "failed refresh, keep
                 // showing the last good graph".
-            } finally {
-                _loading.value = false
             }
+            // Not in a finally: a load cancelled by a newer one rethrows above
+            // and must not clear the spinner the newer load just set.
+            _loading.value = false
         }
     }
 
