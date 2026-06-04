@@ -34,7 +34,6 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.model.TerminalSession
-import com.kubekubedashdash.services.TerminalSessionRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,22 +43,23 @@ import kotlinx.coroutines.withContext
  * Mirrors container-dashboard's `JediTermConsole` but uses fabric8's
  * `ExecWatch` (via [KubectlExecTtyConnector]) instead of Docker Java's exec.
  *
- * Lifecycle: on first composition for a given [session], a coroutine opens
- * the watch on Dispatchers.IO, hands it to a `JediTermWidget`, and starts
- * the widget. On dispose (tab close, navigation away, recomposition with a
- * different session), the connector + watch are closed and the registry
- * entry is dropped.
+ * Lifecycle: the connector + widget live on the [TerminalSession], not this
+ * composable, so the shell session and scrollback survive tab switches. On
+ * first attach a coroutine opens the watch on Dispatchers.IO, hands it to a
+ * `JediTermWidget`, and starts it. Switching tabs disposes the pane but leaves
+ * everything alive on the session; switching back reattaches the same widget.
+ * Teardown happens only in [TerminalSession.close], invoked by
+ * `TerminalSessionRegistry` when the tab is actually closed.
  */
 @Composable
 fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    var connector by remember(session.id) { mutableStateOf<KubectlExecTtyConnector?>(null) }
-    var isConnecting by remember(session.id) { mutableStateOf(true) }
+    // Source of truth is the session: on reattach (tab switch back) the
+    // connector + widget are still alive there, so we render the existing widget
+    // with no spinner instead of opening a fresh shell.
+    var connector by remember(session.id) { mutableStateOf(session.connector as? KubectlExecTtyConnector) }
+    var isConnecting by remember(session.id) { mutableStateOf(session.widget == null) }
     var error by remember(session.id) { mutableStateOf<String?>(null) }
-    // Retained so it can be close()d on dispose: JediTermWidget.start() spins up
-    // per-widget thread pools that only close() reclaims. Without this the
-    // widget leaked on every tab switch-away / theme flip (audit C4).
-    var widget by remember(session.id) { mutableStateOf<JediTermWidget?>(null) }
 
     fun connect() {
         scope.launch {
@@ -67,6 +67,8 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
             error = null
             try {
                 val conn = withContext(Dispatchers.IO) {
+                    // Replace any half-open connector left by an interrupted attempt.
+                    session.connector?.let { stale -> runCatching { stale.close() } }
                     KubectlExecTtyConnector(session) {
                         session.clusterSession.reactiveClient.openExec(
                             name = session.podName,
@@ -75,6 +77,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                         )
                     }.also { it.start() }
                 }
+                session.connector = conn
                 connector = conn
             } catch (e: Exception) {
                 error = e.message ?: "Failed to open terminal"
@@ -85,17 +88,13 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
     }
 
     DisposableEffect(session.id) {
-        connect()
+        // Connect only on first attach; a live connector means we're reattaching.
+        if (session.connector == null) connect() else isConnecting = false
         onDispose {
-            // Close the connector first so JediTerm's blocked read()/waitFor()
-            // return, then close the widget so its executor shutdown doesn't
-            // wait on a live read. widget.close() double-closes the connector
-            // via its terminal starter, which is idempotent.
-            connector?.close()
-            runCatching { widget?.close() }
-            widget = null
-            connector = null
-            TerminalSessionRegistry.close(session.id)
+            // Intentionally no teardown: a tab switch disposes the pane but the
+            // tab — and its TerminalSession — live on, so the shell session and
+            // scrollback persist. Teardown happens in TerminalSession.close(),
+            // invoked by TerminalSessionRegistry when the tab is closed.
         }
     }
 
@@ -115,7 +114,11 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                 SwingPanel(
                     background = Color.Black,
                     modifier = Modifier.fillMaxSize(),
-                    factory = { createTerminalWidget(conn, ThemeManager.isDarkTheme).also { widget = it }.component },
+                    // Reuse the session's widget across reattach so scrollback and
+                    // shell state persist; create it once on first attach.
+                    factory = {
+                        (session.widget ?: createTerminalWidget(conn, ThemeManager.isDarkTheme).also { session.widget = it }).component
+                    },
                 )
             }
 
