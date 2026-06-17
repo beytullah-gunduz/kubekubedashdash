@@ -78,6 +78,11 @@ sealed class Screen(val title: String) {
         data object ValidatingWebhookConfigurations : Main("Validating Webhook Configurations")
         data object MutatingWebhookConfigurations : Main("Mutating Webhook Configurations")
 
+        data object IngressClasses : Main("Ingress Classes")
+        data object EndpointSlices : Main("Endpoint Slices")
+        data object CSIDrivers : Main("CSI Drivers")
+        data object CertificateSigningRequests : Main("Certificate Signing Requests")
+
         data object ClusterTopology : Main("Topology")
 
         /**

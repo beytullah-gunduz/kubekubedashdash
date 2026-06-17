@@ -1145,6 +1145,97 @@ class ReactiveKubeClient(
         },
     )
 
+    // ── Network/Storage/Security fill-ins ─────────────────────────────────────
+
+    val ingressClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.network().v1().ingressClasses().inform(h) },
+        mapper = { ic ->
+            GenericResourceInfo(
+                uid = ic.metadata.uid ?: "",
+                name = ic.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(ic.metadata.creationTimestamp),
+                labels = ic.metadata.labels ?: emptyMap(),
+                annotations = ic.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Controller" to (ic.spec?.controller ?: "—"),
+                ),
+            )
+        },
+    )
+
+    val endpointSlices: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.discovery().v1().endpointSlices().inNamespace(ns).inform(h)
+            } else {
+                k.discovery().v1().endpointSlices().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { es ->
+            GenericResourceInfo(
+                uid = es.metadata.uid ?: "",
+                name = es.metadata.name,
+                namespace = es.metadata.namespace,
+                status = null,
+                age = formatAge(es.metadata.creationTimestamp),
+                labels = es.metadata.labels ?: emptyMap(),
+                annotations = es.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Address Type" to (es.addressType ?: "—"),
+                    "Endpoints" to "${es.endpoints?.size ?: 0}",
+                    "Ports" to "${es.ports?.size ?: 0}",
+                ),
+            )
+        },
+    )
+
+    val csiDrivers: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.storage().v1().csiDrivers().inform(h) },
+        mapper = { d ->
+            GenericResourceInfo(
+                uid = d.metadata.uid ?: "",
+                name = d.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(d.metadata.creationTimestamp),
+                labels = d.metadata.labels ?: emptyMap(),
+                annotations = d.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Attach Required" to (d.spec?.attachRequired?.toString() ?: "—"),
+                    "Modes" to (d.spec?.volumeLifecycleModes?.joinToString(", ") ?: "—"),
+                ),
+            )
+        },
+    )
+
+    val certificateSigningRequests: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.certificates().v1().certificateSigningRequests().inform(h) },
+        mapper = { csr ->
+            val conds = csr.status?.conditions.orEmpty()
+            val cond = when {
+                conds.any { it.type == "Approved" && it.status == "True" } -> "Approved"
+                conds.any { it.type == "Denied" && it.status == "True" } -> "Denied"
+                else -> "Pending"
+            }
+            GenericResourceInfo(
+                uid = csr.metadata.uid ?: "",
+                name = csr.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(csr.metadata.creationTimestamp),
+                labels = csr.metadata.labels ?: emptyMap(),
+                annotations = csr.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Signer" to (csr.spec?.signerName ?: "—"),
+                    "Requestor" to (csr.spec?.username ?: "—"),
+                    "Condition" to cond,
+                ),
+            )
+        },
+    )
+
     // ── Custom Resource Definitions ─────────────────────────────────────────────
 
     /**
@@ -1507,6 +1598,14 @@ class ReactiveKubeClient(
 
             "mutatingwebhookconfiguration" -> k8s.admissionRegistration().v1().mutatingWebhookConfigurations().withName(name).get()
 
+            "ingressclass" -> k8s.network().v1().ingressClasses().withName(name).get()
+
+            "endpointslice" -> namespace?.let { k8s.discovery().v1().endpointSlices().inNamespace(it).withName(name).get() }
+
+            "csidriver" -> k8s.storage().v1().csiDrivers().withName(name).get()
+
+            "certificatesigningrequest" -> k8s.certificates().v1().certificateSigningRequests().withName(name).get()
+
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
                 val rdc = ResourceDefinitionContext.Builder()
@@ -1768,6 +1867,17 @@ class ReactiveKubeClient(
             "validatingwebhookconfiguration" -> k8s.admissionRegistration().v1().validatingWebhookConfigurations().withName(name).delete()
 
             "mutatingwebhookconfiguration" -> k8s.admissionRegistration().v1().mutatingWebhookConfigurations().withName(name).delete()
+
+            "ingressclass" -> k8s.network().v1().ingressClasses().withName(name).delete()
+
+            "endpointslice" -> {
+                val ns = requireNamespace("EndpointSlice", namespace)
+                k8s.discovery().v1().endpointSlices().inNamespace(ns).withName(name).delete()
+            }
+
+            "csidriver" -> k8s.storage().v1().csiDrivers().withName(name).delete()
+
+            "certificatesigningrequest" -> k8s.certificates().v1().certificateSigningRequests().withName(name).delete()
 
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)

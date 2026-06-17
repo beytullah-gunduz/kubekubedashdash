@@ -104,6 +104,10 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
     "priorityclass" -> Res.drawable.sell_filled
     "validatingwebhookconfiguration" -> Res.drawable.code_filled
     "mutatingwebhookconfiguration" -> Res.drawable.code_filled
+    "ingressclass" -> Res.drawable.language_filled
+    "endpointslice" -> Res.drawable.settings_ethernet_filled
+    "csidriver" -> Res.drawable.storage_filled
+    "certificatesigningrequest" -> Res.drawable.lock_filled
     else -> Res.drawable.list_filled
 }
 

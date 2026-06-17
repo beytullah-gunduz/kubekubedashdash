@@ -68,6 +68,14 @@ fun kindColor(kind: String): Color = when (kind) {
 
     "MutatingWebhookConfiguration" -> Color(0xFF00ACC1)
 
+    "IngressClass" -> Color(0xFF42A5F5)
+
+    "EndpointSlice" -> Color(0xFF00BCD4)
+
+    "CSIDriver" -> Color(0xFF6D4C41)
+
+    "CertificateSigningRequest" -> Color(0xFFFFA726)
+
     else -> Color(0xFF6B7280)
 }
 

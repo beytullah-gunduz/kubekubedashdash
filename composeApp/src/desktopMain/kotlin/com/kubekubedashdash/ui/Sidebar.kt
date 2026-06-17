@@ -167,7 +167,9 @@ fun Sidebar(
             SidebarSection("Network", collapsed) {
                 SidebarItem(Res.drawable.cloud_filled, "Services", currentScreen is Screen.Main.Services, collapsed) { onNavigate(Screen.Main.Services) }
                 SidebarItem(Res.drawable.language_filled, "Ingresses", currentScreen is Screen.Main.Ingresses, collapsed) { onNavigate(Screen.Main.Ingresses) }
+                SidebarItem(Res.drawable.language_filled, "Ingress Classes", currentScreen is Screen.Main.IngressClasses, collapsed) { onNavigate(Screen.Main.IngressClasses) }
                 SidebarItem(Res.drawable.settings_ethernet_filled, "Endpoints", currentScreen is Screen.Main.Endpoints, collapsed) { onNavigate(Screen.Main.Endpoints) }
+                SidebarItem(Res.drawable.settings_ethernet_filled, "Endpoint Slices", currentScreen is Screen.Main.EndpointSlices, collapsed) { onNavigate(Screen.Main.EndpointSlices) }
                 SidebarItem(Res.drawable.security_filled, "Network Policies", currentScreen is Screen.Main.NetworkPolicies, collapsed) { onNavigate(Screen.Main.NetworkPolicies) }
             }
 
@@ -175,6 +177,7 @@ fun Sidebar(
                 SidebarItem(Res.drawable.save_filled, "Persistent Volumes", currentScreen is Screen.Main.PersistentVolumes, collapsed) { onNavigate(Screen.Main.PersistentVolumes) }
                 SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims, collapsed) { onNavigate(Screen.Main.PersistentVolumeClaims) }
                 SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses, collapsed) { onNavigate(Screen.Main.StorageClasses) }
+                SidebarItem(Res.drawable.storage_filled, "CSI Drivers", currentScreen is Screen.Main.CSIDrivers, collapsed) { onNavigate(Screen.Main.CSIDrivers) }
             }
 
             SidebarSection("Access Control", collapsed) {
@@ -183,6 +186,7 @@ fun Sidebar(
                 SidebarItem(Res.drawable.security_filled, "Cluster Roles", currentScreen is Screen.Main.ClusterRoles, collapsed) { onNavigate(Screen.Main.ClusterRoles) }
                 SidebarItem(Res.drawable.account_tree_filled, "Role Bindings", currentScreen is Screen.Main.RoleBindings, collapsed) { onNavigate(Screen.Main.RoleBindings) }
                 SidebarItem(Res.drawable.account_tree_filled, "Cluster Role Bindings", currentScreen is Screen.Main.ClusterRoleBindings, collapsed) { onNavigate(Screen.Main.ClusterRoleBindings) }
+                SidebarItem(Res.drawable.lock_filled, "Cert Signing Requests", currentScreen is Screen.Main.CertificateSigningRequests, collapsed) { onNavigate(Screen.Main.CertificateSigningRequests) }
             }
 
             SidebarSection("Autoscaling & Disruption", collapsed) {

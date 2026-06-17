@@ -55,11 +55,14 @@ import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.Job
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
+import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestBuilder
+import io.fabric8.kubernetes.api.model.discovery.v1.EndpointSliceBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.ContainerMetricsBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetricsBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
+import io.fabric8.kubernetes.api.model.networking.v1.IngressClassBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyBuilder
 import io.fabric8.kubernetes.api.model.policy.v1.PodDisruptionBudgetBuilder
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBindingBuilder
@@ -70,6 +73,7 @@ import io.fabric8.kubernetes.api.model.rbac.RoleBuilder
 import io.fabric8.kubernetes.api.model.rbac.RoleRefBuilder
 import io.fabric8.kubernetes.api.model.rbac.SubjectBuilder
 import io.fabric8.kubernetes.api.model.scheduling.v1.PriorityClassBuilder
+import io.fabric8.kubernetes.api.model.storage.CSIDriverBuilder
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
@@ -85,6 +89,7 @@ import java.io.Closeable
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
 import io.fabric8.kubernetes.api.model.Duration as FabricDuration
 
@@ -1443,6 +1448,57 @@ object MockClusterProvider {
         ).create()
 
         log.info("Mock cluster seeded admission control: 1 ValidatingWebhookConfiguration, 1 MutatingWebhookConfiguration")
+
+        // ── Network / Storage / Security fill-ins ───────────────────────────────
+        // IngressClass (cluster-scoped)
+        client.network().v1().ingressClasses().resource(
+            IngressClassBuilder()
+                .withNewMetadata().withName("nginx").withCreationTimestamp(minutesAgo(4320)).endMetadata()
+                .withNewSpec().withController("k8s.io/ingress-nginx").endSpec()
+                .build(),
+        ).create()
+
+        // EndpointSlice (namespaced)
+        client.discovery().v1().endpointSlices().inNamespace("default").resource(
+            EndpointSliceBuilder()
+                .withNewMetadata()
+                .withName("demo-slice")
+                .withNamespace("default")
+                .withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withAddressType("IPv4")
+                .addNewEndpoint().withAddresses("10.0.0.1").endEndpoint()
+                .addNewPort().withName("http").withPort(80).endPort()
+                .build(),
+        ).create()
+
+        // CSIDriver (cluster-scoped)
+        client.storage().v1().csiDrivers().resource(
+            CSIDriverBuilder()
+                .withNewMetadata().withName("ebs.csi.aws.com").withCreationTimestamp(minutesAgo(8640)).endMetadata()
+                .withNewSpec().withAttachRequired(true).withVolumeLifecycleModes("Persistent").endSpec()
+                .build(),
+        ).create()
+
+        // CertificateSigningRequest (cluster-scoped, Approved condition)
+        client.certificates().v1().certificateSigningRequests().resource(
+            CertificateSigningRequestBuilder()
+                .withNewMetadata().withName("demo-csr").withCreationTimestamp(minutesAgo(60)).endMetadata()
+                .withNewSpec()
+                .withRequest(Base64.getEncoder().encodeToString("dummy-csr".toByteArray()))
+                .withSignerName("kubernetes.io/kube-apiserver-client")
+                .withUsername("demo-user")
+                .endSpec()
+                .withNewStatus()
+                .addNewCondition()
+                .withType("Approved")
+                .withStatus("True")
+                .endCondition()
+                .endStatus()
+                .build(),
+        ).create()
+
+        log.info("Mock cluster seeded network/storage/security fill-ins: 1 IngressClass, 1 EndpointSlice, 1 CSIDriver, 1 CertificateSigningRequest")
 
         // ── CRDs + CR instances ─────────────────────────────────────────────────
         seedSparkAndArgo(client)

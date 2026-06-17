@@ -88,6 +88,10 @@ internal fun rememberPaletteEntries(
             paletteScreen("Priority Classes", Res.drawable.sell_filled, Screen.Main.PriorityClasses, onNavigate),
             paletteScreen("Validating Webhook Configurations", Res.drawable.code_filled, Screen.Main.ValidatingWebhookConfigurations, onNavigate),
             paletteScreen("Mutating Webhook Configurations", Res.drawable.code_filled, Screen.Main.MutatingWebhookConfigurations, onNavigate),
+            paletteScreen("Ingress Classes", Res.drawable.language_filled, Screen.Main.IngressClasses, onNavigate),
+            paletteScreen("Endpoint Slices", Res.drawable.settings_ethernet_filled, Screen.Main.EndpointSlices, onNavigate),
+            paletteScreen("CSI Drivers", Res.drawable.storage_filled, Screen.Main.CSIDrivers, onNavigate),
+            paletteScreen("Certificate Signing Requests", Res.drawable.lock_filled, Screen.Main.CertificateSigningRequests, onNavigate),
         )
     }
 

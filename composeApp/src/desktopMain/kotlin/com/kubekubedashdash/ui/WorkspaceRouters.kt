@@ -195,6 +195,14 @@ fun ContentRouter(
 
             is Screen.Main.MutatingWebhookConfigurations -> genericKind("MutatingWebhookConfiguration", reactiveClient.mutatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
+            is Screen.Main.IngressClasses -> genericKind("IngressClass", reactiveClient.ingressClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.EndpointSlices -> genericKind("EndpointSlice", reactiveClient.endpointSlices, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.CSIDrivers -> genericKind("CSIDriver", reactiveClient.csiDrivers, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.CertificateSigningRequests -> genericKind("CertificateSigningRequest", reactiveClient.certificateSigningRequests, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
                 val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {

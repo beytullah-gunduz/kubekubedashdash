@@ -160,6 +160,7 @@ private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.ResourceQuotas,
     is Screen.Main.LimitRanges,
     is Screen.Main.PersistentVolumeClaims,
+    is Screen.Main.EndpointSlices,
     is Screen.Main.ClusterTopology,
     -> true
 
