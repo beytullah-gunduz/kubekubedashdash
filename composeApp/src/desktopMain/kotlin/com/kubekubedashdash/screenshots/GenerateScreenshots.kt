@@ -180,6 +180,9 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
             "26-cluster-role-bindings" to Screen.Main.ClusterRoleBindings,
             "27-horizontal-pod-autoscalers" to Screen.Main.HorizontalPodAutoscalers,
             "28-pod-disruption-budgets" to Screen.Main.PodDisruptionBudgets,
+            "31-resource-quotas" to Screen.Main.ResourceQuotas,
+            "32-limit-ranges" to Screen.Main.LimitRanges,
+            "33-priority-classes" to Screen.Main.PriorityClasses,
         )
 
         for ((slug, screen) in screens) {
@@ -200,10 +203,10 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(300)
         initialWorkspace.showSettings()
         delay(5000L)
-        captureWindow(initialWorkspace.id, outDir.resolve("29-settings.png"))
+        captureWindow(initialWorkspace.id, outDir.resolve("34-settings.png"))
         initialWorkspace.dismissSettings()
         delay(5000L)
-        log.info("captured 29-settings")
+        log.info("captured 34-settings")
 
         log.info("Building light/dark theme comparison")
         sessionVm.navigate(Screen.Main.ClusterOverview)
@@ -252,7 +255,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Capturing All Clusters tab")
         initialWorkspace.setActive(WorkspaceTab.AllClusters.key)
         delay(10_000L)
-        captureWindow(initialWorkspace.id, outDir.resolve("30-all-clusters.png"))
+        captureWindow(initialWorkspace.id, outDir.resolve("35-all-clusters.png"))
         log.info("captured all-clusters")
 
         log.info("Building multi-window showcase (2 windows)")

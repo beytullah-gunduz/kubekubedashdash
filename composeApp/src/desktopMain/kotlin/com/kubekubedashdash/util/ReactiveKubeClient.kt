@@ -1041,6 +1041,76 @@ class ReactiveKubeClient(
         },
     )
 
+    // ── Governance ──────────────────────────────────────────────────────────────
+
+    val resourceQuotas: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.resourceQuotas().inNamespace(ns).inform(h)
+            } else {
+                k.resourceQuotas().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { rq ->
+            GenericResourceInfo(
+                uid = rq.metadata.uid ?: "",
+                name = rq.metadata.name,
+                namespace = rq.metadata.namespace,
+                status = null,
+                age = formatAge(rq.metadata.creationTimestamp),
+                labels = rq.metadata.labels ?: emptyMap(),
+                annotations = rq.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Scopes" to "${rq.spec?.scopes?.size ?: 0}",
+                    "Hard" to "${rq.status?.hard?.size ?: rq.spec?.hard?.size ?: 0}",
+                ),
+            )
+        },
+    )
+
+    val limitRanges: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.limitRanges().inNamespace(ns).inform(h)
+            } else {
+                k.limitRanges().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { lr ->
+            GenericResourceInfo(
+                uid = lr.metadata.uid ?: "",
+                name = lr.metadata.name,
+                namespace = lr.metadata.namespace,
+                status = null,
+                age = formatAge(lr.metadata.creationTimestamp),
+                labels = lr.metadata.labels ?: emptyMap(),
+                annotations = lr.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Limits" to "${lr.spec?.limits?.size ?: 0}",
+                ),
+            )
+        },
+    )
+
+    val priorityClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.scheduling().v1().priorityClasses().inform(h) },
+        mapper = { pc ->
+            GenericResourceInfo(
+                uid = pc.metadata.uid ?: "",
+                name = pc.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(pc.metadata.creationTimestamp),
+                labels = pc.metadata.labels ?: emptyMap(),
+                annotations = pc.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Value" to "${pc.value ?: "—"}",
+                    "Global Default" to "${pc.globalDefault ?: false}",
+                ),
+            )
+        },
+    )
+
     // ── Custom Resource Definitions ─────────────────────────────────────────────
 
     /**
@@ -1393,6 +1463,12 @@ class ReactiveKubeClient(
 
             "poddisruptionbudget" -> namespace?.let { k8s.policy().v1().podDisruptionBudget().inNamespace(it).withName(name).get() }
 
+            "resourcequota" -> namespace?.let { k8s.resourceQuotas().inNamespace(it).withName(name).get() }
+
+            "limitrange" -> namespace?.let { k8s.limitRanges().inNamespace(it).withName(name).get() }
+
+            "priorityclass" -> k8s.scheduling().v1().priorityClasses().withName(name).get()
+
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
                 val rdc = ResourceDefinitionContext.Builder()
@@ -1638,6 +1714,18 @@ class ReactiveKubeClient(
                 val ns = requireNamespace("PodDisruptionBudget", namespace)
                 k8s.policy().v1().podDisruptionBudget().inNamespace(ns).withName(name).delete()
             }
+
+            "resourcequota" -> {
+                val ns = requireNamespace("ResourceQuota", namespace)
+                k8s.resourceQuotas().inNamespace(ns).withName(name).delete()
+            }
+
+            "limitrange" -> {
+                val ns = requireNamespace("LimitRange", namespace)
+                k8s.limitRanges().inNamespace(ns).withName(name).delete()
+            }
+
+            "priorityclass" -> k8s.scheduling().v1().priorityClasses().withName(name).delete()
 
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)

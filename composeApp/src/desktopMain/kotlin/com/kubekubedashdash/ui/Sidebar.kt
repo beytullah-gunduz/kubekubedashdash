@@ -69,6 +69,7 @@ import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
+import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
@@ -77,6 +78,7 @@ import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.expand_more_filled
+import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.graph_3_24
@@ -89,6 +91,7 @@ import com.kubekubedashdash.resources.notifications_filled
 import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.resources.schedule_filled
 import com.kubekubedashdash.resources.security_filled
+import com.kubekubedashdash.resources.sell_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
@@ -184,6 +187,12 @@ fun Sidebar(
             SidebarSection("Autoscaling & Disruption", collapsed) {
                 SidebarItem(Res.drawable.swap_horiz_filled, "HPA", currentScreen is Screen.Main.HorizontalPodAutoscalers, collapsed) { onNavigate(Screen.Main.HorizontalPodAutoscalers) }
                 SidebarItem(Res.drawable.monitor_heart_filled, "Pod Disruption Budgets", currentScreen is Screen.Main.PodDisruptionBudgets, collapsed) { onNavigate(Screen.Main.PodDisruptionBudgets) }
+            }
+
+            SidebarSection("Governance", collapsed) {
+                SidebarItem(Res.drawable.category_filled, "Resource Quotas", currentScreen is Screen.Main.ResourceQuotas, collapsed) { onNavigate(Screen.Main.ResourceQuotas) }
+                SidebarItem(Res.drawable.filter_list_filled, "Limit Ranges", currentScreen is Screen.Main.LimitRanges, collapsed) { onNavigate(Screen.Main.LimitRanges) }
+                SidebarItem(Res.drawable.sell_filled, "Priority Classes", currentScreen is Screen.Main.PriorityClasses, collapsed) { onNavigate(Screen.Main.PriorityClasses) }
             }
 
             CrdSection(currentScreen, onNavigate, collapsed)

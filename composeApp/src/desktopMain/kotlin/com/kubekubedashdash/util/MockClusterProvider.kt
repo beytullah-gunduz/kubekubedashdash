@@ -15,6 +15,7 @@ import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.LimitRangeBuilder
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.api.model.Node
 import io.fabric8.kubernetes.api.model.NodeAddressBuilder
@@ -32,6 +33,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.PodSpecBuilder
 import io.fabric8.kubernetes.api.model.PodStatusBuilder
 import io.fabric8.kubernetes.api.model.Quantity
+import io.fabric8.kubernetes.api.model.ResourceQuotaBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.api.model.ServiceAccountBuilder
 import io.fabric8.kubernetes.api.model.ServiceBuilder
@@ -65,6 +67,7 @@ import io.fabric8.kubernetes.api.model.rbac.RoleBindingBuilder
 import io.fabric8.kubernetes.api.model.rbac.RoleBuilder
 import io.fabric8.kubernetes.api.model.rbac.RoleRefBuilder
 import io.fabric8.kubernetes.api.model.rbac.SubjectBuilder
+import io.fabric8.kubernetes.api.model.scheduling.v1.PriorityClassBuilder
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
@@ -1347,6 +1350,69 @@ object MockClusterProvider {
         ).create()
 
         log.info("Mock cluster seeded autoscaling/disruption: 2 HPAs, 2 PDBs")
+
+        // ── Governance ──────────────────────────────────────────────────────────
+        // ResourceQuotas (namespaced)
+        client.resourceQuotas().inNamespace("default").resource(
+            ResourceQuotaBuilder()
+                .withNewMetadata()
+                .withName("default-quota").withNamespace("default").withCreationTimestamp(minutesAgo(4320))
+                .endMetadata()
+                .withNewSpec()
+                .addToHard("pods", Quantity("10"))
+                .addToHard("requests.cpu", Quantity("4"))
+                .addToHard("requests.memory", Quantity("8Gi"))
+                .endSpec()
+                .build(),
+        ).create()
+        client.resourceQuotas().inNamespace("production").resource(
+            ResourceQuotaBuilder()
+                .withNewMetadata()
+                .withName("prod-quota").withNamespace("production").withCreationTimestamp(minutesAgo(2880))
+                .endMetadata()
+                .withNewSpec()
+                .addToHard("pods", Quantity("50"))
+                .addToHard("requests.cpu", Quantity("16"))
+                .addToHard("requests.memory", Quantity("32Gi"))
+                .endSpec()
+                .build(),
+        ).create()
+
+        // LimitRanges (namespaced)
+        client.limitRanges().inNamespace("default").resource(
+            LimitRangeBuilder()
+                .withNewMetadata()
+                .withName("default-limits").withNamespace("default").withCreationTimestamp(minutesAgo(4320))
+                .endMetadata()
+                .withNewSpec()
+                .addNewLimit()
+                .withType("Container")
+                .endLimit()
+                .endSpec()
+                .build(),
+        ).create()
+
+        // PriorityClasses (cluster-scoped)
+        client.scheduling().v1().priorityClasses().resource(
+            PriorityClassBuilder()
+                .withNewMetadata()
+                .withName("high-priority").withCreationTimestamp(minutesAgo(8640))
+                .endMetadata()
+                .withValue(1000000)
+                .withGlobalDefault(false)
+                .build(),
+        ).create()
+        client.scheduling().v1().priorityClasses().resource(
+            PriorityClassBuilder()
+                .withNewMetadata()
+                .withName("low-priority").withCreationTimestamp(minutesAgo(8640))
+                .endMetadata()
+                .withValue(100)
+                .withGlobalDefault(false)
+                .build(),
+        ).create()
+
+        log.info("Mock cluster seeded governance: 2 ResourceQuotas, 1 LimitRange, 2 PriorityClasses")
 
         // ── CRDs + CR instances ─────────────────────────────────────────────────
         seedSparkAndArgo(client)

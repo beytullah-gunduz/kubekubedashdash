@@ -71,6 +71,10 @@ sealed class Screen(val title: String) {
         data object HorizontalPodAutoscalers : Main("Horizontal Pod Autoscalers")
         data object PodDisruptionBudgets : Main("Pod Disruption Budgets")
 
+        data object ResourceQuotas : Main("Resource Quotas")
+        data object LimitRanges : Main("Limit Ranges")
+        data object PriorityClasses : Main("Priority Classes")
+
         data object ClusterTopology : Main("Topology")
 
         /**

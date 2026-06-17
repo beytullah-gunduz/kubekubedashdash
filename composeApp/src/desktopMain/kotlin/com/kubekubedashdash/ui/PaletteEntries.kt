@@ -10,6 +10,7 @@ import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
+import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.dashboard_filled
@@ -17,6 +18,7 @@ import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.extension_filled
+import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.hub
@@ -29,6 +31,7 @@ import com.kubekubedashdash.resources.notifications_filled
 import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.resources.schedule_filled
 import com.kubekubedashdash.resources.security_filled
+import com.kubekubedashdash.resources.sell_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
@@ -79,6 +82,9 @@ internal fun rememberPaletteEntries(
             paletteScreen("Cluster Role Bindings", Res.drawable.account_tree_filled, Screen.Main.ClusterRoleBindings, onNavigate),
             paletteScreen("Horizontal Pod Autoscalers", Res.drawable.swap_horiz_filled, Screen.Main.HorizontalPodAutoscalers, onNavigate),
             paletteScreen("Pod Disruption Budgets", Res.drawable.monitor_heart_filled, Screen.Main.PodDisruptionBudgets, onNavigate),
+            paletteScreen("Resource Quotas", Res.drawable.category_filled, Screen.Main.ResourceQuotas, onNavigate),
+            paletteScreen("Limit Ranges", Res.drawable.filter_list_filled, Screen.Main.LimitRanges, onNavigate),
+            paletteScreen("Priority Classes", Res.drawable.sell_filled, Screen.Main.PriorityClasses, onNavigate),
         )
     }
 

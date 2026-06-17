@@ -58,6 +58,12 @@ fun kindColor(kind: String): Color = when (kind) {
 
     "PodDisruptionBudget" -> Color(0xFF66BB6A)
 
+    "ResourceQuota" -> Color(0xFFEF6C00)
+
+    "LimitRange" -> Color(0xFFF57C00)
+
+    "PriorityClass" -> Color(0xFFEC407A)
+
     else -> Color(0xFF6B7280)
 }
 

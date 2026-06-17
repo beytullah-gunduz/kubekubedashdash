@@ -185,6 +185,12 @@ fun ContentRouter(
 
             is Screen.Main.PodDisruptionBudgets -> genericKind("PodDisruptionBudget", reactiveClient.podDisruptionBudgets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
+            is Screen.Main.ResourceQuotas -> genericKind("ResourceQuota", reactiveClient.resourceQuotas, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.LimitRanges -> genericKind("LimitRange", reactiveClient.limitRanges, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.PriorityClasses -> genericKind("PriorityClass", reactiveClient.priorityClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
                 val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {

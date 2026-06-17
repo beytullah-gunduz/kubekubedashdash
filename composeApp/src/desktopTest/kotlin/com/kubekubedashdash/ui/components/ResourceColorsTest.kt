@@ -57,4 +57,11 @@ class ResourceColorsTest {
         listOf("HorizontalPodAutoscaler", "PodDisruptionBudget")
             .forEach { assertNotEquals(default, kindColor(it), "kindColor($it) should not be the fallback") }
     }
+
+    @Test
+    fun `governance kinds have dedicated colours`() {
+        val default = Color(0xFF6B7280)
+        listOf("ResourceQuota", "LimitRange", "PriorityClass")
+            .forEach { assertNotEquals(default, kindColor(it), "kindColor($it) should not be the fallback") }
+    }
 }

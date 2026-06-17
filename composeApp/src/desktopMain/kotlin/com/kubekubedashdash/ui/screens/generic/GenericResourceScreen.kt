@@ -29,13 +29,16 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.article_filled
+import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
+import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.lock_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
+import com.kubekubedashdash.resources.sell_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
@@ -95,6 +98,9 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
     "rolebinding", "clusterrolebinding" -> Res.drawable.account_tree_filled
     "horizontalpodautoscaler" -> Res.drawable.swap_horiz_filled
     "poddisruptionbudget" -> Res.drawable.monitor_heart_filled
+    "resourcequota" -> Res.drawable.category_filled
+    "limitrange" -> Res.drawable.filter_list_filled
+    "priorityclass" -> Res.drawable.sell_filled
     else -> Res.drawable.list_filled
 }
 
