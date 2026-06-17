@@ -30,6 +30,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.category_filled
+import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.filter_list_filled
@@ -101,6 +102,8 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
     "resourcequota" -> Res.drawable.category_filled
     "limitrange" -> Res.drawable.filter_list_filled
     "priorityclass" -> Res.drawable.sell_filled
+    "validatingwebhookconfiguration" -> Res.drawable.code_filled
+    "mutatingwebhookconfiguration" -> Res.drawable.code_filled
     else -> Res.drawable.list_filled
 }
 

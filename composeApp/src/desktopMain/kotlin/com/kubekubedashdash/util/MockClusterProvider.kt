@@ -39,6 +39,8 @@ import io.fabric8.kubernetes.api.model.ServiceAccountBuilder
 import io.fabric8.kubernetes.api.model.ServiceBuilder
 import io.fabric8.kubernetes.api.model.ServicePortBuilder
 import io.fabric8.kubernetes.api.model.ServiceSpecBuilder
+import io.fabric8.kubernetes.api.model.admissionregistration.v1.MutatingWebhookConfigurationBuilder
+import io.fabric8.kubernetes.api.model.admissionregistration.v1.ValidatingWebhookConfigurationBuilder
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceColumnDefinitionBuilder
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionBuilder
 import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsBuilder
@@ -1413,6 +1415,34 @@ object MockClusterProvider {
         ).create()
 
         log.info("Mock cluster seeded governance: 2 ResourceQuotas, 1 LimitRange, 2 PriorityClasses")
+
+        // ValidatingWebhookConfigurations (cluster-scoped)
+        client.admissionRegistration().v1().validatingWebhookConfigurations().resource(
+            ValidatingWebhookConfigurationBuilder()
+                .withNewMetadata().withName("policy-validator").withCreationTimestamp(minutesAgo(4320)).endMetadata()
+                .addNewWebhook()
+                .withName("validate.policy.example.com")
+                .withAdmissionReviewVersions("v1")
+                .withSideEffects("None")
+                .withNewClientConfig().endClientConfig()
+                .endWebhook()
+                .build(),
+        ).create()
+
+        // MutatingWebhookConfigurations (cluster-scoped)
+        client.admissionRegistration().v1().mutatingWebhookConfigurations().resource(
+            MutatingWebhookConfigurationBuilder()
+                .withNewMetadata().withName("sidecar-injector").withCreationTimestamp(minutesAgo(4320)).endMetadata()
+                .addNewWebhook()
+                .withName("inject.sidecar.example.com")
+                .withAdmissionReviewVersions("v1")
+                .withSideEffects("None")
+                .withNewClientConfig().endClientConfig()
+                .endWebhook()
+                .build(),
+        ).create()
+
+        log.info("Mock cluster seeded admission control: 1 ValidatingWebhookConfiguration, 1 MutatingWebhookConfiguration")
 
         // ── CRDs + CR instances ─────────────────────────────────────────────────
         seedSparkAndArgo(client)

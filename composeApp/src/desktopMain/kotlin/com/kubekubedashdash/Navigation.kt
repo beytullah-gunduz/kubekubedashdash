@@ -75,6 +75,9 @@ sealed class Screen(val title: String) {
         data object LimitRanges : Main("Limit Ranges")
         data object PriorityClasses : Main("Priority Classes")
 
+        data object ValidatingWebhookConfigurations : Main("Validating Webhook Configurations")
+        data object MutatingWebhookConfigurations : Main("Mutating Webhook Configurations")
+
         data object ClusterTopology : Main("Topology")
 
         /**

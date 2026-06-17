@@ -64,6 +64,10 @@ fun kindColor(kind: String): Color = when (kind) {
 
     "PriorityClass" -> Color(0xFFEC407A)
 
+    "ValidatingWebhookConfiguration" -> Color(0xFF00897B)
+
+    "MutatingWebhookConfiguration" -> Color(0xFF00ACC1)
+
     else -> Color(0xFF6B7280)
 }
 

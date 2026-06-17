@@ -12,6 +12,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.description_filled
@@ -85,6 +86,8 @@ internal fun rememberPaletteEntries(
             paletteScreen("Resource Quotas", Res.drawable.category_filled, Screen.Main.ResourceQuotas, onNavigate),
             paletteScreen("Limit Ranges", Res.drawable.filter_list_filled, Screen.Main.LimitRanges, onNavigate),
             paletteScreen("Priority Classes", Res.drawable.sell_filled, Screen.Main.PriorityClasses, onNavigate),
+            paletteScreen("Validating Webhook Configurations", Res.drawable.code_filled, Screen.Main.ValidatingWebhookConfigurations, onNavigate),
+            paletteScreen("Mutating Webhook Configurations", Res.drawable.code_filled, Screen.Main.MutatingWebhookConfigurations, onNavigate),
         )
     }
 

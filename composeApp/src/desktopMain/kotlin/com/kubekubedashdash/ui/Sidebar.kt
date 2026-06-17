@@ -72,6 +72,7 @@ import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.cloud_filled
+import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.description_filled
@@ -193,6 +194,11 @@ fun Sidebar(
                 SidebarItem(Res.drawable.category_filled, "Resource Quotas", currentScreen is Screen.Main.ResourceQuotas, collapsed) { onNavigate(Screen.Main.ResourceQuotas) }
                 SidebarItem(Res.drawable.filter_list_filled, "Limit Ranges", currentScreen is Screen.Main.LimitRanges, collapsed) { onNavigate(Screen.Main.LimitRanges) }
                 SidebarItem(Res.drawable.sell_filled, "Priority Classes", currentScreen is Screen.Main.PriorityClasses, collapsed) { onNavigate(Screen.Main.PriorityClasses) }
+            }
+
+            SidebarSection("Admission Control", collapsed) {
+                SidebarItem(Res.drawable.code_filled, "Validating Webhooks", currentScreen is Screen.Main.ValidatingWebhookConfigurations, collapsed) { onNavigate(Screen.Main.ValidatingWebhookConfigurations) }
+                SidebarItem(Res.drawable.code_filled, "Mutating Webhooks", currentScreen is Screen.Main.MutatingWebhookConfigurations, collapsed) { onNavigate(Screen.Main.MutatingWebhookConfigurations) }
             }
 
             CrdSection(currentScreen, onNavigate, collapsed)

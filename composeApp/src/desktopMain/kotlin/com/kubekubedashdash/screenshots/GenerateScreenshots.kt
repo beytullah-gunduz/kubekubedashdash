@@ -183,6 +183,8 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
             "31-resource-quotas" to Screen.Main.ResourceQuotas,
             "32-limit-ranges" to Screen.Main.LimitRanges,
             "33-priority-classes" to Screen.Main.PriorityClasses,
+            "36-validating-webhook-configurations" to Screen.Main.ValidatingWebhookConfigurations,
+            "37-mutating-webhook-configurations" to Screen.Main.MutatingWebhookConfigurations,
         )
 
         for ((slug, screen) in screens) {
@@ -203,10 +205,10 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(300)
         initialWorkspace.showSettings()
         delay(5000L)
-        captureWindow(initialWorkspace.id, outDir.resolve("34-settings.png"))
+        captureWindow(initialWorkspace.id, outDir.resolve("38-settings.png"))
         initialWorkspace.dismissSettings()
         delay(5000L)
-        log.info("captured 34-settings")
+        log.info("captured 38-settings")
 
         log.info("Building light/dark theme comparison")
         sessionVm.navigate(Screen.Main.ClusterOverview)
@@ -255,7 +257,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Capturing All Clusters tab")
         initialWorkspace.setActive(WorkspaceTab.AllClusters.key)
         delay(10_000L)
-        captureWindow(initialWorkspace.id, outDir.resolve("35-all-clusters.png"))
+        captureWindow(initialWorkspace.id, outDir.resolve("39-all-clusters.png"))
         log.info("captured all-clusters")
 
         log.info("Building multi-window showcase (2 windows)")

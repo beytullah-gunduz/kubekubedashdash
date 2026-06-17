@@ -1111,6 +1111,40 @@ class ReactiveKubeClient(
         },
     )
 
+    // ── Admission Control ────────────────────────────────────────────────────────
+
+    val validatingWebhookConfigurations: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.admissionRegistration().v1().validatingWebhookConfigurations().inform(h) },
+        mapper = { x ->
+            GenericResourceInfo(
+                uid = x.metadata.uid ?: "",
+                name = x.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(x.metadata.creationTimestamp),
+                labels = x.metadata.labels ?: emptyMap(),
+                annotations = x.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf("Webhooks" to "${x.webhooks?.size ?: 0}"),
+            )
+        },
+    )
+
+    val mutatingWebhookConfigurations: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.admissionRegistration().v1().mutatingWebhookConfigurations().inform(h) },
+        mapper = { x ->
+            GenericResourceInfo(
+                uid = x.metadata.uid ?: "",
+                name = x.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(x.metadata.creationTimestamp),
+                labels = x.metadata.labels ?: emptyMap(),
+                annotations = x.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf("Webhooks" to "${x.webhooks?.size ?: 0}"),
+            )
+        },
+    )
+
     // ── Custom Resource Definitions ─────────────────────────────────────────────
 
     /**
@@ -1469,6 +1503,10 @@ class ReactiveKubeClient(
 
             "priorityclass" -> k8s.scheduling().v1().priorityClasses().withName(name).get()
 
+            "validatingwebhookconfiguration" -> k8s.admissionRegistration().v1().validatingWebhookConfigurations().withName(name).get()
+
+            "mutatingwebhookconfiguration" -> k8s.admissionRegistration().v1().mutatingWebhookConfigurations().withName(name).get()
+
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
                 val rdc = ResourceDefinitionContext.Builder()
@@ -1726,6 +1764,10 @@ class ReactiveKubeClient(
             }
 
             "priorityclass" -> k8s.scheduling().v1().priorityClasses().withName(name).delete()
+
+            "validatingwebhookconfiguration" -> k8s.admissionRegistration().v1().validatingWebhookConfigurations().withName(name).delete()
+
+            "mutatingwebhookconfiguration" -> k8s.admissionRegistration().v1().mutatingWebhookConfigurations().withName(name).delete()
 
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)

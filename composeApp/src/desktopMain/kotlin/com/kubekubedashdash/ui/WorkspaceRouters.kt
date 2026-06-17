@@ -191,6 +191,10 @@ fun ContentRouter(
 
             is Screen.Main.PriorityClasses -> genericKind("PriorityClass", reactiveClient.priorityClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
+            is Screen.Main.ValidatingWebhookConfigurations -> genericKind("ValidatingWebhookConfiguration", reactiveClient.validatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.MutatingWebhookConfigurations -> genericKind("MutatingWebhookConfiguration", reactiveClient.mutatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
                 val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {

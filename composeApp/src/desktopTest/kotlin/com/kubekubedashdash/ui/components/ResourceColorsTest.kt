@@ -64,4 +64,11 @@ class ResourceColorsTest {
         listOf("ResourceQuota", "LimitRange", "PriorityClass")
             .forEach { assertNotEquals(default, kindColor(it), "kindColor($it) should not be the fallback") }
     }
+
+    @Test
+    fun `admission control kinds have dedicated colours`() {
+        val default = Color(0xFF6B7280)
+        listOf("ValidatingWebhookConfiguration", "MutatingWebhookConfiguration")
+            .forEach { assertNotEquals(default, kindColor(it), "kindColor($it) should not be the fallback") }
+    }
 }
