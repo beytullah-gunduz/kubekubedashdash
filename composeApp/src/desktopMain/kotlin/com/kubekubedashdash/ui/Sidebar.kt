@@ -68,6 +68,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
@@ -169,6 +170,14 @@ fun Sidebar(
                 SidebarItem(Res.drawable.save_filled, "Persistent Volumes", currentScreen is Screen.Main.PersistentVolumes, collapsed) { onNavigate(Screen.Main.PersistentVolumes) }
                 SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims, collapsed) { onNavigate(Screen.Main.PersistentVolumeClaims) }
                 SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses, collapsed) { onNavigate(Screen.Main.StorageClasses) }
+            }
+
+            SidebarSection("Access Control", collapsed) {
+                SidebarItem(Res.drawable.account_tree_filled, "Service Accounts", currentScreen is Screen.Main.ServiceAccounts, collapsed) { onNavigate(Screen.Main.ServiceAccounts) }
+                SidebarItem(Res.drawable.security_filled, "Roles", currentScreen is Screen.Main.Roles, collapsed) { onNavigate(Screen.Main.Roles) }
+                SidebarItem(Res.drawable.security_filled, "Cluster Roles", currentScreen is Screen.Main.ClusterRoles, collapsed) { onNavigate(Screen.Main.ClusterRoles) }
+                SidebarItem(Res.drawable.account_tree_filled, "Role Bindings", currentScreen is Screen.Main.RoleBindings, collapsed) { onNavigate(Screen.Main.RoleBindings) }
+                SidebarItem(Res.drawable.account_tree_filled, "Cluster Role Bindings", currentScreen is Screen.Main.ClusterRoleBindings, collapsed) { onNavigate(Screen.Main.ClusterRoleBindings) }
             }
 
             CrdSection(currentScreen, onNavigate, collapsed)

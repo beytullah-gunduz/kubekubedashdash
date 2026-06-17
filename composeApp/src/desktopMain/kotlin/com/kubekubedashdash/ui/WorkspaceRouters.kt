@@ -171,6 +171,16 @@ fun ContentRouter(
 
             is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
+            is Screen.Main.ServiceAccounts -> genericKind("ServiceAccount", reactiveClient.serviceAccounts, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.Roles -> genericKind("Role", reactiveClient.roles, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.ClusterRoles -> genericKind("ClusterRole", reactiveClient.clusterRoles, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.RoleBindings -> genericKind("RoleBinding", reactiveClient.roleBindings, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.ClusterRoleBindings -> genericKind("ClusterRoleBinding", reactiveClient.clusterRoleBindings, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
                 val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {

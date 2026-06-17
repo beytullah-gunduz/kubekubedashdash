@@ -62,6 +62,12 @@ sealed class Screen(val title: String) {
         data object PersistentVolumeClaims : Main("Persistent Volume Claims")
         data object StorageClasses : Main("Storage Classes")
 
+        data object ServiceAccounts : Main("Service Accounts")
+        data object Roles : Main("Roles")
+        data object ClusterRoles : Main("Cluster Roles")
+        data object RoleBindings : Main("Role Bindings")
+        data object ClusterRoleBindings : Main("Cluster Role Bindings")
+
         data object ClusterTopology : Main("Topology")
 
         /**

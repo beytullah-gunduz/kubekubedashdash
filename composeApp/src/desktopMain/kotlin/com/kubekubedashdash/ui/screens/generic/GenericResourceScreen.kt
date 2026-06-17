@@ -27,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
@@ -88,6 +89,9 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
     "endpoint", "endpoints" -> Res.drawable.settings_ethernet_filled
     "deployment" -> Res.drawable.dynamic_feed_filled
     "service" -> Res.drawable.dns_filled
+    "serviceaccount" -> Res.drawable.account_tree_filled
+    "role", "clusterrole" -> Res.drawable.security_filled
+    "rolebinding", "clusterrolebinding" -> Res.drawable.account_tree_filled
     else -> Res.drawable.list_filled
 }
 

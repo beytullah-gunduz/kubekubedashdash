@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.ui.graphics.Color
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdWarning
 import kotlin.test.Test
@@ -41,5 +42,12 @@ class ResourceColorsTest {
     fun `a heavily restarting pod is red, never amber`() {
         assertEquals(KdError, restartCountColor(100))
         assertNotEquals(KdWarning, restartCountColor(100))
+    }
+
+    @Test
+    fun `rbac kinds have dedicated colours`() {
+        val default = Color(0xFF6B7280)
+        listOf("ServiceAccount", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding")
+            .forEach { assertNotEquals(default, kindColor(it), "kindColor($it) should not be the fallback") }
     }
 }

@@ -33,6 +33,7 @@ import io.fabric8.kubernetes.api.model.PodSpecBuilder
 import io.fabric8.kubernetes.api.model.PodStatusBuilder
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.SecretBuilder
+import io.fabric8.kubernetes.api.model.ServiceAccountBuilder
 import io.fabric8.kubernetes.api.model.ServiceBuilder
 import io.fabric8.kubernetes.api.model.ServicePortBuilder
 import io.fabric8.kubernetes.api.model.ServiceSpecBuilder
@@ -55,6 +56,13 @@ import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetricsBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyBuilder
+import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBindingBuilder
+import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBuilder
+import io.fabric8.kubernetes.api.model.rbac.PolicyRuleBuilder
+import io.fabric8.kubernetes.api.model.rbac.RoleBindingBuilder
+import io.fabric8.kubernetes.api.model.rbac.RoleBuilder
+import io.fabric8.kubernetes.api.model.rbac.RoleRefBuilder
+import io.fabric8.kubernetes.api.model.rbac.SubjectBuilder
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
@@ -1163,6 +1171,113 @@ object MockClusterProvider {
                 .endSpec()
                 .build(),
         ).create()
+
+        // ── RBAC / Access Control ───────────────────────────────────────────────
+        // ServiceAccounts (namespaced)
+        client.serviceAccounts().inNamespace("default").resource(
+            ServiceAccountBuilder()
+                .withNewMetadata()
+                .withName("app-sa").withNamespace("default").withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withAutomountServiceAccountToken(true)
+                .build(),
+        ).create()
+        client.serviceAccounts().inNamespace("production").resource(
+            ServiceAccountBuilder()
+                .withNewMetadata()
+                .withName("deployer").withNamespace("production").withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withSecrets(ObjectReferenceBuilder().withName("deployer-token").build())
+                .build(),
+        ).create()
+
+        // Roles (namespaced)
+        client.rbac().roles().inNamespace("default").resource(
+            RoleBuilder()
+                .withNewMetadata()
+                .withName("pod-reader").withNamespace("default").withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withRules(
+                    PolicyRuleBuilder()
+                        .withApiGroups("")
+                        .withResources("pods", "configmaps")
+                        .withVerbs("get", "list", "watch")
+                        .build(),
+                )
+                .build(),
+        ).create()
+        client.rbac().roles().inNamespace("production").resource(
+            RoleBuilder()
+                .withNewMetadata()
+                .withName("deployer-role").withNamespace("production").withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withRules(
+                    PolicyRuleBuilder()
+                        .withApiGroups("apps")
+                        .withResources("deployments", "replicasets")
+                        .withVerbs("get", "list", "update", "patch")
+                        .build(),
+                    PolicyRuleBuilder()
+                        .withApiGroups("")
+                        .withResources("pods")
+                        .withVerbs("get", "list")
+                        .build(),
+                )
+                .build(),
+        ).create()
+
+        // ClusterRoles (cluster-scoped)
+        client.rbac().clusterRoles().resource(
+            ClusterRoleBuilder()
+                .withNewMetadata()
+                .withName("namespace-viewer").withCreationTimestamp(minutesAgo(4320))
+                .endMetadata()
+                .withRules(
+                    PolicyRuleBuilder()
+                        .withApiGroups("")
+                        .withResources("namespaces", "nodes", "pods")
+                        .withVerbs("get", "list", "watch")
+                        .build(),
+                )
+                .build(),
+        ).create()
+
+        // RoleBindings (namespaced)
+        client.rbac().roleBindings().inNamespace("default").resource(
+            RoleBindingBuilder()
+                .withNewMetadata()
+                .withName("read-pods").withNamespace("default").withCreationTimestamp(minutesAgo(1440))
+                .endMetadata()
+                .withRoleRef(
+                    RoleRefBuilder()
+                        .withApiGroup("rbac.authorization.k8s.io").withKind("Role").withName("pod-reader")
+                        .build(),
+                )
+                .withSubjects(
+                    SubjectBuilder().withKind("ServiceAccount").withName("app-sa").withNamespace("default").build(),
+                )
+                .build(),
+        ).create()
+
+        // ClusterRoleBindings (cluster-scoped)
+        client.rbac().clusterRoleBindings().resource(
+            ClusterRoleBindingBuilder()
+                .withNewMetadata()
+                .withName("viewers-global").withCreationTimestamp(minutesAgo(4320))
+                .endMetadata()
+                .withRoleRef(
+                    RoleRefBuilder()
+                        .withApiGroup("rbac.authorization.k8s.io").withKind("ClusterRole").withName("namespace-viewer")
+                        .build(),
+                )
+                .withSubjects(
+                    SubjectBuilder().withKind("ServiceAccount").withName("deployer").withNamespace("production").build(),
+                    SubjectBuilder().withKind("Group").withName("system:authenticated").build(),
+                )
+                .build(),
+        ).create()
+
+        log.info("Mock cluster seeded RBAC: 2 service accounts, 2 roles, 1 cluster role, 1 role binding, 1 cluster role binding")
 
         // ── CRDs + CR instances ─────────────────────────────────────────────────
         seedSparkAndArgo(client)

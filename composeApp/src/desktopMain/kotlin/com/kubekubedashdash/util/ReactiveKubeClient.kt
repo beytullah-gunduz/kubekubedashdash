@@ -873,6 +873,118 @@ class ReactiveKubeClient(
         },
     )
 
+    // ── RBAC / Access Control ───────────────────────────────────────────────────
+
+    val serviceAccounts: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.serviceAccounts().inNamespace(ns).inform(h)
+            } else {
+                k.serviceAccounts().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { sa ->
+            GenericResourceInfo(
+                uid = sa.metadata.uid ?: "",
+                name = sa.metadata.name,
+                namespace = sa.metadata.namespace,
+                status = null,
+                age = formatAge(sa.metadata.creationTimestamp),
+                labels = sa.metadata.labels ?: emptyMap(),
+                annotations = sa.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Secrets" to "${sa.secrets?.size ?: 0}",
+                    "Automount" to (sa.automountServiceAccountToken?.toString() ?: "—"),
+                ),
+            )
+        },
+    )
+
+    val roles: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.rbac().roles().inNamespace(ns).inform(h)
+            } else {
+                k.rbac().roles().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { role ->
+            GenericResourceInfo(
+                uid = role.metadata.uid ?: "",
+                name = role.metadata.name,
+                namespace = role.metadata.namespace,
+                status = null,
+                age = formatAge(role.metadata.creationTimestamp),
+                labels = role.metadata.labels ?: emptyMap(),
+                annotations = role.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf("Rules" to "${role.rules?.size ?: 0}"),
+            )
+        },
+    )
+
+    val clusterRoles: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.rbac().clusterRoles().inform(h) },
+        mapper = { cr ->
+            GenericResourceInfo(
+                uid = cr.metadata.uid ?: "",
+                name = cr.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(cr.metadata.creationTimestamp),
+                labels = cr.metadata.labels ?: emptyMap(),
+                annotations = cr.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Rules" to "${cr.rules?.size ?: 0}",
+                    "Aggregated" to if (cr.aggregationRule != null) "yes" else "—",
+                ),
+            )
+        },
+    )
+
+    val roleBindings: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.rbac().roleBindings().inNamespace(ns).inform(h)
+            } else {
+                k.rbac().roleBindings().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { rb ->
+            GenericResourceInfo(
+                uid = rb.metadata.uid ?: "",
+                name = rb.metadata.name,
+                namespace = rb.metadata.namespace,
+                status = null,
+                age = formatAge(rb.metadata.creationTimestamp),
+                labels = rb.metadata.labels ?: emptyMap(),
+                annotations = rb.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Role" to "${rb.roleRef?.kind ?: ""}/${rb.roleRef?.name ?: ""}",
+                    "Subjects" to "${rb.subjects?.size ?: 0}",
+                ),
+            )
+        },
+    )
+
+    val clusterRoleBindings: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+        inform = { k, h -> k.rbac().clusterRoleBindings().inform(h) },
+        mapper = { crb ->
+            GenericResourceInfo(
+                uid = crb.metadata.uid ?: "",
+                name = crb.metadata.name,
+                namespace = null,
+                status = null,
+                age = formatAge(crb.metadata.creationTimestamp),
+                labels = crb.metadata.labels ?: emptyMap(),
+                annotations = crb.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Role" to "${crb.roleRef?.kind ?: ""}/${crb.roleRef?.name ?: ""}",
+                    "Subjects" to "${crb.subjects?.size ?: 0}",
+                ),
+            )
+        },
+    )
+
     // ── Custom Resource Definitions ─────────────────────────────────────────────
 
     /**
@@ -1211,6 +1323,16 @@ class ReactiveKubeClient(
 
             "storageclass" -> k8s.storage().v1().storageClasses().withName(name).get()
 
+            "serviceaccount" -> namespace?.let { k8s.serviceAccounts().inNamespace(it).withName(name).get() }
+
+            "role" -> namespace?.let { k8s.rbac().roles().inNamespace(it).withName(name).get() }
+
+            "clusterrole" -> k8s.rbac().clusterRoles().withName(name).get()
+
+            "rolebinding" -> namespace?.let { k8s.rbac().roleBindings().inNamespace(it).withName(name).get() }
+
+            "clusterrolebinding" -> k8s.rbac().clusterRoleBindings().withName(name).get()
+
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
                 val rdc = ResourceDefinitionContext.Builder()
@@ -1427,6 +1549,25 @@ class ReactiveKubeClient(
             }
 
             "namespace" -> k8s.namespaces().withName(name).delete()
+
+            "serviceaccount" -> {
+                val ns = requireNamespace("ServiceAccount", namespace)
+                k8s.serviceAccounts().inNamespace(ns).withName(name).delete()
+            }
+
+            "role" -> {
+                val ns = requireNamespace("Role", namespace)
+                k8s.rbac().roles().inNamespace(ns).withName(name).delete()
+            }
+
+            "clusterrole" -> k8s.rbac().clusterRoles().withName(name).delete()
+
+            "rolebinding" -> {
+                val ns = requireNamespace("RoleBinding", namespace)
+                k8s.rbac().roleBindings().inNamespace(ns).withName(name).delete()
+            }
+
+            "clusterrolebinding" -> k8s.rbac().clusterRoleBindings().withName(name).delete()
 
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
