@@ -9,6 +9,7 @@ import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.dashboard_filled
@@ -69,6 +70,11 @@ internal fun rememberPaletteEntries(
             paletteScreen("Persistent Volumes", Res.drawable.save_filled, Screen.Main.PersistentVolumes, onNavigate),
             paletteScreen("PV Claims", Res.drawable.folder_open_filled, Screen.Main.PersistentVolumeClaims, onNavigate),
             paletteScreen("Storage Classes", Res.drawable.list_filled, Screen.Main.StorageClasses, onNavigate),
+            paletteScreen("Service Accounts", Res.drawable.account_tree_filled, Screen.Main.ServiceAccounts, onNavigate),
+            paletteScreen("Roles", Res.drawable.security_filled, Screen.Main.Roles, onNavigate),
+            paletteScreen("Cluster Roles", Res.drawable.security_filled, Screen.Main.ClusterRoles, onNavigate),
+            paletteScreen("Role Bindings", Res.drawable.account_tree_filled, Screen.Main.RoleBindings, onNavigate),
+            paletteScreen("Cluster Role Bindings", Res.drawable.account_tree_filled, Screen.Main.ClusterRoleBindings, onNavigate),
         )
     }
 

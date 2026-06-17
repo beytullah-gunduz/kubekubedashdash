@@ -46,6 +46,14 @@ fun kindColor(kind: String): Color = when (kind) {
 
     "PersistentVolumeClaim" -> Color(0xFF8D6E63)
 
+    "Role" -> Color(0xFF7E57C2)
+
+    "ClusterRole" -> Color(0xFF9575CD)
+
+    "RoleBinding" -> Color(0xFF5C6BC0)
+
+    "ClusterRoleBinding" -> Color(0xFF7986CB)
+
     else -> Color(0xFF6B7280)
 }
 
