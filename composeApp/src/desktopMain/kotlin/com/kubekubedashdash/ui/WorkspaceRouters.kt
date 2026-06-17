@@ -181,6 +181,10 @@ fun ContentRouter(
 
             is Screen.Main.ClusterRoleBindings -> genericKind("ClusterRoleBinding", reactiveClient.clusterRoleBindings, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
+            is Screen.Main.HorizontalPodAutoscalers -> genericKind("HorizontalPodAutoscaler", reactiveClient.horizontalPodAutoscalers, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
+            is Screen.Main.PodDisruptionBudgets -> genericKind("PodDisruptionBudget", reactiveClient.podDisruptionBudgets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
                 val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {

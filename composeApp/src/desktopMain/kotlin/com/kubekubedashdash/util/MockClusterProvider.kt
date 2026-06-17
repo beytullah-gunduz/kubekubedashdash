@@ -46,6 +46,7 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
 import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
+import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscalerBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.Job
@@ -56,6 +57,7 @@ import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetricsBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyBuilder
+import io.fabric8.kubernetes.api.model.policy.v1.PodDisruptionBudgetBuilder
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBindingBuilder
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBuilder
 import io.fabric8.kubernetes.api.model.rbac.PolicyRuleBuilder
@@ -1278,6 +1280,73 @@ object MockClusterProvider {
         ).create()
 
         log.info("Mock cluster seeded RBAC: 2 service accounts, 2 roles, 1 cluster role, 1 role binding, 1 cluster role binding")
+
+        // ── Autoscaling & Disruption ────────────────────────────────────────────
+        // HorizontalPodAutoscalers (namespaced)
+        client.autoscaling().v2().horizontalPodAutoscalers().inNamespace("production").resource(
+            HorizontalPodAutoscalerBuilder()
+                .withNewMetadata()
+                .withName("web-hpa").withNamespace("production").withCreationTimestamp(minutesAgo(2880))
+                .endMetadata()
+                .withNewSpec()
+                .withNewScaleTargetRef().withApiVersion("apps/v1").withKind("Deployment").withName("web").endScaleTargetRef()
+                .withMinReplicas(2)
+                .withMaxReplicas(10)
+                .endSpec()
+                .withNewStatus()
+                .withCurrentReplicas(3)
+                .withDesiredReplicas(3)
+                .endStatus()
+                .build(),
+        ).create()
+        client.autoscaling().v2().horizontalPodAutoscalers().inNamespace("default").resource(
+            HorizontalPodAutoscalerBuilder()
+                .withNewMetadata()
+                .withName("api-hpa").withNamespace("default").withCreationTimestamp(minutesAgo(720))
+                .endMetadata()
+                .withNewSpec()
+                .withNewScaleTargetRef().withApiVersion("apps/v1").withKind("Deployment").withName("api").endScaleTargetRef()
+                .withMinReplicas(1)
+                .withMaxReplicas(5)
+                .endSpec()
+                .withNewStatus()
+                .withCurrentReplicas(1)
+                .withDesiredReplicas(1)
+                .endStatus()
+                .build(),
+        ).create()
+
+        // PodDisruptionBudgets (namespaced)
+        client.policy().v1().podDisruptionBudget().inNamespace("production").resource(
+            PodDisruptionBudgetBuilder()
+                .withNewMetadata()
+                .withName("web-pdb").withNamespace("production").withCreationTimestamp(minutesAgo(2880))
+                .endMetadata()
+                .withNewSpec()
+                .withNewMinAvailable(2)
+                .withNewSelector().withMatchLabels<String, String>(mapOf("app" to "web")).endSelector()
+                .endSpec()
+                .withNewStatus()
+                .withCurrentHealthy(3).withDesiredHealthy(2).withDisruptionsAllowed(1).withExpectedPods(3)
+                .endStatus()
+                .build(),
+        ).create()
+        client.policy().v1().podDisruptionBudget().inNamespace("default").resource(
+            PodDisruptionBudgetBuilder()
+                .withNewMetadata()
+                .withName("api-pdb").withNamespace("default").withCreationTimestamp(minutesAgo(720))
+                .endMetadata()
+                .withNewSpec()
+                .withNewMaxUnavailable(1)
+                .withNewSelector().withMatchLabels<String, String>(mapOf("app" to "api")).endSelector()
+                .endSpec()
+                .withNewStatus()
+                .withCurrentHealthy(1).withDesiredHealthy(1).withDisruptionsAllowed(0).withExpectedPods(1)
+                .endStatus()
+                .build(),
+        ).create()
+
+        log.info("Mock cluster seeded autoscaling/disruption: 2 HPAs, 2 PDBs")
 
         // ── CRDs + CR instances ─────────────────────────────────────────────────
         seedSparkAndArgo(client)

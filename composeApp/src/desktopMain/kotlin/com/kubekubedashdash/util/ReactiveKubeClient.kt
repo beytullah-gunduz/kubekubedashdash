@@ -985,6 +985,62 @@ class ReactiveKubeClient(
         },
     )
 
+    // ── Autoscaling & Disruption ────────────────────────────────────────────────
+
+    val horizontalPodAutoscalers: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.autoscaling().v2().horizontalPodAutoscalers().inNamespace(ns).inform(h)
+            } else {
+                k.autoscaling().v2().horizontalPodAutoscalers().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { hpa ->
+            GenericResourceInfo(
+                uid = hpa.metadata.uid ?: "",
+                name = hpa.metadata.name,
+                namespace = hpa.metadata.namespace,
+                status = null,
+                age = formatAge(hpa.metadata.creationTimestamp),
+                labels = hpa.metadata.labels ?: emptyMap(),
+                annotations = hpa.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Reference" to "${hpa.spec?.scaleTargetRef?.kind ?: ""}/${hpa.spec?.scaleTargetRef?.name ?: ""}",
+                    "Min" to "${hpa.spec?.minReplicas ?: "—"}",
+                    "Max" to "${hpa.spec?.maxReplicas ?: "—"}",
+                    "Replicas" to "${hpa.status?.currentReplicas ?: 0}",
+                ),
+            )
+        },
+    )
+
+    val podDisruptionBudgets: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.policy().v1().podDisruptionBudget().inNamespace(ns).inform(h)
+            } else {
+                k.policy().v1().podDisruptionBudget().inAnyNamespace().inform(h)
+            }
+        },
+        mapper = { pdb ->
+            GenericResourceInfo(
+                uid = pdb.metadata.uid ?: "",
+                name = pdb.metadata.name,
+                namespace = pdb.metadata.namespace,
+                status = null,
+                age = formatAge(pdb.metadata.creationTimestamp),
+                labels = pdb.metadata.labels ?: emptyMap(),
+                annotations = pdb.metadata.annotations ?: emptyMap(),
+                extraColumns = mapOf(
+                    "Min Available" to (pdb.spec?.minAvailable?.let { it.strVal ?: it.intVal?.toString() } ?: "—"),
+                    "Max Unavailable" to (pdb.spec?.maxUnavailable?.let { it.strVal ?: it.intVal?.toString() } ?: "—"),
+                    "Healthy" to "${pdb.status?.currentHealthy ?: 0}/${pdb.status?.desiredHealthy ?: 0}",
+                    "Allowed" to "${pdb.status?.disruptionsAllowed ?: 0}",
+                ),
+            )
+        },
+    )
+
     // ── Custom Resource Definitions ─────────────────────────────────────────────
 
     /**
@@ -1333,6 +1389,10 @@ class ReactiveKubeClient(
 
             "clusterrolebinding" -> k8s.rbac().clusterRoleBindings().withName(name).get()
 
+            "horizontalpodautoscaler" -> namespace?.let { k8s.autoscaling().v2().horizontalPodAutoscalers().inNamespace(it).withName(name).get() }
+
+            "poddisruptionbudget" -> namespace?.let { k8s.policy().v1().podDisruptionBudget().inNamespace(it).withName(name).get() }
+
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
                 val rdc = ResourceDefinitionContext.Builder()
@@ -1568,6 +1628,16 @@ class ReactiveKubeClient(
             }
 
             "clusterrolebinding" -> k8s.rbac().clusterRoleBindings().withName(name).delete()
+
+            "horizontalpodautoscaler" -> {
+                val ns = requireNamespace("HorizontalPodAutoscaler", namespace)
+                k8s.autoscaling().v2().horizontalPodAutoscalers().inNamespace(ns).withName(name).delete()
+            }
+
+            "poddisruptionbudget" -> {
+                val ns = requireNamespace("PodDisruptionBudget", namespace)
+                k8s.policy().v1().podDisruptionBudget().inNamespace(ns).withName(name).delete()
+            }
 
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)

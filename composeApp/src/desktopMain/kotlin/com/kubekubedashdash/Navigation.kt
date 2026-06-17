@@ -68,6 +68,9 @@ sealed class Screen(val title: String) {
         data object RoleBindings : Main("Role Bindings")
         data object ClusterRoleBindings : Main("Cluster Role Bindings")
 
+        data object HorizontalPodAutoscalers : Main("Horizontal Pod Autoscalers")
+        data object PodDisruptionBudgets : Main("Pod Disruption Budgets")
+
         data object ClusterTopology : Main("Topology")
 
         /**

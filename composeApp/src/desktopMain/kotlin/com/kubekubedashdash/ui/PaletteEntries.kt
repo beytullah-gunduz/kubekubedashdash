@@ -24,12 +24,14 @@ import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.lock_filled
+import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.notifications_filled
 import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.resources.schedule_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
+import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
 import org.jetbrains.compose.resources.DrawableResource
@@ -75,6 +77,8 @@ internal fun rememberPaletteEntries(
             paletteScreen("Cluster Roles", Res.drawable.security_filled, Screen.Main.ClusterRoles, onNavigate),
             paletteScreen("Role Bindings", Res.drawable.account_tree_filled, Screen.Main.RoleBindings, onNavigate),
             paletteScreen("Cluster Role Bindings", Res.drawable.account_tree_filled, Screen.Main.ClusterRoleBindings, onNavigate),
+            paletteScreen("Horizontal Pod Autoscalers", Res.drawable.swap_horiz_filled, Screen.Main.HorizontalPodAutoscalers, onNavigate),
+            paletteScreen("Pod Disruption Budgets", Res.drawable.monitor_heart_filled, Screen.Main.PodDisruptionBudgets, onNavigate),
         )
     }
 

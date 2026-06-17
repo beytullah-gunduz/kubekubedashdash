@@ -155,6 +155,8 @@ private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.ServiceAccounts,
     is Screen.Main.Roles,
     is Screen.Main.RoleBindings,
+    is Screen.Main.HorizontalPodAutoscalers,
+    is Screen.Main.PodDisruptionBudgets,
     is Screen.Main.PersistentVolumeClaims,
     is Screen.Main.ClusterTopology,
     -> true

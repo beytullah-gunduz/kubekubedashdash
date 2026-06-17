@@ -84,6 +84,7 @@ import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.lock_filled
+import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.notifications_filled
 import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.resources.schedule_filled
@@ -178,6 +179,11 @@ fun Sidebar(
                 SidebarItem(Res.drawable.security_filled, "Cluster Roles", currentScreen is Screen.Main.ClusterRoles, collapsed) { onNavigate(Screen.Main.ClusterRoles) }
                 SidebarItem(Res.drawable.account_tree_filled, "Role Bindings", currentScreen is Screen.Main.RoleBindings, collapsed) { onNavigate(Screen.Main.RoleBindings) }
                 SidebarItem(Res.drawable.account_tree_filled, "Cluster Role Bindings", currentScreen is Screen.Main.ClusterRoleBindings, collapsed) { onNavigate(Screen.Main.ClusterRoleBindings) }
+            }
+
+            SidebarSection("Autoscaling & Disruption", collapsed) {
+                SidebarItem(Res.drawable.swap_horiz_filled, "HPA", currentScreen is Screen.Main.HorizontalPodAutoscalers, collapsed) { onNavigate(Screen.Main.HorizontalPodAutoscalers) }
+                SidebarItem(Res.drawable.monitor_heart_filled, "Pod Disruption Budgets", currentScreen is Screen.Main.PodDisruptionBudgets, collapsed) { onNavigate(Screen.Main.PodDisruptionBudgets) }
             }
 
             CrdSection(currentScreen, onNavigate, collapsed)

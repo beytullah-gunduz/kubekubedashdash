@@ -38,6 +38,7 @@ import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
+import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -92,6 +93,8 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
     "serviceaccount" -> Res.drawable.account_tree_filled
     "role", "clusterrole" -> Res.drawable.security_filled
     "rolebinding", "clusterrolebinding" -> Res.drawable.account_tree_filled
+    "horizontalpodautoscaler" -> Res.drawable.swap_horiz_filled
+    "poddisruptionbudget" -> Res.drawable.monitor_heart_filled
     else -> Res.drawable.list_filled
 }
 

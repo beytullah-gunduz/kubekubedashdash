@@ -54,6 +54,10 @@ fun kindColor(kind: String): Color = when (kind) {
 
     "ClusterRoleBinding" -> Color(0xFF7986CB)
 
+    "HorizontalPodAutoscaler" -> Color(0xFF26A69A)
+
+    "PodDisruptionBudget" -> Color(0xFF66BB6A)
+
     else -> Color(0xFF6B7280)
 }
 
