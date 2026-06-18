@@ -48,7 +48,6 @@ import kotlinx.coroutines.withContext
  * Extension point: add new `when` branches here as more kind-specific tabs are needed.
  * Signature: (kind, selected resource, kube client) → list of [ExtraTab] (may be empty).
  */
-@Composable
 fun kindExtraTabs(
     kind: String,
     res: GenericResourceInfo,
@@ -58,11 +57,15 @@ fun kindExtraTabs(
     else -> emptyList()
 }
 
-@Composable
 private fun resourceQuotaUsageTab(
     res: GenericResourceInfo,
     client: ReactiveKubeClient,
-): ExtraTab {
+): ExtraTab = ExtraTab(
+    label = "Usage",
+    icon = Res.drawable.monitor_heart_filled,
+) {
+    // Fetch lazily, inside the content lambda, so the GET only fires when the
+    // user actually opens the Usage tab (mirrors DeploymentResourceGraphTab).
     var rows by remember(res.uid) { mutableStateOf<List<QuotaUsageRow>?>(null) }
 
     LaunchedEffect(res.uid) {
@@ -72,46 +75,41 @@ private fun resourceQuotaUsageTab(
         }
     }
 
-    return ExtraTab(
-        label = "Usage",
-        icon = Res.drawable.monitor_heart_filled,
-    ) {
-        when {
-            rows == null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-                }
+    when {
+        rows == null -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
             }
+        }
 
-            rows!!.isEmpty() -> {
-                EmptyState(
-                    icon = Res.drawable.monitor_heart_filled,
-                    kind = "No quota usage data",
+        rows!!.isEmpty() -> {
+            EmptyState(
+                icon = Res.drawable.monitor_heart_filled,
+                kind = "No quota usage data",
+            )
+        }
+
+        else -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "Resource Usage",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = KdTextPrimary,
                 )
-            }
-
-            else -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        "Resource Usage",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = KdTextPrimary,
-                    )
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
-                        Column(
-                            modifier = Modifier
-                                .padding(12.dp)
-                                .fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            rows!!.forEach { row -> UsageBarRow(row) }
-                        }
+                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Column(
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        rows!!.forEach { row -> UsageBarRow(row) }
                     }
                 }
             }

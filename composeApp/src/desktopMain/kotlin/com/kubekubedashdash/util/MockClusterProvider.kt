@@ -1375,8 +1375,8 @@ object MockClusterProvider {
                 .addToHard("requests.cpu", Quantity("4"))
                 .addToHard("requests.memory", Quantity("8Gi"))
                 .addToUsed("pods", Quantity("3"))
-                .addToUsed("requests.cpu", Quantity("1500m"))
-                .addToUsed("requests.memory", Quantity("2Gi"))
+                .addToUsed("requests.cpu", Quantity("3"))
+                .addToUsed("requests.memory", Quantity("7Gi"))
                 .endStatus()
                 .build(),
         ).create()
