@@ -5,6 +5,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -78,7 +79,10 @@ import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenVi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
+
+private const val MIN_LIST_DP = 320f
 
 /**
  * English plural for a Kubernetes Kind. Handles the cases that "+s" gets wrong
@@ -159,7 +163,8 @@ fun GenericResourceScreen(
     plural: String? = null,
     onNavigate: (Screen) -> Unit = {},
 ) {
-    val viewModel = viewModel(key = kind) { GenericResourceScreenViewModel(sourceFlow) }
+    var retryKey by remember(kind) { mutableStateOf(0) }
+    val viewModel = viewModel(key = "$kind#$retryKey") { GenericResourceScreenViewModel(sourceFlow) }
     val state by viewModel.state.collectAsState()
     val selected by viewModel.selected.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
@@ -189,7 +194,7 @@ fun GenericResourceScreen(
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
 
-        is ResourceState.Error -> ResourceErrorMessage(s.message)
+        is ResourceState.Error -> ResourceErrorMessage(s.message, onRetry = { retryKey++ })
 
         is ResourceState.Success -> {
             val availableStatuses = remember(s.data) {
@@ -213,239 +218,242 @@ fun GenericResourceScreen(
                 }
             }
 
-            Row(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    ResourceCountHeader(
-                        count = filtered.size,
-                        kind = pluralizeKind(kind),
-                        liveDot = {
-                            LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
-                        },
-                        actions = { compact ->
-                            LabelSelectorChip(
-                                query = labelQuery,
-                                onQueryChange = onLabelQueryChange,
-                                modifier = Modifier.padding(end = 8.dp),
-                                pulseOnEntry = pulseLabelsOnEntry,
-                                compact = compact,
-                            )
-                            AnnotationSelectorChip(
-                                query = annotationQuery,
-                                onQueryChange = onAnnotationQueryChange,
-                                modifier = Modifier.padding(end = 8.dp),
-                                pulseOnEntry = pulseAnnotationsOnEntry,
-                                compact = compact,
-                            )
-                            if (availableStatuses.isNotEmpty()) {
-                                StatusFilterMenu(
-                                    available = availableStatuses,
-                                    selected = activeStatusFilter ?: availableStatuses,
-                                    onToggle = { value ->
-                                        val current = activeStatusFilter ?: availableStatuses
-                                        statusFilter = if (value in current) current - value else current + value
-                                    },
-                                    onSelectAll = { statusFilter = null },
-                                    onSelectNone = { statusFilter = emptySet() },
-                                    compact = compact,
-                                    icon = Res.drawable.monitor_heart_filled,
-                                )
-                            }
-                            AnimatedVisibility(
-                                visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
-                                enter = expandHorizontally() + fadeIn(),
-                                exit = shrinkHorizontally() + fadeOut(),
-                            ) {
-                                ClearFiltersChip(
-                                    onClick = {
-                                        onLabelQueryChange("")
-                                        onAnnotationQueryChange("")
-                                    },
-                                    modifier = Modifier.padding(start = 8.dp),
-                                    compact = compact,
-                                )
-                            }
-                        },
-                    )
-                    if (filtered.isEmpty()) {
-                        EmptyState(
-                            icon = kindIcon(kind),
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val maxPanel = (maxWidth.value - MIN_LIST_DP).coerceAtLeast(280f)
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        ResourceCountHeader(
+                            count = filtered.size,
                             kind = pluralizeKind(kind),
-                        )
-                    } else {
-                        GenericTable(
-                            resources = filtered,
-                            namespacedKind = namespacedKind,
-                            selectedUid = selected?.uid,
-                            onClick = { res -> viewModel.selectItem(res) },
-                            onDelete = { res ->
-                                pendingDelete = res
-                                deleteError = null
+                            liveDot = {
+                                LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                            },
+                            actions = { compact ->
+                                LabelSelectorChip(
+                                    query = labelQuery,
+                                    onQueryChange = onLabelQueryChange,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                    pulseOnEntry = pulseLabelsOnEntry,
+                                    compact = compact,
+                                )
+                                AnnotationSelectorChip(
+                                    query = annotationQuery,
+                                    onQueryChange = onAnnotationQueryChange,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                    pulseOnEntry = pulseAnnotationsOnEntry,
+                                    compact = compact,
+                                )
+                                if (availableStatuses.isNotEmpty()) {
+                                    StatusFilterMenu(
+                                        available = availableStatuses,
+                                        selected = activeStatusFilter ?: availableStatuses,
+                                        onToggle = { value ->
+                                            val current = activeStatusFilter ?: availableStatuses
+                                            statusFilter = if (value in current) current - value else current + value
+                                        },
+                                        onSelectAll = { statusFilter = null },
+                                        onSelectNone = { statusFilter = emptySet() },
+                                        compact = compact,
+                                        icon = Res.drawable.monitor_heart_filled,
+                                    )
+                                }
+                                AnimatedVisibility(
+                                    visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
+                                    enter = expandHorizontally() + fadeIn(),
+                                    exit = shrinkHorizontally() + fadeOut(),
+                                ) {
+                                    ClearFiltersChip(
+                                        onClick = {
+                                            onLabelQueryChange("")
+                                            onAnnotationQueryChange("")
+                                        },
+                                        modifier = Modifier.padding(start = 8.dp),
+                                        compact = compact,
+                                    )
+                                }
                             },
                         )
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = selected != null,
-                    enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
-                    exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
-                ) {
-                    Row(modifier = Modifier.fillMaxHeight()) {
-                        ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceAtLeast(280f) }
-                        selected?.let { res ->
-                            val fields = buildList {
-                                if (namespacedKind && res.namespace != null) {
-                                    add(DetailField("Namespace", res.namespace))
-                                }
-                                if (res.status != null) {
-                                    add(DetailField("Status", res.status, statusColor(res.status)))
-                                }
-                                res.extraColumns.forEach { (key, value) ->
-                                    add(DetailField(key, value))
-                                }
-                                add(DetailField("Age", res.age))
-                            }
-                            val csrActions = if (
-                                kind.equals("CertificateSigningRequest", ignoreCase = true) &&
-                                res.extraColumns["Condition"] == "Pending"
-                            ) {
-                                listOf(
-                                    DetailAction(
-                                        label = "Approve",
-                                        icon = Res.drawable.check_circle_filled,
-                                        destructive = false,
-                                        tint = KdSuccess,
-                                        description = "Issue the certificate for this request — grants the requester the client cert they asked for.",
-                                        enabled = !csrActionInFlight,
-                                        onClick = {
-                                            pendingCsrAction = CsrAction.Approve(res)
-                                            csrActionError = null
-                                        },
-                                    ),
-                                    DetailAction(
-                                        label = "Deny",
-                                        icon = Res.drawable.close_filled,
-                                        destructive = true,
-                                        description = "Reject this certificate request — use when the requester shouldn't be granted a cert.",
-                                        enabled = !csrActionInFlight,
-                                        onClick = {
-                                            pendingCsrAction = CsrAction.Deny(res)
-                                            csrActionError = null
-                                        },
-                                    ),
-                                )
-                            } else {
-                                emptyList()
-                            }
-                            val scaleActions = when (kind.lowercase()) {
-                                "statefulset", "replicaset" -> listOf(
-                                    DetailAction(
-                                        label = "Scale",
-                                        icon = Res.drawable.layers_filled,
-                                        destructive = false,
-                                        description = "Set how many replica pods run — scale up for more traffic, down to save resources.",
-                                        enabled = !scaleInFlight,
-                                        onClick = {
-                                            pendingScale = PendingScale(res)
-                                            scaleError = null
-                                        },
-                                    ),
-                                )
-
-                                else -> emptyList()
-                            }
-                            val restartActions = when (kind.lowercase()) {
-                                "statefulset", "daemonset" -> listOf(
-                                    DetailAction(
-                                        label = "Rollout Restart",
-                                        icon = Res.drawable.rotate_right_filled,
-                                        destructive = false,
-                                        description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
-                                        enabled = !restartInFlight,
-                                        onClick = {
-                                            pendingRestart = PendingRestart(res)
-                                            restartError = null
-                                        },
-                                    ),
-                                )
-
-                                else -> emptyList()
-                            }
-                            val cronJobActions = if (kind.equals("CronJob", ignoreCase = true)) {
-                                val isSuspended = res.status == "Suspended"
-                                listOf(
-                                    DetailAction(
-                                        label = "Trigger Now",
-                                        icon = Res.drawable.rocket_filled,
-                                        destructive = false,
-                                        description = "Run this CronJob immediately — creates a one-off Job from its template, without waiting for the schedule.",
-                                        enabled = !cronJobTriggerInFlight,
-                                        onClick = {
-                                            pendingCronJobTrigger = PendingCronJobTrigger(res)
-                                            cronJobTriggerError = null
-                                        },
-                                    ),
-                                    if (isSuspended) {
-                                        DetailAction(
-                                            label = "Resume",
-                                            icon = Res.drawable.check_circle_filled,
-                                            destructive = false,
-                                            description = "Resume this CronJob — it starts creating Jobs on its schedule again.",
-                                            enabled = !cronJobSuspendInFlight,
-                                            onClick = {
-                                                pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = false)
-                                                cronJobSuspendError = null
-                                            },
-                                        )
-                                    } else {
-                                        DetailAction(
-                                            label = "Suspend",
-                                            icon = Res.drawable.hourglass_empty_filled,
-                                            destructive = false,
-                                            description = "Pause this CronJob — it stops creating new Jobs until resumed (running Jobs keep going).",
-                                            enabled = !cronJobSuspendInFlight,
-                                            onClick = {
-                                                pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = true)
-                                                cronJobSuspendError = null
-                                            },
-                                        )
-                                    },
-                                )
-                            } else {
-                                emptyList()
-                            }
-                            ResourceDetailPanel(
-                                kind = kind,
-                                name = res.name,
-                                namespace = res.namespace,
-                                status = res.status,
-                                fields = fields,
-                                labels = res.labels,
-                                annotations = res.annotations,
-                                onClose = { viewModel.clearSelection() },
-                                modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
-                                extraTabs = kindExtraTabs(kind, res, client, onNavigate),
-                                labelQuery = labelQuery,
-                                onToggleLabel = { k, v ->
-                                    onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))
-                                },
-                                annotationQuery = annotationQuery,
-                                onToggleAnnotation = { k, v ->
-                                    onAnnotationQueryChange(toggleSelectorEntry(annotationQuery, k, v))
-                                },
-                                apiGroup = apiGroup,
-                                apiVersion = apiVersion,
-                                plural = plural,
-                                onDelete = {
+                        if (filtered.isEmpty()) {
+                            EmptyState(
+                                icon = kindIcon(kind),
+                                kind = pluralizeKind(kind),
+                            )
+                        } else {
+                            GenericTable(
+                                resources = filtered,
+                                namespacedKind = namespacedKind,
+                                selectedUid = selected?.uid,
+                                onClick = { res -> viewModel.selectItem(res) },
+                                onDelete = { res ->
                                     pendingDelete = res
                                     deleteError = null
                                 },
-                                actions = csrActions + scaleActions + restartActions + cronJobActions,
                             )
                         }
                     }
+
+                    AnimatedVisibility(
+                        visible = selected != null,
+                        enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
+                        exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
+                    ) {
+                        Row(modifier = Modifier.fillMaxHeight()) {
+                            ResizeHandle { panelWidthDp = (panelWidthDp - it).coerceIn(280f, maxPanel) }
+                            selected?.let { res ->
+                                val fields = buildList {
+                                    if (namespacedKind && res.namespace != null) {
+                                        add(DetailField("Namespace", res.namespace))
+                                    }
+                                    if (res.status != null) {
+                                        add(DetailField("Status", res.status, statusColor(res.status)))
+                                    }
+                                    res.extraColumns.forEach { (key, value) ->
+                                        add(DetailField(key, value))
+                                    }
+                                    add(DetailField("Age", res.age))
+                                }
+                                val csrActions = if (
+                                    kind.equals("CertificateSigningRequest", ignoreCase = true) &&
+                                    res.extraColumns["Condition"] == "Pending"
+                                ) {
+                                    listOf(
+                                        DetailAction(
+                                            label = "Approve",
+                                            icon = Res.drawable.check_circle_filled,
+                                            destructive = false,
+                                            tint = KdSuccess,
+                                            description = "Issue the certificate for this request — grants the requester the client cert they asked for.",
+                                            enabled = !csrActionInFlight,
+                                            onClick = {
+                                                pendingCsrAction = CsrAction.Approve(res)
+                                                csrActionError = null
+                                            },
+                                        ),
+                                        DetailAction(
+                                            label = "Deny",
+                                            icon = Res.drawable.close_filled,
+                                            destructive = true,
+                                            description = "Reject this certificate request — use when the requester shouldn't be granted a cert.",
+                                            enabled = !csrActionInFlight,
+                                            onClick = {
+                                                pendingCsrAction = CsrAction.Deny(res)
+                                                csrActionError = null
+                                            },
+                                        ),
+                                    )
+                                } else {
+                                    emptyList()
+                                }
+                                val scaleActions = when (kind.lowercase()) {
+                                    "statefulset", "replicaset" -> listOf(
+                                        DetailAction(
+                                            label = "Scale",
+                                            icon = Res.drawable.layers_filled,
+                                            destructive = false,
+                                            description = "Set how many replica pods run — scale up for more traffic, down to save resources.",
+                                            enabled = !scaleInFlight,
+                                            onClick = {
+                                                pendingScale = PendingScale(res)
+                                                scaleError = null
+                                            },
+                                        ),
+                                    )
+
+                                    else -> emptyList()
+                                }
+                                val restartActions = when (kind.lowercase()) {
+                                    "statefulset", "daemonset" -> listOf(
+                                        DetailAction(
+                                            label = "Rollout Restart",
+                                            icon = Res.drawable.rotate_right_filled,
+                                            destructive = false,
+                                            description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
+                                            enabled = !restartInFlight,
+                                            onClick = {
+                                                pendingRestart = PendingRestart(res)
+                                                restartError = null
+                                            },
+                                        ),
+                                    )
+
+                                    else -> emptyList()
+                                }
+                                val cronJobActions = if (kind.equals("CronJob", ignoreCase = true)) {
+                                    val isSuspended = res.status == "Suspended"
+                                    listOf(
+                                        DetailAction(
+                                            label = "Trigger Now",
+                                            icon = Res.drawable.rocket_filled,
+                                            destructive = false,
+                                            description = "Run this CronJob immediately — creates a one-off Job from its template, without waiting for the schedule.",
+                                            enabled = !cronJobTriggerInFlight,
+                                            onClick = {
+                                                pendingCronJobTrigger = PendingCronJobTrigger(res)
+                                                cronJobTriggerError = null
+                                            },
+                                        ),
+                                        if (isSuspended) {
+                                            DetailAction(
+                                                label = "Resume",
+                                                icon = Res.drawable.check_circle_filled,
+                                                destructive = false,
+                                                description = "Resume this CronJob — it starts creating Jobs on its schedule again.",
+                                                enabled = !cronJobSuspendInFlight,
+                                                onClick = {
+                                                    pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = false)
+                                                    cronJobSuspendError = null
+                                                },
+                                            )
+                                        } else {
+                                            DetailAction(
+                                                label = "Suspend",
+                                                icon = Res.drawable.hourglass_empty_filled,
+                                                destructive = false,
+                                                description = "Pause this CronJob — it stops creating new Jobs until resumed (running Jobs keep going).",
+                                                enabled = !cronJobSuspendInFlight,
+                                                onClick = {
+                                                    pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = true)
+                                                    cronJobSuspendError = null
+                                                },
+                                            )
+                                        },
+                                    )
+                                } else {
+                                    emptyList()
+                                }
+                                ResourceDetailPanel(
+                                    kind = kind,
+                                    name = res.name,
+                                    namespace = res.namespace,
+                                    status = res.status,
+                                    fields = fields,
+                                    labels = res.labels,
+                                    annotations = res.annotations,
+                                    onClose = { viewModel.clearSelection() },
+                                    modifier = Modifier.width(panelWidthDp.coerceIn(280f, maxPanel).dp).fillMaxHeight(),
+                                    extraTabs = kindExtraTabs(kind, res, client, onNavigate),
+                                    labelQuery = labelQuery,
+                                    onToggleLabel = { k, v ->
+                                        onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))
+                                    },
+                                    annotationQuery = annotationQuery,
+                                    onToggleAnnotation = { k, v ->
+                                        onAnnotationQueryChange(toggleSelectorEntry(annotationQuery, k, v))
+                                    },
+                                    apiGroup = apiGroup,
+                                    apiVersion = apiVersion,
+                                    plural = plural,
+                                    onDelete = {
+                                        pendingDelete = res
+                                        deleteError = null
+                                    },
+                                    actions = csrActions + scaleActions + restartActions + cronJobActions,
+                                )
+                            }
+                        }
+                    }
                 }
-            }
+            } // end BoxWithConstraints
         }
     }
 
@@ -460,15 +468,17 @@ fun GenericResourceScreen(
             onConfirm = {
                 deleteInFlight = true
                 deleteError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.deleteResource(
-                        kind = kind,
-                        name = target.name,
-                        namespace = target.namespace,
-                        group = apiGroup,
-                        version = apiVersion,
-                        plural = plural,
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.deleteResource(
+                            kind = kind,
+                            name = target.name,
+                            namespace = target.namespace,
+                            group = apiGroup,
+                            version = apiVersion,
+                            plural = plural,
+                        )
+                    }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },
@@ -499,11 +509,13 @@ fun GenericResourceScreen(
             onConfirm = {
                 csrActionInFlight = true
                 csrActionError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = if (isApprove) {
-                        client.approveCsr(action.target.name)
-                    } else {
-                        client.denyCsr(action.target.name)
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        if (isApprove) {
+                            client.approveCsr(action.target.name)
+                        } else {
+                            client.denyCsr(action.target.name)
+                        }
                     }
                     csrActionInFlight = false
                     result.fold(
@@ -533,13 +545,15 @@ fun GenericResourceScreen(
             onConfirm = { replicas ->
                 scaleInFlight = true
                 scaleError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.scaleWorkload(
-                        kind = kind,
-                        name = ps.target.name,
-                        namespace = ps.target.namespace ?: "",
-                        replicas = replicas,
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.scaleWorkload(
+                            kind = kind,
+                            name = ps.target.name,
+                            namespace = ps.target.namespace ?: "",
+                            replicas = replicas,
+                        )
+                    }
                     scaleInFlight = false
                     result.fold(
                         onSuccess = { pendingScale = null },
@@ -565,12 +579,14 @@ fun GenericResourceScreen(
             onConfirm = {
                 restartInFlight = true
                 restartError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.restartWorkload(
-                        kind = kind,
-                        name = pr.target.name,
-                        namespace = pr.target.namespace ?: "",
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.restartWorkload(
+                            kind = kind,
+                            name = pr.target.name,
+                            namespace = pr.target.namespace ?: "",
+                        )
+                    }
                     restartInFlight = false
                     result.fold(
                         onSuccess = { pendingRestart = null },
@@ -596,11 +612,13 @@ fun GenericResourceScreen(
             onConfirm = {
                 cronJobTriggerInFlight = true
                 cronJobTriggerError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.triggerCronJob(
-                        name = pt.target.name,
-                        namespace = pt.target.namespace ?: "",
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.triggerCronJob(
+                            name = pt.target.name,
+                            namespace = pt.target.namespace ?: "",
+                        )
+                    }
                     cronJobTriggerInFlight = false
                     result.fold(
                         onSuccess = { pendingCronJobTrigger = null },
@@ -631,12 +649,14 @@ fun GenericResourceScreen(
             onConfirm = {
                 cronJobSuspendInFlight = true
                 cronJobSuspendError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.setCronJobSuspend(
-                        name = ps.target.name,
-                        namespace = ps.target.namespace ?: "",
-                        suspend = ps.suspend,
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.setCronJobSuspend(
+                            name = ps.target.name,
+                            namespace = ps.target.namespace ?: "",
+                            suspend = ps.suspend,
+                        )
+                    }
                     cronJobSuspendInFlight = false
                     result.fold(
                         onSuccess = { pendingCronJobSuspend = null },
