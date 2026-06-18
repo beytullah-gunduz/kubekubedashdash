@@ -64,6 +64,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
@@ -189,52 +190,36 @@ internal fun NodeDetailPanel(
                         }
                     }
                     // Cordon / Uncordon toggle
-                    IconButton(
+                    TooltipIconButton(
+                        icon = if (node.unschedulable) Res.drawable.check_circle_filled else Res.drawable.lock_filled,
+                        label = if (node.unschedulable) "Uncordon node" else "Cordon node",
+                        tint = if (node.unschedulable) KdWarning else KdTextSecondary,
+                        enabled = !cordonInFlight && !drainInFlight,
                         onClick = {
                             cordonError = null
                             showCordonDialog = true
                         },
-                        modifier = Modifier.size(28.dp),
-                        enabled = !cordonInFlight && !drainInFlight,
-                    ) {
-                        if (node.unschedulable) {
-                            Icon(
-                                painterResource(Res.drawable.check_circle_filled),
-                                "Uncordon node",
-                                Modifier.size(16.dp),
-                                tint = KdWarning,
-                            )
-                        } else {
-                            Icon(
-                                painterResource(Res.drawable.lock_filled),
-                                "Cordon node",
-                                Modifier.size(16.dp),
-                                tint = KdTextSecondary,
-                            )
-                        }
-                    }
+                    )
 
                     // Drain button
-                    IconButton(
+                    TooltipIconButton(
+                        icon = Res.drawable.clear_all_filled,
+                        label = "Drain node",
+                        tint = KdTextSecondary,
+                        enabled = !cordonInFlight && !drainInFlight,
                         onClick = {
                             drainError = null
                             drainStatus = null
                             showDrainDialog = true
                         },
-                        modifier = Modifier.size(28.dp),
-                        enabled = !cordonInFlight && !drainInFlight,
-                    ) {
-                        Icon(
-                            painterResource(Res.drawable.clear_all_filled),
-                            "Drain node",
-                            Modifier.size(16.dp),
-                            tint = KdTextSecondary,
-                        )
-                    }
+                    )
 
-                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                        Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
-                    }
+                    TooltipIconButton(
+                        icon = Res.drawable.close_filled,
+                        label = "Close",
+                        tint = KdTextSecondary,
+                        onClick = onClose,
+                    )
                 }
 
                 SecondaryTabRow(

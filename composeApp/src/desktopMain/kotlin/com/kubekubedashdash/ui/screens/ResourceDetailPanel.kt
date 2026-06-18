@@ -67,6 +67,7 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -187,27 +188,18 @@ fun ResourceDetailPanel(
                     }
                 }
                 actions.forEach { action ->
-                    IconButton(
-                        onClick = action.onClick,
-                        modifier = Modifier.size(28.dp),
+                    TooltipIconButton(
+                        icon = action.icon,
+                        label = action.label,
+                        tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary,
                         enabled = action.enabled,
-                    ) {
-                        Icon(
-                            painterResource(action.icon),
-                            action.label,
-                            Modifier.size(16.dp),
-                            tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary,
-                        )
-                    }
+                        onClick = action.onClick,
+                    )
                 }
                 if (onDelete != null) {
-                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                        Icon(painterResource(Res.drawable.delete_filled), "Delete", Modifier.size(16.dp), tint = KdError)
-                    }
+                    TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, onClick = onDelete)
                 }
-                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
-                }
+                TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
             }
 
             // Tabs
