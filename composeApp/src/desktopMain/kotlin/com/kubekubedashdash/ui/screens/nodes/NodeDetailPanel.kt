@@ -194,6 +194,11 @@ internal fun NodeDetailPanel(
                         icon = if (node.unschedulable) Res.drawable.check_circle_filled else Res.drawable.lock_filled,
                         label = if (node.unschedulable) "Uncordon node" else "Cordon node",
                         tint = if (node.unschedulable) KdWarning else KdTextSecondary,
+                        description = if (node.unschedulable) {
+                            "Allow pods to be scheduled here again — reverses a cordon once the node is healthy."
+                        } else {
+                            "Stop new pods from scheduling on this node (existing ones keep running) — to quarantine a flaky node."
+                        },
                         enabled = !cordonInFlight && !drainInFlight,
                         onClick = {
                             cordonError = null
@@ -206,6 +211,7 @@ internal fun NodeDetailPanel(
                         icon = Res.drawable.clear_all_filled,
                         label = "Drain node",
                         tint = KdTextSecondary,
+                        description = "Cordon the node and move its pods elsewhere — to safely empty it before maintenance or shutdown.",
                         enabled = !cordonInFlight && !drainInFlight,
                         onClick = {
                             drainError = null

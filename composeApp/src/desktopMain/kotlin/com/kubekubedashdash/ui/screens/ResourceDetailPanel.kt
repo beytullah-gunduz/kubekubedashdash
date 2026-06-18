@@ -100,6 +100,7 @@ data class DetailAction(
     val destructive: Boolean = false,
     val enabled: Boolean = true,
     val tint: Color? = null,
+    val description: String? = null,
     val onClick: () -> Unit,
 )
 
@@ -192,12 +193,19 @@ fun ResourceDetailPanel(
                         icon = action.icon,
                         label = action.label,
                         tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary,
+                        description = action.description,
                         enabled = action.enabled,
                         onClick = action.onClick,
                     )
                 }
                 if (onDelete != null) {
-                    TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, onClick = onDelete)
+                    TooltipIconButton(
+                        Res.drawable.delete_filled,
+                        "Delete",
+                        KdError,
+                        description = "Permanently remove this resource — it won't come back unless recreated.",
+                        onClick = onDelete,
+                    )
                 }
                 TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
             }

@@ -301,6 +301,7 @@ fun GenericResourceScreen(
                                         icon = Res.drawable.check_circle_filled,
                                         destructive = false,
                                         tint = KdSuccess,
+                                        description = "Issue the certificate for this request — grants the requester the client cert they asked for.",
                                         enabled = !csrActionInFlight,
                                         onClick = {
                                             pendingCsrAction = CsrAction.Approve(res)
@@ -311,6 +312,7 @@ fun GenericResourceScreen(
                                         label = "Deny",
                                         icon = Res.drawable.close_filled,
                                         destructive = true,
+                                        description = "Reject this certificate request — use when the requester shouldn't be granted a cert.",
                                         enabled = !csrActionInFlight,
                                         onClick = {
                                             pendingCsrAction = CsrAction.Deny(res)
@@ -327,6 +329,7 @@ fun GenericResourceScreen(
                                         label = "Scale",
                                         icon = Res.drawable.layers_filled,
                                         destructive = false,
+                                        description = "Set how many replica pods run — scale up for more traffic, down to save resources.",
                                         enabled = !scaleInFlight,
                                         onClick = {
                                             pendingScale = PendingScale(res)
@@ -343,6 +346,7 @@ fun GenericResourceScreen(
                                         label = "Rollout Restart",
                                         icon = Res.drawable.rotate_right_filled,
                                         destructive = false,
+                                        description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
                                         enabled = !restartInFlight,
                                         onClick = {
                                             pendingRestart = PendingRestart(res)

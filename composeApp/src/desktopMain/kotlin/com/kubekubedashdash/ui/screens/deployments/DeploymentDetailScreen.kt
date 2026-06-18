@@ -56,6 +56,7 @@ fun DeploymentDetailScreen(
             label = "Scale",
             icon = Res.drawable.layers_filled,
             destructive = false,
+            description = "Set how many replica pods run — scale up for more traffic, down to save resources.",
             enabled = !scaleInFlight,
             onClick = {
                 showScaleDialog = true
@@ -66,6 +67,7 @@ fun DeploymentDetailScreen(
             label = "Rollout Restart",
             icon = Res.drawable.rotate_right_filled,
             destructive = false,
+            description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
             enabled = !restartInFlight,
             onClick = {
                 showRestartDialog = true
