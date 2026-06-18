@@ -54,16 +54,14 @@ import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.AnnotationSelectorChip
-import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.EmptyState
-import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
+import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.ScaleDialog
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
@@ -219,48 +217,33 @@ fun GenericResourceScreen(
                                 LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                             },
                             actions = { compact ->
-                                LabelSelectorChip(
-                                    query = labelQuery,
-                                    onQueryChange = onLabelQueryChange,
-                                    modifier = Modifier.padding(end = 8.dp),
-                                    pulseOnEntry = pulseLabelsOnEntry,
+                                ResourceFilterChips(
+                                    labelQuery = labelQuery,
+                                    onLabelQueryChange = onLabelQueryChange,
+                                    annotationQuery = annotationQuery,
+                                    onAnnotationQueryChange = onAnnotationQueryChange,
                                     compact = compact,
+                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                    statusChip = if (availableStatuses.isNotEmpty()) {
+                                        {
+                                            StatusFilterMenu(
+                                                available = availableStatuses,
+                                                selected = activeStatusFilter ?: availableStatuses,
+                                                onToggle = { value ->
+                                                    val current = activeStatusFilter ?: availableStatuses
+                                                    statusFilter = if (value in current) current - value else current + value
+                                                },
+                                                onSelectAll = { statusFilter = null },
+                                                onSelectNone = { statusFilter = emptySet() },
+                                                compact = compact,
+                                                icon = Res.drawable.monitor_heart_filled,
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
                                 )
-                                AnnotationSelectorChip(
-                                    query = annotationQuery,
-                                    onQueryChange = onAnnotationQueryChange,
-                                    modifier = Modifier.padding(end = 8.dp),
-                                    pulseOnEntry = pulseAnnotationsOnEntry,
-                                    compact = compact,
-                                )
-                                if (availableStatuses.isNotEmpty()) {
-                                    StatusFilterMenu(
-                                        available = availableStatuses,
-                                        selected = activeStatusFilter ?: availableStatuses,
-                                        onToggle = { value ->
-                                            val current = activeStatusFilter ?: availableStatuses
-                                            statusFilter = if (value in current) current - value else current + value
-                                        },
-                                        onSelectAll = { statusFilter = null },
-                                        onSelectNone = { statusFilter = emptySet() },
-                                        compact = compact,
-                                        icon = Res.drawable.monitor_heart_filled,
-                                    )
-                                }
-                                AnimatedVisibility(
-                                    visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
-                                    enter = expandHorizontally() + fadeIn(),
-                                    exit = shrinkHorizontally() + fadeOut(),
-                                ) {
-                                    ClearFiltersChip(
-                                        onClick = {
-                                            onLabelQueryChange("")
-                                            onAnnotationQueryChange("")
-                                        },
-                                        modifier = Modifier.padding(start = 8.dp),
-                                        compact = compact,
-                                    )
-                                }
                             },
                         )
                         if (filtered.isEmpty()) {

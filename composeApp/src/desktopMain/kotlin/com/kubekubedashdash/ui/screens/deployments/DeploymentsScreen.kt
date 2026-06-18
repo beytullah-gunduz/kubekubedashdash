@@ -1,13 +1,7 @@
 package com.kubekubedashdash.ui.screens.deployments
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -17,18 +11,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.AnnotationSelectorChip
-import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
-import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
+import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
@@ -91,35 +82,21 @@ fun DeploymentsScreen(
                     count = filtered.size,
                     kind = "Deployments",
                     actions = { compact ->
-                        LabelSelectorChip(
-                            query = labelQuery,
-                            onQueryChange = onLabelQueryChange,
-                            modifier = Modifier.padding(end = 8.dp),
-                            pulseOnEntry = pulseLabelsOnEntry,
+                        ResourceFilterChips(
+                            labelQuery = labelQuery,
+                            onLabelQueryChange = onLabelQueryChange,
+                            annotationQuery = annotationQuery,
+                            onAnnotationQueryChange = onAnnotationQueryChange,
                             compact = compact,
+                            pulseLabelsOnEntry = pulseLabelsOnEntry,
+                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                            clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
+                            onClear = {
+                                onLabelQueryChange("")
+                                onAnnotationQueryChange("")
+                                degradedOnly = false
+                            },
                         )
-                        AnnotationSelectorChip(
-                            query = annotationQuery,
-                            onQueryChange = onAnnotationQueryChange,
-                            modifier = Modifier.padding(end = 8.dp),
-                            pulseOnEntry = pulseAnnotationsOnEntry,
-                            compact = compact,
-                        )
-                        AnimatedVisibility(
-                            visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
-                            enter = expandHorizontally() + fadeIn(),
-                            exit = shrinkHorizontally() + fadeOut(),
-                        ) {
-                            ClearFiltersChip(
-                                onClick = {
-                                    onLabelQueryChange("")
-                                    onAnnotationQueryChange("")
-                                    degradedOnly = false
-                                },
-                                modifier = Modifier.padding(end = 8.dp),
-                                compact = compact,
-                            )
-                        }
                     },
                 )
                 DeploymentTable(

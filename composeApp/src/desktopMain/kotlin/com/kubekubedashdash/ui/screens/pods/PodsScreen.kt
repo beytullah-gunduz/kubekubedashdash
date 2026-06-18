@@ -1,11 +1,9 @@
 package com.kubekubedashdash.ui.screens.pods
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -33,13 +31,11 @@ import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.AnnotationSelectorChip
-import com.kubekubedashdash.ui.components.ClearFiltersChip
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
-import com.kubekubedashdash.ui.components.LabelSelectorChip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
+import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
@@ -159,48 +155,36 @@ fun PodsScreen(
                                 LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                             },
                             actions = { compact ->
-                                LabelSelectorChip(
-                                    query = labelQuery,
-                                    onQueryChange = onLabelQueryChange,
-                                    modifier = Modifier.padding(end = 8.dp),
-                                    pulseOnEntry = pulseLabelsOnEntry,
+                                ResourceFilterChips(
+                                    labelQuery = labelQuery,
+                                    onLabelQueryChange = onLabelQueryChange,
+                                    annotationQuery = annotationQuery,
+                                    onAnnotationQueryChange = onAnnotationQueryChange,
                                     compact = compact,
-                                )
-                                AnnotationSelectorChip(
-                                    query = annotationQuery,
-                                    onQueryChange = onAnnotationQueryChange,
-                                    modifier = Modifier.padding(end = 8.dp),
-                                    pulseOnEntry = pulseAnnotationsOnEntry,
-                                    compact = compact,
-                                )
-                                StatusFilterMenu(
-                                    available = availableStatuses,
-                                    selected = activeStatusFilter ?: availableStatuses,
-                                    onToggle = { value ->
-                                        val current = activeStatusFilter ?: availableStatuses
-                                        viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                    statusChip = {
+                                        StatusFilterMenu(
+                                            available = availableStatuses,
+                                            selected = activeStatusFilter ?: availableStatuses,
+                                            onToggle = { value ->
+                                                val current = activeStatusFilter ?: availableStatuses
+                                                viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                            },
+                                            onSelectAll = { viewModel.setStatusFilter(null) },
+                                            onSelectNone = { viewModel.setStatusFilter(emptySet()) },
+                                            pulseOnEntry = statusFilter != null,
+                                            compact = compact,
+                                            icon = Res.drawable.monitor_heart_filled,
+                                        )
                                     },
-                                    onSelectAll = { viewModel.setStatusFilter(null) },
-                                    onSelectNone = { viewModel.setStatusFilter(emptySet()) },
-                                    pulseOnEntry = statusFilter != null,
-                                    compact = compact,
-                                    icon = Res.drawable.monitor_heart_filled,
+                                    clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
+                                    onClear = {
+                                        onLabelQueryChange("")
+                                        onAnnotationQueryChange("")
+                                        viewModel.setStatusFilter(null)
+                                    },
                                 )
-                                AnimatedVisibility(
-                                    visible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
-                                    enter = expandHorizontally() + fadeIn(),
-                                    exit = shrinkHorizontally() + fadeOut(),
-                                ) {
-                                    ClearFiltersChip(
-                                        onClick = {
-                                            onLabelQueryChange("")
-                                            onAnnotationQueryChange("")
-                                            viewModel.setStatusFilter(null)
-                                        },
-                                        modifier = Modifier.padding(start = 8.dp),
-                                        compact = compact,
-                                    )
-                                }
                             },
                         )
                         PodTable(
