@@ -38,11 +38,13 @@ import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.filter_list_filled
+import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.language_filled
 import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.lock_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
+import com.kubekubedashdash.resources.rocket_filled
 import com.kubekubedashdash.resources.rotate_right_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.sell_filled
@@ -134,6 +136,12 @@ private data class PendingScale(val target: GenericResourceInfo)
 /** Pending rollout restart: holds the resource to restart. */
 private data class PendingRestart(val target: GenericResourceInfo)
 
+/** Pending CronJob trigger: creates a one-off Job from the CronJob's template. */
+private data class PendingCronJobTrigger(val target: GenericResourceInfo)
+
+/** Pending CronJob suspend/resume toggle. */
+private data class PendingCronJobSuspend(val target: GenericResourceInfo, val suspend: Boolean)
+
 @Composable
 fun GenericResourceScreen(
     kind: String,
@@ -171,6 +179,12 @@ fun GenericResourceScreen(
     var pendingRestart by remember(kind) { mutableStateOf<PendingRestart?>(null) }
     var restartInFlight by remember(kind) { mutableStateOf(false) }
     var restartError by remember(kind) { mutableStateOf<String?>(null) }
+    var pendingCronJobTrigger by remember(kind) { mutableStateOf<PendingCronJobTrigger?>(null) }
+    var cronJobTriggerInFlight by remember(kind) { mutableStateOf(false) }
+    var cronJobTriggerError by remember(kind) { mutableStateOf<String?>(null) }
+    var pendingCronJobSuspend by remember(kind) { mutableStateOf<PendingCronJobSuspend?>(null) }
+    var cronJobSuspendInFlight by remember(kind) { mutableStateOf(false) }
+    var cronJobSuspendError by remember(kind) { mutableStateOf<String?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -357,6 +371,49 @@ fun GenericResourceScreen(
 
                                 else -> emptyList()
                             }
+                            val cronJobActions = if (kind.equals("CronJob", ignoreCase = true)) {
+                                val isSuspended = res.status == "Suspended"
+                                listOf(
+                                    DetailAction(
+                                        label = "Trigger Now",
+                                        icon = Res.drawable.rocket_filled,
+                                        destructive = false,
+                                        description = "Run this CronJob immediately — creates a one-off Job from its template, without waiting for the schedule.",
+                                        enabled = !cronJobTriggerInFlight,
+                                        onClick = {
+                                            pendingCronJobTrigger = PendingCronJobTrigger(res)
+                                            cronJobTriggerError = null
+                                        },
+                                    ),
+                                    if (isSuspended) {
+                                        DetailAction(
+                                            label = "Resume",
+                                            icon = Res.drawable.check_circle_filled,
+                                            destructive = false,
+                                            description = "Resume this CronJob — it starts creating Jobs on its schedule again.",
+                                            enabled = !cronJobSuspendInFlight,
+                                            onClick = {
+                                                pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = false)
+                                                cronJobSuspendError = null
+                                            },
+                                        )
+                                    } else {
+                                        DetailAction(
+                                            label = "Suspend",
+                                            icon = Res.drawable.hourglass_empty_filled,
+                                            destructive = false,
+                                            description = "Pause this CronJob — it stops creating new Jobs until resumed (running Jobs keep going).",
+                                            enabled = !cronJobSuspendInFlight,
+                                            onClick = {
+                                                pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = true)
+                                                cronJobSuspendError = null
+                                            },
+                                        )
+                                    },
+                                )
+                            } else {
+                                emptyList()
+                            }
                             ResourceDetailPanel(
                                 kind = kind,
                                 name = res.name,
@@ -383,7 +440,7 @@ fun GenericResourceScreen(
                                     pendingDelete = res
                                     deleteError = null
                                 },
-                                actions = csrActions + scaleActions + restartActions,
+                                actions = csrActions + scaleActions + restartActions + cronJobActions,
                             )
                         }
                     }
@@ -524,6 +581,72 @@ fun GenericResourceScreen(
             onDismiss = {
                 pendingRestart = null
                 restartError = null
+            },
+        )
+    }
+
+    pendingCronJobTrigger?.let { pt ->
+        ConfirmActionDialog(
+            title = "Trigger CronJob",
+            body = "Run \"${pt.target.name}\" now? This creates a one-off Job from its template.",
+            confirmLabel = "Trigger",
+            destructive = false,
+            inFlight = cronJobTriggerInFlight,
+            errorMessage = cronJobTriggerError,
+            onConfirm = {
+                cronJobTriggerInFlight = true
+                cronJobTriggerError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = client.triggerCronJob(
+                        name = pt.target.name,
+                        namespace = pt.target.namespace ?: "",
+                    )
+                    cronJobTriggerInFlight = false
+                    result.fold(
+                        onSuccess = { pendingCronJobTrigger = null },
+                        onFailure = { cronJobTriggerError = it.message ?: "Trigger failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingCronJobTrigger = null
+                cronJobTriggerError = null
+            },
+        )
+    }
+
+    pendingCronJobSuspend?.let { ps ->
+        val isSuspending = ps.suspend
+        ConfirmActionDialog(
+            title = if (isSuspending) "Suspend CronJob" else "Resume CronJob",
+            body = if (isSuspending) {
+                "Suspend \"${ps.target.name}\"? It will stop creating new Jobs until resumed (running Jobs keep going)."
+            } else {
+                "Resume \"${ps.target.name}\"? It will start creating Jobs on its schedule again."
+            },
+            confirmLabel = if (isSuspending) "Suspend" else "Resume",
+            destructive = false,
+            inFlight = cronJobSuspendInFlight,
+            errorMessage = cronJobSuspendError,
+            onConfirm = {
+                cronJobSuspendInFlight = true
+                cronJobSuspendError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = client.setCronJobSuspend(
+                        name = ps.target.name,
+                        namespace = ps.target.namespace ?: "",
+                        suspend = ps.suspend,
+                    )
+                    cronJobSuspendInFlight = false
+                    result.fold(
+                        onSuccess = { pendingCronJobSuspend = null },
+                        onFailure = { cronJobSuspendError = it.message ?: "${if (isSuspending) "Suspend" else "Resume"} failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingCronJobSuspend = null
+                cronJobSuspendError = null
             },
         )
     }

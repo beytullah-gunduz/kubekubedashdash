@@ -23,6 +23,8 @@ import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
 import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestConditionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.ExecListener
@@ -2107,6 +2109,45 @@ class ReactiveKubeClient(
         log.info("Drain node={}: evicted={} skipped={} failed={}", name, evicted, skipped, failed)
         DrainResult(evicted = evicted, skipped = skipped, failed = failed)
     }
+
+    // ── On-demand: CronJob Trigger / Suspend ─────────────────────────────────────
+
+    /**
+     * Trigger a CronJob immediately by creating a one-off Job from its
+     * [spec.jobTemplate], exactly as `kubectl create job --from=cronjob/<name>`.
+     * No ownerReference is added so the CronJob controller does not adopt or
+     * garbage-collect the job when the next schedule runs.
+     */
+    fun triggerCronJob(name: String, namespace: String): Result<Unit> = runCatching {
+        log.info("Triggering CronJob name={} namespace={}", name, namespace)
+        val cj = k8s.batch().v1().cronjobs().inNamespace(namespace).withName(name).get()
+            ?: error("CronJob $name not found in namespace $namespace")
+        val template = cj.spec?.jobTemplate ?: error("CronJob $name has no jobTemplate")
+        // Job name must be <= 63 chars: truncate the base so "-manual-<epoch>" fits.
+        val suffix = "-manual-${System.currentTimeMillis() / 1000}"
+        val base = name.take(63 - suffix.length)
+        val job = JobBuilder()
+            .withNewMetadata()
+            .withName(base + suffix)
+            .withNamespace(namespace)
+            .addToAnnotations("cronjob.kubernetes.io/instantiate", "manual")
+            .endMetadata()
+            .withSpec(template.spec)
+            .build()
+        k8s.batch().v1().jobs().inNamespace(namespace).resource(job).create()
+        log.info("Triggered CronJob name={}: created job={}", name, base + suffix)
+    }.map { }
+
+    /**
+     * Suspend or resume a CronJob by setting [spec.suspend].
+     * When `suspend=true` the CronJob stops creating new Jobs until resumed.
+     * Running Jobs are not affected.
+     */
+    fun setCronJobSuspend(name: String, namespace: String, suspend: Boolean): Result<Unit> = runCatching {
+        log.info("Setting CronJob name={} namespace={} suspend={}", name, namespace, suspend)
+        k8s.batch().v1().cronjobs().inNamespace(namespace).withName(name)
+            .edit { cj -> CronJobBuilder(cj).editSpec().withSuspend(suspend).endSpec().build() }
+    }.map { }
 
     // ── On-demand: ResourceQuota Usage ─────────────────────────────────────────
 
