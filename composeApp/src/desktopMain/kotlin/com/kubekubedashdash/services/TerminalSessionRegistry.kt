@@ -7,6 +7,7 @@ import com.kubekubedashdash.model.TerminalSessionId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 
 /**
@@ -41,10 +42,8 @@ object TerminalSessionRegistry {
 
     @Synchronized
     fun close(id: TerminalSessionId) {
-        _sessions.update { current ->
-            current[id.value]?.close()
-            current - id.value
-        }
+        val removed = _sessions.getAndUpdate { it - id.value }[id.value]
+        removed?.close()
     }
 
     @Synchronized

@@ -29,7 +29,12 @@
         </encoder>
     </appender>
 
-    <logger name="com.kubekubedashdash" level="DEBUG" />
+    <!-- IN_MEMORY backs the in-app log drawer. Attach it ONLY to com.kubekubedashdash
+         so third-party DEBUG logging (e.g. a future io.fabric8/okhttp wire logger)
+         can never route bearer tokens or Secret bodies into the on-screen drawer. Audit S7. -->
+    <logger name="com.kubekubedashdash" level="DEBUG" additivity="true">
+        <appender-ref ref="IN_MEMORY" />
+    </logger>
 
     <logger name="io.fabric8" level="WARN" />
     <logger name="okhttp3" level="WARN" />
@@ -38,6 +43,5 @@
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
-        <appender-ref ref="IN_MEMORY" />
     </root>
 </configuration>

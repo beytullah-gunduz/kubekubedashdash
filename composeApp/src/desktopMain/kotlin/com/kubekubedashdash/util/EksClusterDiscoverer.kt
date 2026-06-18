@@ -26,6 +26,11 @@ object EksClusterDiscoverer {
     private val log = LoggerFactory.getLogger(EksClusterDiscoverer::class.java)
     private val json = Json { ignoreUnknownKeys = true }
 
+    private val REGION_RX = Regex("^[a-z]{2}-[a-z]+-\\d+$")
+    private fun requireValidRegion(region: String) {
+        require(REGION_RX.matches(region)) { "Refusing AWS region with unexpected shape: '$region'" }
+    }
+
     val COMMON_REGIONS: List<String> = listOf(
         "us-east-1",
         "us-east-2",
@@ -69,6 +74,7 @@ object EksClusterDiscoverer {
     }
 
     suspend fun listClusters(profile: String, region: String): Result<List<EksCluster>> = withContext(Dispatchers.IO) {
+        requireValidRegion(region)
         log.debug("Listing clusters profile={} region={}", profile, region)
         val args = listOf(
             "aws", "eks", "list-clusters",
@@ -101,6 +107,7 @@ object EksClusterDiscoverer {
         clusterName: String,
         kubeconfigPath: String,
     ): Result<String> = withContext(Dispatchers.IO) {
+        requireValidRegion(region)
         log.info("Importing cluster name={} region={} profile={}", clusterName, region, profile)
         try {
             KubeconfigLocator.ensureParentDirectory(kubeconfigPath)

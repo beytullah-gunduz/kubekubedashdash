@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -350,9 +351,6 @@ class AllClustersViewModel private constructor() : ViewModel() {
     private val _memHistory = MutableStateFlow<List<Float>>(emptyList())
     val memHistory: StateFlow<List<Float>> = _memHistory.asStateFlow()
 
-    private val _podsHistory = MutableStateFlow<List<Float>>(emptyList())
-    val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
-
     /** Summed cluster-level counts across all open sessions. */
     val aggregatedClusterInfo: StateFlow<ClusterInfo?> = clusterTabsFlow()
         .flatMapLatest { clusterTabs ->
@@ -423,6 +421,21 @@ class AllClustersViewModel private constructor() : ViewModel() {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    /**
+     * Rolling history (last 20 samples) of cluster-wide pod-count utilisation.
+     * Derived (not a permanent init collector) so the upstream cluster-info and
+     * node informers idle when the All-Clusters UI isn't observed — audit C4.
+     * Declared after [aggregatedClusterInfo]/[aggregatedPodsCapacity] because a
+     * property initializer may only reference properties declared above it.
+     */
+    val podsHistory: StateFlow<List<Float>> =
+        combine(aggregatedClusterInfo, aggregatedPodsCapacity) { info, cap ->
+            val count = info?.podsCount ?: 0
+            if (cap > 0) count.toFloat() / cap else 0f
+        }
+            .runningFold(emptyList<Float>()) { acc, frac -> (acc + frac).takeLast(20) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** Top 3 nodes by pressure fraction across all open sessions. */
     val topNodesAcrossAllClusters: StateFlow<List<NodeResourceUsage>> = clusterTabsFlow()
         .flatMapLatest { clusterTabs ->
@@ -436,14 +449,6 @@ class AllClustersViewModel private constructor() : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
-        viewModelScope.launch {
-            combine(aggregatedClusterInfo, aggregatedPodsCapacity) { info, cap ->
-                val count = info?.podsCount ?: 0
-                if (cap > 0) count.toFloat() / cap else 0f
-            }.collect { frac ->
-                _podsHistory.update { (it + frac).takeLast(20) }
-            }
-        }
         viewModelScope.launch {
             PreferenceRepository.customPresets.collect { persisted ->
                 _userPresets.value = persisted
