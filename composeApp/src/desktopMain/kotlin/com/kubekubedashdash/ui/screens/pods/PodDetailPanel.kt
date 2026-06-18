@@ -38,7 +38,6 @@ import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,11 +50,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
@@ -64,7 +61,6 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
@@ -72,7 +68,6 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
-import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.info_filled
@@ -90,7 +85,9 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
-import com.kubekubedashdash.ui.screens.highlightYamlLine
+import com.kubekubedashdash.ui.screens.DetailAction
+import com.kubekubedashdash.ui.screens.DetailPanelHeader
+import com.kubekubedashdash.ui.screens.GenericYamlTab
 import com.kubekubedashdash.ui.screens.logviewer.LogLine
 import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
@@ -100,8 +97,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
 
 private enum class DetailTab(val label: String, val icon: DrawableResource) {
     Overview("Overview", Res.drawable.info_filled),
@@ -200,7 +195,7 @@ fun PodDetailPanel(
                             onToggleAnnotation = onToggleAnnotation,
                         )
 
-                        DetailTab.Yaml -> YamlTab(pod)
+                        DetailTab.Yaml -> GenericYamlTab("Pod", pod.name, pod.namespace)
 
                         DetailTab.Logs -> LogsTab(pod, onOpenLogs, onOpenTerminal)
                     }
@@ -274,57 +269,29 @@ private fun PanelHeader(
     onEvictClick: () -> Unit,
     onForceDeleteClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(KdSurfaceVariant)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                pod.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = KdTextPrimary,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                StatusBadge(pod.status)
-                Text(pod.namespace, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-            }
-        }
-
-        // Evict button
-        TooltipIconButton(
-            icon = Res.drawable.clear_all_filled,
-            label = "Evict pod",
-            tint = KdTextSecondary,
-            description = "Gracefully remove this pod — respects PodDisruptionBudgets and lets its controller reschedule it (use to move a pod off its node).",
-            enabled = actionsEnabled,
-            onClick = onEvictClick,
-        )
-
-        // Force Delete button
-        TooltipIconButton(
-            icon = Res.drawable.delete_filled,
-            label = "Force delete pod",
-            tint = KdError,
-            description = "Immediately delete this pod (grace period 0) — only for a stuck/unresponsive pod; skips graceful shutdown and can orphan resources.",
-            enabled = actionsEnabled,
-            onClick = onForceDeleteClick,
-        )
-
-        TooltipIconButton(
-            icon = Res.drawable.close_filled,
-            label = "Close",
-            tint = KdTextSecondary,
-            onClick = onClose,
-        )
-    }
+    val evictAction = DetailAction(
+        icon = Res.drawable.clear_all_filled,
+        label = "Evict pod",
+        description = "Gracefully remove this pod — respects PodDisruptionBudgets and lets its controller reschedule it (use to move a pod off its node).",
+        enabled = actionsEnabled,
+        onClick = onEvictClick,
+    )
+    val forceDeleteAction = DetailAction(
+        icon = Res.drawable.delete_filled,
+        label = "Force delete pod",
+        tint = KdError,
+        destructive = true,
+        description = "Immediately delete this pod (grace period 0) — only for a stuck/unresponsive pod; skips graceful shutdown and can orphan resources.",
+        enabled = actionsEnabled,
+        onClick = onForceDeleteClick,
+    )
+    DetailPanelHeader(
+        name = pod.name,
+        subtitle = pod.namespace,
+        status = pod.status,
+        actions = listOf(evictAction, forceDeleteAction),
+        onClose = onClose,
+    )
 }
 
 // ── Tab Bar ─────────────────────────────────────────────────────────────────────
@@ -538,67 +505,6 @@ private fun ContainerCard(container: ContainerInfo) {
     }
 }
 
-// ── YAML Tab ────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun YamlTab(pod: PodInfo) {
-    val kubeClient = LocalReactiveKubeClient.current
-    var yaml by remember(pod.uid) { mutableStateOf<String?>(null) }
-    var loading by remember(pod.uid) { mutableStateOf(true) }
-    LaunchedEffect(pod.uid) {
-        loading = true
-        yaml = withContext(Dispatchers.IO) { kubeClient.getResourceYaml("Pod", pod.name, pod.namespace) }
-        loading = false
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            TextButton(
-                onClick = { yaml?.let { text -> copyToClipboard(text) } },
-                colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            ) {
-                Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(13.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Copy", style = MaterialTheme.typography.labelSmall)
-            }
-        }
-
-        if (loading) {
-            ResourceLoadingIndicator()
-        } else {
-            val lines = (yaml ?: "").lines()
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
-                items(lines.size) { i ->
-                    Row {
-                        Text(
-                            "${i + 1}",
-                            modifier = Modifier.width(36.dp),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = kdMonoFamily(),
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp,
-                            ),
-                            color = KdTextSecondary.copy(alpha = 0.35f),
-                        )
-                        Text(
-                            text = highlightYamlLine(lines[i]),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = kdMonoFamily(),
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp,
-                            ),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ── Logs Tab (preview → drawer) ──────────────────────────────────────────────────
 
 private const val LOGS_PREVIEW_TAIL = 50
@@ -794,8 +700,4 @@ private fun OpenTerminalButton(
             }
         }
     }
-}
-
-private fun copyToClipboard(text: String) {
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }

@@ -158,57 +158,17 @@ fun ResourceDetailPanel(
     Surface(modifier = modifier, color = KdSurface) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(KdSurfaceVariant)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = KdTextPrimary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (status != null) StatusBadge(status)
-                        Text(
-                            buildString {
-                                append(kind)
-                                if (namespace != null) append(" · $namespace")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
-                        )
-                    }
-                }
-                actions.forEach { action ->
-                    TooltipIconButton(
-                        icon = action.icon,
-                        label = action.label,
-                        tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary,
-                        description = action.description,
-                        enabled = action.enabled,
-                        onClick = action.onClick,
-                    )
-                }
-                if (onDelete != null) {
-                    TooltipIconButton(
-                        Res.drawable.delete_filled,
-                        "Delete",
-                        KdError,
-                        description = "Permanently remove this resource — it won't come back unless recreated.",
-                        onClick = onDelete,
-                    )
-                }
-                TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
-            }
+            DetailPanelHeader(
+                name = name,
+                subtitle = buildString {
+                    append(kind)
+                    if (namespace != null) append(" · $namespace")
+                },
+                status = status,
+                actions = actions,
+                onDelete = onDelete,
+                onClose = onClose,
+            )
 
             // Tabs
             SecondaryTabRow(
@@ -276,6 +236,39 @@ fun ResourceDetailPanel(
                 }
             }
         }
+    }
+}
+
+// ── Shared panel header ─────────────────────────────────────────────────────────
+
+@Composable
+fun DetailPanelHeader(
+    name: String,
+    subtitle: String,
+    status: String?,
+    actions: List<DetailAction> = emptyList(),
+    onDelete: (() -> Unit)? = null,
+    onClose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleMedium, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (status != null) StatusBadge(status)
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+            }
+        }
+        actions.forEach { action ->
+            TooltipIconButton(icon = action.icon, label = action.label, tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary, description = action.description, enabled = action.enabled, onClick = action.onClick)
+        }
+        if (onDelete != null) {
+            TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, description = "Permanently remove this resource — it won't come back unless recreated.", onClick = onDelete)
+        }
+        TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
     }
 }
 

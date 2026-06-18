@@ -69,8 +69,10 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.DetailFieldsCard
+import com.kubekubedashdash.ui.screens.DetailPanelHeader
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -166,67 +168,39 @@ internal fun NodeDetailPanel(
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(KdSurfaceVariant)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            node.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = KdTextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            StatusBadge(node.status)
-                            Text("Node", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-                        }
-                    }
-                    // Cordon / Uncordon toggle
-                    TooltipIconButton(
-                        icon = if (node.unschedulable) Res.drawable.check_circle_filled else Res.drawable.lock_filled,
-                        label = if (node.unschedulable) "Uncordon node" else "Cordon node",
-                        tint = if (node.unschedulable) KdWarning else KdTextSecondary,
-                        description = if (node.unschedulable) {
-                            "Allow pods to be scheduled here again — reverses a cordon once the node is healthy."
-                        } else {
-                            "Stop new pods from scheduling on this node (existing ones keep running) — to quarantine a flaky node."
-                        },
-                        enabled = !cordon.inFlight && !drain.inFlight,
-                        onClick = {
-                            cordon.clearError()
-                            showCordonDialog = true
-                        },
-                    )
-
-                    // Drain button
-                    TooltipIconButton(
-                        icon = Res.drawable.clear_all_filled,
-                        label = "Drain node",
-                        tint = KdTextSecondary,
-                        description = "Cordon the node and move its pods elsewhere — to safely empty it before maintenance or shutdown.",
-                        enabled = !cordon.inFlight && !drain.inFlight,
-                        onClick = {
-                            drain.clearError()
-                            drainStatus = null
-                            showDrainDialog = true
-                        },
-                    )
-
-                    TooltipIconButton(
-                        icon = Res.drawable.close_filled,
-                        label = "Close",
-                        tint = KdTextSecondary,
-                        onClick = onClose,
-                    )
-                }
+                val cordonAction = DetailAction(
+                    icon = if (node.unschedulable) Res.drawable.check_circle_filled else Res.drawable.lock_filled,
+                    label = if (node.unschedulable) "Uncordon node" else "Cordon node",
+                    tint = if (node.unschedulable) KdWarning else null,
+                    description = if (node.unschedulable) {
+                        "Allow pods to be scheduled here again — reverses a cordon once the node is healthy."
+                    } else {
+                        "Stop new pods from scheduling on this node (existing ones keep running) — to quarantine a flaky node."
+                    },
+                    enabled = !cordon.inFlight && !drain.inFlight,
+                    onClick = {
+                        cordon.clearError()
+                        showCordonDialog = true
+                    },
+                )
+                val drainAction = DetailAction(
+                    icon = Res.drawable.clear_all_filled,
+                    label = "Drain node",
+                    description = "Cordon the node and move its pods elsewhere — to safely empty it before maintenance or shutdown.",
+                    enabled = !cordon.inFlight && !drain.inFlight,
+                    onClick = {
+                        drain.clearError()
+                        drainStatus = null
+                        showDrainDialog = true
+                    },
+                )
+                DetailPanelHeader(
+                    name = node.name,
+                    subtitle = "Node",
+                    status = node.status,
+                    actions = listOf(cordonAction, drainAction),
+                    onClose = onClose,
+                )
 
                 SecondaryTabRow(
                     selectedTabIndex = tabs.indexOf(activeTab).coerceAtLeast(0),
