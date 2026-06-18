@@ -155,7 +155,7 @@ class ReactiveKubeClientDrainEvictTest {
 
     @Test
     fun `drainNode evicts eligible pods and skips DaemonSet mirror and completed pods`() {
-        val result = client.drainNode("node-a")
+        val result = client.actions.drainNode("node-a")
         assertTrue(result.isSuccess, "drainNode must succeed (cordon + eviction loop), got: ${result.exceptionOrNull()}")
 
         val drainResult = result.getOrThrow()

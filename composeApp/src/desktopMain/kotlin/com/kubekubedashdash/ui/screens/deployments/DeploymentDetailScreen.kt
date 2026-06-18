@@ -124,7 +124,7 @@ fun DeploymentDetailScreen(
                 scaleError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.scaleWorkload(
+                        client.actions.scaleWorkload(
                             kind = "Deployment",
                             name = deployment.name,
                             namespace = deployment.namespace,
@@ -158,7 +158,7 @@ fun DeploymentDetailScreen(
                 restartError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.restartWorkload(
+                        client.actions.restartWorkload(
                             kind = "Deployment",
                             name = deployment.name,
                             namespace = deployment.namespace,

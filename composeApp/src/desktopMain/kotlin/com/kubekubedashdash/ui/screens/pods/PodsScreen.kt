@@ -247,7 +247,7 @@ fun PodsScreen(
                 deleteInFlight = true
                 deleteError = null
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) { reactiveClient.deleteResource("pod", pod.name, pod.namespace) }
+                    val result = withContext(Dispatchers.IO) { reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace) }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },

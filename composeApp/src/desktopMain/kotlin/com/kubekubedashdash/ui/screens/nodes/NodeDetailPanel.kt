@@ -313,7 +313,7 @@ internal fun NodeDetailPanel(
                     cordonInFlight = true
                     cordonError = null
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { kubeClient.cordonNode(node.name, targetUnschedulable) }
+                        val result = withContext(Dispatchers.IO) { kubeClient.actions.cordonNode(node.name, targetUnschedulable) }
                         cordonInFlight = false
                         result.fold(
                             onSuccess = { showCordonDialog = false },
@@ -347,7 +347,7 @@ internal fun NodeDetailPanel(
                     drainError = null
                     drainStatus = null
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { kubeClient.drainNode(node.name) }
+                        val result = withContext(Dispatchers.IO) { kubeClient.actions.drainNode(node.name) }
                         drainInFlight = false
                         result.fold(
                             onSuccess = { dr ->

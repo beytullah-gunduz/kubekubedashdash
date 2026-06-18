@@ -149,7 +149,7 @@ fun NamespacesScreen(
                 deleteInFlight = true
                 deleteError = null
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) { reactiveClient.deleteResource("namespace", ns.name, namespace = null) }
+                    val result = withContext(Dispatchers.IO) { reactiveClient.actions.deleteResource("namespace", ns.name, namespace = null) }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },

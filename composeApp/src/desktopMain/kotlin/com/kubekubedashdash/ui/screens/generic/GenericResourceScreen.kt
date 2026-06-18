@@ -470,7 +470,7 @@ fun GenericResourceScreen(
                 deleteError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.deleteResource(
+                        client.actions.deleteResource(
                             kind = kind,
                             name = target.name,
                             namespace = target.namespace,
@@ -512,9 +512,9 @@ fun GenericResourceScreen(
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
                         if (isApprove) {
-                            client.approveCsr(action.target.name)
+                            client.actions.approveCsr(action.target.name)
                         } else {
-                            client.denyCsr(action.target.name)
+                            client.actions.denyCsr(action.target.name)
                         }
                     }
                     csrActionInFlight = false
@@ -547,7 +547,7 @@ fun GenericResourceScreen(
                 scaleError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.scaleWorkload(
+                        client.actions.scaleWorkload(
                             kind = kind,
                             name = ps.target.name,
                             namespace = ps.target.namespace ?: "",
@@ -581,7 +581,7 @@ fun GenericResourceScreen(
                 restartError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.restartWorkload(
+                        client.actions.restartWorkload(
                             kind = kind,
                             name = pr.target.name,
                             namespace = pr.target.namespace ?: "",
@@ -614,7 +614,7 @@ fun GenericResourceScreen(
                 cronJobTriggerError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.triggerCronJob(
+                        client.actions.triggerCronJob(
                             name = pt.target.name,
                             namespace = pt.target.namespace ?: "",
                         )
@@ -651,7 +651,7 @@ fun GenericResourceScreen(
                 cronJobSuspendError = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        client.setCronJobSuspend(
+                        client.actions.setCronJobSuspend(
                             name = ps.target.name,
                             namespace = ps.target.namespace ?: "",
                             suspend = ps.suspend,

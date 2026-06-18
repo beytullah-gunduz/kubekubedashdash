@@ -156,7 +156,7 @@ fun DeploymentsScreen(
                 deleteInFlight = true
                 deleteError = null
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) { reactiveClient.deleteResource("deployment", dep.name, dep.namespace) }
+                    val result = withContext(Dispatchers.IO) { reactiveClient.actions.deleteResource("deployment", dep.name, dep.namespace) }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },

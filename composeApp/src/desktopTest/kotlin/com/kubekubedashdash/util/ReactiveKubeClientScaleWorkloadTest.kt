@@ -86,7 +86,7 @@ class ReactiveKubeClientScaleWorkloadTest {
 
     @Test
     fun `scaleWorkload scales a Deployment to the requested replica count`() {
-        val result = client.scaleWorkload("deployment", "app", "default", 5)
+        val result = client.actions.scaleWorkload("deployment", "app", "default", 5)
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -100,7 +100,7 @@ class ReactiveKubeClientScaleWorkloadTest {
 
     @Test
     fun `scaleWorkload scales a StatefulSet to the requested replica count`() {
-        val result = client.scaleWorkload("statefulset", "app", "default", 3)
+        val result = client.actions.scaleWorkload("statefulset", "app", "default", 3)
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -114,7 +114,7 @@ class ReactiveKubeClientScaleWorkloadTest {
 
     @Test
     fun `scaleWorkload scales a ReplicaSet to the requested replica count`() {
-        val result = client.scaleWorkload("replicaset", "app", "default", 1)
+        val result = client.actions.scaleWorkload("replicaset", "app", "default", 1)
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -129,14 +129,14 @@ class ReactiveKubeClientScaleWorkloadTest {
     @Test
     fun `scaleWorkload returns failure when replicas is negative`() {
         // The require(replicas >= 0) guard inside scaleWorkload must produce a failure.
-        val result = client.scaleWorkload("deployment", "app", "default", -1)
+        val result = client.actions.scaleWorkload("deployment", "app", "default", -1)
         assertTrue(result.isFailure, "negative replicas must yield Result.failure")
     }
 
     @Test
     fun `scaleWorkload returns failure for an unsupported kind`() {
         // DaemonSet is not in the when-branch — must throw IllegalArgumentException.
-        val result = client.scaleWorkload("daemonset", "app", "default", 2)
+        val result = client.actions.scaleWorkload("daemonset", "app", "default", 2)
         assertTrue(result.isFailure, "unsupported kind must yield Result.failure")
     }
 }

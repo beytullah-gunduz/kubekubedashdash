@@ -131,7 +131,7 @@ class ReactiveKubeClientSimpleActionsTest {
 
     @Test
     fun `deleteResource deletes a namespaced pod and it is gone`() {
-        val result = client.deleteResource("pod", "p", "default")
+        val result = client.actions.deleteResource("pod", "p", "default")
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -145,7 +145,7 @@ class ReactiveKubeClientSimpleActionsTest {
 
     @Test
     fun `deleteResource deletes a cluster-scoped namespace`() {
-        val result = client.deleteResource("namespace", "ns", null)
+        val result = client.actions.deleteResource("namespace", "ns", null)
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -161,7 +161,7 @@ class ReactiveKubeClientSimpleActionsTest {
 
     @Test
     fun `cordonNode sets unschedulable=true then unschedulable=false`() {
-        val cordonResult = client.cordonNode("node-a", true)
+        val cordonResult = client.actions.cordonNode("node-a", true)
         assertTrue(cordonResult.isSuccess, "cordon expected success, got: ${cordonResult.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -173,7 +173,7 @@ class ReactiveKubeClientSimpleActionsTest {
             verify.close()
         }
 
-        val uncordonResult = client.cordonNode("node-a", false)
+        val uncordonResult = client.actions.cordonNode("node-a", false)
         assertTrue(uncordonResult.isSuccess, "uncordon expected success, got: ${uncordonResult.exceptionOrNull()}")
 
         val verify2 = server.createClient()
@@ -193,7 +193,7 @@ class ReactiveKubeClientSimpleActionsTest {
 
     @Test
     fun `setCronJobSuspend suspends a CronJob`() {
-        val result = client.setCronJobSuspend("nightly", "default", true)
+        val result = client.actions.setCronJobSuspend("nightly", "default", true)
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -210,7 +210,7 @@ class ReactiveKubeClientSimpleActionsTest {
 
     @Test
     fun `restartWorkload patches the kubectl restart annotation on a Deployment`() {
-        val result = client.restartWorkload("deployment", "app", "default")
+        val result = client.actions.restartWorkload("deployment", "app", "default")
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()

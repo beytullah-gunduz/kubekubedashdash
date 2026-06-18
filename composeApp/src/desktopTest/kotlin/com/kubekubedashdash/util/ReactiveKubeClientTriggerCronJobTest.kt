@@ -118,7 +118,7 @@ class ReactiveKubeClientTriggerCronJobTest {
 
     @Test
     fun `triggerCronJob creates a Job with name prefixed by cronjob name`() {
-        val result = client.triggerCronJob("nightly", "default")
+        val result = client.actions.triggerCronJob("nightly", "default")
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -133,7 +133,7 @@ class ReactiveKubeClientTriggerCronJobTest {
 
     @Test
     fun `triggerCronJob copies jobTemplate labels and annotations onto the created Job (D1)`() {
-        val result = client.triggerCronJob("nightly", "default")
+        val result = client.actions.triggerCronJob("nightly", "default")
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -163,7 +163,7 @@ class ReactiveKubeClientTriggerCronJobTest {
     @Test
     fun `triggerCronJob truncates the Job name so it stays within 63 characters`() {
         val longName = "a".repeat(60)
-        val result = client.triggerCronJob(longName, "default")
+        val result = client.actions.triggerCronJob(longName, "default")
         assertTrue(result.isSuccess, "expected success, got: ${result.exceptionOrNull()}")
 
         val verify = server.createClient()
@@ -183,7 +183,7 @@ class ReactiveKubeClientTriggerCronJobTest {
 
     @Test
     fun `triggerCronJob returns failure when the CronJob does not exist`() {
-        val result = client.triggerCronJob("missing", "default")
+        val result = client.actions.triggerCronJob("missing", "default")
         assertTrue(result.isFailure, "expected failure for missing CronJob")
     }
 }
