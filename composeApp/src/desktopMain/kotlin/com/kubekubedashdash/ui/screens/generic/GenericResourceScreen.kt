@@ -459,9 +459,9 @@ fun GenericResourceScreen(
     }
 
     pendingScale?.let { ps ->
-        val currentReplicas = ps.target.extraColumns
-            .entries.firstOrNull { (_, v) -> v.contains("/") }
-            ?.let { (_, v) -> v.substringAfterLast("/").toIntOrNull() }
+        val currentReplicas = ps.target.extraColumns["Ready"]?.substringAfterLast("/")?.toIntOrNull()
+            ?: ps.target.extraColumns.entries.firstOrNull { (_, v) -> v.contains("/") }
+                ?.let { (_, v) -> v.substringAfterLast("/").toIntOrNull() }
             ?: ps.target.extraColumns.values.firstOrNull { it.toIntOrNull() != null }?.toIntOrNull()
             ?: 1
         ScaleDialog(

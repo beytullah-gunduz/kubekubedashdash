@@ -46,13 +46,9 @@ fun ScaleDialog(
 ) {
     var rawInput by remember(currentReplicas) { mutableStateOf(currentReplicas.toString()) }
 
-    val parsed = rawInput.trimStart('0').let {
-        if (it.isEmpty()) {
-            rawInput.toIntOrNull()?.let { v -> if (v == 0) 0 else null } ?: rawInput.toIntOrNull()
-        } else {
-            it.toIntOrNull()
-        }
-    }
+    // onValueChange constrains rawInput to "" or all-digits, so a plain parse
+    // suffices (null for empty or Int-overflow input).
+    val parsed = rawInput.toIntOrNull()
     val isValid = rawInput.isNotBlank() && parsed != null && parsed >= 0
     val isUnchanged = isValid && parsed == currentReplicas
     val canConfirm = !inFlight && isValid && !isUnchanged

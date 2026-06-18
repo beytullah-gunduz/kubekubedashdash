@@ -1915,6 +1915,7 @@ class ReactiveKubeClient(
      * Supported kinds: Deployment, StatefulSet, ReplicaSet.
      */
     fun scaleWorkload(kind: String, name: String, namespace: String, replicas: Int): Result<Unit> = runCatching {
+        require(replicas >= 0) { "replicas must be >= 0, was $replicas" }
         log.info("Scaling {} name={} namespace={} replicas={}", kind, name, namespace, replicas)
         when (kind.lowercase()) {
             "deployment" -> k8s.apps().deployments().inNamespace(namespace).withName(name)
