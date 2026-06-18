@@ -70,6 +70,7 @@ import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
+import com.kubekubedashdash.ui.screens.DetailFieldsCard
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -395,27 +396,7 @@ private fun NodeOverviewCombinedTab(
             Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         }
         item {
-            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
-                Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                    fields.forEach { f ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                            if (f.valueColor != null) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(6.dp).clip(CircleShape).background(f.valueColor))
-                                    Spacer(Modifier.width(5.dp))
-                                    Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
-                                }
-                            } else {
-                                Text(f.value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary, fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-                }
-            }
+            DetailFieldsCard(fields = fields)
         }
 
         // ── Labels ──────────────────────────────────────────────────────────
@@ -529,27 +510,7 @@ private fun NodeDetailsOnlyTab(
             Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         }
         item {
-            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
-                Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                    fields.forEach { f ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                            if (f.valueColor != null) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(6.dp).clip(CircleShape).background(f.valueColor))
-                                    Spacer(Modifier.width(5.dp))
-                                    Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
-                                }
-                            } else {
-                                Text(f.value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary, fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-                }
-            }
+            DetailFieldsCard(fields = fields)
         }
 
         if (node.labels.isNotEmpty()) {
