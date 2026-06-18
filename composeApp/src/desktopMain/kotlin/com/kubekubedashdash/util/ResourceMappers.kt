@@ -69,7 +69,16 @@ object ResourceMappers {
         val phase = pod.status?.phase ?: return "Unknown"
         pod.status?.containerStatuses?.forEach { cs ->
             cs.state?.waiting?.reason?.let { return it }
-            cs.state?.terminated?.reason?.let { if (phase != "Succeeded") return it }
+            cs.state?.terminated?.let { term ->
+                // A cleanly-finished container (exit 0) must not override a Running/Pending
+                // pod that is still serving (e.g. a completed sidecar/one-shot). Only surface
+                // a terminated reason that represents a real failure, or any terminated reason
+                // when the pod itself is not running.
+                val cleanlyCompleted = term.exitCode == 0
+                if (!cleanlyCompleted && phase != "Succeeded") {
+                    term.reason?.let { return it }
+                }
+            }
         }
         return phase
     }
@@ -103,7 +112,11 @@ object ResourceMappers {
             ?: spec.versions?.firstOrNull { it.served == true }
             ?: return null
         if (version.served != true) return null
-        val columns = version.additionalPrinterColumns
+        val columnSource = version.additionalPrinterColumns?.takeIf { it.isNotEmpty() }
+            ?: spec.versions
+                ?.firstOrNull { it.served == true && !it.additionalPrinterColumns.isNullOrEmpty() }
+                ?.additionalPrinterColumns
+        val columns = columnSource
             ?.mapNotNull { col ->
                 val name = col.name ?: return@mapNotNull null
                 val path = col.jsonPath ?: return@mapNotNull null

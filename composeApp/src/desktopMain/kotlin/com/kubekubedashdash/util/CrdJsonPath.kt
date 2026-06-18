@@ -41,7 +41,11 @@ object CrdJsonPath {
         now: Instant = Instant.now(),
     ): String {
         val raw = readRaw(resource, path) ?: return MISSING
-        return format(raw, type, now)
+        return if (raw is List<*>) {
+            raw.joinToString(", ") { el -> if (el == null) "" else format(el, type, now) }
+        } else {
+            format(raw, type, now)
+        }
     }
 
     private fun readRaw(resource: GenericKubernetesResource, path: String): Any? {
@@ -85,7 +89,7 @@ object CrdJsonPath {
         is List<*> -> when {
             value.isEmpty() -> null
             value.size == 1 -> value[0]
-            else -> value.joinToString(", ") { it?.toString() ?: "" }
+            else -> value
         }
 
         else -> value

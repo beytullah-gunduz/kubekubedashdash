@@ -71,12 +71,33 @@ class ResourceMappersTest {
             .withContainerStatuses(
                 ContainerStatusBuilder()
                     .withName("c")
-                    .withNewState().withNewTerminated().withReason("Error").endTerminated().endState()
+                    .withNewState().withNewTerminated().withReason("Error").withExitCode(1).endTerminated().endState()
                     .build(),
             )
             .endStatus()
             .build()
         assertEquals("Error", ResourceMappers.effectivePodStatus(pod))
+    }
+
+    @Test
+    fun `effectivePodStatus keeps Running when a container completed cleanly`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("p").endMetadata()
+            .withNewStatus()
+            .withPhase("Running")
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("sidecar")
+                    .withNewState().withNewTerminated().withReason("Completed").withExitCode(0).endTerminated().endState()
+                    .build(),
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withNewState().withNewRunning().endRunning().endState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+        assertEquals("Running", ResourceMappers.effectivePodStatus(pod))
     }
 
     // ── mapPod ──────────────────────────────────────────────────────────────
@@ -203,5 +224,34 @@ class ResourceMappersTest {
             .endSpec()
             .build()
         assertTrue(ResourceMappers.mapCrd(crd) == null)
+    }
+
+    @Test
+    fun `mapCrd falls back to served version columns when storage version has none`() {
+        val crd = CustomResourceDefinitionBuilder()
+            .withNewMetadata().withName("gadgets.example.com").endMetadata()
+            .withNewSpec()
+            .withGroup("example.com")
+            .withScope("Namespaced")
+            .withNewNames()
+            .withKind("Gadget").withPlural("gadgets").withSingular("gadget")
+            .endNames()
+            .addNewVersion()
+            .withName("v1beta1").withServed(true).withStorage(false)
+            .addNewAdditionalPrinterColumn()
+            .withName("Phase").withType("string").withJsonPath(".status.phase").withPriority(0)
+            .endAdditionalPrinterColumn()
+            .endVersion()
+            .addNewVersion()
+            .withName("v1").withServed(true).withStorage(true)
+            // no printer columns on this version
+            .endVersion()
+            .endSpec()
+            .build()
+
+        val info = ResourceMappers.mapCrd(crd)!!
+        assertEquals("v1", info.version) // listing stays on storage version
+        assertEquals(1, info.columns.size)
+        assertEquals("Phase", info.columns[0].name)
     }
 }

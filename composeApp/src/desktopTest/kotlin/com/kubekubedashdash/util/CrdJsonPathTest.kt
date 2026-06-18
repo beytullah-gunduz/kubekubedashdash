@@ -191,4 +191,26 @@ class CrdJsonPathTest {
         val r = cr(status = mapOf("phase" to "Pending"))
         assertEquals("Pending", CrdJsonPath.evaluate(r, ".status.phase", "weird-type", now))
     }
+
+    // ── D4 multi-match per-element formatting ────────────────────────────────
+
+    @Test
+    fun `multi-match number path formats each element without trailing zero`() {
+        // .status.values[*] returns [4, 5] — each must be formatted as "4" and "5",
+        // not as "4.0" and "5.0" (the old bug: joinToString before format).
+        val r = cr(status = mapOf("values" to listOf(4, 5)))
+        assertEquals("4, 5", CrdJsonPath.evaluate(r, ".status.values[*]", "number", now))
+    }
+
+    @Test
+    fun `single-match number still formats correctly after D4`() {
+        val r = cr(status = mapOf("ratio" to 7.0))
+        assertEquals("7", CrdJsonPath.evaluate(r, ".status.ratio", "number", now))
+    }
+
+    @Test
+    fun `empty multi-match renders as none sentinel`() {
+        val r = cr(status = mapOf("values" to emptyList<Int>()))
+        assertEquals("<none>", CrdJsonPath.evaluate(r, ".status.values[*]", "number", now))
+    }
 }
