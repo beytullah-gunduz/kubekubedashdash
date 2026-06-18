@@ -314,6 +314,7 @@ fun GenericResourceScreen(
                                 annotations = res.annotations,
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
+                                extraTabs = kindExtraTabs(kind, res, client),
                                 labelQuery = labelQuery,
                                 onToggleLabel = { k, v ->
                                     onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))

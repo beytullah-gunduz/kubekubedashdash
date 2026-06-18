@@ -1930,6 +1930,37 @@ class ReactiveKubeClient(
         )
     }
 
+    // ── On-demand: ResourceQuota Usage ─────────────────────────────────────────
+
+    fun getResourceQuotaUsage(name: String, namespace: String): List<QuotaUsageRow> = runCatching {
+        log.debug("Fetching ResourceQuota usage name={} namespace={}", name, namespace)
+        val rq = k8s.resourceQuotas().inNamespace(namespace).withName(name).get()
+            ?: return@runCatching emptyList()
+        val hard = rq.status?.hard ?: rq.spec?.hard ?: emptyMap()
+        val used = rq.status?.used ?: emptyMap()
+        hard.keys.sorted().map { key ->
+            val hardQ = hard[key]!!
+            val usedQ = used[key]
+            val hardBytes = runCatching { io.fabric8.kubernetes.api.model.Quantity.getAmountInBytes(hardQ) }.getOrNull()
+            val usedBytes = if (usedQ != null) {
+                runCatching { io.fabric8.kubernetes.api.model.Quantity.getAmountInBytes(usedQ) }.getOrNull()
+            } else {
+                null
+            }
+            val fraction = if (hardBytes != null && usedBytes != null && hardBytes.signum() != 0) {
+                (usedBytes.toDouble() / hardBytes.toDouble()).toFloat().coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            QuotaUsageRow(
+                resource = key,
+                used = usedQ?.toString() ?: "0",
+                hard = hardQ.toString(),
+                fraction = fraction,
+            )
+        }
+    }.getOrDefault(emptyList())
+
     // ── On-demand: Pod Metrics ──────────────────────────────────────────────────
 
     fun getPodMetrics(name: String, namespace: String): PodMetricsSnapshot? = try {
@@ -2233,6 +2264,14 @@ private val DEFAULT_SHELL_CMD = listOf(
     "/bin/sh",
     "-c",
     "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+)
+
+/** A single row in the ResourceQuota Usage tab. */
+data class QuotaUsageRow(
+    val resource: String,
+    val used: String,
+    val hard: String,
+    val fraction: Float,
 )
 
 /**
