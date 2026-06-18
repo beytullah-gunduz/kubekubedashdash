@@ -240,7 +240,7 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Component | Library / Version |
 |-----------|-------------------|
 | Language | Kotlin 2.3.21 |
-| UI framework | Compose Multiplatform 1.11.0 |
+| UI framework | Compose Multiplatform 1.11.1 |
 | Material 3 | compose-material3 1.11.0-alpha07, material3-adaptive 1.3.0-alpha07 (ListDetailPaneScaffold) |
 | ViewModel / lifecycle | androidx.lifecycle 2.11.0-beta01 (multiplatform) |
 | Persistence | androidx.datastore-preferences 1.1.7 |
