@@ -1498,7 +1498,19 @@ object MockClusterProvider {
                 .build(),
         ).create()
 
-        log.info("Mock cluster seeded network/storage/security fill-ins: 1 IngressClass, 1 EndpointSlice, 1 CSIDriver, 1 CertificateSigningRequest")
+        // CertificateSigningRequest (cluster-scoped, Pending — exercises the Approve/Deny actions)
+        client.certificates().v1().certificateSigningRequests().resource(
+            CertificateSigningRequestBuilder()
+                .withNewMetadata().withName("demo-csr-pending").withCreationTimestamp(minutesAgo(5)).endMetadata()
+                .withNewSpec()
+                .withRequest(Base64.getEncoder().encodeToString("dummy-csr-pending".toByteArray()))
+                .withSignerName("kubernetes.io/kube-apiserver-client")
+                .withUsername("alice")
+                .endSpec()
+                .build(),
+        ).create()
+
+        log.info("Mock cluster seeded network/storage/security fill-ins: 1 IngressClass, 1 EndpointSlice, 1 CSIDriver, 2 CertificateSigningRequests (1 approved, 1 pending)")
 
         // ── CRDs + CR instances ─────────────────────────────────────────────────
         seedSparkAndArgo(client)

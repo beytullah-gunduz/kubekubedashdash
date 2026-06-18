@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -282,6 +283,7 @@ fun GenericResourceScreen(
                                         label = "Approve",
                                         icon = Res.drawable.check_circle_filled,
                                         destructive = false,
+                                        tint = KdSuccess,
                                         enabled = !csrActionInFlight,
                                         onClick = {
                                             pendingCsrAction = CsrAction.Approve(res)

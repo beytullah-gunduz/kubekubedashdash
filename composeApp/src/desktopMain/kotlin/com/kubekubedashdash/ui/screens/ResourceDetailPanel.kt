@@ -98,6 +98,7 @@ data class DetailAction(
     val icon: DrawableResource,
     val destructive: Boolean = false,
     val enabled: Boolean = true,
+    val tint: Color? = null,
     val onClick: () -> Unit,
 )
 
@@ -195,7 +196,7 @@ fun ResourceDetailPanel(
                             painterResource(action.icon),
                             action.label,
                             Modifier.size(16.dp),
-                            tint = if (action.destructive) KdError else KdTextSecondary,
+                            tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary,
                         )
                     }
                 }
