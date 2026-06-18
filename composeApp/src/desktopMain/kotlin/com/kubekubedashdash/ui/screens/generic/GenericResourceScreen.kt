@@ -30,6 +30,8 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.category_filled
+import com.kubekubedashdash.resources.check_circle_filled
+import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
@@ -48,6 +50,7 @@ import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.AnnotationSelectorChip
 import com.kubekubedashdash.ui.components.ClearFiltersChip
+import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.LabelSelectorChip
@@ -61,6 +64,7 @@ import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
@@ -111,6 +115,14 @@ private fun kindIcon(kind: String): DrawableResource = when (kind.lowercase()) {
     else -> Res.drawable.list_filled
 }
 
+private sealed interface CsrAction {
+    val target: GenericResourceInfo
+
+    data class Approve(override val target: GenericResourceInfo) : CsrAction
+
+    data class Deny(override val target: GenericResourceInfo) : CsrAction
+}
+
 @Composable
 fun GenericResourceScreen(
     kind: String,
@@ -138,6 +150,9 @@ fun GenericResourceScreen(
     var pendingDelete by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
     var deleteInFlight by remember(kind) { mutableStateOf(false) }
     var deleteError by remember(kind) { mutableStateOf<String?>(null) }
+    var pendingCsrAction by remember(kind) { mutableStateOf<CsrAction?>(null) }
+    var csrActionInFlight by remember(kind) { mutableStateOf(false) }
+    var csrActionError by remember(kind) { mutableStateOf<String?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -258,6 +273,35 @@ fun GenericResourceScreen(
                                 }
                                 add(DetailField("Age", res.age))
                             }
+                            val csrActions = if (
+                                kind.equals("CertificateSigningRequest", ignoreCase = true) &&
+                                res.extraColumns["Condition"] == "Pending"
+                            ) {
+                                listOf(
+                                    DetailAction(
+                                        label = "Approve",
+                                        icon = Res.drawable.check_circle_filled,
+                                        destructive = false,
+                                        enabled = !csrActionInFlight,
+                                        onClick = {
+                                            pendingCsrAction = CsrAction.Approve(res)
+                                            csrActionError = null
+                                        },
+                                    ),
+                                    DetailAction(
+                                        label = "Deny",
+                                        icon = Res.drawable.close_filled,
+                                        destructive = true,
+                                        enabled = !csrActionInFlight,
+                                        onClick = {
+                                            pendingCsrAction = CsrAction.Deny(res)
+                                            csrActionError = null
+                                        },
+                                    ),
+                                )
+                            } else {
+                                emptyList()
+                            }
                             ResourceDetailPanel(
                                 kind = kind,
                                 name = res.name,
@@ -283,6 +327,7 @@ fun GenericResourceScreen(
                                     pendingDelete = res
                                     deleteError = null
                                 },
+                                actions = csrActions,
                             )
                         }
                     }
@@ -321,6 +366,42 @@ fun GenericResourceScreen(
             onDismiss = {
                 pendingDelete = null
                 deleteError = null
+            },
+        )
+    }
+
+    pendingCsrAction?.let { action ->
+        val isApprove = action is CsrAction.Approve
+        ConfirmActionDialog(
+            title = if (isApprove) "Approve CSR" else "Deny CSR",
+            body = if (isApprove) {
+                "Approve certificate signing request \"${action.target.name}\"? This issues the certificate."
+            } else {
+                "Deny certificate signing request \"${action.target.name}\"? This permanently rejects the certificate."
+            },
+            confirmLabel = if (isApprove) "Approve" else "Deny",
+            destructive = !isApprove,
+            inFlight = csrActionInFlight,
+            errorMessage = csrActionError,
+            onConfirm = {
+                csrActionInFlight = true
+                csrActionError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = if (isApprove) {
+                        client.approveCsr(action.target.name)
+                    } else {
+                        client.denyCsr(action.target.name)
+                    }
+                    csrActionInFlight = false
+                    result.fold(
+                        onSuccess = { pendingCsrAction = null },
+                        onFailure = { csrActionError = it.message ?: "${if (isApprove) "Approve" else "Deny"} failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingCsrAction = null
+                csrActionError = null
             },
         )
     }

@@ -18,6 +18,7 @@ import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
+import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestConditionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecWatch
@@ -1902,6 +1903,32 @@ class ReactiveKubeClient(
     }
 
     private fun requireNamespace(kind: String, namespace: String?): String = namespace ?: throw IllegalArgumentException("$kind requires a namespace")
+
+    // ── On-demand: CSR Approve / Deny ───────────────────────────────────────────
+
+    fun approveCsr(name: String, message: String = "Approved by kubekubedashdash"): Result<Unit> = runCatching {
+        log.info("Approving CSR name={}", name)
+        k8s.certificates().v1().certificateSigningRequests().withName(name).approve(
+            CertificateSigningRequestConditionBuilder()
+                .withType("Approved")
+                .withStatus("True")
+                .withReason("KubekubedashdashApprove")
+                .withMessage(message)
+                .build(),
+        )
+    }
+
+    fun denyCsr(name: String, message: String = "Denied by kubekubedashdash"): Result<Unit> = runCatching {
+        log.info("Denying CSR name={}", name)
+        k8s.certificates().v1().certificateSigningRequests().withName(name).deny(
+            CertificateSigningRequestConditionBuilder()
+                .withType("Denied")
+                .withStatus("True")
+                .withReason("KubekubedashdashDeny")
+                .withMessage(message)
+                .build(),
+        )
+    }
 
     // ── On-demand: Pod Metrics ──────────────────────────────────────────────────
 

@@ -84,6 +84,23 @@ data class DetailField(
     val valueColor: Color? = null,
 )
 
+/**
+ * An action button rendered in the [ResourceDetailPanel] header alongside Delete.
+ *
+ * @param label       Button tooltip / accessibility label.
+ * @param icon        Icon to display (16 dp).
+ * @param destructive When true the icon renders in [KdError] red; otherwise [KdTextSecondary].
+ * @param enabled     Controls whether the button responds to clicks.
+ * @param onClick     Invoked when the button is clicked.
+ */
+data class DetailAction(
+    val label: String,
+    val icon: DrawableResource,
+    val destructive: Boolean = false,
+    val enabled: Boolean = true,
+    val onClick: () -> Unit,
+)
+
 class ExtraTab(
     val label: String,
     val icon: DrawableResource,
@@ -112,6 +129,7 @@ fun ResourceDetailPanel(
     apiVersion: String? = null,
     plural: String? = null,
     onDelete: (() -> Unit)? = null,
+    actions: List<DetailAction> = emptyList(),
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -164,6 +182,20 @@ fun ResourceDetailPanel(
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = KdTextSecondary,
+                        )
+                    }
+                }
+                actions.forEach { action ->
+                    IconButton(
+                        onClick = action.onClick,
+                        modifier = Modifier.size(28.dp),
+                        enabled = action.enabled,
+                    ) {
+                        Icon(
+                            painterResource(action.icon),
+                            action.label,
+                            Modifier.size(16.dp),
+                            tint = if (action.destructive) KdError else KdTextSecondary,
                         )
                     }
                 }
