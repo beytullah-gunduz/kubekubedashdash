@@ -2149,10 +2149,14 @@ class ReactiveKubeClient(
         // Use millis (not seconds) so rapid re-triggers don't collide on the name.
         val suffix = "-manual-${System.currentTimeMillis()}"
         val base = name.take(63 - suffix.length)
+        val templateLabels = template.metadata?.labels ?: emptyMap()
+        val templateAnnotations = template.metadata?.annotations ?: emptyMap()
         val job = JobBuilder()
             .withNewMetadata()
             .withName(base + suffix)
             .withNamespace(namespace)
+            .addToLabels(templateLabels)
+            .addToAnnotations(templateAnnotations)
             .addToAnnotations("cronjob.kubernetes.io/instantiate", "manual")
             .endMetadata()
             .withSpec(template.spec)
