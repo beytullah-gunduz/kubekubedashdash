@@ -7,6 +7,7 @@ import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,7 +42,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
@@ -143,9 +151,21 @@ fun ClusterSelectorModal(
         }
     }
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
+    val modalFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { modalFocus.requestFocus() } }
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .focusRequester(modalFocus)
+            .focusable()
+            .onPreviewKeyEvent { e ->
+                if (dismissable && e.type == KeyEventType.KeyDown && e.key == Key.Escape) {
+                    onDismiss()
+                    true
+                } else {
+                    false
+                }
+            }
             .background(Color.Black.copy(alpha = 0.45f))
             .then(
                 if (dismissable) {

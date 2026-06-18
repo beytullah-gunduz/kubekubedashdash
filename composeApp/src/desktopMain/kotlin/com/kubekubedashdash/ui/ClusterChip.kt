@@ -51,6 +51,8 @@ import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -408,8 +410,15 @@ private fun ClusterAvatar(
         1f
     }
 
+    val connState = when {
+        showSpinner -> "Connecting"
+        isConnected == true -> "Connected"
+        isConnected == false -> "Disconnected"
+        else -> "Unknown"
+    }
+
     Box(
-        modifier = Modifier.size(24.dp),
+        modifier = Modifier.size(24.dp).semantics { stateDescription = connState },
         contentAlignment = Alignment.Center,
     ) {
         // Cluster-color fill, intentionally smaller than the avatar's outer

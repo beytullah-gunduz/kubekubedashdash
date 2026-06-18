@@ -168,8 +168,12 @@ fun ResourceTable(
     var keyboardIndex by remember(sortedRows) { mutableStateOf(-1) }
     val coroutineScope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    var hasAutoFocused by remember { mutableStateOf(false) }
     LaunchedEffect(sortedRows.isNotEmpty()) {
-        if (sortedRows.isNotEmpty()) runCatching { focusRequester.requestFocus() }
+        if (sortedRows.isNotEmpty() && !hasAutoFocused) {
+            hasAutoFocused = true
+            runCatching { focusRequester.requestFocus() }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

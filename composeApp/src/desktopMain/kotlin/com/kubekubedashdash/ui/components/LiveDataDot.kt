@@ -23,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
@@ -54,10 +56,13 @@ fun LiveDataDot(isConnected: Boolean, errorMessage: String?, modifier: Modifier 
         1.0f
     }
 
+    val stateText = if (healthy) "Live data connected" else (errorMessage ?: "Disconnected")
+
     val dot = @Composable {
         Box(
             modifier = modifier
                 .size(8.dp)
+                .semantics { contentDescription = stateText }
                 .alpha(dotAlpha)
                 .clip(CircleShape)
                 .background(dotColor),
