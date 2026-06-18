@@ -25,6 +25,7 @@ import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun DeploymentDetailScreen(
@@ -121,13 +122,15 @@ fun DeploymentDetailScreen(
             onConfirm = { replicas ->
                 scaleInFlight = true
                 scaleError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.scaleWorkload(
-                        kind = "Deployment",
-                        name = deployment.name,
-                        namespace = deployment.namespace,
-                        replicas = replicas,
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.scaleWorkload(
+                            kind = "Deployment",
+                            name = deployment.name,
+                            namespace = deployment.namespace,
+                            replicas = replicas,
+                        )
+                    }
                     scaleInFlight = false
                     result.fold(
                         onSuccess = { showScaleDialog = false },
@@ -153,12 +156,14 @@ fun DeploymentDetailScreen(
             onConfirm = {
                 restartInFlight = true
                 restartError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = client.restartWorkload(
-                        kind = "Deployment",
-                        name = deployment.name,
-                        namespace = deployment.namespace,
-                    )
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        client.restartWorkload(
+                            kind = "Deployment",
+                            name = deployment.name,
+                            namespace = deployment.namespace,
+                        )
+                    }
                     restartInFlight = false
                     result.fold(
                         onSuccess = { showRestartDialog = false },

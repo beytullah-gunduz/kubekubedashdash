@@ -223,8 +223,8 @@ fun PodDetailPanel(
                 onConfirm = {
                     evictInFlight = true
                     evictError = null
-                    scope.launch(Dispatchers.IO) {
-                        val result = kubeClient.evictPod(pod.name, pod.namespace)
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { kubeClient.evictPod(pod.name, pod.namespace) }
                         evictInFlight = false
                         result.fold(
                             onSuccess = { showEvictDialog = false },
@@ -255,8 +255,8 @@ fun PodDetailPanel(
                 onConfirm = {
                     forceDeleteInFlight = true
                     forceDeleteError = null
-                    scope.launch(Dispatchers.IO) {
-                        val result = kubeClient.forceDeletePod(pod.name, pod.namespace)
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { kubeClient.forceDeletePod(pod.name, pod.namespace) }
                         forceDeleteInFlight = false
                         result.fold(
                             onSuccess = { showForceDeleteDialog = false },

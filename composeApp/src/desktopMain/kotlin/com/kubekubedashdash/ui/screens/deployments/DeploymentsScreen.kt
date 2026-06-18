@@ -37,6 +37,7 @@ import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun DeploymentsScreen(
@@ -154,8 +155,8 @@ fun DeploymentsScreen(
             onConfirm = {
                 deleteInFlight = true
                 deleteError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = reactiveClient.deleteResource("deployment", dep.name, dep.namespace)
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { reactiveClient.deleteResource("deployment", dep.name, dep.namespace) }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },

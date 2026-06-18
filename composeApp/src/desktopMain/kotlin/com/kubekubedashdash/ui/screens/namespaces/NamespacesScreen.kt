@@ -38,6 +38,7 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun NamespacesScreen(
@@ -147,8 +148,8 @@ fun NamespacesScreen(
             onConfirm = {
                 deleteInFlight = true
                 deleteError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = reactiveClient.deleteResource("namespace", ns.name, namespace = null)
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { reactiveClient.deleteResource("namespace", ns.name, namespace = null) }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },

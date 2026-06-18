@@ -48,6 +48,7 @@ import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PodsScreen(
@@ -245,8 +246,8 @@ fun PodsScreen(
             onConfirm = {
                 deleteInFlight = true
                 deleteError = null
-                scope.launch(Dispatchers.IO) {
-                    val result = reactiveClient.deleteResource("pod", pod.name, pod.namespace)
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { reactiveClient.deleteResource("pod", pod.name, pod.namespace) }
                     deleteInFlight = false
                     result.fold(
                         onSuccess = { pendingDelete = null },
