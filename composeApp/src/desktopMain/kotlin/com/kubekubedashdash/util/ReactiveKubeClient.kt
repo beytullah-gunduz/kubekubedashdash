@@ -18,6 +18,10 @@ import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
+import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
+import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
+import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
 import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestConditionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.ExecListener
@@ -1903,6 +1907,80 @@ class ReactiveKubeClient(
     }
 
     private fun requireNamespace(kind: String, namespace: String?): String = namespace ?: throw IllegalArgumentException("$kind requires a namespace")
+
+    // ── On-demand: Scale / Rollout Restart ─────────────────────────────────────
+
+    /**
+     * Scale a workload by editing `spec.replicas` directly on the resource.
+     * Supported kinds: Deployment, StatefulSet, ReplicaSet.
+     */
+    fun scaleWorkload(kind: String, name: String, namespace: String, replicas: Int): Result<Unit> = runCatching {
+        log.info("Scaling {} name={} namespace={} replicas={}", kind, name, namespace, replicas)
+        when (kind.lowercase()) {
+            "deployment" -> k8s.apps().deployments().inNamespace(namespace).withName(name)
+                .edit { d -> DeploymentBuilder(d).editSpec().withReplicas(replicas).endSpec().build() }
+
+            "statefulset" -> k8s.apps().statefulSets().inNamespace(namespace).withName(name)
+                .edit { ss -> StatefulSetBuilder(ss).editSpec().withReplicas(replicas).endSpec().build() }
+
+            "replicaset" -> k8s.apps().replicaSets().inNamespace(namespace).withName(name)
+                .edit { rs -> ReplicaSetBuilder(rs).editSpec().withReplicas(replicas).endSpec().build() }
+
+            else -> throw IllegalArgumentException("Scale not supported for $kind")
+        }
+    }.map { }
+
+    /**
+     * Trigger a rolling restart by patching the pod-template annotation
+     * `kubectl.kubernetes.io/restartedAt` — identical to `kubectl rollout restart`.
+     * Supported kinds: Deployment, StatefulSet, DaemonSet.
+     */
+    fun restartWorkload(kind: String, name: String, namespace: String): Result<Unit> = runCatching {
+        log.info("Restarting {} name={} namespace={}", kind, name, namespace)
+        val ts = java.time.Instant.now().toString()
+        when (kind.lowercase()) {
+            "deployment" -> k8s.apps().deployments().inNamespace(namespace).withName(name)
+                .edit { d ->
+                    DeploymentBuilder(d)
+                        .editSpec()
+                        .editOrNewTemplate()
+                        .editOrNewMetadata()
+                        .addToAnnotations("kubectl.kubernetes.io/restartedAt", ts)
+                        .endMetadata()
+                        .endTemplate()
+                        .endSpec()
+                        .build()
+                }
+
+            "statefulset" -> k8s.apps().statefulSets().inNamespace(namespace).withName(name)
+                .edit { ss ->
+                    StatefulSetBuilder(ss)
+                        .editSpec()
+                        .editOrNewTemplate()
+                        .editOrNewMetadata()
+                        .addToAnnotations("kubectl.kubernetes.io/restartedAt", ts)
+                        .endMetadata()
+                        .endTemplate()
+                        .endSpec()
+                        .build()
+                }
+
+            "daemonset" -> k8s.apps().daemonSets().inNamespace(namespace).withName(name)
+                .edit { ds ->
+                    DaemonSetBuilder(ds)
+                        .editSpec()
+                        .editOrNewTemplate()
+                        .editOrNewMetadata()
+                        .addToAnnotations("kubectl.kubernetes.io/restartedAt", ts)
+                        .endMetadata()
+                        .endTemplate()
+                        .endSpec()
+                        .build()
+                }
+
+            else -> throw IllegalArgumentException("Restart not supported for $kind")
+        }
+    }.map { }
 
     // ── On-demand: CSR Approve / Deny ───────────────────────────────────────────
 

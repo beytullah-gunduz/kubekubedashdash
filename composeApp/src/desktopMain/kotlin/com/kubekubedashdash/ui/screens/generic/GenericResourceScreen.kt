@@ -39,9 +39,11 @@ import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.language_filled
+import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.lock_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
+import com.kubekubedashdash.resources.rotate_right_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.sell_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
@@ -60,6 +62,7 @@ import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
+import com.kubekubedashdash.ui.components.ScaleDialog
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
@@ -125,6 +128,12 @@ private sealed interface CsrAction {
     data class Deny(override val target: GenericResourceInfo) : CsrAction
 }
 
+/** Pending workload scale: holds the resource to scale. */
+private data class PendingScale(val target: GenericResourceInfo)
+
+/** Pending rollout restart: holds the resource to restart. */
+private data class PendingRestart(val target: GenericResourceInfo)
+
 @Composable
 fun GenericResourceScreen(
     kind: String,
@@ -156,6 +165,12 @@ fun GenericResourceScreen(
     var pendingCsrAction by remember(kind) { mutableStateOf<CsrAction?>(null) }
     var csrActionInFlight by remember(kind) { mutableStateOf(false) }
     var csrActionError by remember(kind) { mutableStateOf<String?>(null) }
+    var pendingScale by remember(kind) { mutableStateOf<PendingScale?>(null) }
+    var scaleInFlight by remember(kind) { mutableStateOf(false) }
+    var scaleError by remember(kind) { mutableStateOf<String?>(null) }
+    var pendingRestart by remember(kind) { mutableStateOf<PendingRestart?>(null) }
+    var restartInFlight by remember(kind) { mutableStateOf(false) }
+    var restartError by remember(kind) { mutableStateOf<String?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -306,6 +321,38 @@ fun GenericResourceScreen(
                             } else {
                                 emptyList()
                             }
+                            val scaleActions = when (kind.lowercase()) {
+                                "statefulset", "replicaset" -> listOf(
+                                    DetailAction(
+                                        label = "Scale",
+                                        icon = Res.drawable.layers_filled,
+                                        destructive = false,
+                                        enabled = !scaleInFlight,
+                                        onClick = {
+                                            pendingScale = PendingScale(res)
+                                            scaleError = null
+                                        },
+                                    ),
+                                )
+
+                                else -> emptyList()
+                            }
+                            val restartActions = when (kind.lowercase()) {
+                                "statefulset", "daemonset" -> listOf(
+                                    DetailAction(
+                                        label = "Rollout Restart",
+                                        icon = Res.drawable.rotate_right_filled,
+                                        destructive = false,
+                                        enabled = !restartInFlight,
+                                        onClick = {
+                                            pendingRestart = PendingRestart(res)
+                                            restartError = null
+                                        },
+                                    ),
+                                )
+
+                                else -> emptyList()
+                            }
                             ResourceDetailPanel(
                                 kind = kind,
                                 name = res.name,
@@ -332,7 +379,7 @@ fun GenericResourceScreen(
                                     pendingDelete = res
                                     deleteError = null
                                 },
-                                actions = csrActions,
+                                actions = csrActions + scaleActions + restartActions,
                             )
                         }
                     }
@@ -407,6 +454,72 @@ fun GenericResourceScreen(
             onDismiss = {
                 pendingCsrAction = null
                 csrActionError = null
+            },
+        )
+    }
+
+    pendingScale?.let { ps ->
+        val currentReplicas = ps.target.extraColumns
+            .entries.firstOrNull { (_, v) -> v.contains("/") }
+            ?.let { (_, v) -> v.substringAfterLast("/").toIntOrNull() }
+            ?: ps.target.extraColumns.values.firstOrNull { it.toIntOrNull() != null }?.toIntOrNull()
+            ?: 1
+        ScaleDialog(
+            name = ps.target.name,
+            currentReplicas = currentReplicas,
+            inFlight = scaleInFlight,
+            errorMessage = scaleError,
+            onConfirm = { replicas ->
+                scaleInFlight = true
+                scaleError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = client.scaleWorkload(
+                        kind = kind,
+                        name = ps.target.name,
+                        namespace = ps.target.namespace ?: "",
+                        replicas = replicas,
+                    )
+                    scaleInFlight = false
+                    result.fold(
+                        onSuccess = { pendingScale = null },
+                        onFailure = { scaleError = it.message ?: "Scale failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingScale = null
+                scaleError = null
+            },
+        )
+    }
+
+    pendingRestart?.let { pr ->
+        ConfirmActionDialog(
+            title = "Rollout Restart",
+            body = "Restart all pods of $kind \"${pr.target.name}\"? Pods are recreated in a rolling update.",
+            confirmLabel = "Restart",
+            destructive = false,
+            inFlight = restartInFlight,
+            errorMessage = restartError,
+            onConfirm = {
+                restartInFlight = true
+                restartError = null
+                scope.launch(Dispatchers.IO) {
+                    val result = client.restartWorkload(
+                        kind = kind,
+                        name = pr.target.name,
+                        namespace = pr.target.namespace ?: "",
+                    )
+                    restartInFlight = false
+                    result.fold(
+                        onSuccess = { pendingRestart = null },
+                        onFailure = { restartError = it.message ?: "Restart failed" },
+                    )
+                }
+            },
+            onDismiss = {
+                pendingRestart = null
+                restartError = null
             },
         )
     }
