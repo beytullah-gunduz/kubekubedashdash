@@ -1961,6 +1961,78 @@ class ReactiveKubeClient(
         }
     }.getOrDefault(emptyList())
 
+    // ── On-demand: RBAC Rules & Binding Detail ─────────────────────────────────
+
+    fun getPolicyRules(kind: String, name: String, namespace: String?): List<PolicyRuleRow> = runCatching {
+        log.debug("Fetching RBAC rules kind={} name={} namespace={}", kind, name, namespace)
+        val rules =
+            if (kind == "ClusterRole") {
+                k8s.rbac().clusterRoles().withName(name).get()?.rules
+            } else {
+                k8s.rbac().roles().inNamespace(namespace ?: "").withName(name).get()?.rules
+            } ?: return@runCatching emptyList()
+        rules.map { rule ->
+            PolicyRuleRow(
+                apiGroups = rule.apiGroups?.joinToString(", ") ?: "",
+                resources = rule.resources?.joinToString(", ") ?: "",
+                verbs = rule.verbs?.joinToString(", ") ?: "",
+                resourceNames = rule.resourceNames?.joinToString(", ") ?: "",
+                nonResourceUrls = rule.nonResourceURLs?.joinToString(", ") ?: "",
+            )
+        }
+    }.getOrDefault(emptyList())
+
+    fun getRoleBindingDetail(kind: String, name: String, namespace: String?): RoleBindingDetail? = runCatching {
+        log.debug("Fetching binding detail kind={} name={} namespace={}", kind, name, namespace)
+        val roleRef: io.fabric8.kubernetes.api.model.rbac.RoleRef
+        val rawSubjects: List<io.fabric8.kubernetes.api.model.rbac.Subject>
+        if (kind == "ClusterRoleBinding") {
+            val crb = k8s.rbac().clusterRoleBindings().withName(name).get()
+                ?: return@runCatching null
+            roleRef = crb.roleRef ?: return@runCatching null
+            rawSubjects = crb.subjects ?: emptyList()
+        } else {
+            val rb = k8s.rbac().roleBindings().inNamespace(namespace ?: "").withName(name).get()
+                ?: return@runCatching null
+            roleRef = rb.roleRef ?: return@runCatching null
+            rawSubjects = rb.subjects ?: emptyList()
+        }
+        val subjects =
+            rawSubjects.map { s ->
+                RbacSubjectRow(
+                    kind = s.kind ?: "",
+                    name = s.name ?: "",
+                    namespace = s.namespace,
+                )
+            }
+        // Resolve referenced role
+        val resolveNamespace =
+            if (roleRef.kind == "ClusterRole") {
+                null
+            } else {
+                namespace
+            }
+        val resolvedRules = getPolicyRules(roleRef.kind ?: "", roleRef.name ?: "", resolveNamespace)
+        // A ClusterRole/Role is "found" if rules came back non-empty OR we can
+        // fetch it directly (handles rules=[]).
+        val resolvedRoleFound =
+            resolvedRules.isNotEmpty() ||
+                runCatching {
+                    if (roleRef.kind == "ClusterRole") {
+                        k8s.rbac().clusterRoles().withName(roleRef.name ?: "").get() != null
+                    } else {
+                        k8s.rbac().roles().inNamespace(resolveNamespace ?: "").withName(roleRef.name ?: "").get() != null
+                    }
+                }.getOrDefault(false)
+        RoleBindingDetail(
+            roleRefKind = roleRef.kind ?: "",
+            roleRefName = roleRef.name ?: "",
+            subjects = subjects,
+            resolvedRules = resolvedRules,
+            resolvedRoleFound = resolvedRoleFound,
+        )
+    }.getOrNull()
+
     // ── On-demand: Pod Metrics ──────────────────────────────────────────────────
 
     fun getPodMetrics(name: String, namespace: String): PodMetricsSnapshot? = try {
@@ -2272,6 +2344,31 @@ data class QuotaUsageRow(
     val used: String,
     val hard: String,
     val fraction: Float,
+)
+
+/** A single policy rule in a Role / ClusterRole. */
+data class PolicyRuleRow(
+    val apiGroups: String,
+    val resources: String,
+    val verbs: String,
+    val resourceNames: String,
+    val nonResourceUrls: String,
+)
+
+/** A single subject in a RoleBinding / ClusterRoleBinding. */
+data class RbacSubjectRow(
+    val kind: String,
+    val name: String,
+    val namespace: String?,
+)
+
+/** Full detail for a RoleBinding / ClusterRoleBinding. */
+data class RoleBindingDetail(
+    val roleRefKind: String,
+    val roleRefName: String,
+    val subjects: List<RbacSubjectRow>,
+    val resolvedRules: List<PolicyRuleRow>,
+    val resolvedRoleFound: Boolean,
 )
 
 /**
