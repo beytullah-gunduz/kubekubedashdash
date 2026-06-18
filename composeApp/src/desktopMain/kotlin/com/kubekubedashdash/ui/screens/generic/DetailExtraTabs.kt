@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.screens.generic
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,13 +35,17 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
+import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.screens.ExtraTab
+import com.kubekubedashdash.util.EndpointSliceDetail
 import com.kubekubedashdash.util.PolicyRuleRow
 import com.kubekubedashdash.util.QuotaUsageRow
 import com.kubekubedashdash.util.ReactiveKubeClient
@@ -51,16 +57,18 @@ import kotlinx.coroutines.withContext
  * Returns kind-specific extra tabs for [ResourceDetailPanel].
  *
  * Extension point: add new `when` branches here as more kind-specific tabs are needed.
- * Signature: (kind, selected resource, kube client) → list of [ExtraTab] (may be empty).
+ * Signature: (kind, selected resource, kube client, onNavigate) → list of [ExtraTab] (may be empty).
  */
 fun kindExtraTabs(
     kind: String,
     res: GenericResourceInfo,
     client: ReactiveKubeClient,
+    onNavigate: (Screen) -> Unit = {},
 ): List<ExtraTab> = when (kind) {
     "ResourceQuota" -> listOf(resourceQuotaUsageTab(res, client))
     "Role", "ClusterRole" -> listOf(policyRulesTab(res, client, kind))
     "RoleBinding", "ClusterRoleBinding" -> listOf(roleBindingTab(res, client, kind))
+    "EndpointSlice" -> listOf(endpointSliceTab(res, client, onNavigate))
     else -> emptyList()
 }
 
@@ -299,6 +307,185 @@ private fun roleBindingTab(
                 } else {
                     d.resolvedRules.forEachIndexed { idx, rule ->
                         PolicyRuleCard(rule = rule, index = idx + 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun endpointSliceTab(
+    res: GenericResourceInfo,
+    client: ReactiveKubeClient,
+    onNavigate: (Screen) -> Unit,
+): ExtraTab = ExtraTab(
+    label = "Endpoints",
+    icon = Res.drawable.settings_ethernet_filled,
+) {
+    var detail by remember(res.uid) { mutableStateOf<EndpointSliceDetail?>(null) }
+    var loaded by remember(res.uid) { mutableStateOf(false) }
+
+    LaunchedEffect(res.uid) {
+        detail = null
+        loaded = false
+        detail =
+            withContext(Dispatchers.IO) {
+                client.getEndpointSliceDetail(res.name, res.namespace)
+            }
+        loaded = true
+    }
+
+    // Read the services flow inside the composable so navigation can resolve the
+    // backing Service by name + namespace at click-time without a blocking fetch.
+    val servicesState by client.services.collectAsState()
+
+    when {
+        !loaded -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            }
+        }
+
+        detail == null -> {
+            EmptyState(
+                icon = Res.drawable.settings_ethernet_filled,
+                kind = "EndpointSlice not found",
+            )
+        }
+
+        else -> {
+            val d = detail!!
+            Column(
+                modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // ── Summary section ─────────────────────────────────────────
+                Text(
+                    "Summary",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = KdTextPrimary,
+                )
+                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Column(
+                        modifier =
+                        Modifier
+                            .padding(12.dp)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        LabeledLine(label = "Address Type", value = d.addressType)
+
+                        // Backing Service link — only rendered when the label is present
+                        if (d.serviceName != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    "Backing Service:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = KdTextSecondary,
+                                )
+                                Text(
+                                    d.serviceName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = KdSuccess,
+                                    modifier =
+                                    Modifier.clickable {
+                                        val found =
+                                            (servicesState as? ResourceState.Success)?.data
+                                                ?.firstOrNull {
+                                                    it.name == d.serviceName &&
+                                                        it.namespace == res.namespace
+                                                }
+                                        if (found != null) {
+                                            onNavigate(Screen.Detail.ServiceDetail(found))
+                                        } else {
+                                            onNavigate(Screen.Main.Services)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── Endpoints section ───────────────────────────────────────
+                if (d.endpoints.isNotEmpty()) {
+                    Text(
+                        "Endpoints",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = KdTextPrimary,
+                    )
+                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                        Column(
+                            modifier =
+                            Modifier
+                                .padding(12.dp)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            d.endpoints.forEachIndexed { idx, ep ->
+                                if (idx > 0) HorizontalDivider(color = KdTextSecondary.copy(alpha = 0.15f))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        ep.addresses.ifBlank { "—" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KdTextPrimary,
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (ep.ready) KdSuccess.copy(alpha = 0.15f) else KdError.copy(alpha = 0.15f),
+                                    ) {
+                                        Text(
+                                            if (ep.ready) "Ready" else "NotReady",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (ep.ready) KdSuccess else KdError,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                }
+                                if (!ep.hostname.isNullOrBlank()) {
+                                    LabeledLine(label = "Hostname", value = ep.hostname)
+                                }
+                                if (!ep.nodeName.isNullOrBlank()) {
+                                    LabeledLine(label = "Node", value = ep.nodeName)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Ports section ───────────────────────────────────────────
+                if (d.ports.isNotEmpty()) {
+                    Text(
+                        "Ports",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = KdTextPrimary,
+                    )
+                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                        Column(
+                            modifier =
+                            Modifier
+                                .padding(12.dp)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            d.ports.forEachIndexed { idx, p ->
+                                if (idx > 0) HorizontalDivider(color = KdTextSecondary.copy(alpha = 0.15f))
+                                LabeledLine(label = "Name", value = p.name)
+                                LabeledLine(label = "Port", value = p.port)
+                                LabeledLine(label = "Protocol", value = p.protocol)
+                            }
+                        }
                     }
                 }
             }

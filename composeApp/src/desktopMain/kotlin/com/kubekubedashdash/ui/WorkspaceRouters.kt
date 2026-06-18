@@ -197,7 +197,7 @@ fun ContentRouter(
 
             is Screen.Main.IngressClasses -> genericKind("IngressClass", reactiveClient.ingressClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
-            is Screen.Main.EndpointSlices -> genericKind("EndpointSlice", reactiveClient.endpointSlices, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.EndpointSlices -> genericKind("EndpointSlice", reactiveClient.endpointSlices, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
             is Screen.Main.CSIDrivers -> genericKind("CSIDriver", reactiveClient.csiDrivers, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
@@ -249,6 +249,7 @@ private fun genericKind(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    onNavigate: (Screen) -> Unit = {},
 ) = GenericResourceScreen(
     kind = kind,
     searchQuery = searchQuery,
@@ -263,6 +264,7 @@ private fun genericKind(
     apiGroup = apiGroup,
     apiVersion = apiVersion,
     plural = plural,
+    onNavigate = onNavigate,
 )
 
 @Composable

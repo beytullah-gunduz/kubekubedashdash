@@ -2033,6 +2033,37 @@ class ReactiveKubeClient(
         )
     }.getOrNull()
 
+    // ── On-demand: EndpointSlice Detail ───────────────────────────────────────
+
+    fun getEndpointSliceDetail(name: String, namespace: String?): EndpointSliceDetail? = runCatching {
+        log.debug("Fetching EndpointSlice detail name={} namespace={}", name, namespace ?: "<cluster>")
+        val ns = namespace ?: ""
+        val es = k8s.discovery().v1().endpointSlices().inNamespace(ns).withName(name).get()
+            ?: return@runCatching null
+        val serviceName = es.metadata?.labels?.get("kubernetes.io/service-name")
+        val endpoints = es.endpoints?.map { ep ->
+            EndpointDetail(
+                addresses = ep.addresses?.joinToString(", ") ?: "",
+                ready = ep.conditions?.ready ?: false,
+                hostname = ep.hostname?.ifBlank { null },
+                nodeName = ep.nodeName?.ifBlank { null },
+            )
+        } ?: emptyList()
+        val ports = es.ports?.map { p ->
+            EndpointPortRow(
+                name = p.name?.ifBlank { "—" } ?: "—",
+                port = p.port?.toString() ?: "—",
+                protocol = p.protocol?.ifBlank { "—" } ?: "—",
+            )
+        } ?: emptyList()
+        EndpointSliceDetail(
+            addressType = es.addressType ?: "—",
+            serviceName = serviceName,
+            endpoints = endpoints,
+            ports = ports,
+        )
+    }.getOrNull()
+
     // ── On-demand: Pod Metrics ──────────────────────────────────────────────────
 
     fun getPodMetrics(name: String, namespace: String): PodMetricsSnapshot? = try {
@@ -2369,6 +2400,29 @@ data class RoleBindingDetail(
     val subjects: List<RbacSubjectRow>,
     val resolvedRules: List<PolicyRuleRow>,
     val resolvedRoleFound: Boolean,
+)
+
+/** A single endpoint entry in an EndpointSlice. */
+data class EndpointDetail(
+    val addresses: String,
+    val ready: Boolean,
+    val hostname: String?,
+    val nodeName: String?,
+)
+
+/** A single port entry in an EndpointSlice. */
+data class EndpointPortRow(
+    val name: String,
+    val port: String,
+    val protocol: String,
+)
+
+/** Full detail for an EndpointSlice. */
+data class EndpointSliceDetail(
+    val addressType: String,
+    val serviceName: String?,
+    val endpoints: List<EndpointDetail>,
+    val ports: List<EndpointPortRow>,
 )
 
 /**

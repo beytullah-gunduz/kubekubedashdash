@@ -1466,17 +1466,25 @@ object MockClusterProvider {
                 .build(),
         ).create()
 
-        // EndpointSlice (namespaced)
+        // EndpointSlice (namespaced) — links to seeded frontend-svc via label
         client.discovery().v1().endpointSlices().inNamespace("default").resource(
             EndpointSliceBuilder()
                 .withNewMetadata()
                 .withName("demo-slice")
                 .withNamespace("default")
                 .withCreationTimestamp(minutesAgo(1440))
+                .addToLabels("kubernetes.io/service-name", "frontend-svc")
                 .endMetadata()
                 .withAddressType("IPv4")
-                .addNewEndpoint().withAddresses("10.0.0.1").endEndpoint()
-                .addNewPort().withName("http").withPort(80).endPort()
+                .addNewEndpoint()
+                .withAddresses("10.0.0.1")
+                .withNewConditions().withReady(true).endConditions()
+                .endEndpoint()
+                .addNewEndpoint()
+                .withAddresses("10.0.0.2")
+                .withNewConditions().withReady(false).endConditions()
+                .endEndpoint()
+                .addNewPort().withName("http").withPort(80).withProtocol("TCP").endPort()
                 .build(),
         ).create()
 

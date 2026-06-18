@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdSuccess
+import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -139,6 +140,7 @@ fun GenericResourceScreen(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    onNavigate: (Screen) -> Unit = {},
 ) {
     val viewModel = viewModel(key = kind) { GenericResourceScreenViewModel(sourceFlow) }
     val state by viewModel.state.collectAsState()
@@ -314,7 +316,7 @@ fun GenericResourceScreen(
                                 annotations = res.annotations,
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.width(panelWidthDp.dp).fillMaxHeight(),
-                                extraTabs = kindExtraTabs(kind, res, client),
+                                extraTabs = kindExtraTabs(kind, res, client, onNavigate),
                                 labelQuery = labelQuery,
                                 onToggleLabel = { k, v ->
                                     onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))
