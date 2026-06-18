@@ -254,8 +254,8 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Embedded HTTP server | Ktor 3.1.3 (CIO + SSE + content negotiation) |
 | Native interop | JNA 5.15 (macOS shell `PATH` resolution) |
 | Logging | Logback Classic 1.5.15 (via SLF4J) |
-| Code formatting | Spotless 8.2.1 + ktlint |
-| Build tool | Gradle 8.12, JDK 21 |
+| Code formatting | Spotless 8.7.0 + ktlint |
+| Build tool | Gradle 9.3.0, JDK 21 |
 | Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
 
 ## CI
