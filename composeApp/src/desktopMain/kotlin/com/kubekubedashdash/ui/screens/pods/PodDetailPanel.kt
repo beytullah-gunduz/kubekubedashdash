@@ -69,19 +69,23 @@ import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
+import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.refresh_24
 import com.kubekubedashdash.resources.terminal_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.MetricsLineChart
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
@@ -124,6 +128,16 @@ fun PodDetailPanel(
     var metricsHistory by remember(pod.uid) { mutableStateOf(listOf<PodMetricsSnapshot>()) }
     val scope = rememberCoroutineScope()
 
+    // ── Evict dialog state ─────────────────────────────────────────────────────
+    var showEvictDialog by remember(pod.uid) { mutableStateOf(false) }
+    var evictInFlight by remember(pod.uid) { mutableStateOf(false) }
+    var evictError by remember(pod.uid) { mutableStateOf<String?>(null) }
+
+    // ── Force-Delete dialog state ──────────────────────────────────────────────
+    var showForceDeleteDialog by remember(pod.uid) { mutableStateOf(false) }
+    var forceDeleteInFlight by remember(pod.uid) { mutableStateOf(false) }
+    var forceDeleteError by remember(pod.uid) { mutableStateOf<String?>(null) }
+
     LaunchedEffect(pod.uid) {
         while (true) {
             val snapshot = withContext(Dispatchers.IO) {
@@ -153,7 +167,19 @@ fun PodDetailPanel(
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                PanelHeader(pod, onClose)
+                PanelHeader(
+                    pod = pod,
+                    onClose = onClose,
+                    actionsEnabled = !evictInFlight && !forceDeleteInFlight,
+                    onEvictClick = {
+                        evictError = null
+                        showEvictDialog = true
+                    },
+                    onForceDeleteClick = {
+                        forceDeleteError = null
+                        showForceDeleteDialog = true
+                    },
+                )
                 PanelTabs(activeTab, tabs) { newTab ->
                     activeTab = newTab
                     scope.launch {
@@ -182,13 +208,83 @@ fun PodDetailPanel(
                 }
             }
         }
+
+        // ── Evict dialog ───────────────────────────────────────────────────────
+        if (showEvictDialog) {
+            ConfirmActionDialog(
+                title = "Evict Pod",
+                body = "Evict \"${pod.name}\" from namespace \"${pod.namespace}\"? " +
+                    "The pod will be gracefully removed — its controller will reschedule it on another node. " +
+                    "This respects PodDisruptionBudgets and may be rejected if disruption is not allowed.",
+                confirmLabel = "Evict",
+                destructive = false,
+                inFlight = evictInFlight,
+                errorMessage = evictError,
+                onConfirm = {
+                    evictInFlight = true
+                    evictError = null
+                    scope.launch(Dispatchers.IO) {
+                        val result = kubeClient.evictPod(pod.name, pod.namespace)
+                        evictInFlight = false
+                        result.fold(
+                            onSuccess = { showEvictDialog = false },
+                            onFailure = { evictError = it.message ?: "Eviction failed" },
+                        )
+                    }
+                },
+                onDismiss = {
+                    if (!evictInFlight) {
+                        showEvictDialog = false
+                        evictError = null
+                    }
+                },
+            )
+        }
+
+        // ── Force-Delete dialog ────────────────────────────────────────────────
+        if (showForceDeleteDialog) {
+            ConfirmActionDialog(
+                title = "Force Delete Pod",
+                body = "Force-delete \"${pod.name}\" from namespace \"${pod.namespace}\"? " +
+                    "This immediately removes the pod with grace period 0, bypassing graceful shutdown. " +
+                    "Only use this for a stuck or unresponsive pod — it can orphan volumes and open connections.",
+                confirmLabel = "Force Delete",
+                destructive = true,
+                inFlight = forceDeleteInFlight,
+                errorMessage = forceDeleteError,
+                onConfirm = {
+                    forceDeleteInFlight = true
+                    forceDeleteError = null
+                    scope.launch(Dispatchers.IO) {
+                        val result = kubeClient.forceDeletePod(pod.name, pod.namespace)
+                        forceDeleteInFlight = false
+                        result.fold(
+                            onSuccess = { showForceDeleteDialog = false },
+                            onFailure = { forceDeleteError = it.message ?: "Force delete failed" },
+                        )
+                    }
+                },
+                onDismiss = {
+                    if (!forceDeleteInFlight) {
+                        showForceDeleteDialog = false
+                        forceDeleteError = null
+                    }
+                },
+            )
+        }
     }
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PanelHeader(pod: PodInfo, onClose: () -> Unit) {
+private fun PanelHeader(
+    pod: PodInfo,
+    onClose: () -> Unit,
+    actionsEnabled: Boolean,
+    onEvictClick: () -> Unit,
+    onForceDeleteClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -212,9 +308,33 @@ private fun PanelHeader(pod: PodInfo, onClose: () -> Unit) {
                 Text(pod.namespace, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
             }
         }
-        IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-            Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
-        }
+
+        // Evict button
+        TooltipIconButton(
+            icon = Res.drawable.clear_all_filled,
+            label = "Evict pod",
+            tint = KdTextSecondary,
+            description = "Gracefully remove this pod — respects PodDisruptionBudgets and lets its controller reschedule it (use to move a pod off its node).",
+            enabled = actionsEnabled,
+            onClick = onEvictClick,
+        )
+
+        // Force Delete button
+        TooltipIconButton(
+            icon = Res.drawable.delete_filled,
+            label = "Force delete pod",
+            tint = KdError,
+            description = "Immediately delete this pod (grace period 0) — only for a stuck/unresponsive pod; skips graceful shutdown and can orphan resources.",
+            enabled = actionsEnabled,
+            onClick = onForceDeleteClick,
+        )
+
+        TooltipIconButton(
+            icon = Res.drawable.close_filled,
+            label = "Close",
+            tint = KdTextSecondary,
+            onClick = onClose,
+        )
     }
 }
 

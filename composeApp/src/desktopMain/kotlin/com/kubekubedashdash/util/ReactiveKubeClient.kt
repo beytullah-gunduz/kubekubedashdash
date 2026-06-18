@@ -2110,6 +2110,28 @@ class ReactiveKubeClient(
         DrainResult(evicted = evicted, skipped = skipped, failed = failed)
     }
 
+    // ── On-demand: Pod Evict / Force-Delete ─────────────────────────────────────
+
+    /**
+     * Evict a pod gracefully via the `/eviction` subresource — respects
+     * PodDisruptionBudgets. Returns failure if the eviction is rejected
+     * (e.g. blocked by a PDB) so the UI can surface the reason.
+     */
+    fun evictPod(name: String, namespace: String): Result<Unit> = runCatching {
+        log.info("Evicting pod name={} namespace={}", name, namespace)
+        val ok = k8s.pods().inNamespace(namespace).withName(name).evict()
+        if (!ok) error("Eviction was rejected (it may be blocked by a PodDisruptionBudget)")
+    }
+
+    /**
+     * Force-delete a pod with grace period 0 — skips graceful shutdown entirely.
+     * Use only for pods stuck in Terminating/unresponsive; can orphan resources.
+     */
+    fun forceDeletePod(name: String, namespace: String): Result<Unit> = runCatching {
+        log.info("Force-deleting pod name={} namespace={}", name, namespace)
+        k8s.pods().inNamespace(namespace).withName(name).withGracePeriod(0L).delete()
+    }.map { }
+
     // ── On-demand: CronJob Trigger / Suspend ─────────────────────────────────────
 
     /**
