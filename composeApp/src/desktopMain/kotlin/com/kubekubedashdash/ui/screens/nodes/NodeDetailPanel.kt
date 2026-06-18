@@ -66,6 +66,7 @@ import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
@@ -108,13 +109,11 @@ internal fun NodeDetailPanel(
 
     // ── Cordon / Uncordon dialog state ─────────────────────────────────────────
     var showCordonDialog by remember(node.uid) { mutableStateOf(false) }
-    var cordonInFlight by remember(node.uid) { mutableStateOf(false) }
-    var cordonError by remember(node.uid) { mutableStateOf<String?>(null) }
+    val cordon = rememberConfirmableAction()
 
     // ── Drain dialog state ─────────────────────────────────────────────────────
     var showDrainDialog by remember(node.uid) { mutableStateOf(false) }
-    var drainInFlight by remember(node.uid) { mutableStateOf(false) }
-    var drainError by remember(node.uid) { mutableStateOf<String?>(null) }
+    val drain = rememberConfirmableAction()
     var drainStatus by remember(node.uid) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(node.name) {
@@ -199,9 +198,9 @@ internal fun NodeDetailPanel(
                         } else {
                             "Stop new pods from scheduling on this node (existing ones keep running) — to quarantine a flaky node."
                         },
-                        enabled = !cordonInFlight && !drainInFlight,
+                        enabled = !cordon.inFlight && !drain.inFlight,
                         onClick = {
-                            cordonError = null
+                            cordon.clearError()
                             showCordonDialog = true
                         },
                     )
@@ -212,9 +211,9 @@ internal fun NodeDetailPanel(
                         label = "Drain node",
                         tint = KdTextSecondary,
                         description = "Cordon the node and move its pods elsewhere — to safely empty it before maintenance or shutdown.",
-                        enabled = !cordonInFlight && !drainInFlight,
+                        enabled = !cordon.inFlight && !drain.inFlight,
                         onClick = {
-                            drainError = null
+                            drain.clearError()
                             drainStatus = null
                             showDrainDialog = true
                         },
@@ -307,24 +306,19 @@ internal fun NodeDetailPanel(
                 },
                 confirmLabel = if (targetUnschedulable) "Cordon" else "Uncordon",
                 destructive = false,
-                inFlight = cordonInFlight,
-                errorMessage = cordonError,
+                inFlight = cordon.inFlight,
+                errorMessage = cordon.error,
                 onConfirm = {
-                    cordonInFlight = true
-                    cordonError = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) { kubeClient.actions.cordonNode(node.name, targetUnschedulable) }
-                        cordonInFlight = false
-                        result.fold(
-                            onSuccess = { showCordonDialog = false },
-                            onFailure = { cordonError = it.message ?: "Operation failed" },
-                        )
-                    }
+                    cordon.run(
+                        failureMessage = "Operation failed",
+                        block = { kubeClient.actions.cordonNode(node.name, targetUnschedulable) },
+                        onSuccess = { showCordonDialog = false },
+                    )
                 },
                 onDismiss = {
-                    if (!cordonInFlight) {
+                    if (!cordon.inFlight) {
                         showCordonDialog = false
-                        cordonError = null
+                        cordon.clearError()
                     }
                 },
             )
@@ -340,28 +334,23 @@ internal fun NodeDetailPanel(
                     (drainStatus ?: ""),
                 confirmLabel = "Drain",
                 destructive = true,
-                inFlight = drainInFlight,
-                errorMessage = drainError,
+                inFlight = drain.inFlight,
+                errorMessage = drain.error,
                 onConfirm = {
-                    drainInFlight = true
-                    drainError = null
                     drainStatus = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) { kubeClient.actions.drainNode(node.name) }
-                        drainInFlight = false
-                        result.fold(
-                            onSuccess = { dr ->
-                                drainStatus = "Evicted ${dr.evicted}, skipped ${dr.skipped}, failed ${dr.failed}."
-                                showDrainDialog = false
-                            },
-                            onFailure = { drainError = it.message ?: "Drain failed" },
-                        )
-                    }
+                    drain.run(
+                        failureMessage = "Drain failed",
+                        block = { kubeClient.actions.drainNode(node.name) },
+                        onSuccess = { dr ->
+                            drainStatus = "Evicted ${dr.evicted}, skipped ${dr.skipped}, failed ${dr.failed}."
+                            showDrainDialog = false
+                        },
+                    )
                 },
                 onDismiss = {
-                    if (!drainInFlight) {
+                    if (!drain.inFlight) {
                         showDrainDialog = false
-                        drainError = null
+                        drain.clearError()
                     }
                 },
             )

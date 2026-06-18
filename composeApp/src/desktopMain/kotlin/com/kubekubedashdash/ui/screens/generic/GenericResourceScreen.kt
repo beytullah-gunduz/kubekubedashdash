@@ -18,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,16 +69,14 @@ import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 
 private const val MIN_LIST_DP = 320f
@@ -171,25 +168,18 @@ fun GenericResourceScreen(
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
 
     val client = LocalReactiveKubeClient.current
-    val scope = rememberCoroutineScope()
     var pendingDelete by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
-    var deleteInFlight by remember(kind) { mutableStateOf(false) }
-    var deleteError by remember(kind) { mutableStateOf<String?>(null) }
+    val delete = rememberConfirmableAction()
     var pendingCsrAction by remember(kind) { mutableStateOf<CsrAction?>(null) }
-    var csrActionInFlight by remember(kind) { mutableStateOf(false) }
-    var csrActionError by remember(kind) { mutableStateOf<String?>(null) }
+    val csrAction = rememberConfirmableAction()
     var pendingScale by remember(kind) { mutableStateOf<PendingScale?>(null) }
-    var scaleInFlight by remember(kind) { mutableStateOf(false) }
-    var scaleError by remember(kind) { mutableStateOf<String?>(null) }
+    val scale = rememberConfirmableAction()
     var pendingRestart by remember(kind) { mutableStateOf<PendingRestart?>(null) }
-    var restartInFlight by remember(kind) { mutableStateOf(false) }
-    var restartError by remember(kind) { mutableStateOf<String?>(null) }
+    val restart = rememberConfirmableAction()
     var pendingCronJobTrigger by remember(kind) { mutableStateOf<PendingCronJobTrigger?>(null) }
-    var cronJobTriggerInFlight by remember(kind) { mutableStateOf(false) }
-    var cronJobTriggerError by remember(kind) { mutableStateOf<String?>(null) }
+    val cronJobTrigger = rememberConfirmableAction()
     var pendingCronJobSuspend by remember(kind) { mutableStateOf<PendingCronJobSuspend?>(null) }
-    var cronJobSuspendInFlight by remember(kind) { mutableStateOf(false) }
-    var cronJobSuspendError by remember(kind) { mutableStateOf<String?>(null) }
+    val cronJobSuspend = rememberConfirmableAction()
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -286,7 +276,7 @@ fun GenericResourceScreen(
                                 onClick = { res -> viewModel.selectItem(res) },
                                 onDelete = { res ->
                                     pendingDelete = res
-                                    deleteError = null
+                                    delete.clearError()
                                 },
                             )
                         }
@@ -323,10 +313,10 @@ fun GenericResourceScreen(
                                             destructive = false,
                                             tint = KdSuccess,
                                             description = "Issue the certificate for this request — grants the requester the client cert they asked for.",
-                                            enabled = !csrActionInFlight,
+                                            enabled = !csrAction.inFlight,
                                             onClick = {
                                                 pendingCsrAction = CsrAction.Approve(res)
-                                                csrActionError = null
+                                                csrAction.clearError()
                                             },
                                         ),
                                         DetailAction(
@@ -334,10 +324,10 @@ fun GenericResourceScreen(
                                             icon = Res.drawable.close_filled,
                                             destructive = true,
                                             description = "Reject this certificate request — use when the requester shouldn't be granted a cert.",
-                                            enabled = !csrActionInFlight,
+                                            enabled = !csrAction.inFlight,
                                             onClick = {
                                                 pendingCsrAction = CsrAction.Deny(res)
-                                                csrActionError = null
+                                                csrAction.clearError()
                                             },
                                         ),
                                     )
@@ -351,10 +341,10 @@ fun GenericResourceScreen(
                                             icon = Res.drawable.layers_filled,
                                             destructive = false,
                                             description = "Set how many replica pods run — scale up for more traffic, down to save resources.",
-                                            enabled = !scaleInFlight,
+                                            enabled = !scale.inFlight,
                                             onClick = {
                                                 pendingScale = PendingScale(res)
-                                                scaleError = null
+                                                scale.clearError()
                                             },
                                         ),
                                     )
@@ -368,10 +358,10 @@ fun GenericResourceScreen(
                                             icon = Res.drawable.rotate_right_filled,
                                             destructive = false,
                                             description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
-                                            enabled = !restartInFlight,
+                                            enabled = !restart.inFlight,
                                             onClick = {
                                                 pendingRestart = PendingRestart(res)
-                                                restartError = null
+                                                restart.clearError()
                                             },
                                         ),
                                     )
@@ -386,10 +376,10 @@ fun GenericResourceScreen(
                                             icon = Res.drawable.rocket_filled,
                                             destructive = false,
                                             description = "Run this CronJob immediately — creates a one-off Job from its template, without waiting for the schedule.",
-                                            enabled = !cronJobTriggerInFlight,
+                                            enabled = !cronJobTrigger.inFlight,
                                             onClick = {
                                                 pendingCronJobTrigger = PendingCronJobTrigger(res)
-                                                cronJobTriggerError = null
+                                                cronJobTrigger.clearError()
                                             },
                                         ),
                                         if (isSuspended) {
@@ -398,10 +388,10 @@ fun GenericResourceScreen(
                                                 icon = Res.drawable.check_circle_filled,
                                                 destructive = false,
                                                 description = "Resume this CronJob — it starts creating Jobs on its schedule again.",
-                                                enabled = !cronJobSuspendInFlight,
+                                                enabled = !cronJobSuspend.inFlight,
                                                 onClick = {
                                                     pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = false)
-                                                    cronJobSuspendError = null
+                                                    cronJobSuspend.clearError()
                                                 },
                                             )
                                         } else {
@@ -410,10 +400,10 @@ fun GenericResourceScreen(
                                                 icon = Res.drawable.hourglass_empty_filled,
                                                 destructive = false,
                                                 description = "Pause this CronJob — it stops creating new Jobs until resumed (running Jobs keep going).",
-                                                enabled = !cronJobSuspendInFlight,
+                                                enabled = !cronJobSuspend.inFlight,
                                                 onClick = {
                                                     pendingCronJobSuspend = PendingCronJobSuspend(res, suspend = true)
-                                                    cronJobSuspendError = null
+                                                    cronJobSuspend.clearError()
                                                 },
                                             )
                                         },
@@ -445,7 +435,7 @@ fun GenericResourceScreen(
                                     plural = plural,
                                     onDelete = {
                                         pendingDelete = res
-                                        deleteError = null
+                                        delete.clearError()
                                     },
                                     actions = csrActions + scaleActions + restartActions + cronJobActions,
                                 )
@@ -463,13 +453,12 @@ fun GenericResourceScreen(
             name = target.name,
             namespace = target.namespace,
             requireTypedConfirm = kind.equals("Namespace", ignoreCase = true),
-            inFlight = deleteInFlight,
-            errorMessage = deleteError,
+            inFlight = delete.inFlight,
+            errorMessage = delete.error,
             onConfirm = {
-                deleteInFlight = true
-                deleteError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
+                delete.run(
+                    failureMessage = "Delete failed",
+                    block = {
                         client.actions.deleteResource(
                             kind = kind,
                             name = target.name,
@@ -478,17 +467,13 @@ fun GenericResourceScreen(
                             version = apiVersion,
                             plural = plural,
                         )
-                    }
-                    deleteInFlight = false
-                    result.fold(
-                        onSuccess = { pendingDelete = null },
-                        onFailure = { deleteError = it.message ?: "Delete failed" },
-                    )
-                }
+                    },
+                    onSuccess = { pendingDelete = null },
+                )
             },
             onDismiss = {
                 pendingDelete = null
-                deleteError = null
+                delete.clearError()
             },
         )
     }
@@ -504,29 +489,24 @@ fun GenericResourceScreen(
             },
             confirmLabel = if (isApprove) "Approve" else "Deny",
             destructive = !isApprove,
-            inFlight = csrActionInFlight,
-            errorMessage = csrActionError,
+            inFlight = csrAction.inFlight,
+            errorMessage = csrAction.error,
             onConfirm = {
-                csrActionInFlight = true
-                csrActionError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
+                csrAction.run(
+                    failureMessage = "${if (isApprove) "Approve" else "Deny"} failed",
+                    block = {
                         if (isApprove) {
                             client.actions.approveCsr(action.target.name)
                         } else {
                             client.actions.denyCsr(action.target.name)
                         }
-                    }
-                    csrActionInFlight = false
-                    result.fold(
-                        onSuccess = { pendingCsrAction = null },
-                        onFailure = { csrActionError = it.message ?: "${if (isApprove) "Approve" else "Deny"} failed" },
-                    )
-                }
+                    },
+                    onSuccess = { pendingCsrAction = null },
+                )
             },
             onDismiss = {
                 pendingCsrAction = null
-                csrActionError = null
+                csrAction.clearError()
             },
         )
     }
@@ -540,30 +520,25 @@ fun GenericResourceScreen(
         ScaleDialog(
             name = ps.target.name,
             currentReplicas = currentReplicas,
-            inFlight = scaleInFlight,
-            errorMessage = scaleError,
+            inFlight = scale.inFlight,
+            errorMessage = scale.error,
             onConfirm = { replicas ->
-                scaleInFlight = true
-                scaleError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
+                scale.run(
+                    failureMessage = "Scale failed",
+                    block = {
                         client.actions.scaleWorkload(
                             kind = kind,
                             name = ps.target.name,
                             namespace = ps.target.namespace ?: "",
                             replicas = replicas,
                         )
-                    }
-                    scaleInFlight = false
-                    result.fold(
-                        onSuccess = { pendingScale = null },
-                        onFailure = { scaleError = it.message ?: "Scale failed" },
-                    )
-                }
+                    },
+                    onSuccess = { pendingScale = null },
+                )
             },
             onDismiss = {
                 pendingScale = null
-                scaleError = null
+                scale.clearError()
             },
         )
     }
@@ -574,29 +549,24 @@ fun GenericResourceScreen(
             body = "Restart all pods of $kind \"${pr.target.name}\"? Pods are recreated in a rolling update.",
             confirmLabel = "Restart",
             destructive = false,
-            inFlight = restartInFlight,
-            errorMessage = restartError,
+            inFlight = restart.inFlight,
+            errorMessage = restart.error,
             onConfirm = {
-                restartInFlight = true
-                restartError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
+                restart.run(
+                    failureMessage = "Restart failed",
+                    block = {
                         client.actions.restartWorkload(
                             kind = kind,
                             name = pr.target.name,
                             namespace = pr.target.namespace ?: "",
                         )
-                    }
-                    restartInFlight = false
-                    result.fold(
-                        onSuccess = { pendingRestart = null },
-                        onFailure = { restartError = it.message ?: "Restart failed" },
-                    )
-                }
+                    },
+                    onSuccess = { pendingRestart = null },
+                )
             },
             onDismiss = {
                 pendingRestart = null
-                restartError = null
+                restart.clearError()
             },
         )
     }
@@ -607,28 +577,23 @@ fun GenericResourceScreen(
             body = "Run \"${pt.target.name}\" now? This creates a one-off Job from its template.",
             confirmLabel = "Trigger",
             destructive = false,
-            inFlight = cronJobTriggerInFlight,
-            errorMessage = cronJobTriggerError,
+            inFlight = cronJobTrigger.inFlight,
+            errorMessage = cronJobTrigger.error,
             onConfirm = {
-                cronJobTriggerInFlight = true
-                cronJobTriggerError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
+                cronJobTrigger.run(
+                    failureMessage = "Trigger failed",
+                    block = {
                         client.actions.triggerCronJob(
                             name = pt.target.name,
                             namespace = pt.target.namespace ?: "",
                         )
-                    }
-                    cronJobTriggerInFlight = false
-                    result.fold(
-                        onSuccess = { pendingCronJobTrigger = null },
-                        onFailure = { cronJobTriggerError = it.message ?: "Trigger failed" },
-                    )
-                }
+                    },
+                    onSuccess = { pendingCronJobTrigger = null },
+                )
             },
             onDismiss = {
                 pendingCronJobTrigger = null
-                cronJobTriggerError = null
+                cronJobTrigger.clearError()
             },
         )
     }
@@ -644,29 +609,24 @@ fun GenericResourceScreen(
             },
             confirmLabel = if (isSuspending) "Suspend" else "Resume",
             destructive = false,
-            inFlight = cronJobSuspendInFlight,
-            errorMessage = cronJobSuspendError,
+            inFlight = cronJobSuspend.inFlight,
+            errorMessage = cronJobSuspend.error,
             onConfirm = {
-                cronJobSuspendInFlight = true
-                cronJobSuspendError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
+                cronJobSuspend.run(
+                    failureMessage = "${if (isSuspending) "Suspend" else "Resume"} failed",
+                    block = {
                         client.actions.setCronJobSuspend(
                             name = ps.target.name,
                             namespace = ps.target.namespace ?: "",
                             suspend = ps.suspend,
                         )
-                    }
-                    cronJobSuspendInFlight = false
-                    result.fold(
-                        onSuccess = { pendingCronJobSuspend = null },
-                        onFailure = { cronJobSuspendError = it.message ?: "${if (isSuspending) "Suspend" else "Resume"} failed" },
-                    )
-                }
+                    },
+                    onSuccess = { pendingCronJobSuspend = null },
+                )
             },
             onDismiss = {
                 pendingCronJobSuspend = null
-                cronJobSuspendError = null
+                cronJobSuspend.clearError()
             },
         )
     }

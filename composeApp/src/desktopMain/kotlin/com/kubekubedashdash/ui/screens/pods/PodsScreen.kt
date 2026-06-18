@@ -44,11 +44,10 @@ import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun PodsScreen(
@@ -86,8 +85,7 @@ fun PodsScreen(
     val scope = rememberCoroutineScope()
 
     var pendingDelete by remember { mutableStateOf<PodInfo?>(null) }
-    var deleteInFlight by remember { mutableStateOf(false) }
-    var deleteError by remember { mutableStateOf<String?>(null) }
+    val delete = rememberConfirmableAction()
     var terminalPickerPod by remember { mutableStateOf<PodInfo?>(null) }
 
     LaunchedEffect(selectPodUid) {
@@ -224,7 +222,7 @@ fun PodsScreen(
                             },
                             onDelete = { pod ->
                                 pendingDelete = pod
-                                deleteError = null
+                                delete.clearError()
                             },
                             pinnedIds = pinnedIds,
                             onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
@@ -241,23 +239,18 @@ fun PodsScreen(
             kind = "Pod",
             name = pod.name,
             namespace = pod.namespace,
-            inFlight = deleteInFlight,
-            errorMessage = deleteError,
+            inFlight = delete.inFlight,
+            errorMessage = delete.error,
             onConfirm = {
-                deleteInFlight = true
-                deleteError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) { reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace) }
-                    deleteInFlight = false
-                    result.fold(
-                        onSuccess = { pendingDelete = null },
-                        onFailure = { deleteError = it.message ?: "Delete failed" },
-                    )
-                }
+                delete.run(
+                    failureMessage = "Delete failed",
+                    block = { reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace) },
+                    onSuccess = { pendingDelete = null },
+                )
             },
             onDismiss = {
                 pendingDelete = null
-                deleteError = null
+                delete.clearError()
             },
         )
     }

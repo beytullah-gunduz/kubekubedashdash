@@ -13,7 +13,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -35,10 +34,8 @@ import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun NamespacesScreen(
@@ -55,10 +52,8 @@ fun NamespacesScreen(
     val viewModel: NamespacesScreenViewModel = viewModel { NamespacesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
     var pendingDelete by remember { mutableStateOf<GenericResourceInfo?>(null) }
-    var deleteInFlight by remember { mutableStateOf(false) }
-    var deleteError by remember { mutableStateOf<String?>(null) }
+    val delete = rememberConfirmableAction()
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -127,7 +122,7 @@ fun NamespacesScreen(
                     },
                     onDelete = { ns ->
                         pendingDelete = ns
-                        deleteError = null
+                        delete.clearError()
                     },
                 )
             }
@@ -140,26 +135,21 @@ fun NamespacesScreen(
             name = ns.name,
             namespace = null,
             requireTypedConfirm = true,
-            inFlight = deleteInFlight,
-            errorMessage = deleteError,
+            inFlight = delete.inFlight,
+            errorMessage = delete.error,
             body = "Delete Namespace \"${ns.name}\"? This deletes every resource in the namespace " +
                 "and may stay in Terminating for a while if any resource has stuck finalizers. " +
                 "This cannot be undone.",
             onConfirm = {
-                deleteInFlight = true
-                deleteError = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) { reactiveClient.actions.deleteResource("namespace", ns.name, namespace = null) }
-                    deleteInFlight = false
-                    result.fold(
-                        onSuccess = { pendingDelete = null },
-                        onFailure = { deleteError = it.message ?: "Delete failed" },
-                    )
-                }
+                delete.run(
+                    failureMessage = "Delete failed",
+                    block = { reactiveClient.actions.deleteResource("namespace", ns.name, namespace = null) },
+                    onSuccess = { pendingDelete = null },
+                )
             },
             onDismiss = {
                 pendingDelete = null
-                deleteError = null
+                delete.clearError()
             },
         )
     }

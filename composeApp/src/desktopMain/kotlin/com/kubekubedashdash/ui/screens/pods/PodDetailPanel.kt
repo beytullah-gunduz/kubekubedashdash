@@ -87,6 +87,7 @@ import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.highlightYamlLine
@@ -130,13 +131,11 @@ fun PodDetailPanel(
 
     // ── Evict dialog state ─────────────────────────────────────────────────────
     var showEvictDialog by remember(pod.uid) { mutableStateOf(false) }
-    var evictInFlight by remember(pod.uid) { mutableStateOf(false) }
-    var evictError by remember(pod.uid) { mutableStateOf<String?>(null) }
+    val evict = rememberConfirmableAction()
 
     // ── Force-Delete dialog state ──────────────────────────────────────────────
     var showForceDeleteDialog by remember(pod.uid) { mutableStateOf(false) }
-    var forceDeleteInFlight by remember(pod.uid) { mutableStateOf(false) }
-    var forceDeleteError by remember(pod.uid) { mutableStateOf<String?>(null) }
+    val forceDelete = rememberConfirmableAction()
 
     LaunchedEffect(pod.uid) {
         while (true) {
@@ -170,13 +169,13 @@ fun PodDetailPanel(
                 PanelHeader(
                     pod = pod,
                     onClose = onClose,
-                    actionsEnabled = !evictInFlight && !forceDeleteInFlight,
+                    actionsEnabled = !evict.inFlight && !forceDelete.inFlight,
                     onEvictClick = {
-                        evictError = null
+                        evict.clearError()
                         showEvictDialog = true
                     },
                     onForceDeleteClick = {
-                        forceDeleteError = null
+                        forceDelete.clearError()
                         showForceDeleteDialog = true
                     },
                 )
@@ -218,24 +217,19 @@ fun PodDetailPanel(
                     "This respects PodDisruptionBudgets and may be rejected if disruption is not allowed.",
                 confirmLabel = "Evict",
                 destructive = false,
-                inFlight = evictInFlight,
-                errorMessage = evictError,
+                inFlight = evict.inFlight,
+                errorMessage = evict.error,
                 onConfirm = {
-                    evictInFlight = true
-                    evictError = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) { kubeClient.actions.evictPod(pod.name, pod.namespace) }
-                        evictInFlight = false
-                        result.fold(
-                            onSuccess = { showEvictDialog = false },
-                            onFailure = { evictError = it.message ?: "Eviction failed" },
-                        )
-                    }
+                    evict.run(
+                        failureMessage = "Eviction failed",
+                        block = { kubeClient.actions.evictPod(pod.name, pod.namespace) },
+                        onSuccess = { showEvictDialog = false },
+                    )
                 },
                 onDismiss = {
-                    if (!evictInFlight) {
+                    if (!evict.inFlight) {
                         showEvictDialog = false
-                        evictError = null
+                        evict.clearError()
                     }
                 },
             )
@@ -250,24 +244,19 @@ fun PodDetailPanel(
                     "Only use this for a stuck or unresponsive pod — it can orphan volumes and open connections.",
                 confirmLabel = "Force Delete",
                 destructive = true,
-                inFlight = forceDeleteInFlight,
-                errorMessage = forceDeleteError,
+                inFlight = forceDelete.inFlight,
+                errorMessage = forceDelete.error,
                 onConfirm = {
-                    forceDeleteInFlight = true
-                    forceDeleteError = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) { kubeClient.actions.forceDeletePod(pod.name, pod.namespace) }
-                        forceDeleteInFlight = false
-                        result.fold(
-                            onSuccess = { showForceDeleteDialog = false },
-                            onFailure = { forceDeleteError = it.message ?: "Force delete failed" },
-                        )
-                    }
+                    forceDelete.run(
+                        failureMessage = "Force delete failed",
+                        block = { kubeClient.actions.forceDeletePod(pod.name, pod.namespace) },
+                        onSuccess = { showForceDeleteDialog = false },
+                    )
                 },
                 onDismiss = {
-                    if (!forceDeleteInFlight) {
+                    if (!forceDelete.inFlight) {
                         showForceDeleteDialog = false
-                        forceDeleteError = null
+                        forceDelete.clearError()
                     }
                 },
             )
