@@ -2123,8 +2123,9 @@ class ReactiveKubeClient(
         val cj = k8s.batch().v1().cronjobs().inNamespace(namespace).withName(name).get()
             ?: error("CronJob $name not found in namespace $namespace")
         val template = cj.spec?.jobTemplate ?: error("CronJob $name has no jobTemplate")
-        // Job name must be <= 63 chars: truncate the base so "-manual-<epoch>" fits.
-        val suffix = "-manual-${System.currentTimeMillis() / 1000}"
+        // Job name must be <= 63 chars: truncate the base so "-manual-<epoch-ms>" fits.
+        // Use millis (not seconds) so rapid re-triggers don't collide on the name.
+        val suffix = "-manual-${System.currentTimeMillis()}"
         val base = name.take(63 - suffix.length)
         val job = JobBuilder()
             .withNewMetadata()
