@@ -2046,7 +2046,10 @@ class ReactiveKubeClient(
         //    annotations — PodInfo strips those fields.
         val rawPods = try {
             k8s.pods().inAnyNamespace().list().items
-                .filter { it.spec?.nodeName == name || it.status?.nominatedNodeName == name }
+                // Evict ONLY pods actually running on the node. nominatedNodeName
+                // (a scheduler hint for a still-Pending pod) must NOT select a pod
+                // for eviction — that pod isn't on this node.
+                .filter { it.spec?.nodeName == name }
         } catch (e: Exception) {
             log.warn("Drain node={}: could not list pods: {}", name, e.message)
             emptyList()
@@ -2059,6 +2062,13 @@ class ReactiveKubeClient(
         for (pod in rawPods) {
             val podName = pod.metadata?.name ?: continue
             val ns = pod.metadata?.namespace ?: ""
+
+            // Skip already-terminated pods (kubectl drain ignores Succeeded/Failed)
+            val phase = pod.status?.phase
+            if (phase == "Succeeded" || phase == "Failed") {
+                skipped++
+                continue
+            }
 
             // Skip DaemonSet-owned pods
             val ownedByDaemonSet = pod.metadata?.ownerReferences
