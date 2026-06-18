@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ServiceInfo(
-    val uid: String,
+    override val uid: String,
     val name: String,
     val namespace: String,
     val type: String,
@@ -15,4 +15,4 @@ data class ServiceInfo(
     val selector: Map<String, String>,
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
-)
+) : Identifiable

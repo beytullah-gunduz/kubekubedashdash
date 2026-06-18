@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GenericResourceInfo(
-    val uid: String,
+    override val uid: String,
     val name: String,
     val namespace: String?,
     val status: String?,
@@ -12,4 +12,4 @@ data class GenericResourceInfo(
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
     val extraColumns: Map<String, String> = emptyMap(),
-)
+) : Identifiable

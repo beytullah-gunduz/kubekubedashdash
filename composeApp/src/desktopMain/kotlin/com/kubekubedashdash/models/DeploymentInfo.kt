@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class DeploymentInfo(
-    val uid: String,
+    override val uid: String,
     val name: String,
     val namespace: String,
     val ready: String,
@@ -15,4 +15,4 @@ data class DeploymentInfo(
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
     val conditions: List<String>,
-)
+) : Identifiable
