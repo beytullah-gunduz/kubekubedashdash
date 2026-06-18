@@ -16,6 +16,7 @@ import com.kubekubedashdash.models.ServiceInfo
 import io.fabric8.kubernetes.api.model.DeletionPropagation
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
@@ -524,6 +525,7 @@ class ReactiveKubeClient(
                 pods = alloc?.get("pods")?.toString() ?: "",
                 age = formatAge(node.metadata.creationTimestamp),
                 creationTimestamp = node.metadata.creationTimestamp ?: "",
+                unschedulable = node.spec?.unschedulable ?: false,
                 labels = node.metadata.labels ?: emptyMap(),
                 annotations = node.metadata.annotations ?: emptyMap(),
             )
@@ -2009,6 +2011,93 @@ class ReactiveKubeClient(
         )
     }
 
+    // ── On-demand: Cordon / Drain Nodes ─────────────────────────────────────────
+
+    /**
+     * Cordon (unschedulable=true) or uncordon (unschedulable=false) a node by
+     * patching `spec.unschedulable` in-place via the fabric8 fluent builder.
+     */
+    fun cordonNode(name: String, unschedulable: Boolean): Result<Unit> = runCatching {
+        log.info("Setting node={} unschedulable={}", name, unschedulable)
+        k8s.nodes().withName(name).edit { n ->
+            NodeBuilder(n).editOrNewSpec().withUnschedulable(unschedulable).endSpec().build()
+        }
+    }.map { }
+
+    /**
+     * Drain a node: first cordons it (unschedulable=true), then evicts all
+     * eligible pods. Skipped pods are DaemonSet-owned (ownerReferences contains
+     * kind=DaemonSet) or mirror/static pods (annotation
+     * `kubernetes.io/config.mirror` present). Eviction errors are collected and
+     * reported in [DrainResult.failed] — they do NOT abort the drain so that a
+     * single PDB-blocked pod does not prevent all others from being evicted.
+     *
+     * Returns [Result.failure] only when the initial cordon itself throws.
+     * Eviction failures are surfaced via [DrainResult.failed].
+     */
+    fun drainNode(name: String): Result<DrainResult> = runCatching {
+        // 1. Cordon first — fail the whole drain if this throws.
+        log.info("Draining node={}: cordoning", name)
+        k8s.nodes().withName(name).edit { n ->
+            NodeBuilder(n).editOrNewSpec().withUnschedulable(true).endSpec().build()
+        }
+
+        // 2. List raw fabric8 Pod objects so we can inspect ownerReferences and
+        //    annotations — PodInfo strips those fields.
+        val rawPods = try {
+            k8s.pods().inAnyNamespace().list().items
+                .filter { it.spec?.nodeName == name || it.status?.nominatedNodeName == name }
+        } catch (e: Exception) {
+            log.warn("Drain node={}: could not list pods: {}", name, e.message)
+            emptyList()
+        }
+
+        var evicted = 0
+        var skipped = 0
+        var failed = 0
+
+        for (pod in rawPods) {
+            val podName = pod.metadata?.name ?: continue
+            val ns = pod.metadata?.namespace ?: ""
+
+            // Skip DaemonSet-owned pods
+            val ownedByDaemonSet = pod.metadata?.ownerReferences
+                ?.any { it.kind == "DaemonSet" } == true
+            if (ownedByDaemonSet) {
+                log.trace("Drain node={}: skipping DaemonSet pod={}/{}", name, ns, podName)
+                skipped++
+                continue
+            }
+
+            // Skip mirror/static pods
+            val isMirror = pod.metadata?.annotations
+                ?.containsKey("kubernetes.io/config.mirror") == true
+            if (isMirror) {
+                log.trace("Drain node={}: skipping mirror pod={}/{}", name, ns, podName)
+                skipped++
+                continue
+            }
+
+            // Evict best-effort — a PDB block returns false; an API error is caught
+            try {
+                val ok = k8s.pods().inNamespace(ns).withName(podName).evict()
+                if (ok) {
+                    log.trace("Drain node={}: evicted pod={}/{}", name, ns, podName)
+                    evicted++
+                } else {
+                    log.warn("Drain node={}: eviction blocked (PDB?) pod={}/{}", name, ns, podName)
+                    failed++
+                }
+            } catch (e: Exception) {
+                log.warn("Drain node={}: eviction error pod={}/{}: {}", name, ns, podName, e.message)
+                failed++
+            }
+        }
+
+        log.info("Drain node={}: evicted={} skipped={} failed={}", name, evicted, skipped, failed)
+        DrainResult(evicted = evicted, skipped = skipped, failed = failed)
+    }
+
     // ── On-demand: ResourceQuota Usage ─────────────────────────────────────────
 
     fun getResourceQuotaUsage(name: String, namespace: String): List<QuotaUsageRow> = runCatching {
@@ -2446,6 +2535,13 @@ private val DEFAULT_SHELL_CMD = listOf(
     "/bin/sh",
     "-c",
     "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+)
+
+/** Result of a node drain operation. */
+data class DrainResult(
+    val evicted: Int,
+    val skipped: Int,
+    val failed: Int,
 )
 
 /** A single row in the ResourceQuota Usage tab. */

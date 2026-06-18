@@ -52,12 +52,16 @@ import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_circle_filled
+import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.lock_filled
 import com.kubekubedashdash.resources.view_list_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
@@ -100,6 +104,17 @@ internal fun NodeDetailPanel(
     var podsLoading by remember(node.name) { mutableStateOf(true) }
     var events by remember(node.name) { mutableStateOf<List<EventInfo>>(emptyList()) }
     var eventsLoading by remember(node.name) { mutableStateOf(true) }
+
+    // ── Cordon / Uncordon dialog state ─────────────────────────────────────────
+    var showCordonDialog by remember(node.uid) { mutableStateOf(false) }
+    var cordonInFlight by remember(node.uid) { mutableStateOf(false) }
+    var cordonError by remember(node.uid) { mutableStateOf<String?>(null) }
+
+    // ── Drain dialog state ─────────────────────────────────────────────────────
+    var showDrainDialog by remember(node.uid) { mutableStateOf(false) }
+    var drainInFlight by remember(node.uid) { mutableStateOf(false) }
+    var drainError by remember(node.uid) { mutableStateOf<String?>(null) }
+    var drainStatus by remember(node.uid) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(node.name) {
         podsLoading = true
@@ -173,6 +188,50 @@ internal fun NodeDetailPanel(
                             Text("Node", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                         }
                     }
+                    // Cordon / Uncordon toggle
+                    IconButton(
+                        onClick = {
+                            cordonError = null
+                            showCordonDialog = true
+                        },
+                        modifier = Modifier.size(28.dp),
+                        enabled = !cordonInFlight && !drainInFlight,
+                    ) {
+                        if (node.unschedulable) {
+                            Icon(
+                                painterResource(Res.drawable.check_circle_filled),
+                                "Uncordon node",
+                                Modifier.size(16.dp),
+                                tint = KdWarning,
+                            )
+                        } else {
+                            Icon(
+                                painterResource(Res.drawable.lock_filled),
+                                "Cordon node",
+                                Modifier.size(16.dp),
+                                tint = KdTextSecondary,
+                            )
+                        }
+                    }
+
+                    // Drain button
+                    IconButton(
+                        onClick = {
+                            drainError = null
+                            drainStatus = null
+                            showDrainDialog = true
+                        },
+                        modifier = Modifier.size(28.dp),
+                        enabled = !cordonInFlight && !drainInFlight,
+                    ) {
+                        Icon(
+                            painterResource(Res.drawable.clear_all_filled),
+                            "Drain node",
+                            Modifier.size(16.dp),
+                            tint = KdTextSecondary,
+                        )
+                    }
+
                     IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
                         Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                     }
@@ -243,6 +302,78 @@ internal fun NodeDetailPanel(
                     }
                 }
             }
+        }
+
+        // ── Cordon / Uncordon dialog ───────────────────────────────────────────
+        if (showCordonDialog) {
+            val targetUnschedulable = !node.unschedulable
+            ConfirmActionDialog(
+                title = if (targetUnschedulable) "Cordon Node" else "Uncordon Node",
+                body = if (targetUnschedulable) {
+                    "Mark \"${node.name}\" as unschedulable? No new pods will be scheduled on this node."
+                } else {
+                    "Mark \"${node.name}\" as schedulable again? New pods may be scheduled on this node."
+                },
+                confirmLabel = if (targetUnschedulable) "Cordon" else "Uncordon",
+                destructive = false,
+                inFlight = cordonInFlight,
+                errorMessage = cordonError,
+                onConfirm = {
+                    cordonInFlight = true
+                    cordonError = null
+                    scope.launch(Dispatchers.IO) {
+                        val result = kubeClient.cordonNode(node.name, targetUnschedulable)
+                        cordonInFlight = false
+                        result.fold(
+                            onSuccess = { showCordonDialog = false },
+                            onFailure = { cordonError = it.message ?: "Operation failed" },
+                        )
+                    }
+                },
+                onDismiss = {
+                    if (!cordonInFlight) {
+                        showCordonDialog = false
+                        cordonError = null
+                    }
+                },
+            )
+        }
+
+        // ── Drain dialog ───────────────────────────────────────────────────────
+        if (showDrainDialog) {
+            val podCount = if (podsLoading) "?" else "${pods.size}"
+            ConfirmActionDialog(
+                title = "Drain Node",
+                body = "Drain \"${node.name}\"? This cordons the node and evicts pods (~$podCount pods). " +
+                    "DaemonSet and mirror/static pods are skipped. " +
+                    (drainStatus ?: ""),
+                confirmLabel = "Drain",
+                destructive = true,
+                inFlight = drainInFlight,
+                errorMessage = drainError,
+                onConfirm = {
+                    drainInFlight = true
+                    drainError = null
+                    drainStatus = null
+                    scope.launch(Dispatchers.IO) {
+                        val result = kubeClient.drainNode(node.name)
+                        drainInFlight = false
+                        result.fold(
+                            onSuccess = { dr ->
+                                drainStatus = "Evicted ${dr.evicted}, skipped ${dr.skipped}, failed ${dr.failed}."
+                                showDrainDialog = false
+                            },
+                            onFailure = { drainError = it.message ?: "Drain failed" },
+                        )
+                    }
+                },
+                onDismiss = {
+                    if (!drainInFlight) {
+                        showDrainDialog = false
+                        drainError = null
+                    }
+                },
+            )
         }
     }
 }

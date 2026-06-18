@@ -17,6 +17,7 @@ data class NodeInfo(
     val pods: String,
     val age: String,
     val creationTimestamp: String = "",
+    val unschedulable: Boolean = false,
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
 )

@@ -184,6 +184,7 @@ class KubeClient(
                 memory = alloc?.get("memory")?.toString() ?: "",
                 pods = alloc?.get("pods")?.toString() ?: "",
                 age = formatAge(node.metadata.creationTimestamp),
+                unschedulable = node.spec?.unschedulable ?: false,
                 labels = node.metadata.labels ?: emptyMap(),
                 annotations = node.metadata.annotations ?: emptyMap(),
             )
