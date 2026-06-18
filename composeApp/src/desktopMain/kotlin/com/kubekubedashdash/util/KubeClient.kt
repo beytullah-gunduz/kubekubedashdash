@@ -203,44 +203,14 @@ class KubeClient(
             }
         }
         log.debug("Fetched {} events", items.size)
-        return items.sortedByDescending { it.metadata?.creationTimestamp }.map { ev ->
-            val lastTs = ev.lastTimestamp ?: ev.metadata?.creationTimestamp ?: ""
-            EventInfo(
-                uid = ev.metadata?.uid ?: "",
-                type = ev.type ?: "Normal",
-                reason = ev.reason ?: "",
-                objectRef = "${ev.involvedObject?.kind ?: ""}/${ev.involvedObject?.name ?: ""}",
-                message = ev.message ?: "",
-                count = ev.count ?: 1,
-                firstSeen = formatAge(ev.firstTimestamp ?: ev.metadata?.creationTimestamp),
-                lastSeen = formatAge(lastTs),
-                lastSeenTimestamp = lastTs,
-                namespace = ev.metadata?.namespace ?: "",
-                node = ev.source?.host ?: "",
-            )
-        }
+        return items.sortedByDescending { it.metadata?.creationTimestamp }.mapNotNull { ResourceMappers.mapEvent(it) }
     }
 
     fun getEventsForNode(nodeName: String): List<EventInfo> {
         val items = client.v1().events().inAnyNamespace().list().items
             .filter { it.involvedObject?.kind == "Node" && it.involvedObject?.name == nodeName }
             .sortedByDescending { it.metadata?.creationTimestamp }
-        return items.map { ev ->
-            val lastTs = ev.lastTimestamp ?: ev.metadata?.creationTimestamp ?: ""
-            EventInfo(
-                uid = ev.metadata?.uid ?: "",
-                type = ev.type ?: "Normal",
-                reason = ev.reason ?: "",
-                objectRef = "${ev.involvedObject?.kind ?: ""}/${ev.involvedObject?.name ?: ""}",
-                message = ev.message ?: "",
-                count = ev.count ?: 1,
-                firstSeen = formatAge(ev.firstTimestamp ?: ev.metadata?.creationTimestamp),
-                lastSeen = formatAge(lastTs),
-                lastSeenTimestamp = lastTs,
-                namespace = ev.metadata?.namespace ?: "",
-                node = ev.source?.host ?: "",
-            )
-        }
+        return items.mapNotNull { ResourceMappers.mapEvent(it) }
     }
 
     // ── Generic Resource Fetchers ───────────────────────────────────────────────
@@ -261,7 +231,8 @@ class KubeClient(
                 status = null,
                 age = formatAge(cm.metadata.creationTimestamp),
                 labels = cm.metadata.labels ?: emptyMap(),
-                annotations = cm.metadata.annotations ?: emptyMap(),
+                annotations = (cm.metadata.annotations ?: emptyMap())
+                    .filterKeys { it != "kubectl.kubernetes.io/last-applied-configuration" },
                 extraColumns = mapOf("Data" to "${(cm.data?.size ?: 0) + (cm.binaryData?.size ?: 0)}"),
             )
         }
@@ -283,7 +254,8 @@ class KubeClient(
                 status = null,
                 age = formatAge(s.metadata.creationTimestamp),
                 labels = s.metadata.labels ?: emptyMap(),
-                annotations = s.metadata.annotations ?: emptyMap(),
+                annotations = (s.metadata.annotations ?: emptyMap())
+                    .filterKeys { it != "kubectl.kubernetes.io/last-applied-configuration" },
                 extraColumns = mapOf("Type" to (s.type ?: ""), "Data" to "${s.data?.size ?: 0}"),
             )
         }

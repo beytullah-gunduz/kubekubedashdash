@@ -150,8 +150,8 @@ class SettingsScreenViewModel : ViewModel() {
         // honor the persisted "MCP enabled" intent on startup and seed the
         // runtime bearer token.
         viewModelScope.launch(Dispatchers.IO) {
-            if (PreferenceRepository.mcpServerEnabled.value && !McpServerManager.isRunning) {
-                McpServerManager.start(PreferenceRepository.mcpServerPort.value)
+            if (PreferenceRepository.mcpServerEnabled.value) {
+                McpServerManager.startIfNotRunning(PreferenceRepository.mcpServerPort.value)
             }
             _mcpBearerToken.value = McpServerManager.bearerToken
         }

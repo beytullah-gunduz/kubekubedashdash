@@ -41,6 +41,10 @@ internal fun Application.installMcpAuth(
             // Origin: "null" string = sandboxed iframe, data:, file://. REJECT —
             // these *can* be the carrier for such an attack.
             val originOk = origin == null || origin == "http://$expectedHost"
+            // LOAD-BEARING (audit S4): the Host check is the real DNS-rebinding defense.
+            // A browser/fetch cannot forge Host to the loopback authority, so even if a
+            // missing/forged Origin slips past originOk above, hostOk must hold. Do NOT
+            // weaken or make this conditional.
             val hostOk = host == expectedHost
             if (!originOk || !hostOk) {
                 call.respond(HttpStatusCode.Forbidden)

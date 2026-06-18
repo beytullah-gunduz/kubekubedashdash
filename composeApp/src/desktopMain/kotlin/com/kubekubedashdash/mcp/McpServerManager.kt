@@ -33,7 +33,7 @@ object McpServerManager {
         "Target cluster kube-context. Optional when exactly one cluster is open; " +
             "when several are open, call the list_clusters tool and pass one of its contexts."
 
-    private val MCP_YAML_ALLOWLIST = setOf(
+    internal val MCP_YAML_ALLOWLIST = setOf(
         "pod", "deployment", "service", "namespace",
         "statefulset", "daemonset", "replicaset",
         "job", "cronjob", "ingress",
@@ -42,6 +42,8 @@ object McpServerManager {
         //           "configmap" (frequently misused for credentials),
         //           "node"      (kubelet bootstrap details).
     )
+
+    private fun isYamlAllowed(kind: String): Boolean = kind.lowercase() in MCP_YAML_ALLOWLIST
 
     // @Volatile + @Synchronized start/stop: these are mutated from start/stop
     // (invoked on Dispatchers.IO from SettingsScreenViewModel and from the JVM
@@ -59,6 +61,12 @@ object McpServerManager {
     val requireAuth: Boolean get() = _requireAuth
 
     val isRunning: Boolean get() = server != null
+
+    @Synchronized
+    fun startIfNotRunning(port: Int = DEFAULT_PORT) {
+        if (server != null) return
+        start(port)
+    }
 
     @Synchronized
     fun start(port: Int = DEFAULT_PORT) {
@@ -234,7 +242,7 @@ object McpServerManager {
                 else -> return@addTool toolResolutionError(r)
             }
             val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
-            if (kind.lowercase() !in MCP_YAML_ALLOWLIST) {
+            if (!isYamlAllowed(kind)) {
                 return@addTool CallToolResult(
                     content = listOf(TextContent(text = """{"error":"Kind '$kind' is not exposed via MCP. Allowed kinds: ${MCP_YAML_ALLOWLIST.sorted().joinToString(", ")}"}""")),
                     isError = true,
@@ -314,8 +322,8 @@ object McpServerManager {
                             put("type", "string")
                             put(
                                 "description",
-                                "Resource kind: Pod, Deployment, Service, Event, Node, Namespace, " +
-                                    "ConfigMap, Secret, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob, " +
+                                "Resource kind: Pod, Deployment, Service, Event, Namespace, " +
+                                    "StatefulSet, DaemonSet, ReplicaSet, Job, CronJob, " +
                                     "Ingress, Endpoint, NetworkPolicy, PersistentVolume, PersistentVolumeClaim, StorageClass",
                             )
                         },
@@ -350,10 +358,7 @@ object McpServerManager {
                 "deployment" -> json.encodeToString(kubeClient.getDeployments(ns))
                 "service" -> json.encodeToString(kubeClient.getServices(ns))
                 "event" -> json.encodeToString(kubeClient.getEvents(ns))
-                "node" -> json.encodeToString(kubeClient.getNodes())
                 "namespace" -> json.encodeToString(kubeClient.getNamespacesGeneric())
-                "configmap" -> json.encodeToString(kubeClient.getConfigMaps(ns))
-                "secret" -> json.encodeToString(kubeClient.getSecrets(ns))
                 "statefulset" -> json.encodeToString(kubeClient.getStatefulSets(ns))
                 "daemonset" -> json.encodeToString(kubeClient.getDaemonSets(ns))
                 "replicaset" -> json.encodeToString(kubeClient.getReplicaSets(ns))
