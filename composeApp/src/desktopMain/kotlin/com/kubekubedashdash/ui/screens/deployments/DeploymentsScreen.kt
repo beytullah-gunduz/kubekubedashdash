@@ -14,16 +14,16 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.DeploymentInfo
-import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.ResourceCountHeader
-import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceFilterChips
+import com.kubekubedashdash.ui.components.ResourceListScaffold
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
+import com.kubekubedashdash.ui.components.rememberResourceFilter
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
 
@@ -56,62 +56,59 @@ fun DeploymentsScreen(
     var pendingDelete by remember { mutableStateOf<DeploymentInfo?>(null) }
     val delete = rememberConfirmableAction()
 
-    when (val s = state) {
-        is ResourceState.Loading -> ResourceLoadingIndicator()
+    ResourceListScaffold(state, loading = { ResourceLoadingIndicator() }) { data ->
+        val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
+        val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
+        val filtered = rememberResourceFilter(
+            data,
+            searchQuery,
+            labelSelector,
+            annotationSelector,
+            degradedOnly,
+        ) { dep, q, labels, anns ->
+            val passesSearch = q.isBlank() ||
+                dep.name.contains(q, ignoreCase = true) ||
+                dep.namespace.contains(q, ignoreCase = true)
+            val passesLabels = labels.isEmpty() || matchesMapSelector(dep.labels, labels)
+            val passesAnnotations = anns.isEmpty() || matchesMapSelector(dep.annotations, anns)
+            val passesDegraded = !degradedOnly || deploymentDegraded(dep)
+            passesSearch && passesLabels && passesAnnotations && passesDegraded
+        }
 
-        is ResourceState.Error -> ResourceErrorMessage(s.message)
-
-        is ResourceState.Success -> {
-            val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
-            val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-            val filtered = remember(s.data, searchQuery, labelSelector, annotationSelector, degradedOnly) {
-                s.data.filter { dep ->
-                    val passesSearch = searchQuery.isBlank() ||
-                        dep.name.contains(searchQuery, ignoreCase = true) ||
-                        dep.namespace.contains(searchQuery, ignoreCase = true)
-                    val passesLabels = labelSelector.isEmpty() || matchesMapSelector(dep.labels, labelSelector)
-                    val passesAnnotations = annotationSelector.isEmpty() ||
-                        matchesMapSelector(dep.annotations, annotationSelector)
-                    val passesDegraded = !degradedOnly || deploymentDegraded(dep)
-                    passesSearch && passesLabels && passesAnnotations && passesDegraded
-                }
-            }
-
-            Column(modifier = Modifier.fillMaxSize()) {
-                ResourceCountHeader(
-                    count = filtered.size,
-                    kind = "Deployments",
-                    actions = { compact ->
-                        ResourceFilterChips(
-                            labelQuery = labelQuery,
-                            onLabelQueryChange = onLabelQueryChange,
-                            annotationQuery = annotationQuery,
-                            onAnnotationQueryChange = onAnnotationQueryChange,
-                            compact = compact,
-                            pulseLabelsOnEntry = pulseLabelsOnEntry,
-                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                            clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
-                            onClear = {
-                                onLabelQueryChange("")
-                                onAnnotationQueryChange("")
-                                degradedOnly = false
-                            },
-                        )
-                    },
-                )
-                DeploymentTable(
-                    deployments = filtered,
-                    selectedUid = selectedUid,
-                    onClick = { dep ->
-                        selectedUid = dep.uid
-                        onNavigate(Screen.Detail.DeploymentDetail(dep))
-                    },
-                    onDelete = { dep ->
-                        pendingDelete = dep
-                        delete.clearError()
-                    },
-                )
-            }
+        Column(modifier = Modifier.fillMaxSize()) {
+            ResourceCountHeader(
+                count = filtered.size,
+                kind = "Deployments",
+                actions = { compact ->
+                    ResourceFilterChips(
+                        labelQuery = labelQuery,
+                        onLabelQueryChange = onLabelQueryChange,
+                        annotationQuery = annotationQuery,
+                        onAnnotationQueryChange = onAnnotationQueryChange,
+                        compact = compact,
+                        pulseLabelsOnEntry = pulseLabelsOnEntry,
+                        pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                        clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
+                        onClear = {
+                            onLabelQueryChange("")
+                            onAnnotationQueryChange("")
+                            degradedOnly = false
+                        },
+                    )
+                },
+            )
+            DeploymentTable(
+                deployments = filtered,
+                selectedUid = selectedUid,
+                onClick = { dep ->
+                    selectedUid = dep.uid
+                    onNavigate(Screen.Detail.DeploymentDetail(dep))
+                },
+                onDelete = { dep ->
+                    pendingDelete = dep
+                    delete.clearError()
+                },
+            )
         }
     }
 
