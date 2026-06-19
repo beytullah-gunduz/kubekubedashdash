@@ -25,7 +25,7 @@ import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
-import com.kubekubedashdash.util.MockClusterProvider
+import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -144,7 +144,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Connecting bootstrap session to demo cluster")
         WorkspaceManager.openCluster(
             initialWorkspace,
-            MockClusterProvider.MOCK_CONTEXT_NAME,
+            DemoContext.MOCK_CONTEXT_NAME,
             OpenTarget.CURRENT_VIEW,
         )
         val sessionVm = initialWorkspace.activeSession!!.viewModel
@@ -204,7 +204,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         // Strip real kubeconfig contexts so the Settings → Cluster colors section
         // can't render the user's actual cluster ARNs into the public screenshot.
         AppViewModel.instance.overrideContextsForScreenshots(
-            listOf(MockClusterProvider.MOCK_CONTEXT_NAME),
+            listOf(DemoContext.MOCK_CONTEXT_NAME),
         )
         delay(300)
         initialWorkspace.showSettings()
@@ -237,7 +237,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Building multi-tab showcase (3 tabs)")
         WorkspaceManager.openCluster(
             initialWorkspace,
-            MockClusterProvider.MOCK_CONTEXT_NAME,
+            DemoContext.MOCK_CONTEXT_NAME,
             OpenTarget.NEW_TAB,
         )
         val tab2Vm = initialWorkspace.activeSession!!.viewModel
@@ -247,7 +247,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
 
         WorkspaceManager.openCluster(
             initialWorkspace,
-            MockClusterProvider.MOCK_CONTEXT_NAME,
+            DemoContext.MOCK_CONTEXT_NAME,
             OpenTarget.NEW_TAB,
         )
         val tab3Vm = initialWorkspace.activeSession!!.viewModel
@@ -267,7 +267,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("Building multi-window showcase (2 windows)")
         WorkspaceManager.openCluster(
             initialWorkspace,
-            MockClusterProvider.MOCK_CONTEXT_NAME,
+            DemoContext.MOCK_CONTEXT_NAME,
             OpenTarget.NEW_WINDOW,
         )
         val secondWorkspace = WorkspaceManager.workspaces.first { it.size >= 2 }.last()

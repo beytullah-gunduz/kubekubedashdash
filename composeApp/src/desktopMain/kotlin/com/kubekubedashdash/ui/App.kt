@@ -68,7 +68,7 @@ import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
-import com.kubekubedashdash.util.MockClusterProvider
+import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ShellEnvironment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
@@ -262,7 +262,7 @@ fun App(
                         onTryDemo = {
                             WorkspaceManager.openCluster(
                                 workspace,
-                                MockClusterProvider.MOCK_CONTEXT_NAME,
+                                DemoContext.MOCK_CONTEXT_NAME,
                                 OpenTarget.CURRENT_VIEW,
                             )
                         },

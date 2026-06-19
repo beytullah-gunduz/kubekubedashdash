@@ -1,6 +1,6 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
-import com.kubekubedashdash.util.MockClusterProvider
+import com.kubekubedashdash.util.DemoContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -29,12 +29,12 @@ class AppViewModelHasContextsTest {
     }
 
     private fun derivedFlow(contexts: MutableStateFlow<List<String>>) = contexts
-        .map { list -> list.any { !MockClusterProvider.isMockContext(it) } }
+        .map { list -> list.any { !DemoContext.isMockContext(it) } }
         .stateIn(scope, SharingStarted.Eagerly, initialValue = false)
 
     @Test
     fun `false when only mock context present`() {
-        val contexts = MutableStateFlow(listOf(MockClusterProvider.MOCK_CONTEXT_NAME))
+        val contexts = MutableStateFlow(listOf(DemoContext.MOCK_CONTEXT_NAME))
         assertFalse(derivedFlow(contexts).value)
     }
 
@@ -47,28 +47,28 @@ class AppViewModelHasContextsTest {
     @Test
     fun `true when at least one non-mock context`() {
         val contexts = MutableStateFlow(
-            listOf(MockClusterProvider.MOCK_CONTEXT_NAME, "production-cluster"),
+            listOf(DemoContext.MOCK_CONTEXT_NAME, "production-cluster"),
         )
         assertTrue(derivedFlow(contexts).value)
     }
 
     @Test
     fun `updates reactively when real context is added`() {
-        val contexts = MutableStateFlow(listOf(MockClusterProvider.MOCK_CONTEXT_NAME))
+        val contexts = MutableStateFlow(listOf(DemoContext.MOCK_CONTEXT_NAME))
         val hasReal = derivedFlow(contexts)
         assertFalse(hasReal.value)
-        contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME, "staging-cluster")
+        contexts.value = listOf(DemoContext.MOCK_CONTEXT_NAME, "staging-cluster")
         assertTrue(hasReal.value)
     }
 
     @Test
     fun `updates reactively when real context is removed`() {
         val contexts = MutableStateFlow(
-            listOf(MockClusterProvider.MOCK_CONTEXT_NAME, "staging-cluster"),
+            listOf(DemoContext.MOCK_CONTEXT_NAME, "staging-cluster"),
         )
         val hasReal = derivedFlow(contexts)
         assertTrue(hasReal.value)
-        contexts.value = listOf(MockClusterProvider.MOCK_CONTEXT_NAME)
+        contexts.value = listOf(DemoContext.MOCK_CONTEXT_NAME)
         assertFalse(hasReal.value)
     }
 }

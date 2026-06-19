@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.util.CheckStatus
-import com.kubekubedashdash.util.MockClusterProvider
+import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteChecker
 import com.kubekubedashdash.util.PrerequisiteResult
@@ -38,7 +38,7 @@ class AppViewModel private constructor() : ViewModel() {
     private val _contexts = MutableStateFlow<List<String>>(emptyList())
     val contexts: StateFlow<List<String>> = _contexts.asStateFlow()
     val hasRealContexts: StateFlow<Boolean> = _contexts
-        .map { list -> list.any { !MockClusterProvider.isMockContext(it) } }
+        .map { list -> list.any { !DemoContext.isMockContext(it) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialValue = false)
 
     private val _prerequisiteResult = MutableStateFlow<PrerequisiteResult?>(null)
@@ -62,7 +62,7 @@ class AppViewModel private constructor() : ViewModel() {
     }
 
     private suspend fun loadContextsSync(): List<String> = withContext(Dispatchers.IO) {
-        listOf(MockClusterProvider.MOCK_CONTEXT_NAME) +
+        listOf(DemoContext.MOCK_CONTEXT_NAME) +
             WorkspaceManager.activeSession.connectionManager.getContexts()
     }
 
@@ -78,7 +78,7 @@ class AppViewModel private constructor() : ViewModel() {
     private suspend fun loadContextsAndOfferSelector() {
         val loaded = loadContextsSync()
         _contexts.value = loaded
-        val hasReal = loaded.any { !MockClusterProvider.isMockContext(it) }
+        val hasReal = loaded.any { !DemoContext.isMockContext(it) }
         if (hasReal && !anyWorkspaceHasActiveCluster()) {
             WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
         }

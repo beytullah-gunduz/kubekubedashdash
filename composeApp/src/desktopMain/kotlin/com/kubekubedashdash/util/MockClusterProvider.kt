@@ -61,13 +61,8 @@ class MockClusterHandle internal constructor(
 
 object MockClusterProvider {
 
-    /**
-     * Picker-entry / template label. Picking this from the cluster selector means
-     * "give me a brand-new mock instance"; the actual live tab's context name is
-     * a unique `"$MOCK_LABEL_PREFIX #N"` minted by [acquireNewInstance].
-     */
-    const val MOCK_CONTEXT_NAME = "demo-cluster (mock)"
-    private const val MOCK_LABEL_PREFIX = "demo-cluster (mock)"
+    // Kept private for generateUnusedLabel(); string identity lives in DemoContext.
+    private const val MOCK_LABEL_PREFIX = DemoContext.MOCK_CONTEXT_NAME
 
     internal val log = LoggerFactory.getLogger(MockClusterProvider::class.java)
     private val lock = Any()
@@ -87,8 +82,6 @@ object MockClusterProvider {
 
     private val _connectedTabCount = MutableStateFlow(0)
     val connectedTabCount: StateFlow<Int> = _connectedTabCount.asStateFlow()
-
-    fun isMockContext(ctx: String): Boolean = ctx == MOCK_CONTEXT_NAME || ctx.startsWith("$MOCK_LABEL_PREFIX #")
 
     /**
      * Mint a fresh mock instance with a lowest-unused-N label and acquire a handle

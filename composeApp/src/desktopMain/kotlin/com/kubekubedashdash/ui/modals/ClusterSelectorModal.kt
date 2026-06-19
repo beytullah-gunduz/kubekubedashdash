@@ -76,8 +76,8 @@ import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.util.ContextBinding
+import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.EksClusterDiscoverer
-import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
@@ -98,9 +98,9 @@ private data class ParsedContext(
 )
 
 private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
-    if (MockClusterProvider.isMockContext(ctx)) {
+    if (DemoContext.isMockContext(ctx)) {
         // Bare prefix (picker template) → "Demo Cluster"; live "$prefix #N" → "Demo Cluster #N".
-        val suffix = ctx.removePrefix(MockClusterProvider.MOCK_CONTEXT_NAME).trim()
+        val suffix = ctx.removePrefix(DemoContext.MOCK_CONTEXT_NAME).trim()
         val displayName = if (suffix.isEmpty()) "Demo Cluster" else "Demo Cluster $suffix"
         return ParsedContext(
             rawName = ctx,
@@ -301,7 +301,7 @@ fun ClusterSelectorModal(
                                         ctx = ctx,
                                         parsed = parsed,
                                         isSelected = ctx == selectedContext ||
-                                            MockClusterProvider.isMockContext(selectedContext),
+                                            DemoContext.isMockContext(selectedContext),
                                         canAddTab = canAddTab,
                                         defaultTarget = defaultTarget,
                                         onOpenCluster = onOpenCluster,

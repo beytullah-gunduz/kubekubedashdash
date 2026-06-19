@@ -4,7 +4,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.clusterHealthFlow
-import com.kubekubedashdash.util.MockClusterProvider
+import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -295,11 +295,11 @@ class SessionViewModel(
         _isConnecting.value = true
         emitConnEvent(ConnEvent.ConnectStarted)
         connectJob = scope.launch(Dispatchers.IO) {
-            val isMock = MockClusterProvider.isMockContext(ctx)
+            val isMock = DemoContext.isMockContext(ctx)
             val result = if (isMock) {
                 // Bare prefix means "mint a new mock" (picker path); a `#N` label
                 // means reattach (e.g. retry of an existing session).
-                val mockLabel = if (ctx == MockClusterProvider.MOCK_CONTEXT_NAME) null else ctx
+                val mockLabel = if (ctx == DemoContext.MOCK_CONTEXT_NAME) null else ctx
                 reactiveClient.connectMock(mockLabel)
             } else {
                 reactiveClient.connect(ctx)
