@@ -56,6 +56,7 @@ import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.resources.dashboard_filled
+import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.TerminalSessionRegistry
@@ -186,6 +187,29 @@ fun App(
         val settingsOpen by workspace.showSettings.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
         var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
+
+        // Scope pod-log tabs to this window's clusters so they don't bleed
+        // across windows (the registry is a process-global singleton); the
+        // shared app-log tab always counts toward visibility.
+        val visibleSessionIds = remember(tabs) {
+            tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(mutableSetOf()) { it.session.id.value }
+        }
+        // Auto-hide the drawer when the user closes its last visible tab.
+        // drawerState (visibility) and the registry (tab list) are otherwise
+        // independent, so without this the panel lingers empty. Edge-triggered
+        // on the non-empty -> empty transition — not the empty *state* — so
+        // Cmd+J can still deliberately open an empty drawer to show its hint.
+        val openDrawerTabs by LogStreamRegistry.tabs.collectAsState()
+        val visibleDrawerTabCount = remember(openDrawerTabs, visibleSessionIds) {
+            openDrawerTabs.count { (_, tab) -> tab !is ActiveLogStream || tab.id.sessionId in visibleSessionIds }
+        }
+        val prevDrawerTabCount = remember { mutableStateOf(visibleDrawerTabCount) }
+        LaunchedEffect(visibleDrawerTabCount) {
+            if (prevDrawerTabCount.value > 0 && visibleDrawerTabCount == 0) {
+                drawerState = LogDrawerState.HIDDEN
+            }
+            prevDrawerTabCount.value = visibleDrawerTabCount
+        }
         val onOpenLogs: (String, String, String?) -> Unit = remember(activeSession) {
             { pod, ns, container ->
                 activeSession?.let { session ->
@@ -459,11 +483,7 @@ fun App(
                         LogDrawer(
                             state = drawerState,
                             onStateChange = { drawerState = it },
-                            // Scope pod-log tabs to this window's clusters so they
-                            // don't bleed across windows (the registry is global).
-                            visibleSessionIds = remember(tabs) {
-                                tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(mutableSetOf()) { it.session.id.value }
-                            },
+                            visibleSessionIds = visibleSessionIds,
                         )
                     }
                 } // end if (showFirstRun) else
