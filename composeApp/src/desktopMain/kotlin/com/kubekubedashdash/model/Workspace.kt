@@ -48,6 +48,13 @@ enum class TabStripVisibility {
     ALWAYS,
 }
 
+/** A request to open the logs drawer on a specific pod/container (screenshot driver). */
+data class LogRequest(
+    val podName: String,
+    val namespace: String,
+    val container: String? = null,
+)
+
 /**
  * One OS window's worth of tabs. A workspace holds an ordered list of
  * [WorkspaceTab]s (rendered as a strip when N≥2 or any non-cluster tab is open)
@@ -95,6 +102,20 @@ class Workspace(
 
     private val _showSettings = MutableStateFlow(false)
     val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
+
+    // Command palette visibility — hoisted so the screenshot generator can open it
+    // (App.kt owns the keyboard toggle; this lets an external driver request it too).
+    private val _showPalette = MutableStateFlow(false)
+    val showPalette: StateFlow<Boolean> = _showPalette.asStateFlow()
+
+    // One-shot "open the logs drawer on this pod" request, consumed by App.kt.
+    // Null in normal use. Carries the same args App.kt's onOpenLogs already takes.
+    private val _logRequest = MutableStateFlow<LogRequest?>(null)
+    val logRequest: StateFlow<LogRequest?> = _logRequest.asStateFlow()
+
+    // One-shot "hide the logs drawer" request, consumed by App.kt. False in normal use.
+    private val _hideLogsRequest = MutableStateFlow(false)
+    val hideLogsRequest: StateFlow<Boolean> = _hideLogsRequest.asStateFlow()
 
     /**
      * Screen-space rectangle of this window's chip-drop zone — the chip slot in
@@ -268,6 +289,33 @@ class Workspace(
 
     fun dismissSettings() {
         _showSettings.value = false
+    }
+
+    fun showPalette() {
+        _showPalette.value = true
+    }
+    fun dismissPalette() {
+        _showPalette.value = false
+    }
+
+    /** Ask App.kt to open the logs drawer for [podName]/[namespace]/[container]. */
+    fun requestLogs(podName: String, namespace: String, container: String? = null) {
+        _logRequest.value = LogRequest(podName, namespace, container)
+    }
+
+    /** Clear a consumed/pending log request. */
+    fun clearLogRequest() {
+        _logRequest.value = null
+    }
+
+    /** Ask App.kt to hide the logs drawer (screenshot teardown). */
+    fun requestHideLogs() {
+        _hideLogsRequest.value = true
+    }
+
+    /** Clear a consumed hide-logs request. */
+    fun clearHideLogsRequest() {
+        _hideLogsRequest.value = false
     }
 
     fun updateDropZoneScreenBounds(bounds: Rect?) {
