@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -51,6 +52,7 @@ import com.kubekubedashdash.resources.sell_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -204,6 +206,16 @@ fun GenericResourceScreen(
                         matchesMapSelector(r.annotations, annotationSelector)
                     passesSearch && passesStatus && passesLabels && passesAnnotations
                 }
+            }
+
+            // Screenshot-only: auto-select a named row so the detail pane (and its
+            // write-actions / extra tabs) is visible for capture. Inert when the map is
+            // empty (normal use). selectItem is a toggle, so guard against re-selecting.
+            val autoSelectMap by ScreenshotHooks.autoSelect.collectAsState()
+            LaunchedEffect(autoSelectMap, kind, s.data) {
+                val wanted = autoSelectMap[kind] ?: return@LaunchedEffect
+                val row = s.data.firstOrNull { it.name == wanted } ?: return@LaunchedEffect
+                if (selected?.uid != row.uid) viewModel.selectItem(row)
             }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {

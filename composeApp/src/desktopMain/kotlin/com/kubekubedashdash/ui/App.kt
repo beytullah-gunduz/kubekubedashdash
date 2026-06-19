@@ -226,6 +226,35 @@ fun App(
                 }
             }
         }
+
+        // Screenshot-driver bridges. Inert in normal use: palette starts false, and
+        // logRequest/hideLogsRequest start null/false with nothing in production calling
+        // the new Workspace methods.
+
+        // Palette — two-way: showPalette() opens, dismissPalette() closes. A user pressing
+        // Esc sets paletteOpen=false directly and is unaffected (showPalette stays false;
+        // this effect only re-runs when showPalette changes).
+        val showPaletteRequest by workspace.showPalette.collectAsState()
+        LaunchedEffect(showPaletteRequest) { paletteOpen = showPaletteRequest }
+
+        // Logs open — replay the existing onOpenLogs path, then clear the one-shot.
+        val pendingLogRequest by workspace.logRequest.collectAsState()
+        LaunchedEffect(pendingLogRequest) {
+            pendingLogRequest?.let { req ->
+                onOpenLogs(req.podName, req.namespace, req.container)
+                workspace.clearLogRequest()
+            }
+        }
+
+        // Logs hide — screenshot teardown collapses the drawer, then clears the one-shot.
+        val pendingHideLogs by workspace.hideLogsRequest.collectAsState()
+        LaunchedEffect(pendingHideLogs) {
+            if (pendingHideLogs) {
+                drawerState = LogDrawerState.HIDDEN
+                workspace.clearHideLogsRequest()
+            }
+        }
+
         val sessionForPalette = activeSession ?: titleSession
         val paletteEntries = rememberPaletteEntries(
             activeSession = sessionForPalette,

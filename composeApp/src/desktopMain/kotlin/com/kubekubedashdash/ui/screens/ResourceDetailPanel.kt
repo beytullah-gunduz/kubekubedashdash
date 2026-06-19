@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +64,7 @@ import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
@@ -153,6 +155,21 @@ fun ResourceDetailPanel(
 
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { activeTab = it }
+    }
+
+    // Screenshot-only: pre-select an extra tab by label so the generator can capture
+    // detail tabs (Usage, Rules, Bindings, Endpoints) without user interaction.
+    // Inert when autoTab map is empty (normal use). Keys on name/namespace/tabs.size
+    // so this effect re-runs AFTER the LaunchedEffect(name, namespace) above resets
+    // to page 0, ensuring the desired tab is re-applied following a selection change.
+    val autoTabMap by ScreenshotHooks.autoTab.collectAsState()
+    LaunchedEffect(name, namespace, tabs.size, autoTabMap) {
+        val label = autoTabMap[kind] ?: return@LaunchedEffect
+        val idx = tabs.indexOfFirst { it.label == label }
+        if (idx > 0) {
+            activeTab = idx
+            pagerState.scrollToPage(idx)
+        }
     }
 
     Surface(modifier = modifier, color = KdSurface) {
