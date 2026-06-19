@@ -21,6 +21,8 @@ import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
@@ -33,6 +35,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -214,6 +217,200 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(5000L)
         log.info("captured 44-settings")
 
+        log.info("Capturing detail-pane + palette + logs shots")
+        val rc = sessionVm.reactiveClient
+
+        // Make sure we're on a stable, single-tab list baseline.
+        sessionVm.navigate(Screen.Main.ClusterOverview)
+        delay(1500L)
+
+        // ── 46 pod-actions (extra pane via Screen.Detail.PodDetail) ─────────────────
+        run {
+            val pods = currentList(rc.pods)
+            val pod =
+                pods.firstOrNull { it.name.startsWith("frontend") }
+                    ?: pods.firstOrNull { it.name.startsWith("backend") }
+                    ?: pods.firstOrNull()
+            if (pod != null) {
+                sessionVm.navigate(Screen.Main.Pods()) // list behind the pane
+                delay(1200L)
+                sessionVm.navigate(Screen.Detail.PodDetail(pod)) // opens extra pane
+                delay(3000L)
+                captureWindow(initialWorkspace.id, outDir.resolve("46-pod-actions.png"))
+                log.info("captured 46-pod-actions")
+                sessionVm.closeExtraPane()
+                delay(400L)
+            } else {
+                log.warn("46-pod-actions skipped: no pods")
+            }
+        }
+
+        // ── 47 node-actions ─────────────────────────────────────────────────────────
+        run {
+            val node =
+                currentList(rc.nodes).firstOrNull { it.name == "mock-node-1" }
+                    ?: currentList(rc.nodes).firstOrNull()
+            if (node != null) {
+                sessionVm.navigate(Screen.Main.Nodes())
+                delay(1200L)
+                sessionVm.navigate(Screen.Detail.NodeDetail(node))
+                delay(3000L)
+                captureWindow(initialWorkspace.id, outDir.resolve("47-node-actions.png"))
+                log.info("captured 47-node-actions")
+                sessionVm.closeExtraPane()
+                delay(400L)
+            } else {
+                log.warn("47-node-actions skipped: no nodes")
+            }
+        }
+
+        // ── 48 deployment-actions ───────────────────────────────────────────────────
+        run {
+            val dep =
+                currentList(rc.deployments).firstOrNull { it.name == "web" }
+                    ?: currentList(rc.deployments).firstOrNull()
+            if (dep != null) {
+                sessionVm.navigate(Screen.Main.Deployments())
+                delay(1200L)
+                sessionVm.navigate(Screen.Detail.DeploymentDetail(dep))
+                delay(3000L)
+                captureWindow(initialWorkspace.id, outDir.resolve("48-deployment-actions.png"))
+                log.info("captured 48-deployment-actions")
+                sessionVm.closeExtraPane()
+                delay(400L)
+            } else {
+                log.warn("48-deployment-actions skipped: no deployments")
+            }
+        }
+
+        // ── 49 csr-actions (generic list auto-select via ScreenshotHooks) ───────────
+        // CSR is cluster-scoped; the Approve/Deny actions render only for the
+        // Pending CSR "demo-csr-pending".
+        ScreenshotHooks.autoSelect.value = mapOf("CertificateSigningRequest" to "demo-csr-pending")
+        sessionVm.navigate(Screen.Main.CertificateSigningRequests)
+        delay(4000L) // list load + auto-select + pane expand
+        captureWindow(initialWorkspace.id, outDir.resolve("49-csr-actions.png"))
+        log.info("captured 49-csr-actions")
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        delay(500L)
+
+        // ── 50 cronjob-actions ──────────────────────────────────────────────────────
+        ScreenshotHooks.autoSelect.value = mapOf("CronJob" to "nightly-backup")
+        sessionVm.navigate(Screen.Main.CronJobs)
+        delay(4000L)
+        captureWindow(initialWorkspace.id, outDir.resolve("50-cronjob-actions.png"))
+        log.info("captured 50-cronjob-actions")
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        delay(500L)
+
+        // ── 51 quota-usage (auto-select + auto-tab "Usage") ─────────────────────────
+        ScreenshotHooks.autoSelect.value = mapOf("ResourceQuota" to "prod-quota")
+        ScreenshotHooks.autoTab.value = mapOf("ResourceQuota" to "Usage")
+        sessionVm.navigate(Screen.Main.ResourceQuotas)
+        delay(4000L) // select + pane + tab switch
+        delay(2500L) // lazy Usage GET
+        captureWindow(initialWorkspace.id, outDir.resolve("51-quota-usage.png"))
+        log.info("captured 51-quota-usage")
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        ScreenshotHooks.autoTab.value = emptyMap()
+        delay(500L)
+
+        // ── 52 rbac-rules (Role "pod-reader" → "Rules") ─────────────────────────────
+        ScreenshotHooks.autoSelect.value = mapOf("Role" to "pod-reader")
+        ScreenshotHooks.autoTab.value = mapOf("Role" to "Rules")
+        sessionVm.navigate(Screen.Main.Roles)
+        delay(4000L)
+        delay(2500L)
+        captureWindow(initialWorkspace.id, outDir.resolve("52-rbac-rules.png"))
+        log.info("captured 52-rbac-rules")
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        ScreenshotHooks.autoTab.value = emptyMap()
+        delay(500L)
+
+        // ── 53 rolebinding (RoleBinding "read-pods" → "Bindings") ───────────────────
+        ScreenshotHooks.autoSelect.value = mapOf("RoleBinding" to "read-pods")
+        ScreenshotHooks.autoTab.value = mapOf("RoleBinding" to "Bindings")
+        sessionVm.navigate(Screen.Main.RoleBindings)
+        delay(4000L)
+        delay(2500L)
+        captureWindow(initialWorkspace.id, outDir.resolve("53-rolebinding.png"))
+        log.info("captured 53-rolebinding")
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        ScreenshotHooks.autoTab.value = emptyMap()
+        delay(500L)
+
+        // ── 54 endpointslice (EndpointSlice "demo-slice" → "Endpoints") ─────────────
+        ScreenshotHooks.autoSelect.value = mapOf("EndpointSlice" to "demo-slice")
+        ScreenshotHooks.autoTab.value = mapOf("EndpointSlice" to "Endpoints")
+        sessionVm.navigate(Screen.Main.EndpointSlices)
+        delay(4000L)
+        delay(2500L)
+        captureWindow(initialWorkspace.id, outDir.resolve("54-endpointslice.png"))
+        log.info("captured 54-endpointslice")
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        ScreenshotHooks.autoTab.value = emptyMap()
+        delay(500L)
+
+        // ── 55 custom-resources (a discovered CRD instance list) ────────────────────
+        run {
+            val crd =
+                currentList(rc.crds).firstOrNull { it.kind == "SparkApplication" }
+                    ?: currentList(rc.crds).firstOrNull()
+            if (crd != null) {
+                sessionVm.navigate(
+                    Screen.Main.CustomResource(
+                        group = crd.group,
+                        version = crd.version,
+                        kind = crd.kind,
+                        plural = crd.plural,
+                        namespaced = crd.namespaced,
+                    ),
+                )
+                delay(5000L)
+                captureWindow(initialWorkspace.id, outDir.resolve("55-custom-resources.png"))
+                log.info("captured 55-custom-resources")
+            } else {
+                log.warn("55-custom-resources skipped: no CRDs discovered")
+            }
+        }
+
+        // ── 56 command-palette ──────────────────────────────────────────────────────
+        sessionVm.navigate(Screen.Main.ClusterOverview)
+        delay(1200L)
+        initialWorkspace.showPalette()
+        delay(900L)
+        captureWindow(initialWorkspace.id, outDir.resolve("56-command-palette.png"))
+        log.info("captured 56-command-palette")
+        initialWorkspace.dismissPalette()
+        delay(600L)
+
+        // ── 57 logs (drawer expanded, streaming a pod log) — LAST detail shot ───────
+        run {
+            val pod =
+                currentList(rc.pods).firstOrNull { it.name.startsWith("frontend") }
+                    ?: currentList(rc.pods).firstOrNull()
+            if (pod != null) {
+                sessionVm.navigate(Screen.Main.Pods())
+                delay(1200L)
+                initialWorkspace.requestLogs(pod.name, pod.namespace, null)
+                delay(3500L) // let a few mock log lines stream in
+                captureWindow(initialWorkspace.id, outDir.resolve("57-logs.png"))
+                log.info("captured 57-logs")
+            } else {
+                log.warn("57-logs skipped: no pods")
+            }
+        }
+
+        // Teardown so later shots (theme / multi-tab / all-clusters / multi-window)
+        // aren't polluted by an open pane / palette / drawer.
+        ScreenshotHooks.autoSelect.value = emptyMap()
+        ScreenshotHooks.autoTab.value = emptyMap()
+        initialWorkspace.dismissPalette()
+        initialWorkspace.requestHideLogs() // collapse the logs drawer (P1 hide path)
+        sessionVm.closeExtraPane()
+        sessionVm.navigate(Screen.Main.ClusterOverview)
+        delay(1500L)
+
         log.info("Building light/dark theme comparison")
         sessionVm.navigate(Screen.Main.ClusterOverview)
         delay(5000L)
@@ -343,6 +540,9 @@ private suspend fun awaitWindow(id: WorkspaceId): AwtWindow {
 private suspend fun moveWindow(w: AwtWindow, x: Int, y: Int) {
     withContext(Dispatchers.Main) { w.setLocation(x, y) }
 }
+
+/** Read the current Success list from a resource flow, or empty. */
+private fun <T> currentList(flow: StateFlow<ResourceState<List<T>>>): List<T> = (flow.value as? ResourceState.Success)?.data ?: emptyList()
 
 private suspend fun captureWindow(id: WorkspaceId, output: File) {
     val w = windowsByWorkspace.value[id] ?: error("no window for $id")
