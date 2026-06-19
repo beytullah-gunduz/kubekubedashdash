@@ -9,10 +9,7 @@ import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.ui.screens.nodes.MAX_HISTORY_SIZE
 import com.kubekubedashdash.util.DEFAULT_STALE_TTL
 import com.kubekubedashdash.util.ReactiveKubeClient
-import com.kubekubedashdash.util.STALE_PRUNE_INTERVAL_MS
-import com.kubekubedashdash.util.StaleEntry
-import com.kubekubedashdash.util.pruneExpiredStale
-import com.kubekubedashdash.util.reduceStale
+import com.kubekubedashdash.util.StaleTracker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -20,8 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -50,14 +45,14 @@ class NodesScreenViewModel(
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
 
     // Nodes that have left the live watch stream, kept briefly with the instant
-    // they went stale, then evicted after the TTL (prune ticker below / next
-    // snapshot via reduceStale). The frozen NodeInfo is never refreshed — the
-    // node is gone from the stream. Public flow exposes just NodeInfo so callers
-    // keep `s.data + staleNodes.values`; `staleNodes.keys` is the stale UID set.
-    private val _staleNodes = MutableStateFlow<Map<String, StaleEntry<NodeInfo>>>(emptyMap())
-    val staleNodes: StateFlow<Map<String, NodeInfo>> = _staleNodes
-        .map { stale -> stale.mapValues { (_, entry) -> entry.info } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    // they went stale, then evicted after the TTL (prune ticker in StaleTracker /
+    // next snapshot via reduceStale). The frozen NodeInfo is never refreshed —
+    // the node is gone from the stream. Public flow exposes just NodeInfo so
+    // callers keep `s.data + staleNodes.values`; `staleNodes.keys` is the stale
+    // UID set. Nodes use the uniform window — a vanished node is a vanished node,
+    // there's no "error departure" distinction like pods have.
+    private val staleTracker = StaleTracker<NodeInfo>(viewModelScope, { it.uid }, { DEFAULT_STALE_TTL }, now)
+    val staleNodes: StateFlow<Map<String, NodeInfo>> get() = staleTracker.stale
 
     // null = "no explicit allowlist" (= show every status). Non-null Set is
     // the explicit allowlist. Survives screen navigation (session-scoped VM).
@@ -75,14 +70,12 @@ class NodesScreenViewModel(
         _pressureOnly.value = value
     }
 
-    private var previousNodesByUid: Map<String, NodeInfo> = emptyMap()
     private var pendingSelectName: String? = null
 
     val state: StateFlow<ResourceState<List<NodeInfo>>> = reactiveClient.nodes
         .onEach { state ->
             if (state is ResourceState.Loading) {
-                _staleNodes.value = emptyMap()
-                previousNodesByUid = emptyMap()
+                staleTracker.reset()
             }
             if (state is ResourceState.Success) processNodeUpdate(state.data)
         }
@@ -159,27 +152,9 @@ class NodesScreenViewModel(
         .map { it != null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    init {
-        // Age stale entries out independently of informer traffic (see the
-        // matching ticker in PodsScreenViewModel). Loops only while the stale
-        // set is non-empty.
-        viewModelScope.launch {
-            _staleNodes
-                .map { it.isNotEmpty() }
-                .distinctUntilChanged()
-                .collectLatest { hasStale ->
-                    while (hasStale) {
-                        delay(STALE_PRUNE_INTERVAL_MS)
-                        _staleNodes.update { pruneExpiredStale(it, now()) }
-                    }
-                }
-        }
-    }
-
     fun setParams(selectNodeName: String? = null) {
         _selected.value = null
-        _staleNodes.value = emptyMap()
-        previousNodesByUid = emptyMap()
+        staleTracker.reset()
         pendingSelectName = selectNodeName
         if (selectNodeName != null) {
             val current = state.value
@@ -200,12 +175,7 @@ class NodesScreenViewModel(
 
     private fun processNodeUpdate(current: List<NodeInfo>) {
         val currentByUid = current.associateBy { it.uid }
-        // Nodes use the uniform window — a vanished node is a vanished node,
-        // there's no "error departure" distinction like pods have.
-        val updatedStale = reduceStale(_staleNodes.value, currentByUid, previousNodesByUid, now()) { DEFAULT_STALE_TTL }
-
-        previousNodesByUid = currentByUid
-        _staleNodes.value = updatedStale
+        val updatedStale = staleTracker.onSnapshot(currentByUid)
 
         val name = pendingSelectName
         if (name != null) {
