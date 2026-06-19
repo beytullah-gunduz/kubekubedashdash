@@ -85,6 +85,18 @@ class ReactiveKubeClient(
 
     val connectionError: StateFlow<String?> = connectionManager.connectionError
 
+    // ── Namespace selector ──────────────────────────────────────────────────────
+
+    private val _selectedNamespace = MutableStateFlow<String?>(null)
+    val selectedNamespace: StateFlow<String?> = _selectedNamespace.asStateFlow()
+
+    fun setSelectedNamespace(namespace: String?) {
+        log.info("Namespace selection changed to: {}", namespace ?: "<all namespaces>")
+        _selectedNamespace.value = namespace
+    }
+
+    private val informers = ReactiveInformerFactory(scope, connectionManager, selectedNamespace)
+
     fun reportSuccess() = connectionManager.reportSuccess()
     fun reportError(message: String) = connectionManager.reportError(message)
 
@@ -120,257 +132,6 @@ class ReactiveKubeClient(
     fun getContextBindings(): List<ContextBinding> = connectionManager.getContextBindings()
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
     fun getClusterServer(): String = connectionManager.getClusterServer()
-
-    // ── Namespace selector ──────────────────────────────────────────────────────
-
-    private val _selectedNamespace = MutableStateFlow<String?>(null)
-    val selectedNamespace: StateFlow<String?> = _selectedNamespace.asStateFlow()
-
-    fun setSelectedNamespace(namespace: String?) {
-        log.info("Namespace selection changed to: {}", namespace ?: "<all namespaces>")
-        _selectedNamespace.value = namespace
-    }
-
-    // ── Informer-based flow helpers ────────────────────────────────────────────
-
-    private fun <R : HasMetadata, T> informerFlow(
-        inform: (KubernetesClient, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
-        mapper: (R) -> T,
-    ): StateFlow<ResourceState<List<T>>> = connectedTrigger
-        .flatMapLatest {
-            channelFlow {
-                send(ResourceState.Loading)
-                try {
-                    val emitSignal = Channel<Unit>(Channel.CONFLATED)
-                    log.debug("Starting cluster-scoped informer")
-                    val informer = inform(
-                        k8s,
-                        object : ResourceEventHandler<R> {
-                            override fun onAdd(obj: R) {
-                                log.trace("Informer event: ADD {}/{}", obj.kind, obj.metadata?.name)
-                                emitSignal.trySend(Unit)
-                            }
-                            override fun onUpdate(oldObj: R, newObj: R) {
-                                log.trace("Informer event: UPDATE {}/{}", newObj.kind, newObj.metadata?.name)
-                                emitSignal.trySend(Unit)
-                            }
-                            override fun onDelete(obj: R, deletedFinalStateUnknown: Boolean) {
-                                log.trace("Informer event: DELETE {}/{} (finalStateUnknown={})", obj.kind, obj.metadata?.name, deletedFinalStateUnknown)
-                                emitSignal.trySend(Unit)
-                            }
-                        },
-                    )
-                    launch {
-                        // Debounce, not periodic emit. fabric8 fires onAdd for
-                        // every item during initial list-and-watch — without
-                        // debounce a CONFLATED channel + delay(100) becomes a
-                        // fixed 10 Hz cadence of full-store re-emits. debounce
-                        // collapses the burst into one emission once events
-                        // settle.
-                        emitSignal.consumeAsFlow()
-                            .debounce(100)
-                            .collect {
-                                // Pre-sync emissions are dropped — the post-sync
-                                // send below covers the first paint.
-                                if (!informer.hasSynced()) return@collect
-                                try {
-                                    val items = informer.store.list()
-                                    log.trace("Informer emitting {} items from store", items.size)
-                                    send(ResourceState.Success(items.map(mapper)))
-                                    reportSuccess()
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    log.warn("Informer failed to map store contents: {}", e.message)
-                                    reportError(e.message ?: "Unknown error")
-                                }
-                            }
-                    }
-                    while (!informer.hasSynced()) delay(50)
-                    val items = informer.store.list()
-                    log.info("Cluster-scoped informer synced with {} items", items.size)
-                    send(ResourceState.Success(items.map(mapper)))
-                    reportSuccess()
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        log.debug("Closing cluster-scoped informer")
-                        informer.close()
-                    }
-                } catch (e: CancellationException) {
-                    // flatMapLatest cancels the previous inner flow on every
-                    // namespace / connection-version change. This is normal
-                    // lifecycle, NOT a connection failure — never count it as
-                    // such or the shared failure counter trips and the UI
-                    // bounces to "Unable to connect" → retry → reconnect →
-                    // more cancellations → infinite loop.
-                    throw e
-                } catch (e: Exception) {
-                    log.error("Cluster-scoped informer failed: {}", e.message)
-                    reportError(e.message ?: "Unknown error")
-                    send(ResourceState.Error(e.message ?: "Unknown error"))
-                }
-            }
-        }
-        .distinctUntilChanged()
-        .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
-
-    private fun <R : HasMetadata, T> namespacedInformerFlow(
-        inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
-        mapper: (R) -> T?,
-    ): StateFlow<ResourceState<List<T>>> = combine(_selectedNamespace, connectedTrigger) { ns, _ -> ns }
-        .flatMapLatest { ns ->
-            channelFlow {
-                send(ResourceState.Loading)
-                try {
-                    val emitSignal = Channel<Unit>(Channel.CONFLATED)
-                    val nsLabel = ns ?: "<all namespaces>"
-                    log.debug("Starting namespaced informer for namespace={}", nsLabel)
-                    val informer = inform(
-                        k8s,
-                        ns,
-                        object : ResourceEventHandler<R> {
-                            override fun onAdd(obj: R) {
-                                log.trace("Informer event: ADD {}/{} in namespace={}", obj.kind, obj.metadata?.name, nsLabel)
-                                emitSignal.trySend(Unit)
-                            }
-                            override fun onUpdate(oldObj: R, newObj: R) {
-                                log.trace("Informer event: UPDATE {}/{} in namespace={}", newObj.kind, newObj.metadata?.name, nsLabel)
-                                emitSignal.trySend(Unit)
-                            }
-                            override fun onDelete(obj: R, deletedFinalStateUnknown: Boolean) {
-                                log.trace("Informer event: DELETE {}/{} in namespace={} (finalStateUnknown={})", obj.kind, obj.metadata?.name, nsLabel, deletedFinalStateUnknown)
-                                emitSignal.trySend(Unit)
-                            }
-                        },
-                    )
-                    launch {
-                        emitSignal.consumeAsFlow()
-                            .debounce(100)
-                            .collect {
-                                if (!informer.hasSynced()) return@collect
-                                try {
-                                    val items = informer.store.list()
-                                    log.trace("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
-                                    send(ResourceState.Success(items.mapNotNull(mapper)))
-                                    reportSuccess()
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
-                                    reportError(e.message ?: "Unknown error")
-                                }
-                            }
-                    }
-                    while (!informer.hasSynced()) delay(50)
-                    val items = informer.store.list()
-                    log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
-                    send(ResourceState.Success(items.mapNotNull(mapper)))
-                    reportSuccess()
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        log.debug("Closing namespaced informer for namespace={}", nsLabel)
-                        informer.close()
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    log.error("Namespaced informer failed for namespace={}: {}", ns ?: "<all>", e.message)
-                    reportError(e.message ?: "Unknown error")
-                    send(ResourceState.Error(e.message ?: "Unknown error"))
-                }
-            }
-        }
-        .distinctUntilChanged()
-        .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
-
-    // ── Polling helpers (for non-watchable resources) ────────────────────────────
-
-    private fun <T> namespacedPollingStateFlow(
-        intervalMs: Long = 5_000,
-        fetch: (namespace: String?) -> T,
-    ): StateFlow<ResourceState<T>> = combine(_selectedNamespace, connectedTrigger) { ns, _ -> ns }
-        .flatMapLatest { ns ->
-            flow {
-                emit(ResourceState.Loading)
-                var loaded = false
-                while (true) {
-                    try {
-                        // runInterruptible: fetch is a blocking fabric8 call with no
-                        // suspension point, so flatMapLatest cancellation (namespace /
-                        // connection change) can't preempt it otherwise — it would pin
-                        // an IO thread until fabric8's own retry budget exhausts.
-                        val data = runInterruptible(Dispatchers.IO) { fetch(ns) }
-                        reportSuccess()
-                        emit(ResourceState.Success(data))
-                        loaded = true
-                        log.trace("Polling fetch succeeded for namespace={}", ns ?: "<all>")
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        log.warn("Polling fetch failed for namespace={}: {}", ns ?: "<all>", e.message)
-                        reportError(e.message ?: "Unknown error")
-                        if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
-                    }
-                    delay(intervalMs)
-                }
-            }
-        }
-        .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
-
-    private fun <T> pollingStateFlow(
-        intervalMs: Long = 5_000,
-        fetch: () -> T,
-    ): StateFlow<ResourceState<T>> = connectedTrigger
-        .flatMapLatest {
-            flow {
-                emit(ResourceState.Loading)
-                var loaded = false
-                while (true) {
-                    try {
-                        val data = runInterruptible(Dispatchers.IO) { fetch() }
-                        reportSuccess()
-                        emit(ResourceState.Success(data))
-                        loaded = true
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        reportError(e.message ?: "Unknown error")
-                        if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
-                    }
-                    delay(intervalMs)
-                }
-            }
-        }
-        .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
-
-    private fun <T> directPollingStateFlow(
-        intervalMs: Long = 5_000,
-        initial: T,
-        fetch: () -> T,
-    ): StateFlow<T> = connectedTrigger
-        .flatMapLatest {
-            flow {
-                emit(initial)
-                while (true) {
-                    try {
-                        emit(runInterruptible(Dispatchers.IO) { fetch() })
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        // keep previous value on error
-                    }
-                    delay(intervalMs)
-                }
-            }
-        }
-        .flowOn(Dispatchers.IO)
-        .stateIn(scope, SharingStarted.WhileSubscribed(60_000), initial)
 
     // ── Mapping: Pods ───────────────────────────────────────────────────────────
 
@@ -409,12 +170,12 @@ class ReactiveKubeClient(
 
     // ── Namespaces ──────────────────────────────────────────────────────────────
 
-    val namespaceNames: StateFlow<ResourceState<List<String>>> = informerFlow(
+    val namespaceNames: StateFlow<ResourceState<List<String>>> = informers.informer(
         inform = { k, h -> k.namespaces().inform(h) },
         mapper = { ns -> ns.metadata.name },
     )
 
-    val namespaces: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val namespaces: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.namespaces().inform(h) },
         mapper = { ns ->
             GenericResourceInfo(
@@ -431,7 +192,7 @@ class ReactiveKubeClient(
 
     // ── Pods ────────────────────────────────────────────────────────────────────
 
-    val pods: StateFlow<ResourceState<List<PodInfo>>> = namespacedInformerFlow(
+    val pods: StateFlow<ResourceState<List<PodInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.pods().inNamespace(ns).inform(h)
@@ -444,7 +205,7 @@ class ReactiveKubeClient(
 
     // ── Deployments ─────────────────────────────────────────────────────────────
 
-    val deployments: StateFlow<ResourceState<List<DeploymentInfo>>> = namespacedInformerFlow(
+    val deployments: StateFlow<ResourceState<List<DeploymentInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.apps().deployments().inNamespace(ns).inform(h)
@@ -472,7 +233,7 @@ class ReactiveKubeClient(
 
     // ── Services ────────────────────────────────────────────────────────────────
 
-    val services: StateFlow<ResourceState<List<ServiceInfo>>> = namespacedInformerFlow(
+    val services: StateFlow<ResourceState<List<ServiceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.services().inNamespace(ns).inform(h)
@@ -507,7 +268,7 @@ class ReactiveKubeClient(
 
     // ── Nodes ───────────────────────────────────────────────────────────────────
 
-    val nodes: StateFlow<ResourceState<List<NodeInfo>>> = informerFlow(
+    val nodes: StateFlow<ResourceState<List<NodeInfo>>> = informers.informer(
         inform = { k, h -> k.nodes().inform(h) },
         mapper = { node ->
             val readyCond = node.status?.conditions?.find { it.type == "Ready" }
@@ -538,7 +299,7 @@ class ReactiveKubeClient(
 
     // ── Events ──────────────────────────────────────────────────────────────────
 
-    val events: StateFlow<ResourceState<List<EventInfo>>> = namespacedInformerFlow(
+    val events: StateFlow<ResourceState<List<EventInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.v1().events().inNamespace(ns).inform(h)
@@ -551,7 +312,7 @@ class ReactiveKubeClient(
 
     // ── ConfigMaps ──────────────────────────────────────────────────────────────
 
-    val configMaps: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val configMaps: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.configMaps().inNamespace(ns).inform(h)
@@ -575,7 +336,7 @@ class ReactiveKubeClient(
 
     // ── Secrets ─────────────────────────────────────────────────────────────────
 
-    val secrets: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val secrets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.secrets().inNamespace(ns).inform(h)
@@ -599,7 +360,7 @@ class ReactiveKubeClient(
 
     // ── StatefulSets ────────────────────────────────────────────────────────────
 
-    val statefulSets: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val statefulSets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.apps().statefulSets().inNamespace(ns).inform(h)
@@ -625,7 +386,7 @@ class ReactiveKubeClient(
 
     // ── DaemonSets ──────────────────────────────────────────────────────────────
 
-    val daemonSets: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val daemonSets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.apps().daemonSets().inNamespace(ns).inform(h)
@@ -651,7 +412,7 @@ class ReactiveKubeClient(
 
     // ── ReplicaSets ─────────────────────────────────────────────────────────────
 
-    val replicaSets: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val replicaSets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.apps().replicaSets().inNamespace(ns).inform(h)
@@ -677,7 +438,7 @@ class ReactiveKubeClient(
 
     // ── Jobs ────────────────────────────────────────────────────────────────────
 
-    val jobs: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val jobs: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.batch().v1().jobs().inNamespace(ns).inform(h)
@@ -709,7 +470,7 @@ class ReactiveKubeClient(
 
     // ── CronJobs ────────────────────────────────────────────────────────────────
 
-    val cronJobs: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val cronJobs: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.batch().v1().cronjobs().inNamespace(ns).inform(h)
@@ -736,7 +497,7 @@ class ReactiveKubeClient(
 
     // ── Ingresses ───────────────────────────────────────────────────────────────
 
-    val ingresses: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val ingresses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.network().v1().ingresses().inNamespace(ns).inform(h)
@@ -761,7 +522,7 @@ class ReactiveKubeClient(
 
     // ── Endpoints ───────────────────────────────────────────────────────────────
 
-    val endpoints: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val endpoints: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.endpoints().inNamespace(ns).inform(h)
@@ -786,7 +547,7 @@ class ReactiveKubeClient(
 
     // ── NetworkPolicies ─────────────────────────────────────────────────────────
 
-    val networkPolicies: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val networkPolicies: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.network().v1().networkPolicies().inNamespace(ns).inform(h)
@@ -810,7 +571,7 @@ class ReactiveKubeClient(
 
     // ── PersistentVolumes ───────────────────────────────────────────────────────
 
-    val persistentVolumes: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val persistentVolumes: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.persistentVolumes().inform(h) },
         mapper = { pv ->
             GenericResourceInfo(
@@ -833,7 +594,7 @@ class ReactiveKubeClient(
 
     // ── PersistentVolumeClaims ──────────────────────────────────────────────────
 
-    val persistentVolumeClaims: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val persistentVolumeClaims: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.persistentVolumeClaims().inNamespace(ns).inform(h)
@@ -862,7 +623,7 @@ class ReactiveKubeClient(
 
     // ── StorageClasses ──────────────────────────────────────────────────────────
 
-    val storageClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val storageClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.storage().v1().storageClasses().inform(h) },
         mapper = { sc ->
             val isDefault = sc.metadata.annotations
@@ -886,7 +647,7 @@ class ReactiveKubeClient(
 
     // ── RBAC / Access Control ───────────────────────────────────────────────────
 
-    val serviceAccounts: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val serviceAccounts: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.serviceAccounts().inNamespace(ns).inform(h)
@@ -911,7 +672,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val roles: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val roles: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.rbac().roles().inNamespace(ns).inform(h)
@@ -933,7 +694,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val clusterRoles: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val clusterRoles: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.rbac().clusterRoles().inform(h) },
         mapper = { cr ->
             GenericResourceInfo(
@@ -952,7 +713,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val roleBindings: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val roleBindings: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.rbac().roleBindings().inNamespace(ns).inform(h)
@@ -977,7 +738,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val clusterRoleBindings: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val clusterRoleBindings: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.rbac().clusterRoleBindings().inform(h) },
         mapper = { crb ->
             GenericResourceInfo(
@@ -998,7 +759,7 @@ class ReactiveKubeClient(
 
     // ── Autoscaling & Disruption ────────────────────────────────────────────────
 
-    val horizontalPodAutoscalers: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val horizontalPodAutoscalers: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.autoscaling().v2().horizontalPodAutoscalers().inNamespace(ns).inform(h)
@@ -1025,7 +786,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val podDisruptionBudgets: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val podDisruptionBudgets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.policy().v1().podDisruptionBudget().inNamespace(ns).inform(h)
@@ -1054,7 +815,7 @@ class ReactiveKubeClient(
 
     // ── Governance ──────────────────────────────────────────────────────────────
 
-    val resourceQuotas: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val resourceQuotas: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.resourceQuotas().inNamespace(ns).inform(h)
@@ -1079,7 +840,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val limitRanges: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val limitRanges: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.limitRanges().inNamespace(ns).inform(h)
@@ -1103,7 +864,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val priorityClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val priorityClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.scheduling().v1().priorityClasses().inform(h) },
         mapper = { pc ->
             GenericResourceInfo(
@@ -1124,7 +885,7 @@ class ReactiveKubeClient(
 
     // ── Admission Control ────────────────────────────────────────────────────────
 
-    val validatingWebhookConfigurations: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val validatingWebhookConfigurations: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.admissionRegistration().v1().validatingWebhookConfigurations().inform(h) },
         mapper = { x ->
             GenericResourceInfo(
@@ -1140,7 +901,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val mutatingWebhookConfigurations: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val mutatingWebhookConfigurations: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.admissionRegistration().v1().mutatingWebhookConfigurations().inform(h) },
         mapper = { x ->
             GenericResourceInfo(
@@ -1158,7 +919,7 @@ class ReactiveKubeClient(
 
     // ── Network/Storage/Security fill-ins ─────────────────────────────────────
 
-    val ingressClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val ingressClasses: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.network().v1().ingressClasses().inform(h) },
         mapper = { ic ->
             GenericResourceInfo(
@@ -1176,7 +937,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val endpointSlices: StateFlow<ResourceState<List<GenericResourceInfo>>> = namespacedInformerFlow(
+    val endpointSlices: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
                 k.discovery().v1().endpointSlices().inNamespace(ns).inform(h)
@@ -1202,7 +963,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val csiDrivers: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val csiDrivers: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.storage().v1().csiDrivers().inform(h) },
         mapper = { d ->
             GenericResourceInfo(
@@ -1221,7 +982,7 @@ class ReactiveKubeClient(
         },
     )
 
-    val certificateSigningRequests: StateFlow<ResourceState<List<GenericResourceInfo>>> = informerFlow(
+    val certificateSigningRequests: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.certificates().v1().certificateSigningRequests().inform(h) },
         mapper = { csr ->
             val conds = csr.status?.conditions.orEmpty()
@@ -1340,7 +1101,7 @@ class ReactiveKubeClient(
             mapCrInstance(gkr, crd)
         }
         return if (crd.namespaced) {
-            namespacedInformerFlow(
+            informers.namespacedInformer(
                 inform = { k, ns, h ->
                     if (ns != null) {
                         k.genericKubernetesResources(rdc).inNamespace(ns).inform(h)
@@ -1351,7 +1112,7 @@ class ReactiveKubeClient(
                 mapper = mapper,
             )
         } else {
-            informerFlow(
+            informers.informer(
                 inform = { k, h -> k.genericKubernetesResources(rdc).inform(h) },
                 mapper = mapper,
             )
@@ -1367,7 +1128,7 @@ class ReactiveKubeClient(
      * slow cadence — it's the only piece of clusterInfo that has no watch
      * API. Empty string while the first poll is in flight or after an error.
      */
-    private val versionFlow: StateFlow<String> = directPollingStateFlow(
+    private val versionFlow: StateFlow<String> = informers.directPolling(
         intervalMs = 60_000,
         initial = "",
         fetch = {
@@ -1472,7 +1233,7 @@ class ReactiveKubeClient(
 
     // ── Resource Usage (polling — metrics server has no watch API) ───────────────
 
-    val resourceUsage: StateFlow<ResourceState<ResourceUsageSummary>> = namespacedPollingStateFlow(
+    val resourceUsage: StateFlow<ResourceState<ResourceUsageSummary>> = informers.namespacedPolling(
         intervalMs = 10_000,
         fetch = { ns ->
             val podMetricItems = try {
@@ -1482,7 +1243,7 @@ class ReactiveKubeClient(
                     k8s.top().pods().metrics().items ?: emptyList()
                 }
             } catch (_: Exception) {
-                return@namespacedPollingStateFlow ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
+                return@namespacedPolling ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
             }
             var cpuUsed = 0L
             var memUsed = 0L
@@ -1510,14 +1271,14 @@ class ReactiveKubeClient(
 
     // ── Per-node resource usage (polling) ────────────────────────────────────────
 
-    val nodeUsages: StateFlow<Map<String, NodeResourceUsage>> = directPollingStateFlow(
+    val nodeUsages: StateFlow<Map<String, NodeResourceUsage>> = informers.directPolling(
         intervalMs = 10_000,
         initial = emptyMap(),
         fetch = {
             val nodeMetrics = try {
                 k8s.top().nodes().metrics().items ?: emptyList()
             } catch (_: Exception) {
-                return@directPollingStateFlow emptyMap()
+                return@directPolling emptyMap()
             }
             val nodeItems = try {
                 k8s.nodes().list().items ?: emptyList()
