@@ -120,7 +120,7 @@
                 </p>
                 <figure>
                     <img
-                        src="screenshots/23-all-clusters.png"
+                        src="screenshots/45-all-clusters.png"
                         alt="All Clusters tab showing aggregated stats, per-cluster cards, and a merged event feed"
                     />
                 </figure>
@@ -137,6 +137,140 @@
                     <img
                         src="screenshots/21-topology.png"
                         alt="Cluster topology graph showing workloads, pods, and services connected by their relationships"
+                    />
+                </figure>
+            </section>
+
+            <section class="showcase">
+                <h2>Take action on your cluster</h2>
+                <p>
+                    KubeKubeDashDash goes beyond read-only browsing. Evict or
+                    force-delete pods, cordon and drain nodes, scale and
+                    rollout-restart workloads, trigger or suspend CronJobs, and
+                    approve or deny certificate signing requests — each from the
+                    resource's detail panel, every destructive step behind a
+                    confirmation dialog.
+                </p>
+                <div class="grid two">
+                    <figure>
+                        <img
+                            src="screenshots/46-pod-actions.png"
+                            alt="Pod detail panel with Evict and Force-Delete actions"
+                        />
+                        <figcaption>Pods — Evict, Force-Delete</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/47-node-actions.png"
+                            alt="Node detail panel with Cordon and Drain actions"
+                        />
+                        <figcaption>Nodes — Cordon, Drain</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/48-deployment-actions.png"
+                            alt="Deployment detail panel with Scale and Rollout Restart actions"
+                        />
+                        <figcaption>Deployments — Scale, Rollout Restart</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/49-csr-actions.png"
+                            alt="Pending certificate signing request with Approve and Deny actions"
+                        />
+                        <figcaption>CSRs — Approve, Deny</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/50-cronjob-actions.png"
+                            alt="CronJob detail panel with Trigger Now and Suspend actions"
+                        />
+                        <figcaption>CronJobs — Trigger, Suspend</figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <section class="showcase">
+                <h2>Detail panels that go deep</h2>
+                <p>
+                    Many kinds get resource-specific detail tabs. Roles and
+                    RoleBindings resolve their effective rules and subjects,
+                    ResourceQuotas show live usage bars, and EndpointSlices link
+                    straight through to the Service that backs them.
+                </p>
+                <div class="grid two">
+                    <figure>
+                        <img
+                            src="screenshots/52-rbac-rules.png"
+                            alt="Role detail showing its resolved policy rules"
+                        />
+                        <figcaption>RBAC — resolved rules</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/53-rolebinding.png"
+                            alt="RoleBinding detail showing subjects and resolved permissions"
+                        />
+                        <figcaption>RoleBindings — subjects &amp; permissions</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/51-quota-usage.png"
+                            alt="ResourceQuota detail showing usage bars per resource"
+                        />
+                        <figcaption>Quotas — usage bars</figcaption>
+                    </figure>
+                    <figure>
+                        <img
+                            src="screenshots/54-endpointslice.png"
+                            alt="EndpointSlice detail listing endpoints and a link to the backing Service"
+                        />
+                        <figcaption>EndpointSlices — endpoints &amp; backing Service</figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <section class="showcase">
+                <h2>Custom resources</h2>
+                <p>
+                    CRDs are discovered automatically when you connect and listed
+                    in a dedicated Custom Resources sidebar section — searchable,
+                    grouped by API group, and browsable just like built-in kinds.
+                </p>
+                <figure>
+                    <img
+                        src="screenshots/55-custom-resources.png"
+                        alt="Custom resource instance list for a discovered CRD"
+                    />
+                </figure>
+            </section>
+
+            <section class="showcase">
+                <h2>Command palette</h2>
+                <p>
+                    Press Cmd+K (Ctrl+K) to jump anywhere — fuzzy-search across
+                    every resource kind, namespace, and open tab, then navigate
+                    with the keyboard alone.
+                </p>
+                <figure>
+                    <img
+                        src="screenshots/56-command-palette.png"
+                        alt="Command palette open with fuzzy-searchable navigation entries"
+                    />
+                </figure>
+            </section>
+
+            <section class="showcase">
+                <h2>Live logs</h2>
+                <p>
+                    Stream pod logs in a dockable bottom drawer without leaving the
+                    dashboard. Open multiple log tabs at once; each is scoped to
+                    its cluster and keeps streaming as you navigate.
+                </p>
+                <figure>
+                    <img
+                        src="screenshots/57-logs.png"
+                        alt="Logs drawer expanded, streaming a pod's log output"
                     />
                 </figure>
             </section>
@@ -217,7 +351,9 @@
                 <p class="also-available">Also available:</p>
                 <ul class="resource-list">
                     <li>Ingresses</li>
+                    <li>IngressClasses</li>
                     <li>Endpoints</li>
+                    <li>EndpointSlices</li>
                     <li>Network Policies</li>
                 </ul>
             </section>
@@ -248,6 +384,45 @@
                         <figcaption>Storage Classes</figcaption>
                     </figure>
                 </div>
+                <p class="also-available">Also available:</p>
+                <ul class="resource-list">
+                    <li>CSIDrivers</li>
+                </ul>
+            </section>
+
+            <section class="showcase">
+                <h2>Access control &amp; governance</h2>
+                <p>
+                    Audit who can do what and keep the cluster within its
+                    guardrails — full RBAC, autoscaling and disruption budgets,
+                    governance limits, and admission webhooks, all browsable in
+                    the same consistent interface.
+                </p>
+                <p class="also-available">Access control (RBAC):</p>
+                <ul class="resource-list">
+                    <li>ServiceAccounts</li>
+                    <li>Roles</li>
+                    <li>ClusterRoles</li>
+                    <li>RoleBindings</li>
+                    <li>ClusterRoleBindings</li>
+                    <li>CertificateSigningRequests</li>
+                </ul>
+                <p class="also-available">Autoscaling &amp; disruption:</p>
+                <ul class="resource-list">
+                    <li>HorizontalPodAutoscalers</li>
+                    <li>PodDisruptionBudgets</li>
+                </ul>
+                <p class="also-available">Governance:</p>
+                <ul class="resource-list">
+                    <li>ResourceQuotas</li>
+                    <li>LimitRanges</li>
+                    <li>PriorityClasses</li>
+                </ul>
+                <p class="also-available">Admission:</p>
+                <ul class="resource-list">
+                    <li>ValidatingWebhookConfigurations</li>
+                    <li>MutatingWebhookConfigurations</li>
+                </ul>
             </section>
 
             <section class="showcase">
@@ -255,7 +430,7 @@
                 <p>Configure refresh intervals, theme, and kubeconfig context — all from a single settings panel without restarting the dashboard.</p>
                 <figure>
                     <img
-                        src="screenshots/22-settings.png"
+                        src="screenshots/44-settings.png"
                         alt="Settings panel"
                     />
                 </figure>
