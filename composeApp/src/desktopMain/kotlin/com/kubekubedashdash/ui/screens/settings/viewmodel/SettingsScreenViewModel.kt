@@ -93,6 +93,12 @@ class SettingsScreenViewModel : ViewModel() {
         PreferenceRepository.setTabStripVisibility(value)
     }
 
+    val maskSecretValues: StateFlow<Boolean> = PreferenceRepository.maskSecretValues
+
+    fun setMaskSecretValues(value: Boolean) {
+        PreferenceRepository.setMaskSecretValues(value)
+    }
+
     // ── Demo cluster simulator ─────────────────────────────────────────────────
     //
     // With per-tab mock instances, controls in this panel apply *globally* to every

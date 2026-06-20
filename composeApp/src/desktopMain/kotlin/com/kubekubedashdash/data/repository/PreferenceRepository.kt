@@ -52,6 +52,7 @@ object PreferenceRepository {
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
+    private val MASK_SECRET_VALUES by lazy { booleanPreferencesKey("mask_secret_values") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -105,6 +106,12 @@ object PreferenceRepository {
     private val _logDrawerHeightDp = MutableStateFlow(DEFAULT_LOG_DRAWER_HEIGHT_DP)
     val logDrawerHeightDp: StateFlow<Int> = _logDrawerHeightDp.asStateFlow()
 
+    // Default ON — also the fail-safe initial value: readers (the YAML viewer) see
+    // `true` (masked) during the window before the first DataStore emission, so a
+    // Secret is never shown in the clear at startup. Do NOT "tidy" this to false.
+    private val _maskSecretValues = MutableStateFlow(true)
+    val maskSecretValues: StateFlow<Boolean> = _maskSecretValues.asStateFlow()
+
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
@@ -137,6 +144,7 @@ object PreferenceRepository {
                 _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
                 _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
                     .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
+                _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
             }
         }
     }
@@ -208,6 +216,11 @@ object PreferenceRepository {
     fun setSidebarCollapsed(value: Boolean) {
         _sidebarCollapsed.value = value
         ioScope.launch { dataStore.edit { it[SIDEBAR_COLLAPSED] = value } }
+    }
+
+    fun setMaskSecretValues(value: Boolean) {
+        _maskSecretValues.value = value
+        ioScope.launch { dataStore.edit { it[MASK_SECRET_VALUES] = value } }
     }
 
     fun setDemoTargets(value: DemoClusterSimulator.Targets) {
