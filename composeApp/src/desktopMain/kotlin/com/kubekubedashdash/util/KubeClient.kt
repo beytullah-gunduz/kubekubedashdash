@@ -544,7 +544,11 @@ class KubeClient(
 
             "configmap" -> namespace?.let { client.configMaps().inNamespace(it).withName(name).get() }
 
-            "secret" -> namespace?.let { client.secrets().inNamespace(it).withName(name).get() }
+            "secret" -> namespace?.let {
+                client.secrets().inNamespace(it).withName(name).get()?.apply {
+                    metadata?.annotations?.remove("kubectl.kubernetes.io/last-applied-configuration")
+                }
+            }
 
             "statefulset" -> namespace?.let { client.apps().statefulSets().inNamespace(it).withName(name).get() }
 

@@ -57,6 +57,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
@@ -64,6 +65,7 @@ import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
@@ -71,6 +73,7 @@ import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.util.SecretYamlMasking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -384,11 +387,41 @@ internal fun GenericYamlTab(
         loading = false
     }
 
+    val isSecret = SecretYamlMasking.isSecretKind(kind)
+    val maskPref by PreferenceRepository.maskSecretValues.collectAsState()
+    var revealed by remember(kind, name, namespace) { mutableStateOf(false) }
+    // Re-mask whenever masking is turned off, so re-enabling it always starts masked
+    // (avoids the "disable→enable lands on revealed" trap).
+    LaunchedEffect(maskPref) { if (!maskPref) revealed = false }
+
+    val raw = yaml ?: ""
+    val displayText = remember(raw, isSecret, maskPref, revealed) {
+        when {
+            !isSecret -> raw
+            !maskPref -> raw
+            revealed -> SecretYamlMasking.revealSecretYaml(raw)
+            else -> SecretYamlMasking.maskSecretYaml(raw)
+        }
+    }
+    val lines = remember(displayText) { displayText.lines() }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.End,
         ) {
+            if (isSecret && maskPref) {
+                TextButton(
+                    onClick = { revealed = !revealed },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Icon(painterResource(Res.drawable.security_filled), null, Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (revealed) "Hide" else "Reveal", style = MaterialTheme.typography.labelSmall)
+                }
+                Spacer(Modifier.width(4.dp))
+            }
             TextButton(
                 onClick = { yaml?.let { text -> copyToClipboard(text) } },
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
@@ -403,7 +436,6 @@ internal fun GenericYamlTab(
         if (loading) {
             ResourceLoadingIndicator()
         } else {
-            val lines = (yaml ?: "").lines()
             LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
                 items(lines.size) { i ->
                     Row {

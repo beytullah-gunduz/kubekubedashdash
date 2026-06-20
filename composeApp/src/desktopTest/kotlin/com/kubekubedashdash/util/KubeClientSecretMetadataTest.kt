@@ -82,4 +82,13 @@ class KubeClientSecretMetadataTest {
             "No annotation value in getSecrets output must contain the base64 secret data",
         )
     }
+
+    @Test
+    fun `getResourceYaml Secret omits last-applied-configuration annotation`() {
+        val yaml = client.getResourceYaml("Secret", "db-creds", "default")
+        assertFalse(
+            yaml.contains("last-applied-configuration"),
+            "getResourceYaml must not include the last-applied-configuration annotation for Secrets",
+        )
+    }
 }
