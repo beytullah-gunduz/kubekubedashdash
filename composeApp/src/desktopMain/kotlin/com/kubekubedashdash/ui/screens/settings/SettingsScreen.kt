@@ -350,6 +350,7 @@ fun SettingsScreen(
         add("Appearance")
         add("Cluster colors")
         add("Tab behavior")
+        add("Privacy")
         add("Integrations")
         add("Cluster discovery")
         if (mockRunning) add("Demo cluster simulator")
@@ -561,6 +562,41 @@ fun SettingsScreen(
                                         Text(label, maxLines = 1, softWrap = false)
                                     }
                                 }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        SettingsSection(
+                            title = "Privacy",
+                            onLayoutTop = { y -> sectionOffsets["Privacy"] = y },
+                        ) {
+                            val maskSecrets by viewModel.maskSecretValues.collectAsState()
+                            Text(
+                                "Secret values",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Hide Secret data in the YAML viewer. Reveal it per-resource when you need it.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Switch(
+                                    checked = maskSecrets,
+                                    onCheckedChange = { viewModel.setMaskSecretValues(it) },
+                                )
+                                Text(
+                                    if (maskSecrets) "Masked" else "Shown in clear",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (maskSecrets) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                )
                             }
                         }
 
