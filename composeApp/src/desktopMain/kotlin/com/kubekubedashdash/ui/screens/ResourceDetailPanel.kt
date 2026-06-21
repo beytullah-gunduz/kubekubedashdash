@@ -66,6 +66,7 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.security_filled
+import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
@@ -389,18 +390,21 @@ internal fun GenericYamlTab(
 
     val isSecret = SecretYamlMasking.isSecretKind(kind)
     val maskPref by PreferenceRepository.maskSecretValues.collectAsState()
-    var revealed by remember(kind, name, namespace) { mutableStateOf(false) }
-    // Re-mask whenever masking is turned off, so re-enabling it always starts masked
-    // (avoids the "disable→enable lands on revealed" trap).
-    LaunchedEffect(maskPref) { if (!maskPref) revealed = false }
+    // One toggle shared by both modes. Masked mode: Reveal shows the decoded value
+    // vs ••••••. Unmasked mode: Decode shows the decoded value vs raw base64.
+    var showDecoded by remember(kind, name, namespace) { mutableStateOf(false) }
+    // Reset to each mode's default whenever the global masking setting flips, so
+    // toggling it never strands the panel on a stale decoded view.
+    LaunchedEffect(maskPref) { showDecoded = false }
 
     val raw = yaml ?: ""
-    val displayText = remember(raw, isSecret, maskPref, revealed) {
+    val displayText = remember(raw, isSecret, maskPref, showDecoded) {
         when {
             !isSecret -> raw
-            !maskPref -> raw
-            revealed -> SecretYamlMasking.revealSecretYaml(raw)
-            else -> SecretYamlMasking.maskSecretYaml(raw)
+            maskPref && showDecoded -> SecretYamlMasking.revealSecretYaml(raw)
+            maskPref -> SecretYamlMasking.maskSecretYaml(raw)
+            showDecoded -> SecretYamlMasking.revealSecretYaml(raw)
+            else -> raw
         }
     }
     val lines = remember(displayText) { displayText.lines() }
@@ -410,15 +414,22 @@ internal fun GenericYamlTab(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.End,
         ) {
-            if (isSecret && maskPref) {
+            if (isSecret) {
+                // Masked mode → Reveal/Hide (shield); unmasked mode → Decode/Raw (swap).
+                val (buttonIcon, buttonLabel) = when {
+                    maskPref && showDecoded -> Res.drawable.security_filled to "Hide"
+                    maskPref -> Res.drawable.security_filled to "Reveal"
+                    showDecoded -> Res.drawable.swap_horiz_filled to "Raw"
+                    else -> Res.drawable.swap_horiz_filled to "Decode"
+                }
                 TextButton(
-                    onClick = { revealed = !revealed },
+                    onClick = { showDecoded = !showDecoded },
                     colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                 ) {
-                    Icon(painterResource(Res.drawable.security_filled), null, Modifier.size(13.dp))
+                    Icon(painterResource(buttonIcon), null, Modifier.size(13.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(if (revealed) "Hide" else "Reveal", style = MaterialTheme.typography.labelSmall)
+                    Text(buttonLabel, style = MaterialTheme.typography.labelSmall)
                 }
                 Spacer(Modifier.width(4.dp))
             }
