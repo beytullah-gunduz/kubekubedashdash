@@ -111,12 +111,28 @@ fun GkeDiscoveryModal(
 
     // After a successful import, every close path (X icon, footer Close) must refresh the
     // parent's cluster list — otherwise the user goes back to a stale list and has to reopen
-    // the selector to see what they just imported.
+    // the selector to see what they just imported. Closing mid-run must also actually stop
+    // the run: cancel a scan outright (read-only), and request a graceful stop of an import
+    // (the in-flight get-credentials is never killed — see the viewmodel kdoc).
     val closeOrComplete: () -> Unit = {
-        if (step == GkeDiscoveryStep.DONE && viewModel.anyImportSucceeded) {
-            onCompleted()
-        } else {
-            onDismiss()
+        when (step) {
+            GkeDiscoveryStep.SCANNING -> {
+                viewModel.cancel()
+                onDismiss()
+            }
+
+            // DECIDED BY THE PLAN OWNER — do not substitute your own judgement.
+            // X/Escape during IMPORTING behaves exactly like the footer Cancel: request
+            // the graceful stop and KEEP THE MODAL OPEN. It must NOT call onDismiss()
+            // or onCompleted() here. The run finishes the current cluster, marks the
+            // rest Cancelled, and lands on DONE, where the user reads the summary and
+            // closes normally. Closing immediately instead would let one more cluster
+            // land in the kubeconfig up to ~120s later with the user never being told —
+            // which is the original defect, merely narrowed, and it would break this
+            // plan's stated goal of telling the user exactly what was imported.
+            GkeDiscoveryStep.IMPORTING -> viewModel.requestCancelImport()
+
+            else -> if (viewModel.anyImportSucceeded) onCompleted() else onDismiss()
         }
     }
 
@@ -782,6 +798,13 @@ private fun ImportRowView(row: GkeImportRow) {
                     strokeWidth = 2.dp,
                 )
 
+                GkeImportRowState.Cancelled -> Icon(
+                    painterResource(Res.drawable.close_filled),
+                    null,
+                    tint = KdTextSecondary,
+                    modifier = Modifier.size(14.dp),
+                )
+
                 is GkeImportRowState.Done -> Icon(
                     painterResource(Res.drawable.check_circle_filled),
                     null,
@@ -821,6 +844,12 @@ private fun ImportRowView(row: GkeImportRow) {
                     style = MaterialTheme.typography.labelSmall,
                 )
 
+                GkeImportRowState.Cancelled -> Text(
+                    "cancelled",
+                    color = KdTextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+
                 else -> {}
             }
         }
@@ -833,6 +862,7 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
     val backupPath by viewModel.backupPath.collectAsState()
     val ok = rows.count { it.state is GkeImportRowState.Done }
     val failed = rows.count { it.state is GkeImportRowState.Failed }
+    val cancelled = rows.count { it.state is GkeImportRowState.Cancelled }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -840,17 +870,15 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
             .verticalScroll(rememberScrollState()),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val tint = if (failed == 0) {
-                KdSuccess
-            } else if (ok == 0) {
-                KdError
-            } else {
-                KdWarning
+            val tint = when {
+                failed == 0 && cancelled == 0 -> KdSuccess
+                ok == 0 && failed > 0 -> KdError
+                else -> KdWarning
             }
             Icon(painterResource(Res.drawable.check_filled), null, tint = tint, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                summaryLine(ok, failed),
+                summaryLine(ok, failed, cancelled),
                 color = KdTextPrimary,
                 fontWeight = FontWeight.Medium,
             )
@@ -880,9 +908,17 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
     }
 }
 
-private fun summaryLine(ok: Int, failed: Int): String = when {
+private fun summaryLine(ok: Int, failed: Int, cancelled: Int): String = when {
+    cancelled > 0 -> buildString {
+        append("Import cancelled — $ok imported, $cancelled skipped")
+        if (failed > 0) append(", $failed failed")
+        append(".")
+    }
+
     failed == 0 && ok > 0 -> "$ok cluster${if (ok != 1) "s" else ""} imported."
+
     ok == 0 && failed > 0 -> "$failed cluster${if (failed != 1) "s" else ""} failed to import."
+
     else -> "$ok imported, $failed failed."
 }
 
@@ -898,6 +934,7 @@ private fun Footer(
     val selectedProjects by viewModel.selectedProjects.collectAsState()
     val exceedsCap by viewModel.projectSelectionExceedsCap.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
+    val cancelRequested by viewModel.cancelRequested.collectAsState()
 
     Row(
         modifier = Modifier
@@ -920,17 +957,36 @@ private fun Footer(
 
         OutlinedButton(
             onClick = {
-                // Don't reset state on DONE: onDismiss is closeOrComplete, which reads
-                // `step` and `anyImportSucceeded` to decide whether to fire onCompleted
-                // (refreshes the parent's context list). cancel() would clear both.
-                if (step != GkeDiscoveryStep.DONE) viewModel.cancel()
-                onDismiss()
+                when {
+                    // IMPORTING: request a graceful stop and STAY OPEN — the wizard
+                    // proceeds to DONE showing what was imported before the stop.
+                    step == GkeDiscoveryStep.IMPORTING -> viewModel.requestCancelImport()
+
+                    // Don't reset state on DONE: onDismiss is closeOrComplete, which reads
+                    // `anyImportSucceeded` to decide whether to fire onCompleted
+                    // (refreshes the parent's context list). cancel() would clear it.
+                    step == GkeDiscoveryStep.DONE -> onDismiss()
+
+                    else -> {
+                        viewModel.cancel()
+                        onDismiss()
+                    }
+                }
             },
             shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, KdBorder),
-            enabled = !busy || step == GkeDiscoveryStep.SCANNING || step == GkeDiscoveryStep.IMPORTING || step == GkeDiscoveryStep.DONE,
+            enabled = if (step == GkeDiscoveryStep.IMPORTING) {
+                !cancelRequested
+            } else {
+                !busy || step == GkeDiscoveryStep.SCANNING || step == GkeDiscoveryStep.DONE
+            },
         ) {
-            Text(if (step == GkeDiscoveryStep.DONE) "Close" else "Cancel", color = KdTextPrimary)
+            val label = when {
+                step == GkeDiscoveryStep.DONE -> "Close"
+                step == GkeDiscoveryStep.IMPORTING && cancelRequested -> "Stopping…"
+                else -> "Cancel"
+            }
+            Text(label, color = KdTextPrimary)
         }
         Spacer(Modifier.width(8.dp))
 

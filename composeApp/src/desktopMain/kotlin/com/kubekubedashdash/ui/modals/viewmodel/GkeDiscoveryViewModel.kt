@@ -11,9 +11,11 @@ import com.kubekubedashdash.util.KubeconfigLocator
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +29,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 // A real account can have hundreds of GCP projects, and each selected project costs one
 // `gcloud` subprocess at Semaphore(6) concurrency.
@@ -61,6 +64,7 @@ data class GkeClusterCandidate(
 sealed class GkeImportRowState {
     object Pending : GkeImportRowState()
     object Importing : GkeImportRowState()
+    object Cancelled : GkeImportRowState()
     data class Done(val contextName: String) : GkeImportRowState()
     data class Failed(val message: String) : GkeImportRowState()
 }
@@ -130,6 +134,20 @@ class GkeDiscoveryViewModel(
      * coroutine; ours is a `gcloud` subprocess and has to survive the reset.
      */
     private var loadJob: Job? = null
+
+    /**
+     * Monotonic run token. Bumped by [reset], [startScan] and [startImport]; every
+     * asynchronous state write is tagged with the generation captured when its run
+     * started and is dropped when a newer run (or a reset) has superseded it. Closes
+     * two races: a cancelled scan's completion callback — already past its last
+     * cancellation check on a blocked IO thread — landing in a re-run's rows with the
+     * same project id, and an abandoned import job's finally-block yanking a reopened
+     * wizard to DONE.
+     */
+    private val runGeneration = AtomicInteger(0)
+
+    private val _cancelRequested = MutableStateFlow(false)
+    val cancelRequested: StateFlow<Boolean> = _cancelRequested.asStateFlow()
 
     init {
         retryLoad()
@@ -224,6 +242,11 @@ class GkeDiscoveryViewModel(
     fun startScan() {
         val projects = _selectedProjects.value
         if (projects.isEmpty() || projects.size > MAX_SCAN_PROJECTS) return
+        // Bump BEFORE cancelling (same rule as reset()): the dying job's
+        // finally runs on an IO thread concurrently with this one, and in a
+        // cancel-then-bump window its generation check still passes, letting its
+        // DONE/busy=false writes land on top of the run we are starting here.
+        val gen = runGeneration.incrementAndGet()
         activeJob?.cancel()
         _errorMessage.value = null
         _busy.value = true
@@ -232,27 +255,29 @@ class GkeDiscoveryViewModel(
             val ordered = projects.toList().sorted()
             PreferenceRepository.setLastGcpProjects(ordered)
             _scanRows.value = ordered.map { ProjectScanRow(it, ProjectScanState.Pending) }
-            scanProjects(ordered)
-            buildCandidates()
-            _busy.value = false
-            _step.value = GkeDiscoveryStep.PICK_CLUSTERS
+            scanProjects(gen, ordered)
+            if (gen == runGeneration.get()) {
+                buildCandidates()
+                _busy.value = false
+                _step.value = GkeDiscoveryStep.PICK_CLUSTERS
+            }
         }
     }
 
-    private suspend fun scanProjects(projects: List<String>) = coroutineScope {
+    private suspend fun scanProjects(generation: Int, projects: List<String>) = coroutineScope {
         val semaphore = Semaphore(permits = 6)
         projects.map { projectId ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    updateScanRow(projectId) { ProjectScanState.Scanning }
+                    updateScanRow(generation, projectId) { ProjectScanState.Scanning }
                     val result = GkeClusterDiscoverer.listClusters(projectId)
                     result.fold(
                         onSuccess = { clusters ->
-                            updateScanRow(projectId) { ProjectScanState.Done(clusters) }
+                            updateScanRow(generation, projectId) { ProjectScanState.Done(clusters) }
                         },
                         onFailure = { e ->
                             val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
-                            updateScanRow(projectId) { ProjectScanState.Failed(msg) }
+                            updateScanRow(generation, projectId) { ProjectScanState.Failed(msg) }
                         },
                     )
                 }
@@ -260,8 +285,9 @@ class GkeDiscoveryViewModel(
         }.awaitAll()
     }
 
-    private fun updateScanRow(projectId: String, transform: (ProjectScanState) -> ProjectScanState) {
+    private fun updateScanRow(generation: Int, projectId: String, transform: (ProjectScanState) -> ProjectScanState) {
         _scanRows.update { rows ->
+            if (generation != runGeneration.get()) return@update rows
             rows.map { row -> if (row.projectId == projectId) row.copy(state = transform(row.state)) else row }
         }
     }
@@ -297,9 +323,12 @@ class GkeDiscoveryViewModel(
             _errorMessage.value = "Select at least one cluster to import."
             return
         }
+        // Bump BEFORE cancelling — see the note in startScan.
+        val gen = runGeneration.incrementAndGet()
         activeJob?.cancel()
         _errorMessage.value = null
         _busy.value = true
+        _cancelRequested.value = false
         _backupPath.value = null
         _importRows.value = toImport.map { GkeImportRow(it, GkeImportRowState.Pending) }
         _step.value = GkeDiscoveryStep.IMPORTING
@@ -316,37 +345,84 @@ class GkeDiscoveryViewModel(
             if (existing.isFile && existing.length() > 0L) {
                 val backup = EksClusterDiscoverer.backupKubeconfig(kubeconfigPath)
                 if (backup == null) {
-                    _errorMessage.value = "Could not back up $kubeconfigPath. " +
-                        "gcloud rewrites the whole kubeconfig, so the import was cancelled."
-                    _busy.value = false
-                    _step.value = GkeDiscoveryStep.PICK_CLUSTERS
+                    // Guarded: this abort writes state from a launched job, so a run
+                    // abandoned by X-close + reopen must not yank the reopened wizard's
+                    // step and error state. The return stays outside the guard — an
+                    // abandoned run must still stop.
+                    if (gen == runGeneration.get()) {
+                        _errorMessage.value = "Could not back up $kubeconfigPath. " +
+                            "gcloud rewrites the whole kubeconfig, so the import was cancelled."
+                        _busy.value = false
+                        _step.value = GkeDiscoveryStep.PICK_CLUSTERS
+                    }
                     return@launch
                 }
                 _backupPath.value = backup.absolutePath
             }
 
-            for (cluster in toImport) {
-                updateImportRow(cluster) { GkeImportRowState.Importing }
-                val result = withContext(Dispatchers.IO) {
-                    GkeClusterDiscoverer.importCluster(cluster.projectId, cluster.location, cluster.name, kubeconfigPath)
+            try {
+                for (cluster in toImport) {
+                    // Cancellation (requestCancelImport / reset) takes effect HERE,
+                    // between clusters — never mid-import.
+                    ensureActive()
+                    updateImportRow(gen, cluster) { GkeImportRowState.Importing }
+                    // NonCancellable: once get-credentials is running it must finish.
+                    // gcloud saves the kubeconfig by truncate-and-rewrite, so killing
+                    // the child mid-write can corrupt the file.
+                    val result = withContext(NonCancellable) {
+                        GkeClusterDiscoverer.importCluster(cluster.projectId, cluster.location, cluster.name, kubeconfigPath)
+                    }
+                    result.fold(
+                        onSuccess = { ctx ->
+                            updateImportRow(gen, cluster) { GkeImportRowState.Done(ctx) }
+                        },
+                        onFailure = { e ->
+                            val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
+                            updateImportRow(gen, cluster) { GkeImportRowState.Failed(msg) }
+                        },
+                    )
                 }
-                result.fold(
-                    onSuccess = { ctx ->
-                        updateImportRow(cluster) { GkeImportRowState.Done(ctx) }
-                    },
-                    onFailure = { e ->
-                        val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
-                        updateImportRow(cluster) { GkeImportRowState.Failed(msg) }
-                    },
-                )
+            } finally {
+                // Runs on normal completion AND cancellation. On cancellation, rows not
+                // yet imported become Cancelled and the wizard still lands on DONE, so
+                // the user sees exactly which clusters reached the kubeconfig. The
+                // generation guard keeps an abandoned job (modal closed and reopened,
+                // reset() ran) from touching the new run's state.
+                if (gen == runGeneration.get()) {
+                    _importRows.update { rows ->
+                        rows.map { row ->
+                            when (row.state) {
+                                GkeImportRowState.Pending, GkeImportRowState.Importing ->
+                                    row.copy(state = GkeImportRowState.Cancelled)
+
+                                else -> row
+                            }
+                        }
+                    }
+                    _busy.value = false
+                    _cancelRequested.value = false
+                    _step.value = GkeDiscoveryStep.DONE
+                }
             }
-            _busy.value = false
-            _step.value = GkeDiscoveryStep.DONE
         }
     }
 
-    private fun updateImportRow(cluster: GkeCluster, transform: (GkeImportRowState) -> GkeImportRowState) {
+    /**
+     * Requests a graceful stop of the import loop. The in-flight `get-credentials`
+     * child is deliberately NOT killed — gcloud rewrites the kubeconfig in place
+     * (truncate + dump, not atomic), so a kill mid-write can corrupt it. The loop
+     * stops before the next cluster and lands on DONE, where the user sees exactly
+     * which clusters were imported before the stop.
+     */
+    fun requestCancelImport() {
+        if (_step.value != GkeDiscoveryStep.IMPORTING) return
+        _cancelRequested.value = true
+        activeJob?.cancel()
+    }
+
+    private fun updateImportRow(generation: Int, cluster: GkeCluster, transform: (GkeImportRowState) -> GkeImportRowState) {
         _importRows.update { rows ->
+            if (generation != runGeneration.get()) return@update rows
             rows.map { row -> if (row.cluster == cluster) row.copy(state = transform(row.state)) else row }
         }
     }
@@ -357,6 +433,9 @@ class GkeDiscoveryViewModel(
      * would strand [_projectLoadState] on `Loading`.
      */
     fun reset() {
+        // Bump BEFORE cancelling: any in-flight callback that re-checks the
+        // generation is then already stale.
+        runGeneration.incrementAndGet()
         activeJob?.cancel()
         activeJob = null
         _scanRows.value = emptyList()
@@ -365,6 +444,7 @@ class GkeDiscoveryViewModel(
         _backupPath.value = null
         _errorMessage.value = null
         _busy.value = false
+        _cancelRequested.value = false
         _step.value = GkeDiscoveryStep.PICK_PROJECTS
     }
 
