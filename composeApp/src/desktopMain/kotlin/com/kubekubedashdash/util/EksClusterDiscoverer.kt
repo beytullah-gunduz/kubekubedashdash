@@ -8,6 +8,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -144,11 +147,29 @@ object EksClusterDiscoverer {
                 .format(Instant.now())
             File(src.parentFile, "${src.name}.$stamp.bak").also { backup ->
                 src.copyTo(backup, overwrite = false)
+                // copyTo creates the target under the process umask (typically 0644), which would
+                // leave a full copy of the kubeconfig — every cluster's endpoint and exec-auth
+                // config — world-readable even though the original is 0600. Tighten it to match.
+                restrictToOwner(backup)
                 log.info("Backed up kubeconfig to {}", backup.absolutePath)
             }
         }
     } catch (e: Exception) {
         log.warn("Could not back up kubeconfig before import: {}", e.message)
         null
+    }
+
+    /**
+     * Restricts [file] to owner-only access (0600) on POSIX filesystems. A best-effort
+     * no-op elsewhere (e.g. Windows), mirroring [KubeconfigLocator.ensureParentDirectory].
+     */
+    private fun restrictToOwner(file: File) {
+        try {
+            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+                Files.setPosixFilePermissions(file.toPath(), PosixFilePermissions.fromString("rw-------"))
+            }
+        } catch (e: Exception) {
+            log.warn("Could not restrict permissions on {}: {}", file.name, e.message)
+        }
     }
 }

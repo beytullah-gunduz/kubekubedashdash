@@ -78,7 +78,7 @@ object CliRunner {
             if (exitCode == 0) {
                 Result.success(combined)
             } else {
-                val msg = combined.trim().ifBlank { "exit $exitCode" }
+                val msg = redact(combined.trim().ifBlank { "exit $exitCode" })
                 log.warn("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
                 Result.failure(CliInvocationFailure(exitCode, msg.take(500), msg))
             }
@@ -129,12 +129,23 @@ object CliRunner {
             if (exitCode == 0) {
                 Result.success(stdoutText)
             } else {
-                val msg = stderrText.trim().ifBlank { stdoutText.trim() }.ifBlank { "exit $exitCode" }
+                val msg = redact(stderrText.trim().ifBlank { stdoutText.trim() }.ifBlank { "exit $exitCode" })
                 log.warn("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
-                Result.failure(CliInvocationFailure(exitCode, stderrText.take(500), msg))
+                Result.failure(CliInvocationFailure(exitCode, redact(stderrText).take(500), msg))
             }
         }
     }
 
     private fun safeCmd(args: List<String>): String = "${args.firstOrNull() ?: "?"} ${args.getOrNull(1).orEmpty()} ${args.getOrNull(2).orEmpty()}".trim()
+
+    private val EMAIL_RX = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+
+    /**
+     * Strips email-shaped substrings out of CLI error text before it is logged or surfaced in
+     * the UI. Cloud CLIs name the signed-in identity in ordinary failure messages — gcloud's
+     * "Your current active account [<email>] does not have any valid credentials" being the
+     * common one — and this text reaches both the rolling file log and the in-app log drawer,
+     * which is exactly what users paste into public bug reports.
+     */
+    internal fun redact(text: String): String = EMAIL_RX.replace(text, "<redacted-account>")
 }
