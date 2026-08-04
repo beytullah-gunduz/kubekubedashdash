@@ -1,5 +1,8 @@
 package com.kubekubedashdash.util
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
@@ -24,8 +27,16 @@ object CliRunner {
      * avoid) and only stdout is returned on success; gcloud writes diagnostics — some of
      * them unconditionally, not gated behind `--format` — to stderr, and merging that
      * text into stdout corrupts the JSON payload we need to parse.
+     *
+     * Cancellation: this is a suspend function. Cancelling the calling coroutine
+     * interrupts the blocked [Process.waitFor] via [runInterruptible]; the child is
+     * then terminated (SIGTERM, then SIGKILL after a short grace period) so a
+     * cancelled operation cannot keep running — or keep mutating files — behind the
+     * caller's back. Callers that must let an in-flight child finish (e.g. a
+     * kubeconfig-writing import step) should invoke this under
+     * `withContext(NonCancellable)`; the interrupt then never fires.
      */
-    fun run(
+    suspend fun run(
         args: List<String>,
         timeoutSeconds: Long,
         env: Map<String, String> = emptyMap(),
@@ -37,8 +48,13 @@ object CliRunner {
             Result.failure(CliInvocationFailure(-1, "", "${binary ?: "?"} CLI not found on PATH"))
         } else {
             val resolvedArgs = listOf(resolvedBinary) + args.drop(1)
-            if (mergeStderr) runMerged(args, resolvedArgs, timeoutSeconds, env) else runSplit(args, resolvedArgs, timeoutSeconds, env)
+            runInterruptible(Dispatchers.IO) {
+                if (mergeStderr) runMerged(args, resolvedArgs, timeoutSeconds, env) else runSplit(args, resolvedArgs, timeoutSeconds, env)
+            }
         }
+    } catch (e: CancellationException) {
+        log.debug("{} CLI invocation cancelled: {}", args.firstOrNull() ?: "?", safeCmd(args))
+        throw e
     } catch (e: Exception) {
         log.warn("{} CLI invocation failed: {}", args.firstOrNull() ?: "?", e.message)
         Result.failure(e)
@@ -66,7 +82,16 @@ object CliRunner {
             isDaemon = true
             start()
         }
-        val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+        val finished = try {
+            process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+        } catch (ie: InterruptedException) {
+            // Cancellation path: runInterruptible interrupted this thread because the
+            // calling coroutine was cancelled. Kill the child — interruption alone only
+            // unblocks the wait, it does not stop the subprocess. Drainer threads exit
+            // on pipe EOF once the child dies; no join needed here.
+            terminateOnCancel(process)
+            throw ie
+        }
         return if (!finished) {
             process.destroyForcibly()
             drainer.join(1_000)
@@ -114,7 +139,16 @@ object CliRunner {
             isDaemon = true
             start()
         }
-        val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+        val finished = try {
+            process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+        } catch (ie: InterruptedException) {
+            // Cancellation path: runInterruptible interrupted this thread because the
+            // calling coroutine was cancelled. Kill the child — interruption alone only
+            // unblocks the wait, it does not stop the subprocess. Drainer threads exit
+            // on pipe EOF once the child dies; no join needed here.
+            terminateOnCancel(process)
+            throw ie
+        }
         return if (!finished) {
             process.destroyForcibly()
             stdoutDrainer.join(1_000)
@@ -133,6 +167,27 @@ object CliRunner {
                 log.warn("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
                 Result.failure(CliInvocationFailure(exitCode, redact(stderrText).take(500), msg))
             }
+        }
+    }
+
+    private const val TERMINATE_GRACE_MILLIS = 2_000L
+
+    /**
+     * Terminates [process] because the calling coroutine was cancelled: SIGTERM first so
+     * the CLI (gcloud/aws are Python) can run cleanup handlers and reap its own children,
+     * SIGKILL after a short grace period. Catching InterruptedException cleared the
+     * thread's interrupt flag, so the graceful waitFor below can block; a second
+     * interrupt during the grace wait escalates to SIGKILL immediately.
+     */
+    private fun terminateOnCancel(process: Process) {
+        process.destroy()
+        try {
+            if (!process.waitFor(TERMINATE_GRACE_MILLIS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+            }
+        } catch (_: InterruptedException) {
+            process.destroyForcibly()
+            Thread.currentThread().interrupt()
         }
     }
 
