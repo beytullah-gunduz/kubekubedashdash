@@ -70,6 +70,7 @@ import com.kubekubedashdash.resources.rocket_filled
 import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import com.kubekubedashdash.util.GkeClusterDiscoverer
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteResult
 import org.jetbrains.compose.resources.painterResource
@@ -80,8 +81,10 @@ fun PrerequisitesModal(
     onQuit: () -> Unit,
     onIgnore: () -> Unit,
     onDiscoverEks: () -> Unit = {},
+    onDiscoverGke: () -> Unit = {},
 ) {
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
+    val gcloudCliAvailable = remember { GkeClusterDiscoverer.isGcloudAvailable() }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -231,6 +234,30 @@ fun PrerequisitesModal(
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         "Requires AWS CLI",
+                                        color = KdTextSecondary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Button(
+                                    onClick = onDiscoverGke,
+                                    enabled = gcloudCliAvailable,
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                                ) {
+                                    Icon(
+                                        painterResource(Res.drawable.cloud_filled),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = Color.White,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Discover GKE Clusters", color = Color.White)
+                                }
+                                if (!gcloudCliAvailable) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Requires Google Cloud SDK",
                                         color = KdTextSecondary,
                                         style = MaterialTheme.typography.labelSmall,
                                     )

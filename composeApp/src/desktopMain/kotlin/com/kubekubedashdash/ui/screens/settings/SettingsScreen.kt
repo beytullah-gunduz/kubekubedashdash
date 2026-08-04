@@ -78,6 +78,7 @@ import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import com.kubekubedashdash.util.GkeClusterDiscoverer
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -331,11 +332,13 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
 @Composable
 fun SettingsScreen(
     onDiscoverEks: () -> Unit = {},
+    onDiscoverGke: () -> Unit = {},
     onShowAppLogs: () -> Unit = {},
     onClose: () -> Unit = {},
     viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
 ) {
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
+    val gcloudCliAvailable = remember { GkeClusterDiscoverer.isGcloudAvailable() }
     var showAboutModal by remember { mutableStateOf(false) }
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isReady = true }
@@ -806,6 +809,46 @@ fun SettingsScreen(
                                     Spacer(Modifier.width(12.dp))
                                     Text(
                                         "Requires AWS CLI on PATH",
+                                        color = KdTextSecondary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(20.dp))
+
+                            Text(
+                                "Google Cloud GKE",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Find GKE clusters in your Google Cloud projects and add them to your kubeconfig.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton(
+                                    onClick = onDiscoverGke,
+                                    enabled = gcloudCliAvailable,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, KdBorder),
+                                ) {
+                                    Icon(
+                                        painterResource(Res.drawable.cloud_filled),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = if (gcloudCliAvailable) KdPrimary else KdTextSecondary,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Discover GKE Clusters", color = KdTextPrimary)
+                                }
+                                if (!gcloudCliAvailable) {
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        "Requires Google Cloud SDK on PATH",
                                         color = KdTextSecondary,
                                         style = MaterialTheme.typography.labelSmall,
                                     )

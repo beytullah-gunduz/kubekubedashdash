@@ -33,6 +33,7 @@ fun FirstRunScreen(
     onOpenDocs: () -> Unit,
     onRescan: () -> Unit,
     onDiscoverEks: (() -> Unit)? = null,
+    onDiscoverGke: (() -> Unit)? = null,
     onShowDiagnostics: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -75,6 +76,11 @@ fun FirstRunScreen(
             onDiscoverEks?.let { handler ->
                 OutlinedButton(onClick = handler) {
                     Text("Discover EKS clusters")
+                }
+            }
+            onDiscoverGke?.let { handler ->
+                OutlinedButton(onClick = handler) {
+                    Text("Discover GKE clusters")
                 }
             }
             OutlinedButton(onClick = onOpenDocs) {
