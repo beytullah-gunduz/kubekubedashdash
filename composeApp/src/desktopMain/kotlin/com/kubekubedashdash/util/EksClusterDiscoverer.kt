@@ -11,7 +11,6 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.TimeUnit
 
 data class EksCluster(
     val name: String,
@@ -55,7 +54,7 @@ object EksClusterDiscoverer {
             "--profile", profile,
             "--output", "json",
         )
-        val out = runCli(args, timeoutSeconds = 30)
+        val out = CliRunner.run(args, timeoutSeconds = 30)
         out.fold(
             onSuccess = { stdout ->
                 try {
@@ -83,7 +82,7 @@ object EksClusterDiscoverer {
             "--no-paginate",
             "--output", "json",
         )
-        val out = runCli(args, timeoutSeconds = 30)
+        val out = CliRunner.run(args, timeoutSeconds = 30)
         out.fold(
             onSuccess = { stdout ->
                 try {
@@ -123,7 +122,7 @@ object EksClusterDiscoverer {
             "--kubeconfig", kubeconfigPath,
             "--output", "json",
         )
-        runCli(args, timeoutSeconds = 30).map { stdout ->
+        CliRunner.run(args, timeoutSeconds = 30).map { stdout ->
             log.info("Imported cluster {} (region={}, profile={})", clusterName, region, profile)
             stdout.ifBlank { clusterName }
         }
@@ -151,52 +150,5 @@ object EksClusterDiscoverer {
     } catch (e: Exception) {
         log.warn("Could not back up kubeconfig before import: {}", e.message)
         null
-    }
-
-    private fun safeCmd(args: List<String>): String = "${args.firstOrNull() ?: "?"} ${args.getOrNull(1).orEmpty()} ${args.getOrNull(2).orEmpty()}".trim()
-
-    private fun runCli(args: List<String>, timeoutSeconds: Long): Result<String> = try {
-        val resolvedArgs = if (args.firstOrNull() == "aws") {
-            val abs = ShellEnvironment.resolveCommand("aws")
-                ?: return Result.failure(CliInvocationFailure(-1, "", "aws CLI not found on PATH"))
-            listOf(abs) + args.drop(1)
-        } else {
-            args
-        }
-        // Merge stderr → stdout so a single drainer thread prevents pipe-buffer deadlock
-        // (if aws writes >64 KB to stdout/stderr, waitFor blocks unless we drain first).
-        val pb = ProcessBuilder(resolvedArgs).redirectErrorStream(true)
-        ShellEnvironment.applyTo(pb)
-        val process = pb.start()
-        process.outputStream.close()
-        val output = StringBuilder()
-        val drainer = Thread {
-            process.inputStream.bufferedReader().use { r ->
-                r.lineSequence().forEach { line -> synchronized(output) { output.appendLine(line) } }
-            }
-        }.apply {
-            isDaemon = true
-            start()
-        }
-        val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-        if (!finished) {
-            process.destroyForcibly()
-            drainer.join(1_000)
-            Result.failure(CliInvocationFailure(-1, "", "Timed out after ${timeoutSeconds}s: ${safeCmd(args)}"))
-        } else {
-            drainer.join(2_000)
-            val combined = synchronized(output) { output.toString() }
-            val exitCode = process.exitValue()
-            if (exitCode == 0) {
-                Result.success(combined)
-            } else {
-                val msg = combined.trim().ifBlank { "exit $exitCode" }
-                log.warn("aws CLI failed: cmd={} msg={}", safeCmd(args), msg)
-                Result.failure(CliInvocationFailure(exitCode, msg.take(500), msg))
-            }
-        }
-    } catch (e: Exception) {
-        log.warn("aws CLI invocation failed: {}", e.message)
-        Result.failure(e)
     }
 }
