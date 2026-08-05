@@ -91,7 +91,6 @@ import com.kubekubedashdash.ui.modals.viewmodel.ProjectLoadState
 import com.kubekubedashdash.ui.modals.viewmodel.ProjectScanRow
 import com.kubekubedashdash.ui.modals.viewmodel.ProjectScanState
 import com.kubekubedashdash.util.GcpProject
-import com.kubekubedashdash.util.ShellEnvironment
 import org.jetbrains.compose.resources.painterResource
 
 private val GkeBlue = Color(0xFF4285F4) // D8
@@ -598,7 +597,7 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
 
     // D7: the gke-gcloud-auth-plugin check is advisory, not blocking. Surface it here
     // because the diagnostics modal is unreachable once the user already has contexts.
-    val authPluginMissing = remember { ShellEnvironment.resolveCommand("gke-gcloud-auth-plugin") == null }
+    val authPluginMissing = remember { !viewModel.authPluginAvailable }
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         if (authPluginMissing) {

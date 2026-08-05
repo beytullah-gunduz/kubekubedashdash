@@ -2,12 +2,8 @@ package com.kubekubedashdash.ui.modals.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kubekubedashdash.data.repository.PreferenceRepository
-import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
-import com.kubekubedashdash.util.GkeClusterDiscoverer
-import com.kubekubedashdash.util.KubeconfigLocator
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -73,6 +69,7 @@ data class GkeImportRow(val cluster: GkeCluster, val state: GkeImportRowState)
 
 class GkeDiscoveryViewModel(
     private val reactiveClient: ReactiveKubeClient,
+    private val gateway: GkeDiscoveryGateway = DefaultGkeDiscoveryGateway(reactiveClient),
 ) : ViewModel() {
 
     private val log = LoggerFactory.getLogger(GkeDiscoveryViewModel::class.java)
@@ -120,7 +117,10 @@ class GkeDiscoveryViewModel(
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
-    val gcloudCliAvailable: Boolean = GkeClusterDiscoverer.isGcloudAvailable()
+    val gcloudCliAvailable: Boolean = gateway.gcloudAvailable
+
+    /** Whether `gke-gcloud-auth-plugin` resolves on PATH — drives the modal's advisory banner. */
+    val authPluginAvailable: Boolean get() = gateway.authPluginAvailable
 
     /** Tracks the scan/import work, so [reset] can cancel a wizard run in flight. */
     private var activeJob: Job? = null
@@ -159,7 +159,7 @@ class GkeDiscoveryViewModel(
         _errorMessage.value = null
         _projectLoadState.value = ProjectLoadState.Loading
         loadJob = viewModelScope.launch(Dispatchers.IO) {
-            GkeClusterDiscoverer.activeAccount().fold(
+            gateway.activeAccount().fold(
                 onSuccess = { account ->
                     _activeAccount.value = account
                     if (account == null) {
@@ -178,11 +178,11 @@ class GkeDiscoveryViewModel(
     }
 
     private suspend fun loadProjects() {
-        GkeClusterDiscoverer.listProjects().fold(
+        gateway.listProjects().fold(
             onSuccess = { projects ->
                 _projectLoadState.value = ProjectLoadState.Loaded(projects)
                 val available = projects.map { it.projectId }.toSet()
-                val remembered = PreferenceRepository.lastGcpProjects.value.filter { it in available }
+                val remembered = gateway.recallProjectSelection().filter { it in available }
                 _selectedProjects.value = remembered.toSet()
             },
             onFailure = { e ->
@@ -253,7 +253,7 @@ class GkeDiscoveryViewModel(
         _step.value = GkeDiscoveryStep.SCANNING
         activeJob = viewModelScope.launch(Dispatchers.IO) {
             val ordered = projects.toList().sorted()
-            PreferenceRepository.setLastGcpProjects(ordered)
+            gateway.rememberProjectSelection(ordered)
             _scanRows.value = ordered.map { ProjectScanRow(it, ProjectScanState.Pending) }
             scanProjects(gen, ordered)
             if (gen == runGeneration.get()) {
@@ -270,7 +270,7 @@ class GkeDiscoveryViewModel(
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     updateScanRow(generation, projectId) { ProjectScanState.Scanning }
-                    val result = GkeClusterDiscoverer.listClusters(projectId)
+                    val result = gateway.listClusters(projectId)
                     result.fold(
                         onSuccess = { clusters ->
                             updateScanRow(generation, projectId) { ProjectScanState.Done(clusters) }
@@ -293,8 +293,8 @@ class GkeDiscoveryViewModel(
     }
 
     private fun buildCandidates() {
-        val existingKeys: Set<Triple<String, String, String>> = reactiveClient.getContexts()
-            .mapNotNull { ctx -> GkeClusterDiscoverer.parseGkeContext(ctx) }
+        val existingKeys: Set<Triple<String, String, String>> = gateway.existingContexts()
+            .mapNotNull { ctx -> gateway.parseContext(ctx) }
             .toSet()
 
         val clusters = _scanRows.value.flatMap { row ->
@@ -334,7 +334,7 @@ class GkeDiscoveryViewModel(
         _step.value = GkeDiscoveryStep.IMPORTING
 
         activeJob = viewModelScope.launch(Dispatchers.IO) {
-            val kubeconfigPath = KubeconfigLocator.activePath()
+            val kubeconfigPath = gateway.kubeconfigPath()
 
             // The kubeconfig backup is MANDATORY and BLOCKING here — this differs from the
             // EKS flow. `gcloud container clusters get-credentials` rewrites the entire
@@ -343,7 +343,7 @@ class GkeDiscoveryViewModel(
             // proceed best-effort.
             val existing = File(kubeconfigPath)
             if (existing.isFile && existing.length() > 0L) {
-                val backup = EksClusterDiscoverer.backupKubeconfig(kubeconfigPath)
+                val backup = gateway.backupKubeconfig(kubeconfigPath)
                 if (backup == null) {
                     // Guarded: this abort writes state from a launched job, so a run
                     // abandoned by X-close + reopen must not yank the reopened wizard's
@@ -370,7 +370,7 @@ class GkeDiscoveryViewModel(
                     // gcloud saves the kubeconfig by truncate-and-rewrite, so killing
                     // the child mid-write can corrupt the file.
                     val result = withContext(NonCancellable) {
-                        GkeClusterDiscoverer.importCluster(cluster.projectId, cluster.location, cluster.name, kubeconfigPath)
+                        gateway.importCluster(cluster.projectId, cluster.location, cluster.name, kubeconfigPath)
                     }
                     result.fold(
                         onSuccess = { ctx ->
