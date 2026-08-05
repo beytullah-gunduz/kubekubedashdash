@@ -2,6 +2,7 @@ package com.kubekubedashdash.services
 
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
+import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureTask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,6 +35,9 @@ sealed interface DrawerLogTab {
     val key: String
     val displayLabel: String
     val openedAt: Long
+
+    /** Null means "global, shown in every window" (e.g. the application log). */
+    val sessionId: String? get() = null
 }
 
 data class ActiveLogStream(
@@ -43,6 +47,7 @@ data class ActiveLogStream(
     override val openedAt: Long,
 ) : DrawerLogTab {
     override val key: String get() = id.key
+    override val sessionId: String get() = id.sessionId
 }
 
 /**
@@ -60,6 +65,20 @@ data class ActiveAppLog(
     companion object {
         const val APP_LOG_KEY = "__app__"
     }
+}
+
+/**
+ * Drawer tab backed by a live [NamespaceLogCaptureTask]. Unlike [ActiveLogStream]
+ * this tab is scoped to a specific session (namespace log captures only make
+ * sense within the cluster they were taken from), so [sessionId] is non-null.
+ */
+data class ActiveCaptureTask(
+    override val sessionId: String,
+    val task: NamespaceLogCaptureTask,
+    override val openedAt: Long,
+) : DrawerLogTab {
+    override val key: String get() = "capture|$sessionId|${task.namespace}"
+    override val displayLabel: String get() = "Capture · ${task.namespace}"
 }
 
 object LogStreamRegistry {
@@ -131,6 +150,56 @@ object LogStreamRegistry {
         _focusedKey.value = key
     }
 
+    /**
+     * Opens (or focuses) the capture tab for [namespace] in [session]. A
+     * one-line delegation kept separate from [openOrFocusCaptureTab] so unit
+     * tests never construct a [ClusterSession] — its init starts real
+     * connection machinery on the session scope.
+     */
+    fun openOrFocusCapture(
+        session: ClusterSession,
+        namespace: String,
+        taskFactory: () -> NamespaceLogCaptureTask,
+    ): String = openOrFocusCaptureTab(session.id.value, namespace, taskFactory)
+
+    /**
+     * The unit-testable seam, mirroring [openOrFocusStream]. Takes a plain
+     * session id so tests never construct a [ClusterSession]. @Synchronized
+     * for the same reason [openOrFocusStream] is: the check-then-create-then-
+     * insert below must be atomic, or two concurrent opens for the same key
+     * would both pass the guard and the second `jobs[key] =` would orphan the
+     * first capture job.
+     *
+     * If a tab already exists for [sessionId]/[namespace] and its task is
+     * still running, focuses it and returns without invoking [taskFactory].
+     * If the existing task has finished, replaces it — closing the old key
+     * first (cancelling its already-completed job is a no-op), then inserting
+     * the new tab.
+     */
+    @Synchronized
+    internal fun openOrFocusCaptureTab(
+        sessionId: String,
+        namespace: String,
+        taskFactory: () -> NamespaceLogCaptureTask,
+    ): String {
+        val key = "capture|$sessionId|$namespace"
+        val existing = _tabs.value[key] as? ActiveCaptureTask
+        if (existing != null) {
+            if (existing.task.isRunning) {
+                _focusedKey.value = key
+                return key
+            }
+            close(key)
+        }
+        val task = taskFactory()
+        jobs[key] = task.job
+        _tabs.update {
+            it + (key to ActiveCaptureTask(sessionId, task, System.currentTimeMillis()))
+        }
+        _focusedKey.value = key
+        return key
+    }
+
     @Synchronized
     fun focus(key: String) {
         if (key in _tabs.value) _focusedKey.value = key
@@ -149,11 +218,7 @@ object LogStreamRegistry {
 
     @Synchronized
     fun closeAllForSession(sessionId: SessionId) {
-        _tabs.value
-            .values
-            .filterIsInstance<ActiveLogStream>()
-            .filter { it.id.sessionId == sessionId.value }
-            .forEach { close(it.key) }
+        _tabs.value.values.filter { it.sessionId == sessionId.value }.forEach { close(it.key) }
     }
 
     internal fun clearAll() {

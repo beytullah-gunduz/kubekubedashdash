@@ -37,6 +37,7 @@ internal fun NamespaceTable(
     selectedUid: String? = null,
     onClick: (GenericResourceInfo) -> Unit,
     onDelete: ((GenericResourceInfo) -> Unit)? = null,
+    onCaptureLogs: ((GenericResourceInfo) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nsColumns.filter { maxWidth >= it.minTableWidth }
@@ -45,7 +46,10 @@ internal fun NamespaceTable(
             TableRow(
                 id = ns.uid,
                 cells = visible.map { it.cell(ns) },
-                actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(ns) }) else emptyList(),
+                actions = buildList {
+                    if (onCaptureLogs != null) add(RowAction("Capture logs…") { onCaptureLogs(ns) })
+                    if (onDelete != null) add(RowAction("Delete") { onDelete(ns) })
+                },
             )
         }
 

@@ -56,12 +56,14 @@ import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.resources.dashboard_filled
-import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.TerminalSessionRegistry
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.services.logcapture.DefaultNamespaceLogCaptureGateway
+import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureEngine
 import com.kubekubedashdash.terminal.JediTermPane
+import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
@@ -226,7 +228,7 @@ fun App(
         // Cmd+J can still deliberately open an empty drawer to show its hint.
         val openDrawerTabs by LogStreamRegistry.tabs.collectAsState()
         val visibleDrawerTabCount = remember(openDrawerTabs, visibleSessionIds) {
-            openDrawerTabs.count { (_, tab) -> tab !is ActiveLogStream || tab.id.sessionId in visibleSessionIds }
+            openDrawerTabs.count { (_, tab) -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
         }
         val prevDrawerTabCount = remember { mutableStateOf(visibleDrawerTabCount) }
         LaunchedEffect(visibleDrawerTabCount) {
@@ -251,6 +253,13 @@ fun App(
                 }
             }
         }
+        var captureDialogNamespace by remember { mutableStateOf<String?>(null) }
+        // remember-ed so the lambda keeps a stable identity across recompositions:
+        // rememberPaletteEntries keys its capture-entry list on it, and an
+        // identity that churned every frame would rebuild that list every frame.
+        // Unlike onOpenLogs this closes over nothing but the remembered
+        // MutableState setter, so it needs no keys.
+        val onCaptureLogs: (String) -> Unit = remember { { ns -> captureDialogNamespace = ns } }
 
         // Screenshot-driver bridges. Inert in normal use: palette starts false, and
         // logRequest/hideLogsRequest start null/false with nothing in production calling
@@ -287,6 +296,7 @@ fun App(
             onNavigate = { target -> sessionForPalette?.viewModel?.navigate(target) },
             onActivateTab = { key -> workspace.setActive(key) },
             onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setSelectedNamespace(ns) },
+            onCaptureLogs = onCaptureLogs,
         )
 
         // Provide the title session's locals at App scope for modals and the
@@ -525,6 +535,7 @@ fun App(
                                     onDiscoverEks = { workspace.showEksDiscovery() },
                                     onOpenLogs = onOpenLogs,
                                     onOpenTerminal = onOpenTerminal,
+                                    onCaptureLogs = onCaptureLogs,
                                 )
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()
@@ -626,6 +637,24 @@ fun App(
                         entries = paletteEntries,
                         onDismiss = { paletteOpen = false },
                     )
+                }
+
+                captureDialogNamespace?.let { ns ->
+                    activeSession?.let { session ->
+                        val gateway = remember(session) { DefaultNamespaceLogCaptureGateway(session.reactiveClient) }
+                        CaptureNamespaceLogsDialog(
+                            namespace = ns,
+                            gateway = gateway,
+                            onStart = { options ->
+                                LogStreamRegistry.openOrFocusCapture(session, ns) {
+                                    NamespaceLogCaptureEngine.start(session.scope, gateway, ns, options)
+                                }
+                                if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
+                                captureDialogNamespace = null
+                            },
+                            onDismiss = { captureDialogNamespace = null },
+                        )
+                    }
                 }
             }
         }

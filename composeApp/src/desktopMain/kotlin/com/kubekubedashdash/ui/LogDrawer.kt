@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,9 +58,13 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
 import com.kubekubedashdash.services.ActiveAppLog
+import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.ActiveLogStream
+import com.kubekubedashdash.services.DrawerLogTab
 import com.kubekubedashdash.services.LogStreamRegistry
+import com.kubekubedashdash.services.logcapture.CapturePhase
 import com.kubekubedashdash.ui.components.DrawerAppLogPane
+import com.kubekubedashdash.ui.components.DrawerCapturePane
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
@@ -83,7 +88,7 @@ fun LogDrawer(
     val allTabs by LogStreamRegistry.tabs.collectAsState()
     val focusedKey by LogStreamRegistry.focusedKey.collectAsState()
     val tabs = remember(allTabs, visibleSessionIds) {
-        allTabs.filterValues { tab -> tab !is ActiveLogStream || tab.id.sessionId in visibleSessionIds }
+        allTabs.filterValues { tab -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
     }
     val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
     val density = LocalDensity.current
@@ -131,42 +136,44 @@ fun LogDrawer(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             tabList.forEach { tab ->
-                                Tab(
-                                    selected = tab.key == displayedKey,
-                                    onClick = {
-                                        LogStreamRegistry.focus(tab.key)
-                                        if (state == LogDrawerState.COLLAPSED) {
-                                            onStateChange(LogDrawerState.EXPANDED)
-                                        }
-                                    },
-                                    text = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Text(
-                                                tab.displayLabel,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                style = MaterialTheme.typography.labelMedium,
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .pointerInput(tab.key) {
-                                                        detectTapGestures(onTap = { LogStreamRegistry.close(tab.key) })
-                                                    },
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(Res.drawable.close_filled),
-                                                    contentDescription = "Close ${tab.displayLabel}",
-                                                    modifier = Modifier.size(10.dp),
-                                                )
+                                key(tab.key) {
+                                    Tab(
+                                        selected = tab.key == displayedKey,
+                                        onClick = {
+                                            LogStreamRegistry.focus(tab.key)
+                                            if (state == LogDrawerState.COLLAPSED) {
+                                                onStateChange(LogDrawerState.EXPANDED)
                                             }
-                                        }
-                                    },
-                                )
+                                        },
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                Text(
+                                                    drawerTabLabel(tab),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .pointerInput(tab.key) {
+                                                            detectTapGestures(onTap = { LogStreamRegistry.close(tab.key) })
+                                                        },
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        painter = painterResource(Res.drawable.close_filled),
+                                                        contentDescription = "Close ${tab.displayLabel}",
+                                                        modifier = Modifier.size(10.dp),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -246,6 +253,11 @@ fun LogDrawer(
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
+                                is ActiveCaptureTask -> DrawerCapturePane(
+                                    tab = tab,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
                                 null -> Unit
                             }
                         }
@@ -254,6 +266,34 @@ fun LogDrawer(
             }
         }
     }
+}
+
+/**
+ * The tab-strip text for [tab]. Capture tabs get a live "(done/total)" suffix
+ * while running and an outcome glyph once terminal — computed here rather than
+ * by mutating the registry on every progress tick, so
+ * [DrawerLogTab.displayLabel] stays a cheap, static property.
+ *
+ * The terminal glyph distinguishes the three outcomes; a failed capture must
+ * never wear a checkmark. Glyphs match [com.kubekubedashdash.ui.components.DrawerCapturePane]'s
+ * per-pod rows, and each is backed by the receipt text inside the pane, so the
+ * glyph is never the only signal.
+ */
+@Composable
+private fun drawerTabLabel(tab: DrawerLogTab): String = if (tab is ActiveCaptureTask) {
+    val s by tab.task.state.collectAsState()
+    when (s.phase) {
+        is CapturePhase.Listing, is CapturePhase.Running ->
+            "${tab.displayLabel} (${s.completedPods}/${s.totalPods})"
+
+        is CapturePhase.Completed -> "${tab.displayLabel} ✓"
+
+        is CapturePhase.Cancelled -> "${tab.displayLabel} –"
+
+        is CapturePhase.Failed -> "${tab.displayLabel} ✕"
+    }
+} else {
+    tab.displayLabel
 }
 
 @Composable

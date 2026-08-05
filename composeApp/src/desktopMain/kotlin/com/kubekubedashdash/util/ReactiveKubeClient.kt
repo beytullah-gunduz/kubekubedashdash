@@ -13,6 +13,9 @@ import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.models.ServiceInfo
+import com.kubekubedashdash.services.logcapture.CapturePodMapper
+import com.kubekubedashdash.services.logcapture.CapturePodSpec
+import com.kubekubedashdash.services.logcapture.LogQuery
 import io.fabric8.kubernetes.api.model.DeletionPropagation
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
@@ -27,8 +30,11 @@ import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestConditionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.BytesLimitTerminateTimeTailPrettyLoggable
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecWatch
+import io.fabric8.kubernetes.client.dsl.TailPrettyLoggable
+import io.fabric8.kubernetes.client.dsl.TimeTailPrettyLoggable
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
@@ -64,6 +70,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.io.Closeable
+import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
@@ -1414,6 +1421,28 @@ class ReactiveKubeClient(
     } catch (e: Exception) {
         log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
         "Error fetching logs: ${e.message}"
+    }
+
+    suspend fun listCapturePods(namespace: String): Result<List<CapturePodSpec>> = runCatching {
+        runInterruptible(Dispatchers.IO) {
+            k8s.pods().inNamespace(namespace).list().items.map(CapturePodMapper::map)
+        }
+    }
+
+    /**
+     * Non-follow raw log stream for disk capture. The fabric8 DSL narrows its
+     * return type at every step, so this call order is forced:
+     *   usingTimestamps() -> terminated() -> sinceSeconds() -> getLogInputStream()
+     * Never calling tailingLines() means "unlimited".
+     */
+    fun openCaptureLogStream(namespace: String, query: LogQuery): InputStream {
+        val base: BytesLimitTerminateTimeTailPrettyLoggable =
+            k8s.pods().inNamespace(namespace).withName(query.podName)
+                .inContainer(query.containerName)
+                .usingTimestamps()
+        val timed: TimeTailPrettyLoggable = if (query.previous) base.terminated() else base
+        val tailable: TailPrettyLoggable = query.sinceSeconds?.let { timed.sinceSeconds(it) } ?: timed
+        return tailable.getLogInputStream()
     }
 
     fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = flow {

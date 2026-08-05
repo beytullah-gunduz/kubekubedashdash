@@ -77,6 +77,12 @@ private val KdTextSecondaryDark = Color(0xFF8B95A1)
 // because light-mode contrast is already sufficient.
 private val KdTextPlaceholderDark = Color(0xFF94A3B8)
 
+// Maximum-contrast body text for dense readouts on KdSurface — the drawer's
+// capture pane, where KdTextPrimary's 8.6:1 tested as legible but read as
+// washed out at labelSmall sizes. Light value matches primary, which is
+// already 14.6:1 on white.
+private val KdTextBrightDark = Color(0xFFFFFFFF)
+
 // More visible border on dark — the old #2E3440 was indistinguishable from
 // the surface so card outlines never registered. #3A4150 shows a soft
 // hairline without competing with the content.
@@ -104,6 +110,7 @@ val KdOnPrimary = Color.White
 val KdTextPrimary: Color get() = if (ThemeManager.isDarkTheme) KdTextPrimaryDark else KdTextPrimaryLight
 val KdTextSecondary: Color get() = if (ThemeManager.isDarkTheme) KdTextSecondaryDark else KdTextSecondaryLight
 val KdTextPlaceholder: Color get() = if (ThemeManager.isDarkTheme) KdTextPlaceholderDark else KdTextPlaceholderLight
+val KdTextBright: Color get() = if (ThemeManager.isDarkTheme) KdTextBrightDark else KdTextPrimaryLight
 
 // Status colors. The dark variants stay vivid (good contrast on near-black);
 // the light variants are darkened so they still meet WCAG AA on white card
