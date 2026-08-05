@@ -2,12 +2,8 @@ package com.kubekubedashdash.ui.modals.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.util.AwsProfile
-import com.kubekubedashdash.util.AwsProfileReader
 import com.kubekubedashdash.util.EksCluster
-import com.kubekubedashdash.util.EksClusterDiscoverer
-import com.kubekubedashdash.util.KubeconfigLocator
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,6 +61,7 @@ data class ImportRow(val cluster: EksCluster, val state: ImportRowState)
 
 class EksDiscoveryViewModel(
     private val reactiveClient: ReactiveKubeClient,
+    private val gateway: EksDiscoveryGateway = DefaultEksDiscoveryGateway(reactiveClient),
 ) : ViewModel() {
 
     private val log = LoggerFactory.getLogger(EksDiscoveryViewModel::class.java)
@@ -96,7 +93,7 @@ class EksDiscoveryViewModel(
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
-    val awsCliAvailable: Boolean = EksClusterDiscoverer.isAwsCliAvailable()
+    val awsCliAvailable: Boolean = gateway.awsCliAvailable
 
     private var activeJob: Job? = null
 
@@ -120,10 +117,10 @@ class EksDiscoveryViewModel(
 
     fun loadProfiles() {
         viewModelScope.launch(Dispatchers.IO) {
-            val list = AwsProfileReader.listProfiles()
+            val list = gateway.listProfiles()
             _profiles.value = list
             val available = list.map { it.name }.toSet()
-            val remembered = PreferenceRepository.lastAwsProfiles.value.filter { it in available }
+            val remembered = gateway.recallProfileSelection().filter { it in available }
             _selectedProfiles.value = when {
                 remembered.isNotEmpty() -> remembered.toSet()
                 list.isNotEmpty() -> setOf(list.first().name)
@@ -155,7 +152,7 @@ class EksDiscoveryViewModel(
         val profiles = _selectedProfiles.value
         if (profiles.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
-            PreferenceRepository.setLastAwsProfiles(profiles.toList().sorted())
+            gateway.rememberProfileSelection(profiles.toList().sorted())
         }
         _step.value = EksDiscoveryStep.PICK_REGIONS
     }
@@ -206,11 +203,11 @@ class EksDiscoveryViewModel(
             val regions: List<String> = when (scope) {
                 RegionScope.DEFAULT_ONLY -> listOfNotNull(profileDefault ?: "us-east-1")
 
-                RegionScope.COMMON -> (listOfNotNull(profileDefault) + EksClusterDiscoverer.COMMON_REGIONS).distinct()
+                RegionScope.COMMON -> (listOfNotNull(profileDefault) + gateway.commonRegions).distinct()
 
-                RegionScope.ALL_ENABLED -> EksClusterDiscoverer.listEnabledRegions(profile).getOrElse {
+                RegionScope.ALL_ENABLED -> gateway.listEnabledRegions(profile).getOrElse {
                     log.warn("Falling back to common regions for {}: {}", profile, it.message)
-                    EksClusterDiscoverer.COMMON_REGIONS
+                    gateway.commonRegions
                 }
             }
             regions.map { profile to it }
@@ -223,7 +220,7 @@ class EksDiscoveryViewModel(
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     updateScanRow(generation, profile, region) { RegionScanState.Scanning }
-                    val result = EksClusterDiscoverer.listClusters(profile, region)
+                    val result = gateway.listClusters(profile, region)
                     result.fold(
                         onSuccess = { clusters ->
                             updateScanRow(generation, profile, region) { RegionScanState.Done(clusters) }
@@ -248,7 +245,7 @@ class EksDiscoveryViewModel(
     }
 
     private fun buildCandidates() {
-        val existingArns = reactiveClient.getContexts().toSet()
+        val existingArns = gateway.existingContexts().toSet()
         val pattern = Regex("""arn:aws:eks:([^:]+):\d+:cluster/(.+)""")
         val existingByNameAndRegion: Set<Pair<String, String>> = existingArns.mapNotNull { ctx ->
             pattern.matchEntire(ctx)?.let { it.groupValues[2] to it.groupValues[1] }
@@ -295,10 +292,10 @@ class EksDiscoveryViewModel(
         _step.value = EksDiscoveryStep.IMPORTING
 
         activeJob = viewModelScope.launch(Dispatchers.IO) {
-            val kubeconfigPath = KubeconfigLocator.activePath()
+            val kubeconfigPath = gateway.kubeconfigPath()
             // Snapshot the kubeconfig once before the first update-kubeconfig
             // mutates it, so a bad merge is recoverable.
-            EksClusterDiscoverer.backupKubeconfig(kubeconfigPath)
+            gateway.backupKubeconfig(kubeconfigPath)
             try {
                 for (cluster in toImport) {
                     // Cancellation (requestCancelImport / reset) takes effect HERE,
@@ -309,7 +306,7 @@ class EksDiscoveryViewModel(
                     // aws rewrites the kubeconfig in place (truncate + dump, not
                     // atomic), so killing the child mid-write can corrupt the file.
                     val result = withContext(NonCancellable) {
-                        EksClusterDiscoverer.importCluster(cluster.profile, cluster.region, cluster.name, kubeconfigPath)
+                        gateway.importCluster(cluster.profile, cluster.region, cluster.name, kubeconfigPath)
                     }
                     result.fold(
                         onSuccess = { ctx ->
