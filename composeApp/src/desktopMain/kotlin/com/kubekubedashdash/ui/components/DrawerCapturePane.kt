@@ -25,7 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.logcapture.CapturePhase
 import com.kubekubedashdash.services.logcapture.ContainerOutcome
@@ -73,24 +74,41 @@ fun DrawerCapturePane(tab: ActiveCaptureTask, modifier: Modifier = Modifier) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 when (phase) {
-                    is CapturePhase.Listing -> Text("Counting pods…", style = MaterialTheme.typography.bodyMedium)
+                    is CapturePhase.Listing -> Text(
+                        "Counting pods…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = KdTextBright,
+                    )
 
                     is CapturePhase.Running -> {
-                        Text("Capturing \"${state.namespace}\"…", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Capturing \"${state.namespace}\"…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextBright,
+                        )
                         Text(
                             "${state.completedPods}/${state.totalPods} pods · ${humanBytes(state.totalBytes)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
+                            color = KdTextBright,
                         )
                     }
 
-                    is CapturePhase.Completed -> Text(phase.summary, style = MaterialTheme.typography.bodyMedium)
+                    is CapturePhase.Completed -> Text(
+                        phase.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = KdTextBright,
+                    )
 
-                    is CapturePhase.Cancelled -> Text(phase.summary, style = MaterialTheme.typography.bodyMedium)
+                    is CapturePhase.Cancelled -> Text(
+                        phase.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = KdTextBright,
+                    )
 
                     is CapturePhase.Failed -> Text(
                         phase.summary ?: phase.message,
                         style = MaterialTheme.typography.bodyMedium,
+                        color = KdTextBright,
                     )
                 }
             }
@@ -150,9 +168,21 @@ private fun CapturePodRow(pod: PodCaptureProgress) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(glyph, style = MaterialTheme.typography.bodyMedium)
-            Text(pod.podName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(label, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+            // Red is carried by the glyph only: KdError is 3.3:1 on the dark drawer
+            // surface, so tinting the message text would cost more contrast than the
+            // colour is worth. The adjacent "failed" label already says it in words.
+            Text(
+                glyph,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (pod.hasFailure) KdError else KdTextBright,
+            )
+            Text(
+                pod.podName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = KdTextBright,
+                modifier = Modifier.weight(1f),
+            )
+            Text(label, style = MaterialTheme.typography.labelSmall, color = KdTextBright)
         }
         if (pod.hasFailure) {
             val failures = pod.outcomes.filterValues { it is ContainerOutcome.Failed }
@@ -163,7 +193,7 @@ private fun CapturePodRow(pod: PodCaptureProgress) {
                         Text(
                             "$containerName: $message",
                             style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
+                            color = KdTextBright,
                         )
                     }
                 }
