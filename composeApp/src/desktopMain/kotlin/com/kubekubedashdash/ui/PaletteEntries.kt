@@ -53,6 +53,7 @@ internal fun rememberPaletteEntries(
     onNavigate: (Screen) -> Unit,
     onActivateTab: (tabKey: String) -> Unit,
     onSelectNamespace: (String) -> Unit,
+    onCaptureLogs: (String) -> Unit,
 ): List<PaletteEntry> {
     val screenEntries = remember(onNavigate) {
         listOf(
@@ -144,6 +145,18 @@ internal fun rememberPaletteEntries(
         }
     }
 
+    val captureEntries = remember(namespacesState?.value, onCaptureLogs) {
+        (namespacesState?.value ?: emptyList()).map { ns ->
+            PaletteEntry(
+                label = "Capture logs: $ns",
+                sublabel = "save all pod logs to disk",
+                category = "Actions",
+                icon = Res.drawable.description_filled,
+                onActivate = { onCaptureLogs(ns) },
+            )
+        }
+    }
+
     val clusterEntries = remember(tabs, onActivateTab) {
         tabs.filterIsInstance<WorkspaceTab.Cluster>().mapNotNull { tab ->
             val ctx = tab.session.connectionManager.getCurrentContext().ifBlank { return@mapNotNull null }
@@ -182,7 +195,7 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries
+    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + captureEntries
 }
 
 private fun paletteScreen(

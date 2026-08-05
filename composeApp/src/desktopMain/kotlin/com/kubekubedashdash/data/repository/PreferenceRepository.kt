@@ -54,6 +54,7 @@ object PreferenceRepository {
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
     private val MASK_SECRET_VALUES by lazy { booleanPreferencesKey("mask_secret_values") }
+    private val CAPTURE_DESTINATION_DIR by lazy { stringPreferencesKey("capture_destination_dir") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -116,6 +117,9 @@ object PreferenceRepository {
     private val _maskSecretValues = MutableStateFlow(true)
     val maskSecretValues: StateFlow<Boolean> = _maskSecretValues.asStateFlow()
 
+    private val _captureDestinationDir = MutableStateFlow(defaultCaptureDestinationDir())
+    val captureDestinationDir: StateFlow<String> = _captureDestinationDir.asStateFlow()
+
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
@@ -152,6 +156,7 @@ object PreferenceRepository {
                 _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
                     .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
                 _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
+                _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
             }
         }
     }
@@ -240,6 +245,12 @@ object PreferenceRepository {
         ioScope.launch { dataStore.edit { it[MASK_SECRET_VALUES] = value } }
     }
 
+    fun setCaptureDestinationDir(value: String) {
+        if (_captureDestinationDir.value == value) return
+        _captureDestinationDir.value = value
+        ioScope.launch { dataStore.edit { it[CAPTURE_DESTINATION_DIR] = value } }
+    }
+
     fun setDemoTargets(value: DemoClusterSimulator.Targets) {
         _demoTargets.value = value
         ioScope.launch {
@@ -306,5 +317,11 @@ object PreferenceRepository {
         } catch (_: Exception) {
             emptyMap()
         }
+    }
+
+    private fun defaultCaptureDestinationDir(): String {
+        val home = System.getProperty("user.home")
+        val downloads = java.io.File(home, "Downloads")
+        return if (downloads.exists()) downloads.absolutePath else home
     }
 }

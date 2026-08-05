@@ -61,6 +61,7 @@ internal fun SessionPaneContent(
     onDiscoverEks: () -> Unit,
     onOpenLogs: (String, String, String?) -> Unit,
     onOpenTerminal: (String, String, String) -> Unit,
+    onCaptureLogs: (String) -> Unit,
 ) {
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
@@ -180,6 +181,7 @@ internal fun SessionPaneContent(
                                     onDiscoverEks = onDiscoverEks,
                                     onOpenLogs = onOpenLogs,
                                     onOpenTerminal = onOpenTerminal,
+                                    onCaptureLogs = onCaptureLogs,
                                 )
                             }
                         }

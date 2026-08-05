@@ -55,6 +55,7 @@ fun ContentRouter(
     onDiscoverEks: () -> Unit = {},
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
+    onCaptureLogs: (String) -> Unit = {},
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
 
@@ -98,6 +99,7 @@ fun ContentRouter(
                 pulseLabelsOnEntry = pulseLabelsOnEntry,
                 pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
                 onNavigate = onNavigate,
+                onCaptureLogs = onCaptureLogs,
             )
 
             is Screen.Main.Events -> EventsScreen(
