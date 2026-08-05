@@ -56,7 +56,6 @@ import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.resources.dashboard_filled
-import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.TerminalSessionRegistry
@@ -226,7 +225,7 @@ fun App(
         // Cmd+J can still deliberately open an empty drawer to show its hint.
         val openDrawerTabs by LogStreamRegistry.tabs.collectAsState()
         val visibleDrawerTabCount = remember(openDrawerTabs, visibleSessionIds) {
-            openDrawerTabs.count { (_, tab) -> tab !is ActiveLogStream || tab.id.sessionId in visibleSessionIds }
+            openDrawerTabs.count { (_, tab) -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
         }
         val prevDrawerTabCount = remember { mutableStateOf(visibleDrawerTabCount) }
         LaunchedEffect(visibleDrawerTabCount) {
