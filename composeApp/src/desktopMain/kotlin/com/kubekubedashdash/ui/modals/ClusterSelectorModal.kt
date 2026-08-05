@@ -78,11 +78,13 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.util.ContextBinding
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import com.kubekubedashdash.util.GkeClusterDiscoverer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 
 private val EksOrange = Color(0xFFFF9900)
+private val GkeBlue = Color(0xFF4285F4)
 private val MockTeal = Color(0xFF00BFA5)
 
 private val eksPattern = Regex("""arn:aws:eks:([^:]+):(\d+):cluster/(.+)""")
@@ -95,6 +97,9 @@ private data class ParsedContext(
     val awsAccount: String? = null,
     val awsRegion: String? = null,
     val awsProfile: String? = null,
+    val isGke: Boolean = false,
+    val gcpProject: String? = null,
+    val gcpLocation: String? = null,
 )
 
 private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
@@ -107,6 +112,18 @@ private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
             isEks = false,
             isMock = true,
             clusterName = displayName,
+        )
+    }
+    val gkeParsed = GkeClusterDiscoverer.parseGkeContext(ctx)
+    if (gkeParsed != null) {
+        val (project, location, clusterName) = gkeParsed
+        return ParsedContext(
+            rawName = ctx,
+            isEks = false,
+            isGke = true,
+            clusterName = clusterName,
+            gcpProject = project,
+            gcpLocation = location,
         )
     }
     val match = eksPattern.matchEntire(ctx)
@@ -137,6 +154,7 @@ fun ClusterSelectorModal(
     onOpenCluster: (String, OpenTarget) -> Unit,
     onDismiss: () -> Unit,
     onDiscoverEks: () -> Unit = {},
+    onDiscoverGke: () -> Unit = {},
     dismissable: Boolean = true,
     canAddTab: Boolean = false,
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
@@ -151,6 +169,7 @@ fun ClusterSelectorModal(
         }
     }
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
+    val gcloudCliAvailable = remember { GkeClusterDiscoverer.isGcloudAvailable() }
     val modalFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { modalFocus.requestFocus() } }
     Box(
@@ -276,10 +295,14 @@ fun ClusterSelectorModal(
                         }
                     }
                     val (mockItems, rest1) = parsedContexts.partition { it.second.isMock }
-                    val (eksItems, otherItems) = rest1.partition { it.second.isEks }
+                    val (eksItems, rest2) = rest1.partition { it.second.isEks }
+                    val (gkeItems, otherItems) = rest2.partition { it.second.isGke }
                     val eksByAccount = eksItems.groupBy { it.second.awsAccount.orEmpty() }
                     val accountOrder = eksByAccount.keys.sorted()
                     val showAccountHeaders = accountOrder.size > 1
+                    val gkeByProject = gkeItems.groupBy { it.second.gcpProject.orEmpty() }
+                    val projectOrder = gkeByProject.keys.sorted()
+                    val showProjectHeaders = projectOrder.size > 1
                     val listState = rememberLazyListState()
                     Box(
                         modifier = Modifier
@@ -350,6 +373,32 @@ fun ClusterSelectorModal(
                                     }
                                 }
                             }
+                            projectOrder.forEach { project ->
+                                val list = gkeByProject.getValue(project)
+                                if (showProjectHeaders) {
+                                    item(key = "project-header/$project") {
+                                        GcpProjectSectionHeader(
+                                            project = project.ifBlank { "(unknown project)" },
+                                            count = list.size,
+                                            modifier = Modifier.animateItem(),
+                                        )
+                                    }
+                                }
+                                list.forEach { (ctx, parsed) ->
+                                    item(key = ctx) {
+                                        ClusterRow(
+                                            ctx = ctx,
+                                            parsed = parsed,
+                                            isSelected = ctx == selectedContext,
+                                            canAddTab = canAddTab,
+                                            defaultTarget = defaultTarget,
+                                            onOpenCluster = onOpenCluster,
+                                            onDismiss = onDismiss,
+                                            modifier = Modifier.animateItem(),
+                                        )
+                                    }
+                                }
+                            }
                         }
                         VerticalScrollbar(
                             adapter = rememberScrollbarAdapter(listState),
@@ -360,61 +409,123 @@ fun ClusterSelectorModal(
 
                 HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
-                var footerHovered by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (awsCliAvailable) {
-                                Modifier
-                                    .clickable { onDiscoverEks() }
-                                    .onPointerEvent(PointerEventType.Enter) { footerHovered = true }
-                                    .onPointerEvent(PointerEventType.Exit) { footerHovered = false }
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .background(if (footerHovered) KdHover else Color.Transparent)
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
+                Column {
+                    var footerHovered by remember { mutableStateOf(false) }
+                    Row(
                         modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
+                            .fillMaxWidth()
+                            .then(
                                 if (awsCliAvailable) {
-                                    EksOrange.copy(alpha = 0.15f)
+                                    Modifier
+                                        .clickable { onDiscoverEks() }
+                                        .onPointerEvent(PointerEventType.Enter) { footerHovered = true }
+                                        .onPointerEvent(PointerEventType.Exit) { footerHovered = false }
                                 } else {
-                                    KdSurfaceVariant
+                                    Modifier
                                 },
-                            ),
-                        contentAlignment = Alignment.Center,
+                            )
+                            .background(if (footerHovered) KdHover else Color.Transparent)
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            painterResource(Res.drawable.cloud_filled),
-                            contentDescription = null,
-                            tint = if (awsCliAvailable) EksOrange else KdTextSecondary,
-                            modifier = Modifier.size(16.dp),
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (awsCliAvailable) {
+                                        EksOrange.copy(alpha = 0.15f)
+                                    } else {
+                                        KdSurfaceVariant
+                                    },
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painterResource(Res.drawable.cloud_filled),
+                                contentDescription = null,
+                                tint = if (awsCliAvailable) EksOrange else KdTextSecondary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Discover EKS clusters",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (awsCliAvailable) KdTextPrimary else KdTextSecondary,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                if (awsCliAvailable) {
+                                    "Add EKS clusters from your AWS account to kubeconfig"
+                                } else {
+                                    "Requires AWS CLI on PATH"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KdTextSecondary,
+                            )
+                        }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Discover EKS clusters",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (awsCliAvailable) KdTextPrimary else KdTextSecondary,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                            if (awsCliAvailable) {
-                                "Add EKS clusters from your AWS account to kubeconfig"
-                            } else {
-                                "Requires AWS CLI on PATH"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
-                        )
+
+                    HorizontalDivider(color = KdBorder, thickness = 1.dp)
+
+                    var gkeFooterHovered by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (gcloudCliAvailable) {
+                                    Modifier
+                                        .clickable { onDiscoverGke() }
+                                        .onPointerEvent(PointerEventType.Enter) { gkeFooterHovered = true }
+                                        .onPointerEvent(PointerEventType.Exit) { gkeFooterHovered = false }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .background(if (gkeFooterHovered) KdHover else Color.Transparent)
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (gcloudCliAvailable) {
+                                        GkeBlue.copy(alpha = 0.15f)
+                                    } else {
+                                        KdSurfaceVariant
+                                    },
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painterResource(Res.drawable.cloud_filled),
+                                contentDescription = null,
+                                tint = if (gcloudCliAvailable) GkeBlue else KdTextSecondary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Discover GKE clusters",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (gcloudCliAvailable) KdTextPrimary else KdTextSecondary,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                if (gcloudCliAvailable) {
+                                    "Add GKE clusters from your Google Cloud projects to kubeconfig"
+                                } else {
+                                    "Requires Google Cloud SDK on PATH"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KdTextSecondary,
+                            )
+                        }
                     }
                 }
             }
@@ -503,6 +614,22 @@ private fun LazyItemScope.ClusterRow(
                     letterSpacing = 0.5.sp,
                 )
             }
+        } else if (parsed.isGke) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(GkeBlue),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "GKE",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                )
+            }
         } else {
             Box(
                 modifier = Modifier
@@ -562,6 +689,14 @@ private fun LazyItemScope.ClusterRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            } else if (parsed.isGke) {
+                Text(
+                    "${parsed.gcpProject} · ${parsed.gcpLocation}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         if (canAddTab) {
@@ -667,6 +802,44 @@ private fun AwsAccountSectionHeader(account: String, count: Int, modifier: Modif
         Spacer(Modifier.width(8.dp))
         Text(
             account,
+            color = KdTextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$count cluster${if (count != 1) "s" else ""}",
+            color = KdTextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+@Composable
+private fun GcpProjectSectionHeader(project: String, count: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(GkeBlue.copy(alpha = 0.18f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(
+                "GCP",
+                color = GkeBlue,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            project,
             color = KdTextPrimary,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.labelMedium,

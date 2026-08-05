@@ -36,8 +36,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +56,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
+import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
@@ -78,26 +80,29 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.hourglass_empty_filled
-import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
-import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryStep
-import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryViewModel
-import com.kubekubedashdash.ui.modals.viewmodel.ImportRow
-import com.kubekubedashdash.ui.modals.viewmodel.ImportRowState
-import com.kubekubedashdash.ui.modals.viewmodel.RegionScanRow
-import com.kubekubedashdash.ui.modals.viewmodel.RegionScanState
-import com.kubekubedashdash.ui.modals.viewmodel.RegionScope
+import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.modals.viewmodel.GkeClusterCandidate
+import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryStep
+import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryViewModel
+import com.kubekubedashdash.ui.modals.viewmodel.GkeImportRow
+import com.kubekubedashdash.ui.modals.viewmodel.GkeImportRowState
+import com.kubekubedashdash.ui.modals.viewmodel.ProjectLoadState
+import com.kubekubedashdash.ui.modals.viewmodel.ProjectScanRow
+import com.kubekubedashdash.ui.modals.viewmodel.ProjectScanState
+import com.kubekubedashdash.util.GcpProject
 import org.jetbrains.compose.resources.painterResource
 
-private val EksOrange = Color(0xFFFF9900)
+private val GkeBlue = Color(0xFF4285F4) // D8
 
 @Composable
-fun EksDiscoveryModal(
+fun GkeDiscoveryModal(
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
 ) {
     val reactiveClient = com.kubekubedashdash.ui.LocalReactiveKubeClient.current
-    val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel(reactiveClient) }
+    val viewModel: GkeDiscoveryViewModel = viewModel { GkeDiscoveryViewModel(reactiveClient) }
     LaunchedEffect(Unit) { viewModel.reset() }
     val step by viewModel.step.collectAsState()
     val busy by viewModel.busy.collectAsState()
@@ -107,10 +112,10 @@ fun EksDiscoveryModal(
     // parent's cluster list — otherwise the user goes back to a stale list and has to reopen
     // the selector to see what they just imported. Closing mid-run must also actually stop
     // the run: cancel a scan outright (read-only), and request a graceful stop of an import
-    // (the in-flight update-kubeconfig is never killed — see the viewmodel kdoc).
+    // (the in-flight get-credentials is never killed — see the viewmodel kdoc).
     val closeOrComplete: () -> Unit = {
         when (step) {
-            EksDiscoveryStep.SCANNING -> {
+            GkeDiscoveryStep.SCANNING -> {
                 viewModel.cancel()
                 onDismiss()
             }
@@ -124,7 +129,7 @@ fun EksDiscoveryModal(
             // land in the kubeconfig up to ~120s later with the user never being told —
             // which is the original defect, merely narrowed, and it would break this
             // plan's stated goal of telling the user exactly what was imported.
-            EksDiscoveryStep.IMPORTING -> viewModel.requestCancelImport()
+            GkeDiscoveryStep.IMPORTING -> viewModel.requestCancelImport()
 
             else -> if (viewModel.anyImportSucceeded) onCompleted() else onDismiss()
         }
@@ -164,16 +169,15 @@ fun EksDiscoveryModal(
                 ModalHeader(step = step, onClose = closeOrComplete)
                 HorizontalDivider(color = KdBorder)
 
-                if (!viewModel.awsCliAvailable) {
-                    AwsCliMissing(onDismiss)
+                if (!viewModel.gcloudCliAvailable) {
+                    GcloudMissing(onDismiss)
                 } else {
                     when (step) {
-                        EksDiscoveryStep.PICK_PROFILE -> ProfileStep(viewModel)
-                        EksDiscoveryStep.PICK_REGIONS -> RegionStep(viewModel)
-                        EksDiscoveryStep.SCANNING -> ScanningStep(viewModel)
-                        EksDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
-                        EksDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
-                        EksDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                        GkeDiscoveryStep.PICK_PROJECTS -> ProjectStep(viewModel)
+                        GkeDiscoveryStep.SCANNING -> ScanningStep(viewModel)
+                        GkeDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
+                        GkeDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
+                        GkeDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
                     }
                     errorMessage?.let { msg ->
                         HorizontalDivider(color = KdBorder)
@@ -204,7 +208,7 @@ fun EksDiscoveryModal(
 }
 
 @Composable
-private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
+private fun ModalHeader(step: GkeDiscoveryStep, onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -215,15 +219,15 @@ private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(EksOrange.copy(alpha = 0.18f)),
+                .background(GkeBlue.copy(alpha = 0.18f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text("EKS", color = EksOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+            Text("GKE", color = GkeBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "Discover EKS Clusters",
+                "Discover GKE Clusters",
                 style = MaterialTheme.typography.titleMedium,
                 color = KdTextPrimary,
                 fontWeight = FontWeight.SemiBold,
@@ -246,17 +250,16 @@ private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
     }
 }
 
-private fun stepSubtitle(step: EksDiscoveryStep): String = when (step) {
-    EksDiscoveryStep.PICK_PROFILE -> "Step 1 of 4 · Choose AWS profile"
-    EksDiscoveryStep.PICK_REGIONS -> "Step 2 of 4 · Choose regions to scan"
-    EksDiscoveryStep.SCANNING -> "Step 3 of 4 · Scanning regions"
-    EksDiscoveryStep.PICK_CLUSTERS -> "Step 3 of 4 · Choose clusters to import"
-    EksDiscoveryStep.IMPORTING -> "Step 4 of 4 · Importing clusters"
-    EksDiscoveryStep.DONE -> "Step 4 of 4 · Done"
+private fun stepSubtitle(step: GkeDiscoveryStep): String = when (step) {
+    GkeDiscoveryStep.PICK_PROJECTS -> "Step 1 of 3 · Choose GCP projects"
+    GkeDiscoveryStep.SCANNING -> "Step 2 of 3 · Scanning projects"
+    GkeDiscoveryStep.PICK_CLUSTERS -> "Step 2 of 3 · Choose clusters to import"
+    GkeDiscoveryStep.IMPORTING -> "Step 3 of 3 · Importing clusters"
+    GkeDiscoveryStep.DONE -> "Step 3 of 3 · Done"
 }
 
 @Composable
-private fun AwsCliMissing(onDismiss: () -> Unit) {
+private fun GcloudMissing(onDismiss: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -266,14 +269,14 @@ private fun AwsCliMissing(onDismiss: () -> Unit) {
             Icon(painterResource(Res.drawable.error), null, tint = KdError, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                "AWS CLI is not on your PATH.",
+                "Google Cloud SDK not found",
                 color = KdTextPrimary,
                 fontWeight = FontWeight.Medium,
             )
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Install the AWS CLI v2 and ensure `aws` is reachable from your shell, then try again.",
+            "Install the Google Cloud SDK and ensure `gcloud` is reachable from your shell, then try again.",
             color = KdTextSecondary,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -289,195 +292,218 @@ private fun AwsCliMissing(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
-    val profiles by viewModel.profiles.collectAsState()
-    val selected by viewModel.selectedProfiles.collectAsState()
+private fun ProjectStep(viewModel: GkeDiscoveryViewModel) {
+    val loadState by viewModel.projectLoadState.collectAsState()
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-        if (profiles.isEmpty()) {
-            Text(
-                "No AWS profiles found at ~/.aws/credentials or ~/.aws/config.",
-                color = KdTextPrimary,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Run `aws configure --profile NAME` from a terminal, then come back.",
-                color = KdTextSecondary,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${selected.size} of ${profiles.size} selected",
-                    color = KdTextSecondary,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    "Select all",
-                    color = KdPrimary,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { viewModel.selectAllProfiles(true) }
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "None",
-                    color = KdPrimary,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { viewModel.selectAllProfiles(false) }
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            val listState = rememberLazyListState()
-            Box(modifier = Modifier.heightIn(max = 360.dp)) {
-                LazyColumn(state = listState) {
-                    items(profiles, key = { it.name }) { profile ->
-                        val isSelected = profile.name in selected
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) KdSelected else Color.Transparent)
-                                .clickable { viewModel.toggleProfile(profile.name) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = isSelected,
-                                onCheckedChange = { viewModel.toggleProfile(profile.name) },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = KdPrimary,
-                                    uncheckedColor = KdTextSecondary,
-                                ),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    profile.name,
-                                    color = if (isSelected) KdPrimary else KdTextPrimary,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                                val subtitle = buildString {
-                                    profile.defaultRegion?.let { append(it) }
-                                    if (profile.defaultRegion == null) append("no default region")
-                                }
-                                Text(
-                                    subtitle,
-                                    color = KdTextSecondary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                        }
-                    }
+        when (val state = loadState) {
+            ProjectLoadState.Loading -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Checking gcloud sign-in…", color = KdTextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
             }
+
+            ProjectLoadState.NotSignedIn -> NotSignedIn(viewModel)
+
+            is ProjectLoadState.Failed -> LoadFailed(state.message, viewModel)
+
+            is ProjectLoadState.Loaded -> LoadedProjects(state.projects, viewModel)
         }
     }
 }
 
 @Composable
-private fun RegionStep(viewModel: EksDiscoveryViewModel) {
-    val scope by viewModel.regionScope.collectAsState()
-    val selectedProfiles by viewModel.selectedProfiles.collectAsState()
-    val profiles by viewModel.profiles.collectAsState()
-    val orderedSelection = selectedProfiles.toList().sorted()
-    val defaultRegionLabel = if (orderedSelection.size == 1) {
-        profiles.firstOrNull { it.name == orderedSelection[0] }?.defaultRegion ?: "us-east-1"
-    } else {
-        "each profile's default"
+private fun NotSignedIn(viewModel: GkeDiscoveryViewModel) {
+    Text(
+        "No active Google Cloud account found.",
+        color = KdTextPrimary,
+        fontWeight = FontWeight.Medium,
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "Sign in from a terminal, then try again:",
+        color = KdTextSecondary,
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "gcloud auth login",
+        color = KdTextPrimary,
+        fontFamily = FontFamily.Monospace,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(KdSurfaceVariant)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
+    Spacer(Modifier.height(16.dp))
+    OutlinedButton(
+        onClick = { viewModel.retryLoad() },
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, KdBorder),
+    ) { Text("Try again", color = KdTextPrimary) }
+}
+
+@Composable
+private fun LoadFailed(message: String, viewModel: GkeDiscoveryViewModel) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(Res.drawable.error), null, tint = KdError, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Could not list GCP projects.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
     }
-    val profileLabel = when {
-        orderedSelection.isEmpty() -> "No profile selected"
-        orderedSelection.size == 1 -> "Profile: ${orderedSelection[0]}"
-        else -> "Profiles (${orderedSelection.size}): ${orderedSelection.joinToString(", ")}"
+    Spacer(Modifier.height(6.dp))
+    Text(message, color = KdTextSecondary, style = MaterialTheme.typography.bodySmall)
+    Spacer(Modifier.height(16.dp))
+    OutlinedButton(
+        onClick = { viewModel.retryLoad() },
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, KdBorder),
+    ) { Text("Try again", color = KdTextPrimary) }
+}
+
+@Composable
+private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryViewModel) {
+    val selected by viewModel.selectedProjects.collectAsState()
+    val filter by viewModel.projectFilter.collectAsState()
+    val notice by viewModel.selectionNotice.collectAsState()
+
+    if (projects.isEmpty()) {
+        Text(
+            "No active GCP projects found for this account.",
+            color = KdTextPrimary,
+            fontWeight = FontWeight.Medium,
+        )
+        return
     }
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+    val visible = if (filter.isBlank()) {
+        projects
+    } else {
+        projects.filter {
+            it.projectId.contains(filter, ignoreCase = true) || it.displayName.contains(filter, ignoreCase = true)
+        }
+    }
+
+    ProjectSearchField(value = filter, onValueChange = { viewModel.setProjectFilter(it) })
+    Spacer(Modifier.height(10.dp))
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            profileLabel,
+            "${selected.size} of ${projects.size} selected",
             color = KdTextSecondary,
             style = MaterialTheme.typography.labelSmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(12.dp))
-        RegionOption(
-            label = "Default region only",
-            sub = "Just $defaultRegionLabel · fastest",
-            selected = scope == RegionScope.DEFAULT_ONLY,
-            onClick = { viewModel.setRegionScope(RegionScope.DEFAULT_ONLY) },
-        )
-        RegionOption(
-            label = "Common regions",
-            sub = "10 widely-used regions per profile · ~5s",
-            selected = scope == RegionScope.COMMON,
-            onClick = { viewModel.setRegionScope(RegionScope.COMMON) },
-        )
-        RegionOption(
-            label = "All enabled regions",
-            sub = "Every region each account has opted in · slowest",
-            selected = scope == RegionScope.ALL_ENABLED,
-            onClick = { viewModel.setRegionScope(RegionScope.ALL_ENABLED) },
-        )
-    }
-}
-
-@Composable
-private fun RegionOption(label: String, sub: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) KdSelected else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(selectedColor = KdPrimary, unselectedColor = KdTextSecondary),
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            "Select all",
+            color = KdPrimary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { viewModel.selectAllProjects(true) }
+                .padding(horizontal = 6.dp, vertical = 2.dp),
         )
         Spacer(Modifier.width(8.dp))
-        Column {
-            Text(
-                label,
-                color = if (selected) KdPrimary else KdTextPrimary,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            )
-            Text(sub, color = KdTextSecondary, style = MaterialTheme.typography.labelSmall)
+        Text(
+            "None",
+            color = KdPrimary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { viewModel.selectAllProjects(false) }
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+    notice?.let {
+        Spacer(Modifier.height(6.dp))
+        Text(it, color = KdWarning, style = MaterialTheme.typography.labelSmall)
+    }
+    Spacer(Modifier.height(8.dp))
+    val listState = rememberLazyListState()
+    Box(modifier = Modifier.heightIn(max = 360.dp)) {
+        LazyColumn(state = listState) {
+            items(visible, key = { it.projectId }) { project ->
+                val isSelected = project.projectId in selected
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) KdSelected else Color.Transparent)
+                        .clickable { viewModel.toggleProject(project.projectId) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { viewModel.toggleProject(project.projectId) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = KdPrimary,
+                            uncheckedColor = KdTextSecondary,
+                        ),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            project.displayName,
+                            color = if (isSelected) KdPrimary else KdTextPrimary,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            project.projectId,
+                            color = KdTextSecondary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
         }
+        VerticalScrollbar(
+            adapter = rememberScrollbarAdapter(listState),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        )
     }
 }
 
 @Composable
-private fun ScanningStep(viewModel: EksDiscoveryViewModel) {
+private fun ProjectSearchField(value: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        placeholder = { Text("Filter projects by id or name…", style = MaterialTheme.typography.bodySmall) },
+        leadingIcon = {
+            Icon(
+                painterResource(Res.drawable.search_filled),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = KdTextSecondary,
+            )
+        },
+        textStyle = MaterialTheme.typography.bodySmall,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = KdPrimary,
+            unfocusedBorderColor = KdBorder,
+            focusedTextColor = KdTextPrimary,
+            unfocusedTextColor = KdTextPrimary,
+        ),
+    )
+}
+
+@Composable
+private fun ScanningStep(viewModel: GkeDiscoveryViewModel) {
     val rows by viewModel.scanRows.collectAsState()
-    val grouped = rows.groupBy { it.profile }
-    val showHeaders = grouped.size > 1
-    val profileOrder = grouped.keys.sorted()
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Text(
-            if (showHeaders) {
-                "Scanning ${rows.size} region${if (rows.size != 1) "s" else ""} across ${grouped.size} profiles…"
-            } else {
-                "Scanning ${rows.size} region${if (rows.size != 1) "s" else ""}…"
-            },
+            "Scanning ${rows.size} project${if (rows.size != 1) "s" else ""}…",
             color = KdTextSecondary,
             style = MaterialTheme.typography.labelSmall,
         )
@@ -485,13 +511,7 @@ private fun ScanningStep(viewModel: EksDiscoveryViewModel) {
         val listState = rememberLazyListState()
         Box(modifier = Modifier.heightIn(max = 360.dp)) {
             LazyColumn(state = listState) {
-                profileOrder.forEach { profile ->
-                    val profileRows = grouped.getValue(profile)
-                    if (showHeaders) {
-                        item(key = "header/$profile") { ProfileSectionHeader(profile, profileRows.size, "region") }
-                    }
-                    items(profileRows, key = { "${it.profile}/${it.region}" }) { row -> ScanRow(row) }
-                }
+                items(rows, key = { it.projectId }) { row -> ScanRow(row) }
             }
             VerticalScrollbar(
                 adapter = rememberScrollbarAdapter(listState),
@@ -502,30 +522,7 @@ private fun ScanningStep(viewModel: EksDiscoveryViewModel) {
 }
 
 @Composable
-private fun ProfileSectionHeader(profile: String, count: Int, unit: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            profile,
-            color = KdTextPrimary,
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.labelMedium,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            "$count $unit${if (count != 1) "s" else ""}",
-            color = KdTextSecondary,
-            style = MaterialTheme.typography.labelSmall,
-        )
-    }
-}
-
-@Composable
-private fun ScanRow(row: RegionScanRow) {
+private fun ScanRow(row: ProjectScanRow) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -534,27 +531,27 @@ private fun ScanRow(row: RegionScanRow) {
     ) {
         Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
             when (val s = row.state) {
-                RegionScanState.Pending -> Icon(
+                ProjectScanState.Pending -> Icon(
                     painterResource(Res.drawable.hourglass_empty_filled),
                     null,
                     tint = KdTextSecondary,
                     modifier = Modifier.size(14.dp),
                 )
 
-                RegionScanState.Scanning -> CircularProgressIndicator(
+                ProjectScanState.Scanning -> CircularProgressIndicator(
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
                 )
 
-                is RegionScanState.Done -> Icon(
+                is ProjectScanState.Done -> Icon(
                     painterResource(Res.drawable.check_circle_filled),
                     null,
                     tint = if (s.clusters.isEmpty()) KdTextSecondary else KdSuccess,
                     modifier = Modifier.size(14.dp),
                 )
 
-                is RegionScanState.Failed -> Icon(
+                is ProjectScanState.Failed -> Icon(
                     painterResource(Res.drawable.error),
                     null,
                     tint = KdError,
@@ -563,19 +560,25 @@ private fun ScanRow(row: RegionScanRow) {
             }
         }
         Spacer(Modifier.width(10.dp))
-        Text(row.region, color = KdTextPrimary, modifier = Modifier.width(140.dp))
+        Text(
+            row.projectId,
+            color = KdTextPrimary,
+            modifier = Modifier.width(200.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         when (val s = row.state) {
-            RegionScanState.Pending -> Text("waiting", color = KdTextSecondary, style = MaterialTheme.typography.labelSmall)
+            ProjectScanState.Pending -> Text("waiting", color = KdTextSecondary, style = MaterialTheme.typography.labelSmall)
 
-            RegionScanState.Scanning -> Text("scanning…", color = KdTextSecondary, style = MaterialTheme.typography.labelSmall)
+            ProjectScanState.Scanning -> Text("scanning…", color = KdTextSecondary, style = MaterialTheme.typography.labelSmall)
 
-            is RegionScanState.Done -> Text(
+            is ProjectScanState.Done -> Text(
                 if (s.clusters.isEmpty()) "no clusters" else "${s.clusters.size} cluster${if (s.clusters.size != 1) "s" else ""}",
                 color = KdTextSecondary,
                 style = MaterialTheme.typography.labelSmall,
             )
 
-            is RegionScanState.Failed -> Text(
+            is ProjectScanState.Failed -> Text(
                 s.message,
                 color = KdError,
                 style = MaterialTheme.typography.labelSmall,
@@ -588,18 +591,25 @@ private fun ScanRow(row: RegionScanRow) {
 }
 
 @Composable
-private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
+private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
     val candidates by viewModel.candidates.collectAsState()
     val selectedCount = candidates.count { it.selected }
-    val grouped = candidates.groupBy { it.cluster.profile }
-    val showHeaders = grouped.size > 1
-    val profileOrder = grouped.keys.sorted()
+
+    // D7: the gke-gcloud-auth-plugin check is advisory, not blocking. Surface it here
+    // because the diagnostics modal is unreachable once the user already has contexts.
+    val authPluginMissing = remember { !viewModel.authPluginAvailable }
+
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+        if (authPluginMissing) {
+            AuthPluginWarningBanner()
+            Spacer(Modifier.height(12.dp))
+        }
+
         if (candidates.isEmpty()) {
-            Text("No EKS clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
+            Text("No GKE clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Try widening the region scope, or pick different AWS profiles.",
+                "Try selecting different GCP projects.",
                 color = KdTextSecondary,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -635,17 +645,11 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
             val listState = rememberLazyListState()
             Box(modifier = Modifier.heightIn(max = 360.dp)) {
                 LazyColumn(state = listState) {
-                    profileOrder.forEach { profile ->
-                        val profileItems = grouped.getValue(profile)
-                        if (showHeaders) {
-                            item(key = "header/$profile") { ProfileSectionHeader(profile, profileItems.size, "cluster") }
-                        }
-                        items(
-                            profileItems,
-                            key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
-                        ) { candidate ->
-                            CandidateRow(candidate, viewModel)
-                        }
+                    items(
+                        candidates,
+                        key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
+                    ) { candidate ->
+                        CandidateRow(candidate, viewModel)
                     }
                 }
                 VerticalScrollbar(
@@ -658,7 +662,28 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
 }
 
 @Composable
-private fun CandidateRow(candidate: ClusterCandidate, viewModel: EksDiscoveryViewModel) {
+private fun AuthPluginWarningBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(KdWarning.copy(alpha = 0.12f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(Res.drawable.warning_filled), null, tint = KdWarning, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "GKE auth plugin not found — imported clusters will fail to connect. " +
+                "Install with: gcloud components install gke-gcloud-auth-plugin",
+            color = KdTextPrimary,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+@Composable
+private fun CandidateRow(candidate: GkeClusterCandidate, viewModel: GkeDiscoveryViewModel) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -681,10 +706,10 @@ private fun CandidateRow(candidate: ClusterCandidate, viewModel: EksDiscoveryVie
             modifier = Modifier
                 .size(28.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(EksOrange),
+                .background(GkeBlue),
             contentAlignment = Alignment.Center,
         ) {
-            Text("EKS", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text("GKE", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -695,10 +720,21 @@ private fun CandidateRow(candidate: ClusterCandidate, viewModel: EksDiscoveryVie
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // GKE clusters can be PROVISIONING, RECONCILING, STOPPING, ERROR or DEGRADED —
+            // surface a non-RUNNING status so the user isn't offered an unhealthy cluster as
+            // if it were healthy, without filtering or disabling the row.
+            val status = candidate.cluster.status
+            val subtitle = if (status != null && status != "RUNNING") {
+                "${candidate.cluster.projectId} · ${candidate.cluster.location} · $status"
+            } else {
+                "${candidate.cluster.projectId} · ${candidate.cluster.location}"
+            }
             Text(
-                candidate.cluster.region,
+                subtitle,
                 color = KdTextSecondary,
                 style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (candidate.alreadyImported) {
@@ -713,7 +749,7 @@ private fun CandidateRow(candidate: ClusterCandidate, viewModel: EksDiscoveryVie
 }
 
 @Composable
-private fun ImportingStep(viewModel: EksDiscoveryViewModel) {
+private fun ImportingStep(viewModel: GkeDiscoveryViewModel) {
     val rows by viewModel.importRows.collectAsState()
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         Text(
@@ -727,7 +763,7 @@ private fun ImportingStep(viewModel: EksDiscoveryViewModel) {
             LazyColumn(state = listState) {
                 items(
                     rows,
-                    key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
+                    key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
             VerticalScrollbar(
@@ -739,7 +775,7 @@ private fun ImportingStep(viewModel: EksDiscoveryViewModel) {
 }
 
 @Composable
-private fun ImportRowView(row: ImportRow) {
+private fun ImportRowView(row: GkeImportRow) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -748,34 +784,34 @@ private fun ImportRowView(row: ImportRow) {
     ) {
         Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
             when (row.state) {
-                ImportRowState.Pending -> Icon(
+                GkeImportRowState.Pending -> Icon(
                     painterResource(Res.drawable.hourglass_empty_filled),
                     null,
                     tint = KdTextSecondary,
                     modifier = Modifier.size(14.dp),
                 )
 
-                ImportRowState.Importing -> CircularProgressIndicator(
+                GkeImportRowState.Importing -> CircularProgressIndicator(
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
                 )
 
-                ImportRowState.Cancelled -> Icon(
+                GkeImportRowState.Cancelled -> Icon(
                     painterResource(Res.drawable.close_filled),
                     null,
                     tint = KdTextSecondary,
                     modifier = Modifier.size(14.dp),
                 )
 
-                is ImportRowState.Done -> Icon(
+                is GkeImportRowState.Done -> Icon(
                     painterResource(Res.drawable.check_circle_filled),
                     null,
                     tint = KdSuccess,
                     modifier = Modifier.size(14.dp),
                 )
 
-                is ImportRowState.Failed -> Icon(
+                is GkeImportRowState.Failed -> Icon(
                     painterResource(Res.drawable.error),
                     null,
                     tint = KdError,
@@ -786,14 +822,14 @@ private fun ImportRowView(row: ImportRow) {
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "${row.cluster.profile} · ${row.cluster.name} · ${row.cluster.region}",
+                "${row.cluster.projectId} · ${row.cluster.name} · ${row.cluster.location}",
                 color = KdTextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             when (val s = row.state) {
-                is ImportRowState.Failed -> Text(
+                is GkeImportRowState.Failed -> Text(
                     s.message,
                     color = KdError,
                     style = MaterialTheme.typography.labelSmall,
@@ -801,13 +837,13 @@ private fun ImportRowView(row: ImportRow) {
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                is ImportRowState.Done -> Text(
+                is GkeImportRowState.Done -> Text(
                     "imported",
                     color = KdSuccess,
                     style = MaterialTheme.typography.labelSmall,
                 )
 
-                ImportRowState.Cancelled -> Text(
+                GkeImportRowState.Cancelled -> Text(
                     "cancelled",
                     color = KdTextSecondary,
                     style = MaterialTheme.typography.labelSmall,
@@ -820,11 +856,12 @@ private fun ImportRowView(row: ImportRow) {
 }
 
 @Composable
-private fun DoneStep(viewModel: EksDiscoveryViewModel, @Suppress("UNUSED_PARAMETER") onCompleted: () -> Unit) {
+private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMETER") onCompleted: () -> Unit) {
     val rows by viewModel.importRows.collectAsState()
-    val ok = rows.count { it.state is ImportRowState.Done }
-    val failed = rows.count { it.state is ImportRowState.Failed }
-    val cancelled = rows.count { it.state is ImportRowState.Cancelled }
+    val backupPath by viewModel.backupPath.collectAsState()
+    val ok = rows.count { it.state is GkeImportRowState.Done }
+    val failed = rows.count { it.state is GkeImportRowState.Failed }
+    val cancelled = rows.count { it.state is GkeImportRowState.Cancelled }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -845,13 +882,21 @@ private fun DoneStep(viewModel: EksDiscoveryViewModel, @Suppress("UNUSED_PARAMET
                 fontWeight = FontWeight.Medium,
             )
         }
+        backupPath?.let { path ->
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Your previous kubeconfig was backed up to $path",
+                color = KdTextSecondary,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         val listState = rememberLazyListState()
         Box(modifier = Modifier.heightIn(max = 280.dp)) {
             LazyColumn(state = listState) {
                 items(
                     rows,
-                    key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
+                    key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
             VerticalScrollbar(
@@ -878,14 +923,15 @@ private fun summaryLine(ok: Int, failed: Int, cancelled: Int): String = when {
 
 @Composable
 private fun Footer(
-    viewModel: EksDiscoveryViewModel,
-    step: EksDiscoveryStep,
+    viewModel: GkeDiscoveryViewModel,
+    step: GkeDiscoveryStep,
     busy: Boolean,
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
     hideOpenClustersButton: Boolean,
 ) {
-    val selectedProfiles by viewModel.selectedProfiles.collectAsState()
+    val selectedProjects by viewModel.selectedProjects.collectAsState()
+    val exceedsCap by viewModel.projectSelectionExceedsCap.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
     val cancelRequested by viewModel.cancelRequested.collectAsState()
 
@@ -895,16 +941,11 @@ private fun Footer(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (step == EksDiscoveryStep.PICK_REGIONS || step == EksDiscoveryStep.PICK_CLUSTERS) {
+        if (step == GkeDiscoveryStep.PICK_CLUSTERS) {
             OutlinedButton(
                 onClick = {
                     viewModel.cancel()
-                    viewModel.goToStep(
-                        when (step) {
-                            EksDiscoveryStep.PICK_REGIONS -> EksDiscoveryStep.PICK_PROFILE
-                            EksDiscoveryStep.PICK_CLUSTERS -> EksDiscoveryStep.PICK_REGIONS
-                        },
-                    )
+                    viewModel.goToStep(GkeDiscoveryStep.PICK_PROJECTS)
                 },
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, KdBorder),
@@ -918,12 +959,12 @@ private fun Footer(
                 when {
                     // IMPORTING: request a graceful stop and STAY OPEN — the wizard
                     // proceeds to DONE showing what was imported before the stop.
-                    step == EksDiscoveryStep.IMPORTING -> viewModel.requestCancelImport()
+                    step == GkeDiscoveryStep.IMPORTING -> viewModel.requestCancelImport()
 
                     // Don't reset state on DONE: onDismiss is closeOrComplete, which reads
                     // `anyImportSucceeded` to decide whether to fire onCompleted
                     // (refreshes the parent's context list). cancel() would clear it.
-                    step == EksDiscoveryStep.DONE -> onDismiss()
+                    step == GkeDiscoveryStep.DONE -> onDismiss()
 
                     else -> {
                         viewModel.cancel()
@@ -933,15 +974,15 @@ private fun Footer(
             },
             shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, KdBorder),
-            enabled = if (step == EksDiscoveryStep.IMPORTING) {
+            enabled = if (step == GkeDiscoveryStep.IMPORTING) {
                 !cancelRequested
             } else {
-                !busy || step == EksDiscoveryStep.SCANNING || step == EksDiscoveryStep.DONE
+                !busy || step == GkeDiscoveryStep.SCANNING || step == GkeDiscoveryStep.DONE
             },
         ) {
             val label = when {
-                step == EksDiscoveryStep.DONE -> "Close"
-                step == EksDiscoveryStep.IMPORTING && cancelRequested -> "Stopping…"
+                step == GkeDiscoveryStep.DONE -> "Close"
+                step == GkeDiscoveryStep.IMPORTING && cancelRequested -> "Stopping…"
                 else -> "Cancel"
             }
             Text(label, color = KdTextPrimary)
@@ -949,20 +990,14 @@ private fun Footer(
         Spacer(Modifier.width(8.dp))
 
         when (step) {
-            EksDiscoveryStep.PICK_PROFILE -> Button(
-                onClick = { viewModel.proceedFromProfile() },
-                enabled = selectedProfiles.isNotEmpty(),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-            ) { Text("Next", color = Color.White) }
-
-            EksDiscoveryStep.PICK_REGIONS -> Button(
-                onClick = { viewModel.startDiscovery() },
+            GkeDiscoveryStep.PICK_PROJECTS -> Button(
+                onClick = { viewModel.startScan() },
+                enabled = selectedProjects.isNotEmpty() && !exceedsCap,
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) { Text("Scan", color = Color.White) }
 
-            EksDiscoveryStep.SCANNING -> Button(
+            GkeDiscoveryStep.SCANNING -> Button(
                 onClick = {},
                 enabled = false,
                 shape = RoundedCornerShape(8.dp),
@@ -973,7 +1008,7 @@ private fun Footer(
                 Text("Scanning…", color = Color.White)
             }
 
-            EksDiscoveryStep.PICK_CLUSTERS -> {
+            GkeDiscoveryStep.PICK_CLUSTERS -> {
                 val selected = candidates.count { it.selected }
                 Button(
                     onClick = { viewModel.startImport() },
@@ -983,7 +1018,7 @@ private fun Footer(
                 ) { Text(if (selected == 0) "Import" else "Import $selected", color = Color.White) }
             }
 
-            EksDiscoveryStep.IMPORTING -> Button(
+            GkeDiscoveryStep.IMPORTING -> Button(
                 onClick = {},
                 enabled = false,
                 shape = RoundedCornerShape(8.dp),
@@ -994,7 +1029,7 @@ private fun Footer(
                 Text("Importing…", color = Color.White)
             }
 
-            EksDiscoveryStep.DONE -> if (!hideOpenClustersButton) {
+            GkeDiscoveryStep.DONE -> if (!hideOpenClustersButton) {
                 Button(
                     onClick = {
                         val anySuccess = viewModel.anyImportSucceeded

@@ -64,6 +64,7 @@ import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
+import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
 import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
@@ -96,6 +97,7 @@ fun App(
         val activeTabKey by workspace.activeTabKey.collectAsState()
         val showClusterSelector by workspace.showClusterSelector.collectAsState()
         val showEksDiscovery by workspace.showEksDiscovery.collectAsState()
+        val showGkeDiscovery by workspace.showGkeDiscovery.collectAsState()
         val dragTarget by WorkspaceManager.dragTarget.collectAsState()
         val isDropTarget = dragTarget == workspace.id
         val density = LocalDensity.current
@@ -144,6 +146,7 @@ fun App(
         val activeSession = (activeTab as? WorkspaceTab.Cluster)?.session
         val hasRealContexts by appViewModel.hasRealContexts.collectAsState()
         val awsCliAvailable = remember { ShellEnvironment.resolveCommand("aws") != null }
+        val gcloudCliAvailable = remember { ShellEnvironment.resolveCommand("gcloud") != null }
 
         // The title bar powers the cluster chip + connection state for the
         // active cluster tab; fall back to the first cluster tab when a
@@ -329,7 +332,7 @@ fun App(
                 // post-import refresh keeps the splash up (via bootstrapComplete
                 // flipping) until the cluster selector pops — no FirstRunScreen
                 // flash in between.
-                if (showFirstRun && showEksDiscovery) {
+                if (showFirstRun && (showEksDiscovery || showGkeDiscovery)) {
                     BootstrapSplash()
                 } else if (showFirstRun) {
                     FirstRunScreen(
@@ -351,6 +354,11 @@ fun App(
                         onRescan = { appViewModel.refreshContexts() },
                         onDiscoverEks = if (awsCliAvailable) {
                             { workspace.showEksDiscovery() }
+                        } else {
+                            null
+                        },
+                        onDiscoverGke = if (gcloudCliAvailable) {
+                            { workspace.showGkeDiscovery() }
                         } else {
                             null
                         },
@@ -550,6 +558,7 @@ fun App(
                         onQuit = onClose,
                         onIgnore = { appViewModel.dismissPrerequisites() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
+                        onDiscoverGke = { workspace.showGkeDiscovery() },
                     )
                 } else if (showClusterSelector) {
                     val clusterSelectorDefault by workspace.clusterSelectorDefaultTarget.collectAsState()
@@ -564,6 +573,7 @@ fun App(
                         },
                         onDismiss = { workspace.dismissClusterSelector() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
+                        onDiscoverGke = { workspace.showGkeDiscovery() },
                         dismissable = selectedContext.isNotBlank(),
                     )
                 }
@@ -579,12 +589,27 @@ fun App(
                     )
                 }
 
+                if (showGkeDiscovery) {
+                    GkeDiscoveryModal(
+                        onDismiss = { workspace.dismissGkeDiscovery() },
+                        onCompleted = {
+                            workspace.dismissGkeDiscovery()
+                            appViewModel.onEksImportComplete()
+                        },
+                        launchedFromClusterSelector = showClusterSelector,
+                    )
+                }
+
                 if (settingsOpen) {
                     SettingsDialog(
                         onDismiss = { workspace.dismissSettings() },
                         onDiscoverEks = {
                             workspace.dismissSettings()
                             workspace.showEksDiscovery()
+                        },
+                        onDiscoverGke = {
+                            workspace.dismissSettings()
+                            workspace.showGkeDiscovery()
                         },
                         onShowAppLogs = {
                             workspace.dismissSettings()

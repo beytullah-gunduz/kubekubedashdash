@@ -136,10 +136,25 @@ object ShellEnvironment {
         addPathDirs(seen, "/usr/local/sbin")
         addPathDirs(seen, "/usr/local/aws-cli")
         addPathDirs(seen, "/opt/local/bin")
+
+        // Google Cloud SDK keeps its own bin directory, and `gcloud components install`
+        // drops new binaries (notably gke-gcloud-auth-plugin) there WITHOUT linking them
+        // into a directory that is normally on PATH — Homebrew only symlinks the formula's
+        // declared binaries (gcloud/gsutil/bq) at install time. Without these entries the
+        // plugin looks "not installed" even though it is present and working; gcloud itself
+        // works around the same problem by writing the absolute SDK path into the kubeconfig
+        // exec block (api_lib/container/kubeconfig.py, "Provide SDK Full path if command is
+        // not in PATH … Eg: brew").
+        addPathDirs(seen, "/opt/homebrew/share/google-cloud-sdk/bin")
+        addPathDirs(seen, "/usr/local/share/google-cloud-sdk/bin")
+        addPathDirs(seen, "/opt/google-cloud-sdk/bin")
+        addPathDirs(seen, "/usr/lib/google-cloud-sdk/bin")
+
         val home = System.getProperty("user.home").orEmpty()
         if (home.isNotBlank()) {
             addPathDirs(seen, "$home/.local/bin")
             addPathDirs(seen, "$home/bin")
+            addPathDirs(seen, "$home/google-cloud-sdk/bin")
         }
 
         val joined = seen.joinToString(sep)

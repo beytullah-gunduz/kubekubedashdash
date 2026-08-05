@@ -35,6 +35,7 @@ kotlin {
             dependencies {
                 implementation(libs.ktor.server.test.host)
                 implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 

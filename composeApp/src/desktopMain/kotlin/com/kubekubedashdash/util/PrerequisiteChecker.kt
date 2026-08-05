@@ -82,6 +82,13 @@ object PrerequisiteChecker {
                     "Google Cloud SDK",
                     "Required for GKE cluster authentication",
                 )
+                checks += checkCommand(
+                    "gke-gcloud-auth-plugin",
+                    "GKE auth plugin",
+                    "Required for GKE cluster authentication (gcloud components install gke-gcloud-auth-plugin)",
+                    required = false,
+                    missingStatus = CheckStatus.WARN,
+                )
             }
 
             val needsAz = contexts.any { it.contains("aks") || it.contains("azure") || it.contains("azmk8s") }
@@ -176,6 +183,8 @@ object PrerequisiteChecker {
         description: String,
         fallbackCommand: String? = null,
         fallbackName: String? = null,
+        required: Boolean = true,
+        missingStatus: CheckStatus = CheckStatus.FAILED,
     ): PrerequisiteCheck {
         val found = isCommandAvailable(command)
         if (found) {
@@ -185,6 +194,7 @@ object PrerequisiteChecker {
                 description = description,
                 status = CheckStatus.PASSED,
                 detail = resolveCommandPath(command),
+                required = required,
             )
         }
         if (fallbackCommand != null && isCommandAvailable(fallbackCommand)) {
@@ -194,6 +204,7 @@ object PrerequisiteChecker {
                 description = description,
                 status = CheckStatus.PASSED,
                 detail = resolveCommandPath(fallbackCommand),
+                required = required,
             )
         }
         val hint = if (fallbackCommand != null) "$command or $fallbackCommand" else command
@@ -201,8 +212,9 @@ object PrerequisiteChecker {
         return PrerequisiteCheck(
             name = displayName,
             description = description,
-            status = CheckStatus.FAILED,
+            status = missingStatus,
             detail = "'$hint' not found on PATH",
+            required = required,
         )
     }
 

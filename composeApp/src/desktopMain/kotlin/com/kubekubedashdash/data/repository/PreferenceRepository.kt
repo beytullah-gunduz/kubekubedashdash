@@ -39,6 +39,7 @@ object PreferenceRepository {
     private val MCP_LOCALHOST_ONLY by lazy { booleanPreferencesKey("mcp_localhost_only") }
     private val MCP_REQUIRE_AUTH by lazy { booleanPreferencesKey("mcp_require_auth") }
     private val LAST_AWS_PROFILES by lazy { stringPreferencesKey("last_aws_profiles") }
+    private val LAST_GCP_PROJECTS by lazy { stringPreferencesKey("last_gcp_projects") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
     private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
     private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
@@ -72,6 +73,9 @@ object PreferenceRepository {
 
     private val _lastAwsProfiles = MutableStateFlow<List<String>>(emptyList())
     val lastAwsProfiles: StateFlow<List<String>> = _lastAwsProfiles.asStateFlow()
+
+    private val _lastGcpProjects = MutableStateFlow<List<String>>(emptyList())
+    val lastGcpProjects: StateFlow<List<String>> = _lastGcpProjects.asStateFlow()
 
     private val _closeTabFocus = MutableStateFlow(CloseTabFocus.LEFT_NEIGHBOR)
     val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
@@ -124,6 +128,9 @@ object PreferenceRepository {
                 _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
                 _mcpRequireAuth.value = p[MCP_REQUIRE_AUTH] ?: true
                 _lastAwsProfiles.value = p[LAST_AWS_PROFILES]
+                    ?.split(",")?.filter { it.isNotBlank() }
+                    ?: emptyList()
+                _lastGcpProjects.value = p[LAST_GCP_PROJECTS]
                     ?.split(",")?.filter { it.isNotBlank() }
                     ?: emptyList()
                 _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
@@ -181,6 +188,16 @@ object PreferenceRepository {
         ioScope.launch {
             dataStore.edit {
                 if (cleaned.isEmpty()) it.remove(LAST_AWS_PROFILES) else it[LAST_AWS_PROFILES] = cleaned.joinToString(",")
+            }
+        }
+    }
+
+    fun setLastGcpProjects(value: List<String>) {
+        val cleaned = value.filter { it.isNotBlank() }.distinct()
+        _lastGcpProjects.value = cleaned
+        ioScope.launch {
+            dataStore.edit {
+                if (cleaned.isEmpty()) it.remove(LAST_GCP_PROJECTS) else it[LAST_GCP_PROJECTS] = cleaned.joinToString(",")
             }
         }
     }

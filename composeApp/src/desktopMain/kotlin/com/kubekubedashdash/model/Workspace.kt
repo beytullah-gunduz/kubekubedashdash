@@ -100,6 +100,9 @@ class Workspace(
     private val _showEksDiscovery = MutableStateFlow(false)
     val showEksDiscovery: StateFlow<Boolean> = _showEksDiscovery.asStateFlow()
 
+    private val _showGkeDiscovery = MutableStateFlow(false)
+    val showGkeDiscovery: StateFlow<Boolean> = _showGkeDiscovery.asStateFlow()
+
     private val _showSettings = MutableStateFlow(false)
     val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
 
@@ -281,6 +284,14 @@ class Workspace(
 
     fun dismissEksDiscovery() {
         _showEksDiscovery.value = false
+    }
+
+    fun showGkeDiscovery() {
+        _showGkeDiscovery.value = true
+    }
+
+    fun dismissGkeDiscovery() {
+        _showGkeDiscovery.value = false
     }
 
     fun showSettings() {
