@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -70,7 +73,7 @@ private sealed interface JobLogsDialogState {
  * dialog shape.
  */
 @Composable
-fun JobLogsDialog(
+internal fun JobLogsDialog(
     job: GenericResourceInfo,
     client: ReactiveKubeClient,
     onOpenLogs: (String, String, String?) -> Unit,
@@ -83,7 +86,14 @@ fun JobLogsDialog(
     var showLoading by remember(job.uid) { mutableStateOf(false) }
 
     LaunchedEffect(job.uid) {
-        val result = client.listJobPods(job.namespace ?: "", job.uid)
+        // Never fall back to "": fabric8 treats an empty namespace as
+        // cluster-wide and would list every pod in the cluster.
+        val namespace = job.namespace
+        if (namespace == null) {
+            state = JobLogsDialogState.Error("Job has no namespace")
+            return@LaunchedEffect
+        }
+        val result = client.listJobPods(namespace, job.uid)
         state = result.fold(
             onSuccess = { pods -> JobLogsDialogState.Resolved(resolveJobLogTarget(pods)) },
             onFailure = { e -> JobLogsDialogState.Error(e.message ?: "Failed to list pods") },
@@ -225,30 +235,37 @@ private fun PickPodDialog(
     onDismiss: () -> Unit,
 ) {
     JobLogsAlertDialog(job = job, onDismiss = onDismiss, dismissLabel = "Cancel") {
-        pods.forEach { pod ->
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                OutlinedButton(
-                    onClick = { onPick(pod) },
-                    modifier = Modifier.fillMaxWidth(),
+        // The AlertDialog text slot does not scroll; a retried or parallel job
+        // can have an unbounded pod count, so the list must scroll itself.
+        Column(
+            modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            pods.forEach { pod ->
+                Surface(
                     shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    OutlinedButton(
+                        onClick = { onPick(pod) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(6.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(pod.name, style = MaterialTheme.typography.bodyMedium, color = KdTextPrimary)
-                            Text(
-                                pod.status,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = statusColor(pod.status),
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(pod.name, style = MaterialTheme.typography.bodyMedium, color = KdTextPrimary)
+                                Text(
+                                    pod.status,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = statusColor(pod.status),
+                                )
+                            }
+                            Text(pod.age, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                         }
-                        Text(pod.age, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                     }
                 }
             }
@@ -264,23 +281,30 @@ private fun PickContainerDialog(
     onDismiss: () -> Unit,
 ) {
     JobLogsAlertDialog(job = job, onDismiss = onDismiss, dismissLabel = "Cancel") {
-        pod.containers.forEach { container ->
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                OutlinedButton(
-                    onClick = { onPick(container.name) },
-                    modifier = Modifier.fillMaxWidth(),
+        // Same scroll guard as PickPodDialog: sidecar-heavy pods can overflow
+        // the non-scrolling AlertDialog text slot.
+        Column(
+            modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            pod.containers.forEach { container ->
+                Surface(
                     shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        container.name,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = KdTextPrimary,
-                    )
+                    OutlinedButton(
+                        onClick = { onPick(container.name) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(6.dp),
+                    ) {
+                        Text(
+                            container.name,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextPrimary,
+                        )
+                    }
                 }
             }
         }
