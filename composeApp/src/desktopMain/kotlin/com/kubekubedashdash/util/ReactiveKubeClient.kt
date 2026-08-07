@@ -47,7 +47,9 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -80,6 +82,18 @@ class ReactiveKubeClient(
 ) : Closeable {
 
     private val log = LoggerFactory.getLogger(ReactiveKubeClient::class.java)
+
+    // Log readers block for the lifetime of the stream. Keeping them on the shared
+    // Dispatchers.IO (capped at max(64, cores)) lets a namespace tail starve the
+    // app's own informers. A limitedParallelism view of Dispatchers.IO delegates to
+    // the UNLIMITED scheduler, so its threads are granted in addition to that cap.
+    //
+    // Budget: this view is per-client, i.e. per ClusterSession, and is shared with
+    // the single-pod log tabs, which also route through streamLivePodLogs. 64 = the
+    // tail's 40-stream cap plus 24 for single-pod tabs and headroom. Oversubscribing
+    // is silent (a reader simply never runs), which is why the tail is limited to
+    // one tab per session.
+    private val logStreamDispatcher = Dispatchers.IO.limitedParallelism(64)
 
     // ── Connection management (delegated to KubeConnectionManager) ──────────────
 
@@ -1423,11 +1437,72 @@ class ReactiveKubeClient(
         "Error fetching logs: ${e.message}"
     }
 
-    suspend fun listCapturePods(namespace: String): Result<List<CapturePodSpec>> = runCatching {
-        runInterruptible(Dispatchers.IO) {
-            k8s.pods().inNamespace(namespace).list().items.map(CapturePodMapper::map)
-        }
+    suspend fun listCapturePods(namespace: String): Result<List<CapturePodSpec>> = try {
+        Result.success(
+            runInterruptible(Dispatchers.IO) {
+                k8s.pods().inNamespace(namespace).list().items.map(CapturePodMapper::map)
+            },
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        currentCoroutineContext().ensureActive()
+        Result.failure(e)
     }
+
+    /**
+     * Live pod snapshots for one fixed namespace, backed by a dedicated informer.
+     * Unlike the session's `pods` informer this is NOT tied to the selected
+     * namespace. The informer self-reconnects and relists; it is closed in a
+     * finally block. Emissions are conflated and debounced.
+     */
+    fun watchTailPods(namespace: String): Flow<List<CapturePodSpec>> = channelFlow {
+        require(namespace.isNotBlank()) { "watchTailPods requires a non-blank namespace" }
+
+        val emitSignal = Channel<Unit>(Channel.CONFLATED)
+        log.debug("Starting tail informer for namespace={}", namespace)
+        val informer = k8s.pods().inNamespace(namespace).inform(
+            object : ResourceEventHandler<Pod> {
+                override fun onAdd(obj: Pod) {
+                    log.trace("Tail informer event: ADD {} in namespace={}", obj.metadata?.name, namespace)
+                    emitSignal.trySend(Unit)
+                }
+                override fun onUpdate(oldObj: Pod, newObj: Pod) {
+                    log.trace("Tail informer event: UPDATE {} in namespace={}", newObj.metadata?.name, namespace)
+                    emitSignal.trySend(Unit)
+                }
+                override fun onDelete(obj: Pod, deletedFinalStateUnknown: Boolean) {
+                    log.trace(
+                        "Tail informer event: DELETE {} in namespace={} (finalStateUnknown={})",
+                        obj.metadata?.name,
+                        namespace,
+                        deletedFinalStateUnknown,
+                    )
+                    emitSignal.trySend(Unit)
+                }
+            },
+        )
+        try {
+            launch {
+                emitSignal.consumeAsFlow()
+                    .debounce(100)
+                    .collect {
+                        if (!informer.hasSynced()) return@collect
+                        val items = informer.store.list().map(CapturePodMapper::map)
+                        log.trace("Tail informer emitting {} items for namespace={}", items.size, namespace)
+                        send(items)
+                    }
+            }
+            while (!informer.hasSynced()) delay(50)
+            val items = informer.store.list().map(CapturePodMapper::map)
+            log.info("Tail informer synced with {} items for namespace={}", items.size, namespace)
+            send(items)
+            awaitCancellation()
+        } finally {
+            log.debug("Closing tail informer for namespace={}", namespace)
+            informer.close()
+        }
+    }.flowOn(Dispatchers.IO)
 
     /**
      * Non-follow raw log stream for disk capture. The fabric8 DSL narrows its
@@ -1490,11 +1565,12 @@ class ReactiveKubeClient(
             close()
             return@callbackFlow
         }
-        launch(Dispatchers.IO) {
+        launch(logStreamDispatcher) {
             try {
                 watch.output.bufferedReader().use { reader ->
                     for (line in reader.lineSequence()) send(line)
                 }
+                close()
             } catch (e: CancellationException) {
                 // The log pane was closed (LogStreamRegistry.close → job.cancel).
                 // This is normal teardown — don't append a fake "[stream error]"
