@@ -40,6 +40,7 @@ fun NamespacesScreen(
     pulseAnnotationsOnEntry: Boolean = false,
     onNavigate: (Screen) -> Unit,
     onCaptureLogs: (String) -> Unit = {},
+    onTailLogs: (String) -> Unit = {},
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: NamespacesScreenViewModel = viewModel { NamespacesScreenViewModel(reactiveClient) }
@@ -91,6 +92,7 @@ fun NamespacesScreen(
                     delete.clearError()
                 },
                 onCaptureLogs = { ns -> onCaptureLogs(ns.name) },
+                onTailLogs = { ns -> onTailLogs(ns.name) },
             )
         }
     }

@@ -54,6 +54,7 @@ internal fun rememberPaletteEntries(
     onActivateTab: (tabKey: String) -> Unit,
     onSelectNamespace: (String) -> Unit,
     onCaptureLogs: (String) -> Unit,
+    onTailLogs: (String) -> Unit,
 ): List<PaletteEntry> {
     val screenEntries = remember(onNavigate) {
         listOf(
@@ -195,7 +196,19 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + captureEntries
+    val tailEntries = remember(namespacesState?.value, onTailLogs) {
+        (namespacesState?.value ?: emptyList()).map { ns ->
+            PaletteEntry(
+                label = "Tail logs: $ns",
+                sublabel = "live merged stream",
+                category = "Actions",
+                icon = Res.drawable.description_filled,
+                onActivate = { onTailLogs(ns) },
+            )
+        }
+    }
+
+    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + captureEntries + tailEntries
 }
 
 private fun paletteScreen(
