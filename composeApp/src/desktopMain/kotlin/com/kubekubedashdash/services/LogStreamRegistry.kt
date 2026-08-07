@@ -3,6 +3,7 @@ package com.kubekubedashdash.services
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureTask
+import com.kubekubedashdash.services.logtail.NamespaceTailTask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,6 +80,21 @@ data class ActiveCaptureTask(
 ) : DrawerLogTab {
     override val key: String get() = "capture|$sessionId|${task.namespace}"
     override val displayLabel: String get() = "Capture · ${task.namespace}"
+}
+
+/**
+ * Drawer tab backed by a live [NamespaceTailTask]. Mirrors [ActiveCaptureTask]
+ * in shape, but the registry enforces at most one of these per [sessionId] —
+ * see [openOrFocusTailTab] — because the tail's stream cap is sized per
+ * session, not per namespace.
+ */
+data class ActiveNamespaceTail(
+    override val sessionId: String,
+    val task: NamespaceTailTask,
+    override val openedAt: Long,
+) : DrawerLogTab {
+    override val key: String get() = "tail|$sessionId|${task.namespace}"
+    override val displayLabel: String get() = "Tail · ${task.namespace}"
 }
 
 object LogStreamRegistry {
@@ -195,6 +211,60 @@ object LogStreamRegistry {
         jobs[key] = task.job
         _tabs.update {
             it + (key to ActiveCaptureTask(sessionId, task, System.currentTimeMillis()))
+        }
+        _focusedKey.value = key
+        return key
+    }
+
+    /**
+     * Opens (or focuses) the namespace tail tab for [namespace] in [session].
+     * A one-line delegation kept separate from [openOrFocusTailTab] so unit
+     * tests never construct a [ClusterSession] — its init starts real
+     * connection machinery on the session scope.
+     */
+    fun openOrFocusTail(
+        session: ClusterSession,
+        namespace: String,
+        taskFactory: () -> NamespaceTailTask,
+    ): String = openOrFocusTailTab(session.id.value, namespace, taskFactory)
+
+    /**
+     * The unit-testable seam, mirroring [openOrFocusCaptureTab]. Takes a
+     * plain session id so tests never construct a [ClusterSession].
+     * @Synchronized for the same reason [openOrFocusCaptureTab] is: the
+     * check-then-create-then-insert below must be atomic.
+     *
+     * At most ONE tail tab is kept per [sessionId]: unlike captures, the
+     * tail's stream cap ([com.kubekubedashdash.services.logtail.NamespaceTailEngine.MAX_STREAMS])
+     * is sized for a single namespace tail per session, so before inserting
+     * the new tab every other [ActiveNamespaceTail] belonging to this
+     * session is closed first — [close] cancels its job, unwinding that
+     * tail's collectors and freeing its slots before the new tail claims
+     * any.
+     */
+    @Synchronized
+    internal fun openOrFocusTailTab(
+        sessionId: String,
+        namespace: String,
+        taskFactory: () -> NamespaceTailTask,
+    ): String {
+        val key = "tail|$sessionId|$namespace"
+        val existing = _tabs.value[key] as? ActiveNamespaceTail
+        if (existing != null) {
+            if (existing.task.isRunning) {
+                _focusedKey.value = key
+                return key
+            }
+            close(key)
+        }
+        _tabs.value.values
+            .filterIsInstance<ActiveNamespaceTail>()
+            .filter { it.sessionId == sessionId && it.key != key }
+            .forEach { close(it.key) }
+        val task = taskFactory()
+        jobs[key] = task.job
+        _tabs.update {
+            it + (key to ActiveNamespaceTail(sessionId, task, System.currentTimeMillis()))
         }
         _focusedKey.value = key
         return key
