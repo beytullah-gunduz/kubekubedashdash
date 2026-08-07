@@ -29,6 +29,7 @@ internal fun GenericTable(
     selectedUid: String?,
     onClick: (GenericResourceInfo) -> Unit,
     onDelete: ((GenericResourceInfo) -> Unit)? = null,
+    extraActions: ((GenericResourceInfo) -> List<RowAction>)? = null,
 ) {
     val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
     val hasStatus = resources.any { it.status != null }
@@ -64,7 +65,8 @@ internal fun GenericTable(
             TableRow(
                 id = r.uid,
                 cells = visible.map { it.cell(r) },
-                actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(r) }) else emptyList(),
+                actions = (extraActions?.invoke(r) ?: emptyList()) +
+                    (if (onDelete != null) listOf(RowAction("Delete") { onDelete(r) }) else emptyList()),
             )
         }
 

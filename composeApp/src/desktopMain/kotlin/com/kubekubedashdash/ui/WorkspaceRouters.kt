@@ -153,7 +153,7 @@ fun ContentRouter(
 
             is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
-            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onOpenLogs = onOpenLogs)
 
             is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
@@ -252,6 +252,7 @@ private fun genericKind(
     apiVersion: String? = null,
     plural: String? = null,
     onNavigate: (Screen) -> Unit = {},
+    onOpenLogs: ((String, String, String?) -> Unit)? = null,
 ) = GenericResourceScreen(
     kind = kind,
     searchQuery = searchQuery,
@@ -266,6 +267,7 @@ private fun genericKind(
     apiGroup = apiGroup,
     apiVersion = apiVersion,
     plural = plural,
+    onOpenLogs = onOpenLogs,
     onNavigate = onNavigate,
 )
 
