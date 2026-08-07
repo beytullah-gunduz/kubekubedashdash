@@ -64,6 +64,7 @@ import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceFilterChips
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.ScaleDialog
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
@@ -158,6 +159,7 @@ fun GenericResourceScreen(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    onOpenLogs: ((String, String, String?) -> Unit)? = null,
     onNavigate: (Screen) -> Unit = {},
 ) {
     var retryKey by remember(kind) { mutableStateOf(0) }
@@ -180,6 +182,7 @@ fun GenericResourceScreen(
     val cronJobTrigger = rememberConfirmableAction()
     var pendingCronJobSuspend by remember(kind) { mutableStateOf<PendingCronJobSuspend?>(null) }
     val cronJobSuspend = rememberConfirmableAction()
+    var jobLogsTarget by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
 
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
@@ -272,6 +275,11 @@ fun GenericResourceScreen(
                                 onDelete = { res ->
                                     pendingDelete = res
                                     delete.clearError()
+                                },
+                                extraActions = if (kind.equals("Job", ignoreCase = true) && onOpenLogs != null) {
+                                    { res -> listOf(RowAction("View logs") { jobLogsTarget = res }) }
+                                } else {
+                                    null
                                 },
                             )
                         }
@@ -406,6 +414,19 @@ fun GenericResourceScreen(
                                 } else {
                                     emptyList()
                                 }
+                                val jobLogActions = if (kind.equals("Job", ignoreCase = true) && onOpenLogs != null) {
+                                    listOf(
+                                        DetailAction(
+                                            label = "View Logs",
+                                            icon = Res.drawable.article_filled,
+                                            destructive = false,
+                                            description = "Stream logs from this Job's pods — completed pods show their final output.",
+                                            onClick = { jobLogsTarget = res },
+                                        ),
+                                    )
+                                } else {
+                                    emptyList()
+                                }
                                 ResourceDetailPanel(
                                     kind = kind,
                                     name = res.name,
@@ -432,7 +453,7 @@ fun GenericResourceScreen(
                                         pendingDelete = res
                                         delete.clearError()
                                     },
-                                    actions = csrActions + scaleActions + restartActions + cronJobActions,
+                                    actions = csrActions + scaleActions + restartActions + cronJobActions + jobLogActions,
                                 )
                             }
                         }
@@ -624,5 +645,11 @@ fun GenericResourceScreen(
                 cronJobSuspend.clearError()
             },
         )
+    }
+
+    onOpenLogs?.let { openLogs ->
+        jobLogsTarget?.let { job ->
+            JobLogsDialog(job, client, openLogs, onDismiss = { jobLogsTarget = null })
+        }
     }
 }

@@ -1430,6 +1430,38 @@ class ReactiveKubeClient(
     }
 
     /**
+     * Newest-first ordering for the job-log pod picker. Kubernetes emits
+     * RFC3339 UTC at fixed width, so lexicographic descending == chronological
+     * newest-first. sortedByDescending is stable, so equal timestamps preserve
+     * API list order. Pods with no timestamp map to "" (ResourceMappers.mapPod)
+     * and sort last — intended: unknown-age pods go to the bottom.
+     */
+    internal fun sortPodsNewestFirst(pods: List<PodInfo>): List<PodInfo> = pods.sortedByDescending { it.creationTimestamp }
+
+    /**
+     * Pods created by the Job with [jobUid], newest first. Resolved by
+     * ownerReference uid — not the job-name label — so it also matches
+     * manualSelector jobs and the demo cluster's seeded pods, which carry
+     * owner refs but no job-name label.
+     */
+    suspend fun listJobPods(namespace: String, jobUid: String): Result<List<PodInfo>> = try {
+        Result.success(
+            runInterruptible(Dispatchers.IO) {
+                sortPodsNewestFirst(
+                    k8s.pods().inNamespace(namespace).list().items
+                        .filter { pod -> pod.metadata?.ownerReferences?.any { it.uid == jobUid } == true }
+                        .map(ResourceMappers::mapPod),
+                )
+            },
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log.warn("Failed to list job pods namespace={}: {}", namespace, e.message)
+        Result.failure(e)
+    }
+
+    /**
      * Non-follow raw log stream for disk capture. The fabric8 DSL narrows its
      * return type at every step, so this call order is forced:
      *   usingTimestamps() -> terminated() -> sinceSeconds() -> getLogInputStream()
