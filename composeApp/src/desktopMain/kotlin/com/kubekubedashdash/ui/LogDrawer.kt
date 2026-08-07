@@ -60,12 +60,14 @@ import com.kubekubedashdash.resources.keyboard_arrow_up_filled
 import com.kubekubedashdash.services.ActiveAppLog
 import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.ActiveLogStream
+import com.kubekubedashdash.services.ActiveNamespaceTail
 import com.kubekubedashdash.services.DrawerLogTab
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.logcapture.CapturePhase
 import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerCapturePane
 import com.kubekubedashdash.ui.components.DrawerLogPane
+import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
@@ -258,6 +260,11 @@ fun LogDrawer(
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
+                                is ActiveNamespaceTail -> DrawerNamespaceTailPane(
+                                    tab = tab,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
                                 null -> Unit
                             }
                         }
@@ -280,20 +287,27 @@ fun LogDrawer(
  * glyph is never the only signal.
  */
 @Composable
-private fun drawerTabLabel(tab: DrawerLogTab): String = if (tab is ActiveCaptureTask) {
-    val s by tab.task.state.collectAsState()
-    when (s.phase) {
-        is CapturePhase.Listing, is CapturePhase.Running ->
-            "${tab.displayLabel} (${s.completedPods}/${s.totalPods})"
+private fun drawerTabLabel(tab: DrawerLogTab): String = when (tab) {
+    is ActiveCaptureTask -> {
+        val s by tab.task.state.collectAsState()
+        when (s.phase) {
+            is CapturePhase.Listing, is CapturePhase.Running ->
+                "${tab.displayLabel} (${s.completedPods}/${s.totalPods})"
 
-        is CapturePhase.Completed -> "${tab.displayLabel} ✓"
+            is CapturePhase.Completed -> "${tab.displayLabel} ✓"
 
-        is CapturePhase.Cancelled -> "${tab.displayLabel} –"
+            is CapturePhase.Cancelled -> "${tab.displayLabel} –"
 
-        is CapturePhase.Failed -> "${tab.displayLabel} ✕"
+            is CapturePhase.Failed -> "${tab.displayLabel} ✕"
+        }
     }
-} else {
-    tab.displayLabel
+
+    is ActiveNamespaceTail -> {
+        val s by tab.task.state.collectAsState()
+        "${tab.displayLabel} (${s.attachedPods.size})"
+    }
+
+    else -> tab.displayLabel
 }
 
 @Composable

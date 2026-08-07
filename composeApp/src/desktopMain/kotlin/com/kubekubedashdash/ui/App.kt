@@ -62,6 +62,8 @@ import com.kubekubedashdash.services.TerminalSessionRegistry
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.services.logcapture.DefaultNamespaceLogCaptureGateway
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureEngine
+import com.kubekubedashdash.services.logtail.DefaultNamespaceTailGateway
+import com.kubekubedashdash.services.logtail.NamespaceTailEngine
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -261,6 +263,26 @@ fun App(
         // MutableState setter, so it needs no keys.
         val onCaptureLogs: (String) -> Unit = remember { { ns -> captureDialogNamespace = ns } }
 
+        // Unlike onCaptureLogs, this closes over activeSession (to reach its
+        // scope/reactiveClient), so it must key on it — exactly like onOpenLogs
+        // and onOpenTerminal above. A keyless remember would pin the tail to
+        // whichever cluster was active at first composition and open tails
+        // against torn-down clients after a tab switch.
+        val onTailLogs: (String) -> Unit = remember(activeSession) {
+            { ns ->
+                activeSession?.let { session ->
+                    LogStreamRegistry.openOrFocusTail(session, ns) {
+                        NamespaceTailEngine.start(
+                            session.scope,
+                            DefaultNamespaceTailGateway(session.reactiveClient),
+                            ns,
+                        )
+                    }
+                    if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
+                }
+            }
+        }
+
         // Screenshot-driver bridges. Inert in normal use: palette starts false, and
         // logRequest/hideLogsRequest start null/false with nothing in production calling
         // the new Workspace methods.
@@ -297,6 +319,7 @@ fun App(
             onActivateTab = { key -> workspace.setActive(key) },
             onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setSelectedNamespace(ns) },
             onCaptureLogs = onCaptureLogs,
+            onTailLogs = onTailLogs,
         )
 
         // Provide the title session's locals at App scope for modals and the
@@ -536,6 +559,7 @@ fun App(
                                     onOpenLogs = onOpenLogs,
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,
+                                    onTailLogs = onTailLogs,
                                 )
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()

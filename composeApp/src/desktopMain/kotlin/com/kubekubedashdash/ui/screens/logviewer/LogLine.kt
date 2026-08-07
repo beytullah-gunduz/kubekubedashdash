@@ -24,12 +24,7 @@ import com.kubekubedashdash.kdMonoFamily
 
 @Composable
 internal fun LogLine(line: String, highlight: String, wrap: Boolean) {
-    val color = when {
-        line.contains("ERROR", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> KdError
-        line.contains("WARN", ignoreCase = true) -> KdWarning
-        line.contains("DEBUG", ignoreCase = true) -> KdTextSecondary
-        else -> Color(0xFFB0BEC5)
-    }
+    val color = logSeverityColor(line)
 
     val text = remember(line, highlight) { highlightOccurrences(line, highlight) }
 
@@ -47,6 +42,20 @@ internal fun LogLine(line: String, highlight: String, wrap: Boolean) {
             .padding(vertical = 1.dp)
             .then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
     )
+}
+
+/**
+ * Severity colour for one log line, by first-match precedence
+ * ERROR/FATAL, then WARN, then DEBUG, then [default] — all case-insensitive.
+ * Extracted so callers outside the log viewer (e.g. the namespace tail pane)
+ * can keep the same severity colours while swapping the no-severity default
+ * for their own body-text colour.
+ */
+internal fun logSeverityColor(line: String, default: Color = Color(0xFFB0BEC5)): Color = when {
+    line.contains("ERROR", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> KdError
+    line.contains("WARN", ignoreCase = true) -> KdWarning
+    line.contains("DEBUG", ignoreCase = true) -> KdTextSecondary
+    else -> default
 }
 
 /**
