@@ -43,6 +43,8 @@ internal fun DeploymentTable(
     selectedUid: String? = null,
     onClick: (DeploymentInfo) -> Unit,
     onDelete: ((DeploymentInfo) -> Unit)? = null,
+    selectedUids: Set<String> = emptySet(),
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = deployColumns.filter { maxWidth >= it.minTableWidth }
@@ -61,6 +63,9 @@ internal fun DeploymentTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> deployments.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No deployments found",
+            selectable = onSelectionChange != null,
+            selectedIds = selectedUids,
+            onSelectionChange = onSelectionChange,
         )
     }
 }

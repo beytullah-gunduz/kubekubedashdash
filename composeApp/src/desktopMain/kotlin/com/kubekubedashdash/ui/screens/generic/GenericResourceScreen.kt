@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
@@ -56,6 +59,11 @@ import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.BulkActionDialog
+import com.kubekubedashdash.ui.components.BulkRunState
+import com.kubekubedashdash.ui.components.BulkSelectionBar
+import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.EmptyState
@@ -164,14 +172,30 @@ fun GenericResourceScreen(
 ) {
     var retryKey by remember(kind) { mutableStateOf(0) }
     val viewModel = viewModel(key = "$kind#$retryKey") { GenericResourceScreenViewModel(sourceFlow) }
+    // kind Namespace's single delete requires typed confirmation (below);
+    // bulk must not bypass it, so the Namespace kind gets no selection UI.
+    val bulkEnabled = !kind.equals("Namespace", ignoreCase = true)
+    // Ordering constraint (do not reorder): this reset effect must appear
+    // lexically before the LaunchedEffect(visibleUids, bulkEnabled) below —
+    // Compose runs launched effects in composition order, and a reset that
+    // lands after setVisible empties the funnel's visible set and silently
+    // disables all selection until the row set next changes.
+    LaunchedEffect(viewModel) {
+        viewModel.selection.reset()
+        viewModel.bulkRunner.clear()
+    }
     val state by viewModel.state.collectAsState()
     val selected by viewModel.selected.collectAsState()
+    val selectedUids by viewModel.selection.selected.collectAsState()
+    val bulkState by viewModel.bulkRunner.state.collectAsState()
     var panelWidthDp by remember { mutableFloatStateOf(650f) }
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
 
     val client = LocalReactiveKubeClient.current
     var pendingDelete by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
     val delete = rememberConfirmableAction()
+    var bulkVerb by remember(kind) { mutableStateOf<BulkVerb?>(null) }
+    var bulkItems by remember(kind) { mutableStateOf<List<GenericResourceInfo>>(emptyList()) }
     var pendingCsrAction by remember(kind) { mutableStateOf<CsrAction?>(null) }
     val csrAction = rememberConfirmableAction()
     var pendingScale by remember(kind) { mutableStateOf<PendingScale?>(null) }
@@ -209,6 +233,11 @@ fun GenericResourceScreen(
                         matchesMapSelector(r.annotations, annotationSelector)
                     passesSearch && passesStatus && passesLabels && passesAnnotations
                 }
+            }
+
+            val visibleUids = remember(filtered) { filtered.map { it.uid }.toSet() }
+            LaunchedEffect(visibleUids, bulkEnabled) {
+                if (bulkEnabled) viewModel.selection.setVisible(visibleUids)
             }
 
             // Screenshot-only: auto-select a named row so the detail pane (and its
@@ -261,6 +290,29 @@ fun GenericResourceScreen(
                                 )
                             },
                         )
+                        if (bulkEnabled) {
+                            // Exit-animation latch: the bar stays composed while it shrinks
+                            // away, so without holding the last non-zero count it would
+                            // flash "0 <kind> selected" on every Clear.
+                            var lastSelectedCount by remember { mutableStateOf(0) }
+                            if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
+                            AnimatedVisibility(selectedUids.isNotEmpty()) {
+                                BulkSelectionBar(
+                                    selectedCount = lastSelectedCount,
+                                    kind = pluralizeKind(kind).lowercase(),
+                                    onClear = { viewModel.selection.set(emptySet()) },
+                                ) {
+                                    TextButton(onClick = {
+                                        val snapshot = filtered.filter { it.uid in selectedUids }
+                                        if (snapshot.isNotEmpty()) {
+                                            viewModel.bulkRunner.clear()
+                                            bulkItems = snapshot
+                                            bulkVerb = BulkVerbs.Delete
+                                        }
+                                    }) { Text("Delete", color = KdError) }
+                                }
+                            }
+                        }
                         if (filtered.isEmpty()) {
                             EmptyState(
                                 icon = kindIcon(kind),
@@ -281,6 +333,8 @@ fun GenericResourceScreen(
                                 } else {
                                     null
                                 },
+                                selectedUids = selectedUids,
+                                onSelectionChange = if (bulkEnabled) viewModel.selection::set else null,
                             )
                         }
                     }
@@ -490,6 +544,43 @@ fun GenericResourceScreen(
             onDismiss = {
                 pendingDelete = null
                 delete.clearError()
+            },
+        )
+    }
+
+    bulkVerb?.let { verb ->
+        val label: (GenericResourceInfo) -> String = { r ->
+            r.namespace?.let { ns -> "$ns/${r.name}" } ?: r.name
+        }
+        BulkActionDialog(
+            verb = verb,
+            items = bulkItems,
+            itemLabel = label,
+            kindSingular = kind,
+            kindPlural = pluralizeKind(kind),
+            confirmBody = "Delete ${bulkItems.size} ${pluralizeKind(kind).lowercase()}? This cannot be undone.",
+            runState = bulkState,
+            onConfirm = {
+                viewModel.bulkRunner.start(verb, bulkItems, label) { res ->
+                    client.actions.deleteResource(
+                        kind = kind,
+                        name = res.name,
+                        namespace = res.namespace,
+                        group = apiGroup,
+                        version = apiVersion,
+                        plural = plural,
+                    )
+                }
+            },
+            onCancelRun = { viewModel.bulkRunner.cancel() },
+            onDismiss = {
+                val finished = bulkState as? BulkRunState.Finished
+                if (finished != null) {
+                    viewModel.selection.set(finished.failures.map { it.item.uid }.toSet())
+                    viewModel.bulkRunner.clear()
+                }
+                bulkVerb = null
+                bulkItems = emptyList()
             },
         )
     }
