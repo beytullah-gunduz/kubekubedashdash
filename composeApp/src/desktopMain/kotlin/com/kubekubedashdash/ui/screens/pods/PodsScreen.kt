@@ -221,21 +221,16 @@ fun PodsScreen(
                             ) {
                                 TextButton(onClick = {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                                    if (snapshot.isNotEmpty()) {
-                                        // Drop any Finished result a previous run left behind
-                                        // (the runner outlives this composition) so the dialog
-                                        // opens on the confirm phase, never a stale summary.
-                                        viewModel.bulkRunner.clear()
-                                        bulkPods = snapshot
-                                        bulkVerb = BulkVerbs.Evict
+                                    viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
+                                        bulkPods = items
+                                        bulkVerb = v
                                     }
                                 }) { Text("Evict", color = KdTextPrimary) }
                                 TextButton(onClick = {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                                    if (snapshot.isNotEmpty()) {
-                                        viewModel.bulkRunner.clear()
-                                        bulkPods = snapshot
-                                        bulkVerb = BulkVerbs.Delete
+                                    viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
+                                        bulkPods = items
+                                        bulkVerb = v
                                     }
                                 }) { Text("Delete", color = KdError) }
                             }

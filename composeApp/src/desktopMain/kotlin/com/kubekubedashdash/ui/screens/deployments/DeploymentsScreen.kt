@@ -136,18 +136,16 @@ fun DeploymentsScreen(
                 ) {
                     TextButton(onClick = {
                         val snapshot = filtered.filter { it.uid in selectedUids }
-                        if (snapshot.isNotEmpty()) {
-                            viewModel.bulkRunner.clear()
-                            bulkItems = snapshot
-                            bulkVerb = BulkVerbs.Restart
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Restart, snapshot) { v, items ->
+                            bulkItems = items
+                            bulkVerb = v
                         }
                     }) { Text("Restart", color = KdTextPrimary) }
                     TextButton(onClick = {
                         val snapshot = filtered.filter { it.uid in selectedUids }
-                        if (snapshot.isNotEmpty()) {
-                            viewModel.bulkRunner.clear()
-                            bulkItems = snapshot
-                            bulkVerb = BulkVerbs.Delete
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
+                            bulkItems = items
+                            bulkVerb = v
                         }
                     }) { Text("Delete", color = KdError) }
                 }
