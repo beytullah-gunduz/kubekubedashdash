@@ -30,6 +30,8 @@ internal fun GenericTable(
     onClick: (GenericResourceInfo) -> Unit,
     onDelete: ((GenericResourceInfo) -> Unit)? = null,
     extraActions: ((GenericResourceInfo) -> List<RowAction>)? = null,
+    selectedUids: Set<String> = emptySet(),
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
     val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
     val hasStatus = resources.any { it.status != null }
@@ -76,6 +78,9 @@ internal fun GenericTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> resources.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No resources found",
+            selectable = onSelectionChange != null,
+            selectedIds = selectedUids,
+            onSelectionChange = onSelectionChange,
         )
     }
 }

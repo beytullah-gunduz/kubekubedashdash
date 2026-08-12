@@ -47,6 +47,8 @@ internal fun NodeTable(
     // NodesScreenViewModel.staleNodes). Rendered greyed with a "Removed"
     // status so the lingering row reads as gone, not live.
     staleUids: Set<String> = emptySet(),
+    selectedUids: Set<String> = emptySet(),
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -56,6 +58,7 @@ internal fun NodeTable(
             val isStale = node.uid in staleUids
             TableRow(
                 id = node.uid,
+                selectable = !isStale,
                 cells = visible.map { col ->
                     val base = col.cell(node)
                     when {
@@ -88,6 +91,9 @@ internal fun NodeTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> nodes.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No nodes found",
+            selectable = onSelectionChange != null,
+            selectedIds = selectedUids,
+            onSelectionChange = onSelectionChange,
         )
     }
 }

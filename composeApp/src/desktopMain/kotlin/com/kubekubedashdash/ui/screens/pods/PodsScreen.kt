@@ -35,7 +35,11 @@ import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.BulkActionDialog
+import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
+import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.LiveDataDot
@@ -47,8 +51,6 @@ import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
-import com.kubekubedashdash.ui.screens.pods.viewmodel.BulkPodVerb
-import com.kubekubedashdash.ui.screens.pods.viewmodel.BulkRunState
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -77,7 +79,7 @@ fun PodsScreen(
     val resourceUsage by viewModel.resourceUsage.collectAsState()
     val stalePods by viewModel.stalePods.collectAsState()
     val statusFilter by viewModel.statusFilter.collectAsState()
-    val selectedUids by viewModel.selectedUids.collectAsState()
+    val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedPodUid by rememberSaveable { mutableStateOf<String?>(null) }
@@ -93,7 +95,7 @@ fun PodsScreen(
     var pendingDelete by remember { mutableStateOf<PodInfo?>(null) }
     val delete = rememberConfirmableAction()
     var terminalPickerPod by remember { mutableStateOf<PodInfo?>(null) }
-    var bulkVerb by remember { mutableStateOf<BulkPodVerb?>(null) }
+    var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkPods by remember { mutableStateOf<List<PodInfo>>(emptyList()) }
     var pendingEvict by remember { mutableStateOf<PodInfo?>(null) }
     val evict = rememberConfirmableAction()
@@ -150,7 +152,7 @@ fun PodsScreen(
                 val visibleSelectableUids = remember(filtered, stalePods) {
                     filtered.asSequence().map { it.uid }.filter { it !in stalePods.keys }.toSet()
                 }
-                LaunchedEffect(visibleSelectableUids) { viewModel.setVisibleSelectable(visibleSelectableUids) }
+                LaunchedEffect(visibleSelectableUids) { viewModel.selection.setVisible(visibleSelectableUids) }
 
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                     val showStats = maxWidth >= 900.dp
@@ -215,7 +217,7 @@ fun PodsScreen(
                             BulkSelectionBar(
                                 selectedCount = lastSelectedCount,
                                 kind = "pods",
-                                onClear = { viewModel.setSelectedUids(emptySet()) },
+                                onClear = { viewModel.selection.set(emptySet()) },
                             ) {
                                 TextButton(onClick = {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
@@ -225,7 +227,7 @@ fun PodsScreen(
                                         // opens on the confirm phase, never a stale summary.
                                         viewModel.bulkRunner.clear()
                                         bulkPods = snapshot
-                                        bulkVerb = BulkPodVerb.EVICT
+                                        bulkVerb = BulkVerbs.Evict
                                     }
                                 }) { Text("Evict", color = KdTextPrimary) }
                                 TextButton(onClick = {
@@ -233,7 +235,7 @@ fun PodsScreen(
                                     if (snapshot.isNotEmpty()) {
                                         viewModel.bulkRunner.clear()
                                         bulkPods = snapshot
-                                        bulkVerb = BulkPodVerb.DELETE
+                                        bulkVerb = BulkVerbs.Delete
                                     }
                                 }) { Text("Delete", color = KdError) }
                             }
@@ -263,7 +265,7 @@ fun PodsScreen(
                             onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
                             staleUids = stalePods.keys,
                             selectedUids = selectedUids,
-                            onSelectionChange = viewModel::setSelectedUids,
+                            onSelectionChange = viewModel.selection::set,
                             onEvict = { pod ->
                                 evict.clearError()
                                 pendingEvict = pod
@@ -297,24 +299,42 @@ fun PodsScreen(
     }
 
     bulkVerb?.let { verb ->
-        BulkPodActionDialog(
+        val podLabel: (PodInfo) -> String = { "${it.namespace}/${it.name}" }
+        BulkActionDialog(
             verb = verb,
-            pods = bulkPods,
+            items = bulkPods,
+            itemLabel = podLabel,
+            kindSingular = "Pod",
+            kindPlural = "Pods",
+            confirmBody = if (verb == BulkVerbs.Delete) {
+                "Delete ${bulkPods.size} pods? This cannot be undone."
+            } else {
+                "Evict ${bulkPods.size} pods? Each pod is gracefully removed and rescheduled by its " +
+                    "controller. Evictions respect PodDisruptionBudgets and may be rejected."
+            },
             runState = bulkState,
             onConfirm = {
                 // A false return means a run is already in flight; the dialog
-                // is already rendering that run's live state via bulkState, so
-                // there is nothing further to do here.
-                viewModel.startBulkAction(verb, bulkPods)
+                // is already rendering that run's live state via bulkState.
+                viewModel.bulkRunner.start(verb, bulkPods, podLabel) { pod ->
+                    when (verb) {
+                        BulkVerbs.Evict -> reactiveClient.actions.evictPod(pod.name, pod.namespace)
+
+                        BulkVerbs.Delete -> reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace)
+
+                        // Destructive verbs are named explicitly — a future verb
+                        // must fail loudly here, never fall through to delete.
+                        else -> Result.failure(IllegalStateException("Unsupported bulk verb: ${verb.actionLabel}"))
+                    }
+                }
             },
             onCancelRun = { viewModel.bulkRunner.cancel() },
             onDismiss = {
                 val finished = bulkState as? BulkRunState.Finished
                 if (finished != null) {
                     // Retry affordance: keep exactly the failed pods selected.
-                    // Safe: setSelectedUids intersects with the visible set in
-                    // the VM, so hidden pods cannot be resurrected.
-                    viewModel.setSelectedUids(finished.failures.map { it.pod.uid }.toSet())
+                    // Safe: SelectionFunnel.set intersects with the visible set.
+                    viewModel.selection.set(finished.failures.map { it.item.uid }.toSet())
                     viewModel.bulkRunner.clear()
                 }
                 bulkVerb = null

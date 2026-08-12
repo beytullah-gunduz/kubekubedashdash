@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -20,13 +22,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.BulkActionDialog
+import com.kubekubedashdash.ui.components.BulkRunState
+import com.kubekubedashdash.ui.components.BulkSelectionBar
+import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
@@ -72,10 +82,14 @@ fun NodesScreen(
     val podsLoaded by viewModel.podsLoaded.collectAsState()
     val podsHistory by viewModel.podsHistory.collectAsState()
     val staleNodes by viewModel.staleNodes.collectAsState()
+    val selectedUids by viewModel.selection.selected.collectAsState()
+    val bulkState by viewModel.bulkRunner.state.collectAsState()
     val statusFilter by viewModel.statusFilter.collectAsState()
     val pressureOnly by viewModel.pressureOnly.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
     var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
+    var bulkItems by remember { mutableStateOf<List<NodeInfo>>(emptyList()) }
     LaunchedEffect(initialStatusFilter, initialPressureOnly) {
         if (initialStatusFilter != null) viewModel.setStatusFilter(initialStatusFilter)
         if (initialPressureOnly) viewModel.setPressureOnly(true)
@@ -133,6 +147,10 @@ fun NodesScreen(
                     passesSearch && passesStatus && passesLabels && passesAnnotations && passesPressure
                 }
             }
+            val visibleSelectableUids = remember(filtered, staleNodes) {
+                filtered.asSequence().map { it.uid }.filter { it !in staleNodes.keys }.toSet()
+            }
+            LaunchedEffect(visibleSelectableUids) { viewModel.selection.setVisible(visibleSelectableUids) }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val showStats = maxWidth >= 900.dp
@@ -194,6 +212,43 @@ fun NodesScreen(
                             )
                         },
                     )
+                    // Exit-animation latch: the bar stays composed while it shrinks
+                    // away, so without holding the last non-zero count it would
+                    // flash "0 nodes selected" on every Clear.
+                    var lastSelectedCount by remember { mutableStateOf(0) }
+                    if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
+                    AnimatedVisibility(selectedUids.isNotEmpty()) {
+                        BulkSelectionBar(
+                            selectedCount = lastSelectedCount,
+                            kind = "nodes",
+                            onClear = { viewModel.selection.set(emptySet()) },
+                        ) {
+                            TextButton(onClick = {
+                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                                if (snapshot.isNotEmpty()) {
+                                    viewModel.bulkRunner.clear()
+                                    bulkItems = snapshot
+                                    bulkVerb = BulkVerbs.Cordon
+                                }
+                            }) { Text("Cordon", color = KdTextPrimary) }
+                            TextButton(onClick = {
+                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                                if (snapshot.isNotEmpty()) {
+                                    viewModel.bulkRunner.clear()
+                                    bulkItems = snapshot
+                                    bulkVerb = BulkVerbs.Uncordon
+                                }
+                            }) { Text("Uncordon", color = KdTextPrimary) }
+                            TextButton(onClick = {
+                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                                if (snapshot.isNotEmpty()) {
+                                    viewModel.bulkRunner.clear()
+                                    bulkItems = snapshot
+                                    bulkVerb = BulkVerbs.Drain
+                                }
+                            }) { Text("Drain", color = KdError) }
+                        }
+                    }
                     NodeTable(
                         nodes = filtered,
                         selectedUid = selectedNodeUid,
@@ -202,9 +257,62 @@ fun NodesScreen(
                             onNavigate(Screen.Detail.NodeDetail(node))
                         },
                         staleUids = staleNodes.keys,
+                        selectedUids = selectedUids,
+                        onSelectionChange = viewModel.selection::set,
                     )
                 }
             }
         }
+    }
+
+    bulkVerb?.let { verb ->
+        BulkActionDialog(
+            verb = verb,
+            items = bulkItems,
+            itemLabel = { it.name },
+            kindSingular = "Node",
+            kindPlural = "Nodes",
+            confirmBody = when (verb) {
+                BulkVerbs.Cordon ->
+                    "Cordon ${bulkItems.size} nodes? They are marked unschedulable — running pods stay, " +
+                        "new pods will not be scheduled onto them."
+
+                BulkVerbs.Uncordon -> "Uncordon ${bulkItems.size} nodes? They become schedulable again."
+
+                else ->
+                    "Drain ${bulkItems.size} nodes? Each node is cordoned, then its pods are evicted one by one. " +
+                        "Evictions respect PodDisruptionBudgets; blocked or unmanaged pods are counted and reported."
+            },
+            runState = bulkState,
+            onConfirm = {
+                viewModel.bulkRunner.start(verb, bulkItems, { it.name }) { node ->
+                    when (verb) {
+                        BulkVerbs.Cordon -> reactiveClient.actions.cordonNode(node.name, unschedulable = true)
+
+                        BulkVerbs.Uncordon -> reactiveClient.actions.cordonNode(node.name, unschedulable = false)
+
+                        BulkVerbs.Drain -> reactiveClient.actions.drainNode(node.name).mapCatching { r ->
+                            // A drain that completed but left pods behind is a per-node
+                            // failure — surface the counts as the reason.
+                            if (r.failed > 0) error("evicted ${r.evicted}, skipped ${r.skipped}, failed ${r.failed}")
+                        }
+
+                        // Destructive verbs are named explicitly — a future verb
+                        // must fail loudly here, never fall through to drain.
+                        else -> Result.failure(IllegalStateException("Unsupported bulk verb: ${verb.actionLabel}"))
+                    }
+                }
+            },
+            onCancelRun = { viewModel.bulkRunner.cancel() },
+            onDismiss = {
+                val finished = bulkState as? BulkRunState.Finished
+                if (finished != null) {
+                    viewModel.selection.set(finished.failures.map { it.item.uid }.toSet())
+                    viewModel.bulkRunner.clear()
+                }
+                bulkVerb = null
+                bulkItems = emptyList()
+            },
+        )
     }
 }

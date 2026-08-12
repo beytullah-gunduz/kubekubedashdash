@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.Identifiable
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.components.BulkActionRunner
+import com.kubekubedashdash.ui.components.SelectionFunnel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +25,10 @@ abstract class ResourceListViewModel<T : Identifiable>(
 
     private val _selected = MutableStateFlow<T?>(null)
     val selected: StateFlow<T?> = _selected.asStateFlow()
+
+    /** Multi-select bulk-action state; wired by screens that opt in. */
+    val selection = SelectionFunnel()
+    val bulkRunner = BulkActionRunner<T>(viewModelScope)
 
     val state: StateFlow<ResourceState<List<T>>> = source
         .onEach { state -> if (state is ResourceState.Success) syncSelection(state.data) }

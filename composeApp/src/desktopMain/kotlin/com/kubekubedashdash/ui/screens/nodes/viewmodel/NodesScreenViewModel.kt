@@ -6,6 +6,8 @@ import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
+import com.kubekubedashdash.ui.components.BulkActionRunner
+import com.kubekubedashdash.ui.components.SelectionFunnel
 import com.kubekubedashdash.ui.screens.nodes.MAX_HISTORY_SIZE
 import com.kubekubedashdash.util.DEFAULT_STALE_TTL
 import com.kubekubedashdash.util.ReactiveKubeClient
@@ -34,6 +36,9 @@ class NodesScreenViewModel(
     private val log = LoggerFactory.getLogger(NodesScreenViewModel::class.java)
     private val _selected = MutableStateFlow<NodeInfo?>(null)
     val selected: StateFlow<NodeInfo?> = _selected.asStateFlow()
+
+    val selection = SelectionFunnel()
+    val bulkRunner = BulkActionRunner<NodeInfo>(viewModelScope)
 
     private val _cpuHistory = MutableStateFlow<List<Float>>(emptyList())
     val cpuHistory: StateFlow<List<Float>> = _cpuHistory.asStateFlow()
@@ -156,6 +161,11 @@ class NodesScreenViewModel(
         _selected.value = null
         staleTracker.reset()
         pendingSelectName = selectNodeName
+        selection.reset()
+        // The runner outlives the screen composition (session-scoped VM). A
+        // Finished result left over from a previous visit must not greet the
+        // next bulk confirm dialog as a stale summary.
+        bulkRunner.clear()
         if (selectNodeName != null) {
             val current = state.value
             if (current is ResourceState.Success) {
