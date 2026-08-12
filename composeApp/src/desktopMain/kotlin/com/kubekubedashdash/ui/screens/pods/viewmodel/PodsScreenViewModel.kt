@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
@@ -29,6 +30,16 @@ class PodsScreenViewModel(
 
     private val _selectedPod = MutableStateFlow<PodInfo?>(null)
     val selectedPod: StateFlow<PodInfo?> = _selectedPod.asStateFlow()
+
+    private val _selectedUids = MutableStateFlow<Set<String>>(emptySet())
+    val selectedUids: StateFlow<Set<String>> = _selectedUids.asStateFlow()
+
+    // Last set of UIDs the screen reported as visible AND live. Every
+    // selection write is intersected with it, so a hidden or departed pod
+    // can never be selected regardless of which code path sets the selection.
+    private var visibleSelectable: Set<String> = emptySet()
+
+    val bulkRunner = PodBulkActionRunner(viewModelScope)
 
     // Error departures (OOMKilled / CrashLoopBackOff / Failed / …) are worth
     // catching, so they linger longer on screen than a clean exit.
@@ -73,6 +84,12 @@ class PodsScreenViewModel(
         _selectedPod.value = null
         staleTracker.reset()
         pendingSelectUid = selectPodUid
+        _selectedUids.value = emptySet()
+        visibleSelectable = emptySet()
+        // The runner outlives the screen composition (session-scoped VM). A
+        // Finished result left over from a previous visit must not greet the
+        // next bulk confirm dialog as a stale summary.
+        bulkRunner.clear()
     }
 
     fun selectPod(pod: PodInfo?) {
@@ -81,6 +98,22 @@ class PodsScreenViewModel(
 
     fun clearSelection() {
         _selectedPod.value = null
+    }
+
+    fun setVisibleSelectable(uids: Set<String>) {
+        visibleSelectable = uids
+        _selectedUids.update { it intersect uids }
+    }
+
+    fun setSelectedUids(uids: Set<String>) {
+        _selectedUids.value = uids intersect visibleSelectable
+    }
+
+    fun startBulkAction(verb: BulkPodVerb, pods: List<PodInfo>): Boolean = bulkRunner.start(verb, pods) { pod ->
+        when (verb) {
+            BulkPodVerb.EVICT -> reactiveClient.actions.evictPod(pod.name, pod.namespace)
+            BulkPodVerb.DELETE -> reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace)
+        }
     }
 
     private fun processPodUpdate(current: List<PodInfo>) {

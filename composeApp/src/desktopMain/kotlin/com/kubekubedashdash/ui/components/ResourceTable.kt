@@ -15,6 +15,7 @@ import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,11 +42,13 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -68,7 +72,11 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -118,6 +126,12 @@ data class TableRow(
     val actions: List<RowAction> = emptyList(),
     /** Stable key used for pin persistence. Defaults to [id] when null. */
     val pinId: String? = null,
+    /**
+     * When false the row's checkbox renders disabled and inert and the row is
+     * excluded from select-all / Cmd+A / shift-range selection (used for
+     * departed/stale rows).
+     */
+    val selectable: Boolean = true,
 )
 
 /** A single entry in a row's right-click menu. */
@@ -137,8 +151,10 @@ fun ResourceTable(
     pinnable: Boolean = false,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
-    /** When true, renders a leading checkbox column. Selection state is managed internally. */
+    /** When true, renders a leading checkbox column. Selection state is hoisted — see [selectedIds]. */
     selectable: Boolean = false,
+    /** Hoisted checked-row id set; the table never stores selection itself. */
+    selectedIds: Set<String> = emptySet(),
     /** Notified whenever the checked-row set changes. Only fires when [selectable] is true. */
     onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
@@ -157,13 +173,32 @@ fun ResourceTable(
         }
     }
 
-    var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+    val selectableRows = remember(sortedRows) { sortedRows.filter { it.selectable } }
     // Shift-range anchor tracked by row id (not index) so it survives the 5s
     // live-data refresh / re-sorts. Keying it on sortedRows reset it to -1 every
     // tick, so the first shift-click after a refresh degraded to a single toggle.
     var lastSelectedId by remember { mutableStateOf<String?>(null) }
-    // Tracks whether Shift is held so checkbox clicks can extend the selection range.
-    var isShiftHeld by remember { mutableStateOf(false) }
+    // Live modifier state at click time. Unlike key-event tracking, this does
+    // not require the table to hold keyboard focus.
+    val windowInfo = LocalWindowInfo.current
+
+    // Shared by the checkbox and the Cmd/Ctrl+row-click paths so both extend
+    // ranges from the same anchor. The anchor's CURRENT index is resolved by
+    // id so a range stays correct across re-sorts / refreshes; -1 (anchor
+    // gone) falls back to a single toggle.
+    val toggleSelection: (TableRow, Int, Boolean) -> Unit = { row, index, extendRange ->
+        val anchorIndex = lastSelectedId?.let { id -> sortedRows.indexOfFirst { it.id == id } } ?: -1
+        val newIds = if (extendRange && anchorIndex >= 0) {
+            val start = minOf(anchorIndex, index)
+            val end = maxOf(anchorIndex, index)
+            val rangeIds = sortedRows.slice(start..end).filter { it.selectable }.map { it.id }.toSet()
+            if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
+        } else {
+            if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
+        }
+        lastSelectedId = row.id
+        onSelectionChange?.invoke(newIds)
+    }
 
     var keyboardIndex by remember(sortedRows) { mutableStateOf(-1) }
     val coroutineScope = rememberCoroutineScope()
@@ -186,16 +221,23 @@ fun ResourceTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selectable) {
-                val allSelected = sortedRows.isNotEmpty() && sortedRows.all { it.id in selectedIds }
+                val allSelected = selectableRows.isNotEmpty() && selectableRows.all { it.id in selectedIds }
                 Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) {
-                    Checkbox(
-                        checked = allSelected,
-                        onCheckedChange = { checked ->
-                            val newIds = if (checked) sortedRows.map { it.id }.toSet() else emptySet()
-                            selectedIds = newIds
-                            onSelectionChange?.invoke(newIds)
-                        },
-                    )
+                    // Dp.Unspecified drops the 48dp touch-target minimum, which
+                    // would otherwise dictate the row height of the whole table
+                    // (this is a pointer-driven desktop grid, not a touch UI).
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                        Checkbox(
+                            checked = allSelected,
+                            onCheckedChange = { checked ->
+                                onSelectionChange?.invoke(if (checked) selectableRows.map { it.id }.toSet() else emptySet())
+                            },
+                            // Checkbox hard-codes a 20dp glyph (requiredSize), so a
+                            // size modifier can't shrink it — scale it to sit next
+                            // to bodySmall text without dominating the row.
+                            modifier = Modifier.scale(0.75f),
+                        )
+                    }
                 }
             }
             if (pinnable) Spacer(Modifier.width(30.dp))
@@ -259,11 +301,6 @@ fun ResourceTable(
                         .focusRequester(focusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
-                            // Track Shift for range-select — handled before the KeyDown gate.
-                            if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight) {
-                                isShiftHeld = event.type == KeyEventType.KeyDown
-                                return@onPreviewKeyEvent false
-                            }
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 Key.DirectionDown -> {
@@ -321,15 +358,22 @@ fun ResourceTable(
                                     }
                                 }
 
-                                Key.Escape -> {
-                                    val consumed = keyboardIndex >= 0
-                                    keyboardIndex = -1
-                                    consumed
+                                Key.Escape -> when {
+                                    keyboardIndex >= 0 -> {
+                                        keyboardIndex = -1
+                                        true
+                                    }
+
+                                    selectable && selectedIds.isNotEmpty() -> {
+                                        onSelectionChange?.invoke(emptySet())
+                                        true
+                                    }
+
+                                    else -> false
                                 }
 
                                 Key.A -> if (selectable && (event.isMetaPressed || event.isCtrlPressed)) {
-                                    val allIds = sortedRows.map { it.id }.toSet()
-                                    selectedIds = allIds
+                                    val allIds = selectableRows.map { it.id }.toSet()
                                     onSelectionChange?.invoke(allIds)
                                     true
                                 } else {
@@ -348,10 +392,19 @@ fun ResourceTable(
                                 columns = columns,
                                 isEven = index % 2 == 0,
                                 isSelected = row.id == selectedRowId || index == keyboardIndex,
-                                onClick = if (onRowClick != null) {
+                                onClick = if (onRowClick != null || selectable) {
                                     {
-                                        keyboardIndex = -1
-                                        onRowClick(row)
+                                        val mods = windowInfo.keyboardModifiers
+                                        if (selectable && (mods.isMetaPressed || mods.isCtrlPressed)) {
+                                            // Cmd/Ctrl+click toggles selection instead of opening
+                                            // the row; +Shift extends from the checkbox anchor.
+                                            // Inert on non-selectable (stale) rows: the intent was
+                                            // selection, so don't open the detail panel either.
+                                            if (row.selectable) toggleSelection(row, index, mods.isShiftPressed)
+                                        } else if (onRowClick != null) {
+                                            keyboardIndex = -1
+                                            onRowClick(row)
+                                        }
                                     }
                                 } else {
                                     null
@@ -365,24 +418,9 @@ fun ResourceTable(
                                 },
                                 selectable = selectable,
                                 isChecked = row.id in selectedIds,
+                                checkEnabled = row.selectable,
                                 onSelectClick = if (selectable) {
-                                    {
-                                        // Resolve the anchor's CURRENT index by id so a range stays
-                                        // correct across re-sorts / refreshes; -1 (anchor gone) falls
-                                        // back to a single toggle.
-                                        val anchorIndex = lastSelectedId?.let { id -> sortedRows.indexOfFirst { it.id == id } } ?: -1
-                                        val newIds = if (isShiftHeld && anchorIndex >= 0) {
-                                            val start = minOf(anchorIndex, index)
-                                            val end = maxOf(anchorIndex, index)
-                                            val rangeIds = sortedRows.slice(start..end).map { it.id }.toSet()
-                                            if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
-                                        } else {
-                                            if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
-                                        }
-                                        selectedIds = newIds
-                                        lastSelectedId = row.id
-                                        onSelectionChange?.invoke(newIds)
-                                    }
+                                    { toggleSelection(row, index, windowInfo.keyboardModifiers.isShiftPressed) }
                                 } else {
                                     null
                                 },
@@ -424,6 +462,7 @@ private fun TableRowItem(
     onTogglePin: (() -> Unit)? = null,
     selectable: Boolean = false,
     isChecked: Boolean = false,
+    checkEnabled: Boolean = true,
     onSelectClick: (() -> Unit)? = null,
 ) {
     var hovered by remember { mutableStateOf(false) }
@@ -463,14 +502,32 @@ private fun TableRowItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selectable) {
+            // A disabled Checkbox does not consume its click, so it would fall through
+            // to the row's own `clickable` and open the detail panel. When checkEnabled
+            // is false, make the column inert instead of relying on the disabled state.
             Box(
-                modifier = Modifier.width(30.dp),
+                modifier = Modifier.width(30.dp)
+                    .then(
+                        if (!checkEnabled) {
+                            Modifier.clickable(enabled = true, indication = null, interactionSource = remember { MutableInteractionSource() }) {}
+                        } else {
+                            Modifier
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                Checkbox(
-                    checked = isChecked,
-                    onCheckedChange = { onSelectClick?.invoke() },
-                )
+                // Same 48dp-minimum opt-out as the header checkbox: without it
+                // every row inflates from text height to touch-target height.
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    Checkbox(
+                        checked = isChecked,
+                        enabled = checkEnabled,
+                        onCheckedChange = { onSelectClick?.invoke() },
+                        // Same 0.75 scale as the header checkbox (20dp glyph is
+                        // requiredSize-locked; scaling is the only way down).
+                        modifier = Modifier.scale(0.75f),
+                    )
+                }
             }
         }
         if (pinnable) {

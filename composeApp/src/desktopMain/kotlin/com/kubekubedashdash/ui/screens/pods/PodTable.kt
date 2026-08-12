@@ -59,6 +59,9 @@ internal fun PodTable(
     // (e.g. "OOMKilled") in red on a subtle red row background so a problem pod
     // is easy to catch before it ages out.
     staleUids: Set<String> = emptySet(),
+    selectedUids: Set<String> = emptySet(),
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
+    onEvict: ((PodInfo) -> Unit)? = null,
 ) {
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -73,6 +76,7 @@ internal fun PodTable(
                 id = pod.uid,
                 pinId = "pod:${pod.namespace}:${pod.name}",
                 backgroundColor = if (staleError) KdError.copy(alpha = 0.10f) else null,
+                selectable = !isStale,
                 cells = visible.map { col ->
                     when {
                         !isStale -> col.cell(pod)
@@ -96,6 +100,7 @@ internal fun PodTable(
                     add(RowAction("Copy kubectl get") { copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}") })
                     add(RowAction("Copy kubectl describe") { copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}") })
                     add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}") })
+                    if (onEvict != null && !isStale) add(RowAction("Evict") { onEvict(pod) })
                     if (onDelete != null) add(RowAction("Delete") { onDelete(pod) })
                 },
             )
@@ -110,6 +115,9 @@ internal fun PodTable(
             pinnable = onTogglePin != null,
             pinnedIds = pinnedIds,
             onTogglePin = onTogglePin,
+            selectable = onSelectionChange != null,
+            selectedIds = selectedUids,
+            onSelectionChange = onSelectionChange,
         )
     }
 }
