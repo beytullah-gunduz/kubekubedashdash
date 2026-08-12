@@ -206,15 +206,24 @@ fun PodsScreen(
                                 )
                             },
                         )
+                        // Exit-animation latch: the bar stays composed while it
+                        // shrinks away, so without holding the last non-zero
+                        // count it would flash "0 pods selected" on every Clear.
+                        var lastSelectedCount by remember { mutableStateOf(0) }
+                        if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
                         AnimatedVisibility(selectedUids.isNotEmpty(), enter = enter, exit = exit) {
                             BulkSelectionBar(
-                                selectedCount = selectedUids.size,
+                                selectedCount = lastSelectedCount,
                                 kind = "pods",
                                 onClear = { viewModel.setSelectedUids(emptySet()) },
                             ) {
                                 TextButton(onClick = {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
                                     if (snapshot.isNotEmpty()) {
+                                        // Drop any Finished result a previous run left behind
+                                        // (the runner outlives this composition) so the dialog
+                                        // opens on the confirm phase, never a stale summary.
+                                        viewModel.bulkRunner.clear()
                                         bulkPods = snapshot
                                         bulkVerb = BulkPodVerb.EVICT
                                     }
@@ -222,6 +231,7 @@ fun PodsScreen(
                                 TextButton(onClick = {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
                                     if (snapshot.isNotEmpty()) {
+                                        viewModel.bulkRunner.clear()
                                         bulkPods = snapshot
                                         bulkVerb = BulkPodVerb.DELETE
                                     }
@@ -291,7 +301,12 @@ fun PodsScreen(
             verb = verb,
             pods = bulkPods,
             runState = bulkState,
-            onConfirm = { viewModel.startBulkAction(verb, bulkPods) },
+            onConfirm = {
+                // A false return means a run is already in flight; the dialog
+                // is already rendering that run's live state via bulkState, so
+                // there is nothing further to do here.
+                viewModel.startBulkAction(verb, bulkPods)
+            },
             onCancelRun = { viewModel.bulkRunner.cancel() },
             onDismiss = {
                 val finished = bulkState as? BulkRunState.Finished

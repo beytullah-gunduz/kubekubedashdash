@@ -96,6 +96,8 @@ class PodBulkActionRunnerTest {
         }
         withTimeout(5_000) { started.await() }
         runner.cancel()
+        // The request is observable immediately so the UI can disable Stop.
+        withTimeout(5_000) { runner.state.first { it is BulkRunState.Running && it.cancelRequested } }
         release.complete(Unit)
         val f = awaitFinished(runner)
         assertEquals(1, f.attempted)

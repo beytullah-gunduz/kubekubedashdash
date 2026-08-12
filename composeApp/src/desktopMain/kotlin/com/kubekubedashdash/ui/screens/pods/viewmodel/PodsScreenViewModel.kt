@@ -86,6 +86,10 @@ class PodsScreenViewModel(
         pendingSelectUid = selectPodUid
         _selectedUids.value = emptySet()
         visibleSelectable = emptySet()
+        // The runner outlives the screen composition (session-scoped VM). A
+        // Finished result left over from a previous visit must not greet the
+        // next bulk confirm dialog as a stale summary.
+        bulkRunner.clear()
     }
 
     fun selectPod(pod: PodInfo?) {

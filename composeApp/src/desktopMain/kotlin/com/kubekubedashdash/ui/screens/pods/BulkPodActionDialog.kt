@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.pods
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -55,6 +56,7 @@ internal fun BulkPodActionDialog(
                     is BulkRunState.Running -> {
                         LinearProgressIndicator(
                             progress = { runState.done.toFloat() / runState.total },
+                            modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
                             "${verb.progressLabel} ${(runState.done + 1).coerceAtMost(runState.total)} of " +
@@ -99,7 +101,9 @@ internal fun BulkPodActionDialog(
                     }
 
                 is BulkRunState.Running ->
-                    TextButton(onClick = onCancelRun) { Text("Stop") }
+                    TextButton(onClick = onCancelRun, enabled = !runState.cancelRequested) {
+                        Text(if (runState.cancelRequested) "Stopping…" else "Stop")
+                    }
 
                 is BulkRunState.Finished ->
                     TextButton(onClick = onDismiss) { Text("Close") }

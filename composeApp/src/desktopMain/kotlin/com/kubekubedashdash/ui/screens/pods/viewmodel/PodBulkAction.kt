@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -27,6 +28,8 @@ sealed interface BulkRunState {
         override val total: Int,
         val done: Int,
         val currentPodName: String,
+        /** True once cancel() was requested; the in-flight pod still completes. */
+        val cancelRequested: Boolean = false,
     ) : BulkRunState
 
     data class Finished(
@@ -85,6 +88,10 @@ class PodBulkActionRunner(
     /** Stops issuing further actions; the in-flight one completes. */
     fun cancel() {
         cancelRequested = true
+        // Reflect the request in observable state so the UI can disable the
+        // Stop control. The loop emits no further Running states after the
+        // latch is set, so this cannot be overwritten back to false.
+        _state.update { s -> if (s is BulkRunState.Running) s.copy(cancelRequested = true) else s }
     }
 
     /** Dismisses a Finished result. No-op while Running. */
