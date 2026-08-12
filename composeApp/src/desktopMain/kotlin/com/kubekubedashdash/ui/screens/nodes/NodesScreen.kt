@@ -225,26 +225,23 @@ fun NodesScreen(
                         ) {
                             TextButton(onClick = {
                                 val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                                if (snapshot.isNotEmpty()) {
-                                    viewModel.bulkRunner.clear()
-                                    bulkItems = snapshot
-                                    bulkVerb = BulkVerbs.Cordon
+                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Cordon, snapshot) { v, items ->
+                                    bulkItems = items
+                                    bulkVerb = v
                                 }
                             }) { Text("Cordon", color = KdTextPrimary) }
                             TextButton(onClick = {
                                 val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                                if (snapshot.isNotEmpty()) {
-                                    viewModel.bulkRunner.clear()
-                                    bulkItems = snapshot
-                                    bulkVerb = BulkVerbs.Uncordon
+                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Uncordon, snapshot) { v, items ->
+                                    bulkItems = items
+                                    bulkVerb = v
                                 }
                             }) { Text("Uncordon", color = KdTextPrimary) }
                             TextButton(onClick = {
                                 val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                                if (snapshot.isNotEmpty()) {
-                                    viewModel.bulkRunner.clear()
-                                    bulkItems = snapshot
-                                    bulkVerb = BulkVerbs.Drain
+                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Drain, snapshot) { v, items ->
+                                    bulkItems = items
+                                    bulkVerb = v
                                 }
                             }) { Text("Drain", color = KdError) }
                         }

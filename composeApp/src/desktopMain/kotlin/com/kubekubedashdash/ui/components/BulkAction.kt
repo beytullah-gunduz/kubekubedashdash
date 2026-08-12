@@ -110,4 +110,27 @@ class BulkActionRunner<T>(
     fun clear() {
         if (_state.value is BulkRunState.Finished) _state.value = null
     }
+
+    /**
+     * Bar verb-button click policy. Arms the confirm dialog for [verb] over
+     * [snapshot] via [mount] — unless a previous run is still executing (the
+     * runner outlives screen compositions), in which case the dialog must
+     * reattach to that run instead: it mounts under the running verb with no
+     * snapshot, so it shows the in-flight progress truthfully rather than
+     * counting a snapshot [start] would refuse. An empty [snapshot] with no
+     * run in flight mounts nothing.
+     */
+    fun armOrReattach(verb: BulkVerb, snapshot: List<T>, mount: (BulkVerb, List<T>) -> Unit) {
+        val running = _state.value as? BulkRunState.Running
+        when {
+            running != null -> mount(running.verb, emptyList())
+
+            snapshot.isNotEmpty() -> {
+                // Drop any Finished result a previous run left behind so the
+                // dialog opens on the confirm phase, never a stale summary.
+                clear()
+                mount(verb, snapshot)
+            }
+        }
+    }
 }

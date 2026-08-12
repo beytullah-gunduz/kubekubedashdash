@@ -304,10 +304,9 @@ fun GenericResourceScreen(
                                 ) {
                                     TextButton(onClick = {
                                         val snapshot = filtered.filter { it.uid in selectedUids }
-                                        if (snapshot.isNotEmpty()) {
-                                            viewModel.bulkRunner.clear()
-                                            bulkItems = snapshot
-                                            bulkVerb = BulkVerbs.Delete
+                                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
+                                            bulkItems = items
+                                            bulkVerb = v
                                         }
                                     }) { Text("Delete", color = KdError) }
                                 }

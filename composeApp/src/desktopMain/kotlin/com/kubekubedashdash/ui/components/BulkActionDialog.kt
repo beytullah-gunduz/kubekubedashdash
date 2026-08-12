@@ -30,9 +30,14 @@ internal fun <T> BulkActionDialog(
     onCancelRun: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Header from the attached run when one exists: the runner outlives
+    // screen compositions, so the mounted snapshot may not be the run the
+    // body is rendering — the title must count what is actually shown.
+    val shownVerb = runState?.verb ?: verb
+    val shownCount = runState?.total ?: items.size
     AlertDialog(
         onDismissRequest = { if (runState !is BulkRunState.Running) onDismiss() },
-        title = { Text("${verb.actionLabel} ${items.size} ${if (items.size == 1) kindSingular else kindPlural}") },
+        title = { Text("${shownVerb.actionLabel} $shownCount ${if (shownCount == 1) kindSingular else kindPlural}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (runState) {

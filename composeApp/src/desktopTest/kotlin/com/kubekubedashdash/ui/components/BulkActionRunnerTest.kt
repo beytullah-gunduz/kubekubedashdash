@@ -154,6 +154,54 @@ class BulkActionRunnerTest {
     }
 
     @Test
+    fun `armOrReattach drops a finished leftover and mounts the fresh snapshot`() = runBlocking {
+        val runner = BulkActionRunner<Item>(scope)
+        runner.start(BulkVerbs.Evict, listOf(item("1")), itemLabel = { it.name }) { Result.success(Unit) }
+        awaitFinished(runner)
+        var mounted: Pair<BulkVerb, List<Item>>? = null
+        runner.armOrReattach(BulkVerbs.Delete, listOf(item("2"))) { v, items -> mounted = v to items }
+        assertEquals(BulkVerbs.Delete, mounted?.first)
+        assertEquals(listOf(item("2")), mounted?.second)
+        assertNull(runner.state.value)
+    }
+
+    @Test
+    fun `armOrReattach with empty snapshot and no run mounts nothing`() = runBlocking {
+        val runner = BulkActionRunner<Item>(scope)
+        var mountCount = 0
+        runner.armOrReattach(BulkVerbs.Delete, emptyList()) { _, _ -> mountCount++ }
+        assertEquals(0, mountCount)
+        assertNull(runner.state.value)
+    }
+
+    @Test
+    fun `armOrReattach while running reattaches under the running verb and keeps the run`() = runBlocking {
+        val runner = BulkActionRunner<Item>(scope)
+        val items = listOf(item("1"), item("2"))
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        runner.start(BulkVerbs.Evict, items, itemLabel = { it.name }) { p ->
+            if (p.name == items[0].name) {
+                started.complete(Unit)
+                release.await()
+            }
+            Result.success(Unit)
+        }
+        withTimeout(5_000) { started.await() }
+        var mounted: Pair<BulkVerb, List<Item>>? = null
+        // The new snapshot — even a non-empty one under a different verb —
+        // must be discarded in favor of the in-flight run.
+        runner.armOrReattach(BulkVerbs.Delete, listOf(item("3"))) { v, mountedItems -> mounted = v to mountedItems }
+        assertEquals(BulkVerbs.Evict, mounted?.first)
+        assertEquals(emptyList<Item>(), mounted?.second)
+        assertTrue(runner.state.value is BulkRunState.Running)
+        release.complete(Unit)
+        val f = awaitFinished(runner)
+        assertEquals(BulkVerbs.Evict, f.verb)
+        assertEquals(2, f.total)
+    }
+
+    @Test
     fun `throwing action degrades to per-pod failure and the loop continues`() = runBlocking {
         val runner = BulkActionRunner<Item>(scope)
         val items = listOf(item("1"), item("2"), item("3"))
