@@ -42,11 +42,13 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -197,12 +199,17 @@ fun ResourceTable(
             if (selectable) {
                 val allSelected = selectableRows.isNotEmpty() && selectableRows.all { it.id in selectedIds }
                 Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) {
-                    Checkbox(
-                        checked = allSelected,
-                        onCheckedChange = { checked ->
-                            onSelectionChange?.invoke(if (checked) selectableRows.map { it.id }.toSet() else emptySet())
-                        },
-                    )
+                    // Dp.Unspecified drops the 48dp touch-target minimum, which
+                    // would otherwise dictate the row height of the whole table
+                    // (this is a pointer-driven desktop grid, not a touch UI).
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                        Checkbox(
+                            checked = allSelected,
+                            onCheckedChange = { checked ->
+                                onSelectionChange?.invoke(if (checked) selectableRows.map { it.id }.toSet() else emptySet())
+                            },
+                        )
+                    }
                 }
             }
             if (pinnable) Spacer(Modifier.width(30.dp))
@@ -492,11 +499,15 @@ private fun TableRowItem(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Checkbox(
-                    checked = isChecked,
-                    enabled = checkEnabled,
-                    onCheckedChange = { onSelectClick?.invoke() },
-                )
+                // Same 48dp-minimum opt-out as the header checkbox: without it
+                // every row inflates from text height to touch-target height.
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    Checkbox(
+                        checked = isChecked,
+                        enabled = checkEnabled,
+                        onCheckedChange = { onSelectClick?.invoke() },
+                    )
+                }
             }
         }
         if (pinnable) {
