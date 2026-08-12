@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -208,6 +209,10 @@ fun ResourceTable(
                             onCheckedChange = { checked ->
                                 onSelectionChange?.invoke(if (checked) selectableRows.map { it.id }.toSet() else emptySet())
                             },
+                            // Checkbox hard-codes a 20dp glyph (requiredSize), so a
+                            // size modifier can't shrink it — scale it to sit next
+                            // to bodySmall text without dominating the row.
+                            modifier = Modifier.scale(0.75f),
                         )
                     }
                 }
@@ -506,6 +511,9 @@ private fun TableRowItem(
                         checked = isChecked,
                         enabled = checkEnabled,
                         onCheckedChange = { onSelectClick?.invoke() },
+                        // Same 0.75 scale as the header checkbox (20dp glyph is
+                        // requiredSize-locked; scaling is the only way down).
+                        modifier = Modifier.scale(0.75f),
                     )
                 }
             }
