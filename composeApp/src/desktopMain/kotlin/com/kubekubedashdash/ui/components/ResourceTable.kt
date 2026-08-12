@@ -72,7 +72,11 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -174,8 +178,27 @@ fun ResourceTable(
     // live-data refresh / re-sorts. Keying it on sortedRows reset it to -1 every
     // tick, so the first shift-click after a refresh degraded to a single toggle.
     var lastSelectedId by remember { mutableStateOf<String?>(null) }
-    // Tracks whether Shift is held so checkbox clicks can extend the selection range.
-    var isShiftHeld by remember { mutableStateOf(false) }
+    // Live modifier state at click time. Unlike key-event tracking, this does
+    // not require the table to hold keyboard focus.
+    val windowInfo = LocalWindowInfo.current
+
+    // Shared by the checkbox and the Cmd/Ctrl+row-click paths so both extend
+    // ranges from the same anchor. The anchor's CURRENT index is resolved by
+    // id so a range stays correct across re-sorts / refreshes; -1 (anchor
+    // gone) falls back to a single toggle.
+    val toggleSelection: (TableRow, Int, Boolean) -> Unit = { row, index, extendRange ->
+        val anchorIndex = lastSelectedId?.let { id -> sortedRows.indexOfFirst { it.id == id } } ?: -1
+        val newIds = if (extendRange && anchorIndex >= 0) {
+            val start = minOf(anchorIndex, index)
+            val end = maxOf(anchorIndex, index)
+            val rangeIds = sortedRows.slice(start..end).filter { it.selectable }.map { it.id }.toSet()
+            if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
+        } else {
+            if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
+        }
+        lastSelectedId = row.id
+        onSelectionChange?.invoke(newIds)
+    }
 
     var keyboardIndex by remember(sortedRows) { mutableStateOf(-1) }
     val coroutineScope = rememberCoroutineScope()
@@ -278,11 +301,6 @@ fun ResourceTable(
                         .focusRequester(focusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
-                            // Track Shift for range-select — handled before the KeyDown gate.
-                            if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight) {
-                                isShiftHeld = event.type == KeyEventType.KeyDown
-                                return@onPreviewKeyEvent false
-                            }
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 Key.DirectionDown -> {
@@ -374,10 +392,19 @@ fun ResourceTable(
                                 columns = columns,
                                 isEven = index % 2 == 0,
                                 isSelected = row.id == selectedRowId || index == keyboardIndex,
-                                onClick = if (onRowClick != null) {
+                                onClick = if (onRowClick != null || selectable) {
                                     {
-                                        keyboardIndex = -1
-                                        onRowClick(row)
+                                        val mods = windowInfo.keyboardModifiers
+                                        if (selectable && (mods.isMetaPressed || mods.isCtrlPressed)) {
+                                            // Cmd/Ctrl+click toggles selection instead of opening
+                                            // the row; +Shift extends from the checkbox anchor.
+                                            // Inert on non-selectable (stale) rows: the intent was
+                                            // selection, so don't open the detail panel either.
+                                            if (row.selectable) toggleSelection(row, index, mods.isShiftPressed)
+                                        } else if (onRowClick != null) {
+                                            keyboardIndex = -1
+                                            onRowClick(row)
+                                        }
                                     }
                                 } else {
                                     null
@@ -393,22 +420,7 @@ fun ResourceTable(
                                 isChecked = row.id in selectedIds,
                                 checkEnabled = row.selectable,
                                 onSelectClick = if (selectable) {
-                                    {
-                                        // Resolve the anchor's CURRENT index by id so a range stays
-                                        // correct across re-sorts / refreshes; -1 (anchor gone) falls
-                                        // back to a single toggle.
-                                        val anchorIndex = lastSelectedId?.let { id -> sortedRows.indexOfFirst { it.id == id } } ?: -1
-                                        val newIds = if (isShiftHeld && anchorIndex >= 0) {
-                                            val start = minOf(anchorIndex, index)
-                                            val end = maxOf(anchorIndex, index)
-                                            val rangeIds = sortedRows.slice(start..end).filter { it.selectable }.map { it.id }.toSet()
-                                            if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
-                                        } else {
-                                            if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
-                                        }
-                                        lastSelectedId = row.id
-                                        onSelectionChange?.invoke(newIds)
-                                    }
+                                    { toggleSelection(row, index, windowInfo.keyboardModifiers.isShiftPressed) }
                                 } else {
                                     null
                                 },
