@@ -126,7 +126,9 @@ class SessionViewModel(
         scope.launch {
             reactiveClient.namespaceNames.collect { state ->
                 if (state is ResourceState.Success) {
-                    _namespaces.value = state.data
+                    // The informer store yields hash-map order; the selector
+                    // popup shows this list verbatim, so sort it here.
+                    _namespaces.value = state.data.sorted()
                 }
             }
         }
