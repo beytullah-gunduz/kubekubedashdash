@@ -15,6 +15,7 @@ import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -118,6 +119,12 @@ data class TableRow(
     val actions: List<RowAction> = emptyList(),
     /** Stable key used for pin persistence. Defaults to [id] when null. */
     val pinId: String? = null,
+    /**
+     * When false the row's checkbox renders disabled and inert and the row is
+     * excluded from select-all / Cmd+A / shift-range selection (used for
+     * departed/stale rows).
+     */
+    val selectable: Boolean = true,
 )
 
 /** A single entry in a row's right-click menu. */
@@ -137,8 +144,10 @@ fun ResourceTable(
     pinnable: Boolean = false,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
-    /** When true, renders a leading checkbox column. Selection state is managed internally. */
+    /** When true, renders a leading checkbox column. Selection state is hoisted — see [selectedIds]. */
     selectable: Boolean = false,
+    /** Hoisted checked-row id set; the table never stores selection itself. */
+    selectedIds: Set<String> = emptySet(),
     /** Notified whenever the checked-row set changes. Only fires when [selectable] is true. */
     onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
@@ -157,7 +166,7 @@ fun ResourceTable(
         }
     }
 
-    var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+    val selectableRows = remember(sortedRows) { sortedRows.filter { it.selectable } }
     // Shift-range anchor tracked by row id (not index) so it survives the 5s
     // live-data refresh / re-sorts. Keying it on sortedRows reset it to -1 every
     // tick, so the first shift-click after a refresh degraded to a single toggle.
@@ -186,14 +195,12 @@ fun ResourceTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selectable) {
-                val allSelected = sortedRows.isNotEmpty() && sortedRows.all { it.id in selectedIds }
+                val allSelected = selectableRows.isNotEmpty() && selectableRows.all { it.id in selectedIds }
                 Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) {
                     Checkbox(
                         checked = allSelected,
                         onCheckedChange = { checked ->
-                            val newIds = if (checked) sortedRows.map { it.id }.toSet() else emptySet()
-                            selectedIds = newIds
-                            onSelectionChange?.invoke(newIds)
+                            onSelectionChange?.invoke(if (checked) selectableRows.map { it.id }.toSet() else emptySet())
                         },
                     )
                 }
@@ -321,15 +328,22 @@ fun ResourceTable(
                                     }
                                 }
 
-                                Key.Escape -> {
-                                    val consumed = keyboardIndex >= 0
-                                    keyboardIndex = -1
-                                    consumed
+                                Key.Escape -> when {
+                                    keyboardIndex >= 0 -> {
+                                        keyboardIndex = -1
+                                        true
+                                    }
+
+                                    selectable && selectedIds.isNotEmpty() -> {
+                                        onSelectionChange?.invoke(emptySet())
+                                        true
+                                    }
+
+                                    else -> false
                                 }
 
                                 Key.A -> if (selectable && (event.isMetaPressed || event.isCtrlPressed)) {
-                                    val allIds = sortedRows.map { it.id }.toSet()
-                                    selectedIds = allIds
+                                    val allIds = selectableRows.map { it.id }.toSet()
                                     onSelectionChange?.invoke(allIds)
                                     true
                                 } else {
@@ -365,6 +379,7 @@ fun ResourceTable(
                                 },
                                 selectable = selectable,
                                 isChecked = row.id in selectedIds,
+                                checkEnabled = row.selectable,
                                 onSelectClick = if (selectable) {
                                     {
                                         // Resolve the anchor's CURRENT index by id so a range stays
@@ -374,12 +389,11 @@ fun ResourceTable(
                                         val newIds = if (isShiftHeld && anchorIndex >= 0) {
                                             val start = minOf(anchorIndex, index)
                                             val end = maxOf(anchorIndex, index)
-                                            val rangeIds = sortedRows.slice(start..end).map { it.id }.toSet()
+                                            val rangeIds = sortedRows.slice(start..end).filter { it.selectable }.map { it.id }.toSet()
                                             if (row.id in selectedIds) selectedIds - rangeIds else selectedIds + rangeIds
                                         } else {
                                             if (row.id in selectedIds) selectedIds - row.id else selectedIds + row.id
                                         }
-                                        selectedIds = newIds
                                         lastSelectedId = row.id
                                         onSelectionChange?.invoke(newIds)
                                     }
@@ -424,6 +438,7 @@ private fun TableRowItem(
     onTogglePin: (() -> Unit)? = null,
     selectable: Boolean = false,
     isChecked: Boolean = false,
+    checkEnabled: Boolean = true,
     onSelectClick: (() -> Unit)? = null,
 ) {
     var hovered by remember { mutableStateOf(false) }
@@ -463,12 +478,23 @@ private fun TableRowItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selectable) {
+            // A disabled Checkbox does not consume its click, so it would fall through
+            // to the row's own `clickable` and open the detail panel. When checkEnabled
+            // is false, make the column inert instead of relying on the disabled state.
             Box(
-                modifier = Modifier.width(30.dp),
+                modifier = Modifier.width(30.dp)
+                    .then(
+                        if (!checkEnabled) {
+                            Modifier.clickable(enabled = true, indication = null, interactionSource = remember { MutableInteractionSource() }) {}
+                        } else {
+                            Modifier
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Checkbox(
                     checked = isChecked,
+                    enabled = checkEnabled,
                     onCheckedChange = { onSelectClick?.invoke() },
                 )
             }
