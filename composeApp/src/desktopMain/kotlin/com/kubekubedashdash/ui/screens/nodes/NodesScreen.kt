@@ -291,11 +291,15 @@ fun NodesScreen(
 
                         BulkVerbs.Uncordon -> reactiveClient.actions.cordonNode(node.name, unschedulable = false)
 
-                        else -> reactiveClient.actions.drainNode(node.name).mapCatching { r ->
+                        BulkVerbs.Drain -> reactiveClient.actions.drainNode(node.name).mapCatching { r ->
                             // A drain that completed but left pods behind is a per-node
                             // failure — surface the counts as the reason.
                             if (r.failed > 0) error("evicted ${r.evicted}, skipped ${r.skipped}, failed ${r.failed}")
                         }
+
+                        // Destructive verbs are named explicitly — a future verb
+                        // must fail loudly here, never fall through to drain.
+                        else -> Result.failure(IllegalStateException("Unsupported bulk verb: ${verb.actionLabel}"))
                     }
                 }
             },

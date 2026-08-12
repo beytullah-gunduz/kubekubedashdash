@@ -319,7 +319,12 @@ fun PodsScreen(
                 viewModel.bulkRunner.start(verb, bulkPods, podLabel) { pod ->
                     when (verb) {
                         BulkVerbs.Evict -> reactiveClient.actions.evictPod(pod.name, pod.namespace)
-                        else -> reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace)
+
+                        BulkVerbs.Delete -> reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace)
+
+                        // Destructive verbs are named explicitly — a future verb
+                        // must fail loudly here, never fall through to delete.
+                        else -> Result.failure(IllegalStateException("Unsupported bulk verb: ${verb.actionLabel}"))
                     }
                 }
             },

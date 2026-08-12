@@ -212,7 +212,12 @@ fun DeploymentsScreen(
                 viewModel.bulkRunner.start(verb, bulkItems, label) { dep ->
                     when (verb) {
                         BulkVerbs.Restart -> reactiveClient.actions.restartWorkload("deployment", dep.name, dep.namespace)
-                        else -> reactiveClient.actions.deleteResource("deployment", dep.name, dep.namespace)
+
+                        BulkVerbs.Delete -> reactiveClient.actions.deleteResource("deployment", dep.name, dep.namespace)
+
+                        // Destructive verbs are named explicitly — a future verb
+                        // must fail loudly here, never fall through to delete.
+                        else -> Result.failure(IllegalStateException("Unsupported bulk verb: ${verb.actionLabel}"))
                     }
                 }
             },

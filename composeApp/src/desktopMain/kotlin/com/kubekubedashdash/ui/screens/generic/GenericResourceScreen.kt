@@ -294,7 +294,7 @@ fun GenericResourceScreen(
                             // Exit-animation latch: the bar stays composed while it shrinks
                             // away, so without holding the last non-zero count it would
                             // flash "0 <kind> selected" on every Clear.
-                            var lastSelectedCount by remember { mutableStateOf(0) }
+                            var lastSelectedCount by remember(kind) { mutableStateOf(0) }
                             if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
                             AnimatedVisibility(selectedUids.isNotEmpty()) {
                                 BulkSelectionBar(
