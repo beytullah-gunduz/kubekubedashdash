@@ -1497,22 +1497,7 @@ class ReactiveKubeClient(
     ): Result<List<PodInfo>> = try {
         Result.success(
             runInterruptible(Dispatchers.IO) {
-                val all = k8s.pods().inNamespace(namespace).list().items
-                val direct = all.filter { pod ->
-                    pod.metadata?.ownerReferences?.any { it.uid == appUid } == true
-                }
-                val directUids = direct.mapNotNull { it.metadata?.uid }.toSet()
-                val secondHop = all.filter { pod ->
-                    pod.metadata?.ownerReferences?.any { it.uid in directUids } == true
-                }
-                val labeled = all.filter { pod ->
-                    pod.metadata?.labels?.get("sparkoperator.k8s.io/app-name") == appName
-                }
-                val (driverGroup, rest) = (direct + secondHop + labeled)
-                    .distinctBy { it.metadata?.uid }
-                    .partition { pod -> pod.metadata?.ownerReferences?.any { it.uid == appUid } == true }
-                sortPodsNewestFirst(driverGroup.map(ResourceMappers::mapPod)) +
-                    sortPodsNewestFirst(rest.map(ResourceMappers::mapPod))
+                selectSparkApplicationPods(k8s.pods().inNamespace(namespace).list().items, appUid, appName)
             },
         )
     } catch (e: CancellationException) {
@@ -1520,6 +1505,29 @@ class ReactiveKubeClient(
     } catch (e: Exception) {
         log.warn("Failed to list SparkApplication pods namespace={}: {}", namespace, e.message)
         Result.failure(e)
+    }
+
+    /**
+     * Pure selection/ordering seam for [listSparkApplicationPods], testable
+     * without a mock server (whose CRUD dispatcher regenerates uids and
+     * creation timestamps on every POST).
+     */
+    internal fun selectSparkApplicationPods(all: List<Pod>, appUid: String, appName: String): List<PodInfo> {
+        val direct = all.filter { pod ->
+            pod.metadata?.ownerReferences?.any { it.uid == appUid } == true
+        }
+        val directUids = direct.mapNotNull { it.metadata?.uid }.toSet()
+        val secondHop = all.filter { pod ->
+            pod.metadata?.ownerReferences?.any { it.uid in directUids } == true
+        }
+        val labeled = all.filter { pod ->
+            pod.metadata?.labels?.get("sparkoperator.k8s.io/app-name") == appName
+        }
+        val (driverGroup, rest) = (direct + secondHop + labeled)
+            .distinctBy { it.metadata?.uid }
+            .partition { pod -> pod.metadata?.ownerReferences?.any { it.uid == appUid } == true }
+        return sortPodsNewestFirst(driverGroup.map(ResourceMappers::mapPod)) +
+            sortPodsNewestFirst(rest.map(ResourceMappers::mapPod))
     }
 
     /**

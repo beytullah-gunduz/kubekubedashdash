@@ -4,6 +4,7 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.screens.generic.kindExtraTabs
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
@@ -203,6 +204,35 @@ class ReactiveKubeClientSparkAppPodsTest {
     }
 
     @Test
+    fun `selectSparkApplicationPods keeps the driver group first even when the rest is newer`() {
+        // Hand-built pods with explicit uids/timestamps (the CRUD mock can't
+        // seed either): the driver is the OLDEST pod, so plain newest-first
+        // ordering without the driver-group partition would sink it to last.
+        val driver = fixedPod(
+            name = "driver",
+            uid = "uid-driver",
+            createdAt = "2026-01-01T00:00:00Z",
+            ownerUid = "uid-app",
+        )
+        val exec1 = fixedPod(
+            name = "exec-1",
+            uid = "uid-exec-1",
+            createdAt = "2026-01-02T00:00:00Z",
+            ownerUid = "uid-driver",
+        )
+        val labeledOnly = fixedPod(
+            name = "labeled-only",
+            uid = "uid-labeled",
+            createdAt = "2026-01-03T00:00:00Z",
+            labels = mapOf("sparkoperator.k8s.io/app-name" to appName),
+        )
+
+        val result = client.selectSparkApplicationPods(listOf(labeledOnly, exec1, driver), "uid-app", appName)
+
+        assertEquals(listOf("driver", "labeled-only", "exec-1"), result.map { it.name })
+    }
+
+    @Test
     fun `kindExtraTabs wires a Pods tab for a namespaced SparkApplication`() {
         val tabs = kindExtraTabs("SparkApplication", genericRes(namespace = "default"), client)
         assertEquals(listOf("Pods"), tabs.map { it.label })
@@ -212,6 +242,26 @@ class ReactiveKubeClientSparkAppPodsTest {
     fun `kindExtraTabs returns no tabs for a cluster-scoped SparkApplication`() {
         val tabs = kindExtraTabs("SparkApplication", genericRes(namespace = null), client)
         assertTrue(tabs.isEmpty())
+    }
+
+    private fun fixedPod(
+        name: String,
+        uid: String,
+        createdAt: String,
+        ownerUid: String? = null,
+        labels: Map<String, String> = emptyMap(),
+    ): Pod {
+        val builder = PodBuilder()
+            .withNewMetadata()
+            .withName(name)
+            .withNamespace("default")
+            .withUid(uid)
+            .withCreationTimestamp(createdAt)
+            .withLabels<String, String>(labels)
+        if (ownerUid != null) {
+            builder.withOwnerReferences(OwnerReferenceBuilder().withUid(ownerUid).build())
+        }
+        return builder.endMetadata().build()
     }
 
     private fun genericRes(namespace: String?) = GenericResourceInfo(
