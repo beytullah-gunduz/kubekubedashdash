@@ -1483,6 +1483,46 @@ class ReactiveKubeClient(
     }
 
     /**
+     * Pods belonging to one SparkApplication: the driver (owner-ref to the CR),
+     * the executors (owner-ref to the driver pod — Spark's two-hop chain), and
+     * any pod labeled by the Spark Operator with the application name. The label
+     * fallback covers operators that label pods without setting owner refs.
+     * Driver group first (owner-ref to the CR), then the rest, each newest-first
+     * — newest-first alone would sink the driver, which predates its executors.
+     */
+    suspend fun listSparkApplicationPods(
+        namespace: String,
+        appUid: String,
+        appName: String,
+    ): Result<List<PodInfo>> = try {
+        Result.success(
+            runInterruptible(Dispatchers.IO) {
+                val all = k8s.pods().inNamespace(namespace).list().items
+                val direct = all.filter { pod ->
+                    pod.metadata?.ownerReferences?.any { it.uid == appUid } == true
+                }
+                val directUids = direct.mapNotNull { it.metadata?.uid }.toSet()
+                val secondHop = all.filter { pod ->
+                    pod.metadata?.ownerReferences?.any { it.uid in directUids } == true
+                }
+                val labeled = all.filter { pod ->
+                    pod.metadata?.labels?.get("sparkoperator.k8s.io/app-name") == appName
+                }
+                val (driverGroup, rest) = (direct + secondHop + labeled)
+                    .distinctBy { it.metadata?.uid }
+                    .partition { pod -> pod.metadata?.ownerReferences?.any { it.uid == appUid } == true }
+                sortPodsNewestFirst(driverGroup.map(ResourceMappers::mapPod)) +
+                    sortPodsNewestFirst(rest.map(ResourceMappers::mapPod))
+            },
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log.warn("Failed to list SparkApplication pods namespace={}: {}", namespace, e.message)
+        Result.failure(e)
+    }
+
+    /**
      * Live pod snapshots for one fixed namespace, backed by a dedicated informer.
      * Unlike the session's `pods` informer this is NOT tied to the selected
      * namespace. The informer self-reconnects and relists; it is closed in a
