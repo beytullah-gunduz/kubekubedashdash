@@ -531,13 +531,15 @@ private fun sparkApplicationPodsTab(
         }
 
         pods!!.isFailure -> {
-            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
-                Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                    Text(
-                        "Could not load pods",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdError,
-                    )
+            Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                        Text(
+                            "Could not load pods",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KdError,
+                        )
+                    }
                 }
             }
         }
