@@ -59,7 +59,7 @@ fun TooltipIconButton(
 }
 
 @Composable
-private fun ActionTooltip(label: String, description: String?) {
+internal fun ActionTooltip(label: String, description: String?) {
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = KdSurface,
