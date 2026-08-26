@@ -3,8 +3,6 @@ package com.kubekubedashdash.ui.screens.deployments
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,11 +17,15 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.DeploymentInfo
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.delete_filled
+import com.kubekubedashdash.resources.rotate_right_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
 import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbButton
 import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -134,20 +136,32 @@ fun DeploymentsScreen(
                     kind = "deployments",
                     onClear = { viewModel.selection.set(emptySet()) },
                 ) {
-                    TextButton(onClick = {
+                    BulkVerbButton(
+                        icon = Res.drawable.rotate_right_filled,
+                        label = "Restart",
+                        description = "Recreate each selected deployment's pods in a rolling update — " +
+                            "picks up new config or secrets, with no downtime.",
+                        tint = KdTextPrimary,
+                    ) {
                         val snapshot = filtered.filter { it.uid in selectedUids }
                         viewModel.bulkRunner.armOrReattach(BulkVerbs.Restart, snapshot) { v, items ->
                             bulkItems = items
                             bulkVerb = v
                         }
-                    }) { Text("Restart", color = KdTextPrimary) }
-                    TextButton(onClick = {
+                    }
+                    BulkVerbButton(
+                        icon = Res.drawable.delete_filled,
+                        label = "Delete",
+                        description = "Delete the selected deployments and the pods they manage. " +
+                            "This cannot be undone.",
+                        tint = KdError,
+                    ) {
                         val snapshot = filtered.filter { it.uid in selectedUids }
                         viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
                             bulkItems = items
                             bulkVerb = v
                         }
-                    }) { Text("Delete", color = KdError) }
+                    }
                 }
             }
             DeploymentTable(

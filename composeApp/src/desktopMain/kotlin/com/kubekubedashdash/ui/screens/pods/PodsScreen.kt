@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,6 +29,8 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.clear_all_filled
+import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
@@ -39,6 +39,7 @@ import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
 import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbButton
 import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
@@ -219,20 +220,33 @@ fun PodsScreen(
                                 kind = "pods",
                                 onClear = { viewModel.selection.set(emptySet()) },
                             ) {
-                                TextButton(onClick = {
+                                BulkVerbButton(
+                                    icon = Res.drawable.clear_all_filled,
+                                    label = "Evict",
+                                    description = "Gracefully remove the selected pods, letting their controllers " +
+                                        "reschedule them — use to move pods off a node. Respects " +
+                                        "PodDisruptionBudgets; requests can be rejected.",
+                                    tint = KdTextPrimary,
+                                ) {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
                                     viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
                                         bulkPods = items
                                         bulkVerb = v
                                     }
-                                }) { Text("Evict", color = KdTextPrimary) }
-                                TextButton(onClick = {
+                                }
+                                BulkVerbButton(
+                                    icon = Res.drawable.delete_filled,
+                                    label = "Delete",
+                                    description = "Delete the selected pods with graceful termination. " +
+                                        "Controller-managed pods are recreated; standalone pods are gone for good.",
+                                    tint = KdError,
+                                ) {
                                     val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
                                     viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
                                         bulkPods = items
                                         bulkVerb = v
                                     }
-                                }) { Text("Delete", color = KdError) }
+                                }
                             }
                         }
                         PodTable(
