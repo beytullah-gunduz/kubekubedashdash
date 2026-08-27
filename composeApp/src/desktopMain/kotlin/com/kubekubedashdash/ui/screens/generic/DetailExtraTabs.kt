@@ -28,8 +28,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
@@ -37,13 +39,16 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
+import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.components.EmptyState
+import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.util.EndpointSliceDetail
 import com.kubekubedashdash.util.PolicyRuleRow
@@ -66,9 +71,16 @@ fun kindExtraTabs(
     onNavigate: (Screen) -> Unit = {},
 ): List<ExtraTab> = when (kind) {
     "ResourceQuota" -> listOf(resourceQuotaUsageTab(res, client))
+
     "Role", "ClusterRole" -> listOf(policyRulesTab(res, client, kind))
+
     "RoleBinding", "ClusterRoleBinding" -> listOf(roleBindingTab(res, client, kind))
+
     "EndpointSlice" -> listOf(endpointSliceTab(res, client, onNavigate))
+
+    "SparkApplication" ->
+        if (res.namespace != null) listOf(sparkApplicationPodsTab(res, res.namespace, client, onNavigate)) else emptyList()
+
     else -> emptyList()
 }
 
@@ -493,6 +505,75 @@ private fun endpointSliceTab(
     }
 }
 
+private fun sparkApplicationPodsTab(
+    res: GenericResourceInfo,
+    namespace: String,
+    client: ReactiveKubeClient,
+    onNavigate: (Screen) -> Unit,
+): ExtraTab = ExtraTab(
+    label = "Pods",
+    icon = Res.drawable.view_in_ar_filled,
+) {
+    // Fetch lazily, inside the content lambda, so the GET only fires when the
+    // user actually opens the Pods tab (mirrors the Usage tab above).
+    var pods by remember(res.uid) { mutableStateOf<Result<List<PodInfo>>?>(null) }
+
+    LaunchedEffect(res.uid) {
+        pods = null
+        pods = client.listSparkApplicationPods(namespace, res.uid, res.name)
+    }
+
+    when {
+        pods == null -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            }
+        }
+
+        pods!!.isFailure -> {
+            Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                        Text(
+                            "Could not load pods",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KdError,
+                        )
+                    }
+                }
+            }
+        }
+
+        pods!!.getOrThrow().isEmpty() -> {
+            EmptyState(
+                icon = Res.drawable.view_in_ar_filled,
+                kind = "No pods found",
+            )
+        }
+
+        else -> {
+            val podList = pods!!.getOrThrow()
+            Column(
+                modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "${podList.size} Pods",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = KdTextPrimary,
+                )
+                podList.forEach { pod ->
+                    SparkPodItem(pod) { onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) }
+                }
+            }
+        }
+    }
+}
+
 // ── Shared composables ──────────────────────────────────────────────────────
 
 /** A card showing one [PolicyRuleRow] with labeled fields (empty fields hidden). */
@@ -545,6 +626,59 @@ private fun LabeledLine(
             style = MaterialTheme.typography.bodySmall,
             color = KdTextPrimary,
         )
+    }
+}
+
+/** One pod row in the SparkApplication Pods tab; all rows share the CR's namespace. */
+@Composable
+private fun SparkPodItem(pod: PodInfo, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        color = KdSurfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    pod.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = KdPrimary,
+                    fontWeight = FontWeight.Medium,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusBadge(pod.status)
+                    val role = pod.labels["spark-role"]
+                    if (role != null) {
+                        Surface(shape = RoundedCornerShape(4.dp), color = KdTextSecondary.copy(alpha = 0.15f)) {
+                            Text(
+                                role,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KdTextSecondary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    "Ready ${pod.ready}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                )
+                Text(
+                    pod.age,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                )
+            }
+        }
     }
 }
 

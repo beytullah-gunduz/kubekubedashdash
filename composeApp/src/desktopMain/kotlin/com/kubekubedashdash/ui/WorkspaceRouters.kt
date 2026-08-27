@@ -227,6 +227,7 @@ fun ContentRouter(
                         apiGroup = crd.group,
                         apiVersion = crd.version,
                         plural = crd.plural,
+                        onNavigate = onNavigate,
                     )
                 } else {
                     ConnectingScreen()
