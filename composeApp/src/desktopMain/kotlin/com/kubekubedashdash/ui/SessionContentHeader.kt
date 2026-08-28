@@ -56,11 +56,14 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.arrow_back_filled
+import com.kubekubedashdash.resources.arrow_forward_filled
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.search_filled
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 private val sessionHeaderIsMacOS: Boolean =
@@ -80,6 +83,10 @@ private val sessionHeaderIsMacOS: Boolean =
 @Composable
 internal fun SessionContentHeader(
     screen: Screen,
+    canGoBack: Boolean,
+    canGoForward: Boolean,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
     clusterContext: String,
     selectedNamespace: String,
     namespaces: List<String>,
@@ -97,6 +104,8 @@ internal fun SessionContentHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            HistoryNavButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack)
+            HistoryNavButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
             if (clusterContext.isNotBlank()) {
                 Text(
                     text = clusterContext,
@@ -167,6 +176,23 @@ private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.CustomResource -> namespaced
 
     else -> false
+}
+
+@Composable
+private fun HistoryNavButton(
+    icon: DrawableResource,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(22.dp)) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
+            tint = if (enabled) KdTextSecondary else KdTextSecondary.copy(alpha = 0.35f),
+            modifier = Modifier.size(15.dp),
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
