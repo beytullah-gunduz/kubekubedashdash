@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -30,6 +31,34 @@ import kotlinx.coroutines.launch
 fun screenKeyOf(screen: Screen): String = if (screen is Screen.Main) screen::class.simpleName.orEmpty() else ""
 
 /**
+ * One entry in a session's navigation history: the main screen plus whichever
+ * detail pane was open alongside it. Capturing the pane makes "back" from an
+ * open detail close the pane first (browser-like) before a further "back"
+ * changes the main screen.
+ */
+private data class NavEntry(val screen: Screen, val extraPane: Screen?)
+
+private const val MAX_HISTORY = 50
+
+/** Transient connection screens are neither recorded in history nor valid
+ *  places to navigate back/forward from — the connection reducer owns them. */
+private fun Screen.allowsHistoryNav(): Boolean = this !is Screen.Main.Connecting && this !is Screen.Main.ConnectionError
+
+/** Screens carrying a "jump to this resource" parameter re-open a detail pane
+ *  from a LaunchedEffect the moment they compose (PodsScreen.kt, NodesScreen.kt,
+ *  EventsScreen.kt), and ContentRouter's AnimatedContent(targetState = screen)
+ *  re-creates that content for every distinct screen value. History already
+ *  restores the pane itself, so the parameter MUST be stripped from recorded
+ *  entries — otherwise Back/Forward onto such a screen re-opens the pane and
+ *  clears the forward stack. */
+private fun NavEntry.forHistory(): NavEntry = when (val s = screen) {
+    is Screen.Main.Pods -> if (s.selectPodUid == null) this else copy(screen = s.copy(selectPodUid = null))
+    is Screen.Main.Nodes -> if (s.selectNodeName == null) this else copy(screen = s.copy(selectNodeName = null))
+    is Screen.Main.Events -> if (s.selectEventUid == null) this else copy(screen = s.copy(selectEventUid = null))
+    else -> this
+}
+
+/**
  * Per-cluster-session UI state. One instance per [com.kubekubedashdash.model.ClusterSession]
  * — owns the navigation state, namespace selection, connection-status flags, and retry
  * scheduling for that single cluster.
@@ -41,8 +70,24 @@ class SessionViewModel(
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Main.Connecting)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
-    private val _previousScreen = MutableStateFlow<Screen?>(null)
-    val previousScreen: StateFlow<Screen?> = _previousScreen.asStateFlow()
+    // Back/forward history of (screen, extra pane) snapshots. The connection
+    // reducer's direct _currentScreen writes (Connecting / ConnectionError /
+    // post-connect ClusterOverview) bypass history on purpose: transient
+    // connection screens must never be reachable via Back, and the reducer
+    // stays the sole writer of connection transitions.
+    // All of navigate/goBack/goForward/closeExtraPane run on the Compose UI
+    // thread; the stack updates are not atomic across the two screen writes
+    // and must not be called from background coroutines.
+    private val _backStack = MutableStateFlow<List<NavEntry>>(emptyList())
+    private val _forwardStack = MutableStateFlow<List<NavEntry>>(emptyList())
+
+    val canGoBack: StateFlow<Boolean> =
+        combine(_backStack, _currentScreen) { stack, cur -> stack.isNotEmpty() && cur.allowsHistoryNav() }
+            .stateIn(scope, SharingStarted.Eagerly, false)
+
+    val canGoForward: StateFlow<Boolean> =
+        combine(_forwardStack, _currentScreen) { stack, cur -> stack.isNotEmpty() && cur.allowsHistoryNav() }
+            .stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _extraPaneScreen = MutableStateFlow<Screen?>(null)
     val extraPaneScreen: StateFlow<Screen?> = _extraPaneScreen.asStateFlow()
@@ -277,17 +322,62 @@ class SessionViewModel(
         if (screen is Screen.Main.Pods && screen.selectPodUid != null) {
             _selectedNamespace.value = "All Namespaces"
         }
-        if (screen is Screen.Detail) {
-            _previousScreen.value = _currentScreen.value
-            _extraPaneScreen.value = screen
+        // A Detail opens as a pane next to the current main screen; anything
+        // else replaces the main screen and closes the pane.
+        val target = if (screen is Screen.Detail) {
+            NavEntry(_currentScreen.value, screen)
         } else {
-            _extraPaneScreen.value = null
-            _currentScreen.value = screen
+            NavEntry(screen, null)
         }
+        if (target == currentEntry()) return
+        recordCurrent()
+        // Close the pane before switching the main screen (order preserved
+        // from the original navigate) so a stale pane is never composed
+        // against the incoming screen's filter key.
+        if (target.extraPane == null) _extraPaneScreen.value = null
+        _currentScreen.value = target.screen
+        _extraPaneScreen.value = target.extraPane
+    }
+
+    fun goBack() {
+        if (!_currentScreen.value.allowsHistoryNav()) return
+        val entry = _backStack.value.lastOrNull() ?: return
+        _backStack.update { it.dropLast(1) }
+        _forwardStack.update { it + currentEntry().forHistory() }
+        if (entry.extraPane == null) _extraPaneScreen.value = null
+        _currentScreen.value = entry.screen
+        _extraPaneScreen.value = entry.extraPane
+    }
+
+    fun goForward() {
+        if (!_currentScreen.value.allowsHistoryNav()) return
+        val entry = _forwardStack.value.lastOrNull() ?: return
+        _forwardStack.update { it.dropLast(1) }
+        _backStack.update { it + currentEntry().forHistory() }
+        if (entry.extraPane == null) _extraPaneScreen.value = null
+        _currentScreen.value = entry.screen
+        _extraPaneScreen.value = entry.extraPane
     }
 
     fun closeExtraPane() {
+        // Closing the pane is itself a navigation: Back reopens it.
+        if (_extraPaneScreen.value == null) return
+        recordCurrent()
         _extraPaneScreen.value = null
+    }
+
+    private fun currentEntry() = NavEntry(_currentScreen.value, _extraPaneScreen.value)
+
+    /** Shared "a new navigation happened" bookkeeping: clear the forward
+     *  stack and push the outgoing state. The clear happens even when the
+     *  outgoing screen is a transient connection screen (a real navigation
+     *  always invalidates forward history); only the push is skipped there,
+     *  so Back can never land on a connection screen. */
+    private fun recordCurrent() {
+        _forwardStack.value = emptyList()
+        val current = currentEntry()
+        if (!current.screen.allowsHistoryNav()) return
+        _backStack.update { (it + current.forHistory()).takeLast(MAX_HISTORY) }
     }
 
     fun connectToCluster(ctx: String) {
