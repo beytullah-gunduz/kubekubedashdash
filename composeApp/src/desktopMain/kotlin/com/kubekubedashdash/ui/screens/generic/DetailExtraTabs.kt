@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -46,16 +47,17 @@ import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
-import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.screens.ExtraTab
+import com.kubekubedashdash.ui.screens.OverviewSection
 import com.kubekubedashdash.util.EndpointSliceDetail
 import com.kubekubedashdash.util.PolicyRuleRow
 import com.kubekubedashdash.util.QuotaUsageRow
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.RoleBindingDetail
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -71,15 +73,38 @@ fun kindExtraTabs(
     onNavigate: (Screen) -> Unit = {},
 ): List<ExtraTab> = when (kind) {
     "ResourceQuota" -> listOf(resourceQuotaUsageTab(res, client))
-
     "Role", "ClusterRole" -> listOf(policyRulesTab(res, client, kind))
-
     "RoleBinding", "ClusterRoleBinding" -> listOf(roleBindingTab(res, client, kind))
-
     "EndpointSlice" -> listOf(endpointSliceTab(res, client, onNavigate))
+    else -> emptyList()
+}
 
+/**
+ * Returns kind-specific sections appended to the Overview tab of
+ * [ResourceDetailPanel] — the Node panel's inline-pod-list shape, for kinds
+ * whose pods are the first thing worth seeing. Same extension point contract
+ * as [kindExtraTabs].
+ */
+fun kindOverviewSections(
+    kind: String,
+    res: GenericResourceInfo,
+    client: ReactiveKubeClient,
+    onNavigate: (Screen) -> Unit = {},
+): List<OverviewSection> = when (kind) {
     "SparkApplication" ->
-        if (res.namespace != null) listOf(sparkApplicationPodsTab(res, res.namespace, client, onNavigate)) else emptyList()
+        res.namespace?.let { ns ->
+            listOf(podsOverviewSection(res, onNavigate) { client.listSparkApplicationPods(ns, res.uid, res.name) })
+        } ?: emptyList()
+
+    "Job" ->
+        res.namespace?.let { ns ->
+            listOf(podsOverviewSection(res, onNavigate) { client.listJobPods(ns, res.uid) })
+        } ?: emptyList()
+
+    "CronJob" ->
+        res.namespace?.let { ns ->
+            listOf(podsOverviewSection(res, onNavigate) { client.listCronJobPods(ns, res.uid) })
+        } ?: emptyList()
 
     else -> emptyList()
 }
@@ -505,33 +530,54 @@ private fun endpointSliceTab(
     }
 }
 
-private fun sparkApplicationPodsTab(
+private fun podsOverviewSection(
     res: GenericResourceInfo,
-    namespace: String,
-    client: ReactiveKubeClient,
     onNavigate: (Screen) -> Unit,
-): ExtraTab = ExtraTab(
-    label = "Pods",
-    icon = Res.drawable.view_in_ar_filled,
-) {
-    // Fetch lazily, inside the content lambda, so the GET only fires when the
-    // user actually opens the Pods tab (mirrors the Usage tab above).
+    fetch: suspend () -> Result<List<PodInfo>>,
+): OverviewSection = OverviewSection(key = "pods") {
+    // Auto-refresh while the section is visible: pods churn exactly when this
+    // panel is open (executors scaling, a CronJob firing). The loop dies with
+    // the composition, so nothing polls once the panel closes or the user
+    // switches resource or tab.
     var pods by remember(res.uid) { mutableStateOf<Result<List<PodInfo>>?>(null) }
 
     LaunchedEffect(res.uid) {
         pods = null
-        pods = client.listSparkApplicationPods(namespace, res.uid, res.name)
+        while (true) {
+            val next = fetch()
+            // Keep the last good list through a transient refresh failure —
+            // flipping a visible list to an error card on a blip helps no one.
+            if (next.isSuccess || pods?.isSuccess != true) pods = next
+            delay(10_000)
+        }
     }
 
-    when {
-        pods == null -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Pods",
+                style = MaterialTheme.typography.labelLarge,
+                color = KdTextPrimary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            val count = pods?.getOrNull()?.size
+            if (count != null) {
+                Text("$count", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
             }
         }
 
-        pods!!.isFailure -> {
-            Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+        val snapshot = pods
+        when {
+            snapshot == null -> {
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                }
+            }
+
+            snapshot.isFailure -> {
                 Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
                     Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                         Text(
@@ -542,32 +588,14 @@ private fun sparkApplicationPodsTab(
                     }
                 }
             }
-        }
 
-        pods!!.getOrThrow().isEmpty() -> {
-            EmptyState(
-                icon = Res.drawable.view_in_ar_filled,
-                kind = "No pods found",
-            )
-        }
+            snapshot.getOrThrow().isEmpty() -> {
+                Text("No pods", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+            }
 
-        else -> {
-            val podList = pods!!.getOrThrow()
-            Column(
-                modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    "${podList.size} Pods",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = KdTextPrimary,
-                )
-                podList.forEach { pod ->
-                    SparkPodItem(pod) { onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) }
+            else -> {
+                snapshot.getOrThrow().forEach { pod ->
+                    OwnedPodItem(pod) { onNavigate(Screen.Main.Pods(selectPodUid = pod.uid)) }
                 }
             }
         }
@@ -629,9 +657,13 @@ private fun LabeledLine(
     }
 }
 
-/** One pod row in the SparkApplication Pods tab; all rows share the CR's namespace. */
+/**
+ * One pod row in an owned-pods tab (SparkApplication / Job / CronJob); all
+ * rows share the owner's namespace. The role chip renders only for pods that
+ * carry a `spark-role` label.
+ */
 @Composable
-private fun SparkPodItem(pod: PodInfo, onClick: () -> Unit) {
+private fun OwnedPodItem(pod: PodInfo, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(6.dp),

@@ -491,6 +491,7 @@ fun GenericResourceScreen(
                                     onClose = { viewModel.clearSelection() },
                                     modifier = Modifier.width(panelWidthDp.coerceIn(280f, maxPanel).dp).fillMaxHeight(),
                                     extraTabs = kindExtraTabs(kind, res, client, onNavigate),
+                                    overviewSections = kindOverviewSections(kind, res, client, onNavigate),
                                     labelQuery = labelQuery,
                                     onToggleLabel = { k, v ->
                                         onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))

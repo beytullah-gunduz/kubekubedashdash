@@ -118,6 +118,16 @@ class ExtraTab(
     val content: @Composable () -> Unit,
 )
 
+/**
+ * A kind-specific section appended to the Overview tab, after Annotations —
+ * the same shape the Node panel uses for its inline pod list. [key] exists so
+ * wiring is assertable in tests; the section renders its own header.
+ */
+class OverviewSection(
+    val key: String,
+    val content: @Composable () -> Unit,
+)
+
 @Composable
 fun ResourceDetailPanel(
     kind: String,
@@ -130,6 +140,7 @@ fun ResourceDetailPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     extraTabs: List<ExtraTab> = emptyList(),
+    overviewSections: List<OverviewSection> = emptyList(),
     labelQuery: String = "",
     onToggleLabel: (String, String) -> Unit = { _, _ -> },
     annotationQuery: String = "",
@@ -249,6 +260,7 @@ fun ResourceDetailPanel(
                         onToggleLabel = onToggleLabel,
                         annotationQuery = annotationQuery,
                         onToggleAnnotation = onToggleAnnotation,
+                        sections = overviewSections,
                     )
 
                     page == yamlIndex -> GenericYamlTab(kind, name, namespace, apiGroup, apiVersion, plural)
@@ -331,6 +343,7 @@ private fun GenericOverviewTab(
     onToggleLabel: (String, String) -> Unit,
     annotationQuery: String,
     onToggleAnnotation: (String, String) -> Unit,
+    sections: List<OverviewSection> = emptyList(),
 ) {
     val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
     val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -363,6 +376,8 @@ private fun GenericOverviewTab(
                 onToggle = onToggleAnnotation,
             )
         }
+
+        sections.forEach { it.content() }
     }
 }
 

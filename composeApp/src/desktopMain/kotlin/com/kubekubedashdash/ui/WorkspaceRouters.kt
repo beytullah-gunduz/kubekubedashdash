@@ -155,9 +155,9 @@ fun ContentRouter(
 
             is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
-            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onOpenLogs = onOpenLogs)
+            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onOpenLogs = onOpenLogs, onNavigate = onNavigate)
 
-            is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
             is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
 
