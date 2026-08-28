@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
 
@@ -28,6 +29,8 @@ class PodsScreenViewModel(
     private val reactiveClient: ReactiveKubeClient,
     private val now: () -> Instant = { Instant.now() },
 ) : ViewModel() {
+
+    private val log = LoggerFactory.getLogger(PodsScreenViewModel::class.java)
 
     private val _selectedPod = MutableStateFlow<PodInfo?>(null)
     val selectedPod: StateFlow<PodInfo?> = _selectedPod.asStateFlow()
@@ -83,13 +86,23 @@ class PodsScreenViewModel(
         // Finished result left over from a previous visit must not greet the
         // next bulk confirm dialog as a stale summary.
         bulkRunner.clear()
+        // Resolve against the snapshot already in hand: the informer replays
+        // its current value when the screen subscribes, which happens BEFORE
+        // this call — on a quiet cluster no further emission may ever arrive,
+        // and the pending uid would wait forever on an event that never comes.
+        if (selectPodUid != null) {
+            (state.value as? ResourceState.Success)?.let { processPodUpdate(it.data) }
+        }
     }
 
     fun selectPod(pod: PodInfo?) {
+        // A manual click supersedes any unresolved jump-to-pod target.
+        pendingSelectUid = null
         _selectedPod.value = if (_selectedPod.value?.uid == pod?.uid) null else pod
     }
 
     fun clearSelection() {
+        pendingSelectUid = null
         _selectedPod.value = null
     }
 
@@ -99,8 +112,18 @@ class PodsScreenViewModel(
 
         val uid = pendingSelectUid
         if (uid != null) {
-            _selectedPod.value = currentByUid[uid] ?: updatedStale[uid]?.info
-            pendingSelectUid = null
+            // Keep the pending uid until the pod actually appears: snapshots
+            // race the post-navigation informer rebuild (a pre-switch replay,
+            // or a not-yet-synced store), and consuming the uid against one
+            // that lacks the pod silently drops the jump-to-pod selection.
+            val resolved = currentByUid[uid] ?: updatedStale[uid]?.info
+            if (resolved != null) {
+                log.debug("Pending pod selection resolved uid={}", uid)
+                _selectedPod.value = resolved
+                pendingSelectUid = null
+            } else {
+                log.debug("Pending pod selection uid={} not in snapshot of {} pods; keeping", uid, current.size)
+            }
         } else {
             _selectedPod.value = _selectedPod.value?.let { sel ->
                 currentByUid[sel.uid] ?: updatedStale[sel.uid]?.info
