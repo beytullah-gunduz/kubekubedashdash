@@ -548,6 +548,7 @@ private fun sparkApplicationPodsTab(
             EmptyState(
                 icon = Res.drawable.view_in_ar_filled,
                 kind = "No pods found",
+                subtitle = "This SparkApplication has no driver or executor pods.",
             )
         }
 

@@ -41,6 +41,7 @@ private fun kindHelpText(kind: String): String = when (kind.lowercase()) {
 fun EmptyState(
     icon: DrawableResource,
     kind: String,
+    subtitle: String? = null,
     namespace: String? = null,
     onSwitchNamespace: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -64,7 +65,7 @@ fun EmptyState(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            kindHelpText(kind),
+            subtitle ?: kindHelpText(kind),
             style = MaterialTheme.typography.bodySmall,
             color = KdTextSecondary,
         )
