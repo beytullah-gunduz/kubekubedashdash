@@ -71,6 +71,9 @@ fun NodesScreen(
     // Driven by the NODES_UNDER_PRESSURE banner click. User can clear via
     // the chip that surfaces while it's active.
     initialPressureOnly: Boolean = false,
+    // Seeds the row highlight when the screen is (re)created while its
+    // detail pane is already open (Back/Forward restore, tab switch).
+    initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: NodesScreenViewModel = viewModel { NodesScreenViewModel(reactiveClient) }
@@ -89,7 +92,7 @@ fun NodesScreen(
     val statusFilter by viewModel.statusFilter.collectAsState()
     val pressureOnly by viewModel.pressureOnly.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
-    var selectedNodeUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedNodeUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkItems by remember { mutableStateOf<List<NodeInfo>>(emptyList()) }
     LaunchedEffect(initialStatusFilter, initialPressureOnly) {

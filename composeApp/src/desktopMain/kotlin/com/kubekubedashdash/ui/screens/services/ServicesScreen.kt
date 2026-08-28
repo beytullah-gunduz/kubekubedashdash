@@ -36,11 +36,14 @@ fun ServicesScreen(
     pulseLabelsOnEntry: Boolean = false,
     pulseAnnotationsOnEntry: Boolean = false,
     onNavigate: (Screen) -> Unit,
+    // Seeds the row highlight when the screen is (re)created while its
+    // detail pane is already open (Back/Forward restore, tab switch).
+    initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: ServicesScreenViewModel = viewModel { ServicesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
-    var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
 
     ResourceListScaffold(state) { data ->
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }

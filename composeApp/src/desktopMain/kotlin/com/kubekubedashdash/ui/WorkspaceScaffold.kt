@@ -184,6 +184,7 @@ internal fun SessionPaneContent(
                                     pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
                                     onNavigate = sessionVm::navigate,
                                     clusterHealth = clusterHealth,
+                                    paneSelectionUid = extraPaneScreen.paneSelectionUid(),
                                     onSelectCluster = onSelectCluster,
                                     onDiscoverEks = onDiscoverEks,
                                     onOpenLogs = onOpenLogs,

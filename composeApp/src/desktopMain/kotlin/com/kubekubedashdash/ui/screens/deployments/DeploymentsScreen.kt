@@ -53,6 +53,9 @@ fun DeploymentsScreen(
     // via the chip that appears above the table once active. Driven by the
     // DEPLOYMENTS_DEGRADED banner click.
     initialDegradedOnly: Boolean = false,
+    // Seeds the row highlight when the screen is (re)created while its
+    // detail pane is already open (Back/Forward restore, tab switch).
+    initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: DeploymentsScreenViewModel = viewModel { DeploymentsScreenViewModel(reactiveClient) }
@@ -68,7 +71,7 @@ fun DeploymentsScreen(
     val state by viewModel.state.collectAsState()
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
-    var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var degradedOnly by rememberSaveable { mutableStateOf(initialDegradedOnly) }
     LaunchedEffect(initialDegradedOnly) {
         // Re-applies the seed if the user clicks the banner again after
