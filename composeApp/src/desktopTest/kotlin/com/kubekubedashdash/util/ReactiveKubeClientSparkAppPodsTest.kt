@@ -1,7 +1,7 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.GenericResourceInfo
-import com.kubekubedashdash.ui.screens.generic.kindExtraTabs
+import com.kubekubedashdash.ui.screens.generic.kindOverviewSections
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.Pod
@@ -233,15 +233,15 @@ class ReactiveKubeClientSparkAppPodsTest {
     }
 
     @Test
-    fun `kindExtraTabs wires a Pods tab for a namespaced SparkApplication`() {
-        val tabs = kindExtraTabs("SparkApplication", genericRes(namespace = "default"), client)
-        assertEquals(listOf("Pods"), tabs.map { it.label })
+    fun `kindOverviewSections wires a pods section for a namespaced SparkApplication`() {
+        val sections = kindOverviewSections("SparkApplication", genericRes(namespace = "default"), client)
+        assertEquals(listOf("pods"), sections.map { it.key })
     }
 
     @Test
-    fun `kindExtraTabs returns no tabs for a cluster-scoped SparkApplication`() {
-        val tabs = kindExtraTabs("SparkApplication", genericRes(namespace = null), client)
-        assertTrue(tabs.isEmpty())
+    fun `kindOverviewSections returns no sections for a cluster-scoped SparkApplication`() {
+        val sections = kindOverviewSections("SparkApplication", genericRes(namespace = null), client)
+        assertTrue(sections.isEmpty())
     }
 
     private fun fixedPod(

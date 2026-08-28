@@ -1508,6 +1508,34 @@ class ReactiveKubeClient(
     }
 
     /**
+     * Pods belonging to one CronJob: pods owned by any Job the CronJob owns.
+     * Same owner-ref filter as [listJobPods], with the intermediate Job hop.
+     */
+    suspend fun listCronJobPods(
+        namespace: String,
+        cronJobUid: String,
+    ): Result<List<PodInfo>> = try {
+        Result.success(
+            runInterruptible(Dispatchers.IO) {
+                val jobUids = k8s.batch().v1().jobs().inNamespace(namespace).list().items
+                    .filter { job -> job.metadata?.ownerReferences?.any { it.uid == cronJobUid } == true }
+                    .mapNotNull { it.metadata?.uid }
+                    .toSet()
+                sortPodsNewestFirst(
+                    k8s.pods().inNamespace(namespace).list().items
+                        .filter { pod -> pod.metadata?.ownerReferences?.any { it.uid in jobUids } == true }
+                        .map(ResourceMappers::mapPod),
+                )
+            },
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log.warn("Failed to list CronJob pods namespace={}: {}", namespace, e.message)
+        Result.failure(e)
+    }
+
+    /**
      * Pure selection/ordering seam for [listSparkApplicationPods], testable
      * without a mock server (whose CRUD dispatcher regenerates uids and
      * creation timestamps on every POST).
