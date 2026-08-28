@@ -47,13 +47,16 @@ fun EventsScreen(
     // (e.g. setOf("Warning", "Error") from the cluster-health banner), seed
     // the type-filter chip with it on entry. User can broaden via the menu.
     initialTypeFilter: Set<String>? = null,
+    // Seeds the row highlight when the screen is (re)created while its
+    // detail pane is already open (Back/Forward restore, tab switch).
+    initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: EventsScreenViewModel = viewModel { EventsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     val typeFilter by viewModel.typeFilter.collectAsState()
     val nodeFilter by viewModel.nodeFilter.collectAsState()
-    var selectedEventUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedEventUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
 
     // Nav-driven seed: if the route arrives with an explicit type allowlist
     // (e.g. from a banner click), write it into VM state so the chip shows it.

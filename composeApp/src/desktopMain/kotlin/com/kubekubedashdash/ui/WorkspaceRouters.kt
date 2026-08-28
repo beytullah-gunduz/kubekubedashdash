@@ -35,6 +35,23 @@ import com.kubekubedashdash.ui.screens.services.ServicesScreen
 import com.kubekubedashdash.ui.screens.topology.ClusterTopologyScreen
 import kotlinx.coroutines.flow.StateFlow
 
+/**
+ * Uid of the resource a detail-pane screen refers to, or null for screens
+ * that aren't resource details. Used to re-seed a list screen's row
+ * highlight from the open pane after the screen's own selection state was
+ * disposed (Back/Forward restore, tab switch). Uids are cluster-unique, so
+ * a pane belonging to a different list simply matches no row.
+ */
+internal fun Screen?.paneSelectionUid(): String? = when (this) {
+    is Screen.Detail.PodDetail -> pod.uid
+    is Screen.Detail.NodeDetail -> node.uid
+    is Screen.Detail.DeploymentDetail -> deployment.uid
+    is Screen.Detail.ServiceDetail -> service.uid
+    is Screen.Detail.NamespaceDetail -> namespace.uid
+    is Screen.Detail.EventDetail -> event.uid
+    else -> null
+}
+
 @Composable
 fun ContentRouter(
     screen: Screen,
@@ -49,6 +66,12 @@ fun ContentRouter(
     // degradation timer continuously, not just while the cluster screen is
     // visible — see clusterHealthFlow).
     clusterHealth: ClusterHealthSummary?,
+    // Uid of the resource shown in the session's extra pane, if any — seeds
+    // the row highlight when a list screen is (re)created while its detail
+    // pane is already open (Back/Forward restore, tab switch). Screen-local
+    // selection state does not survive AnimatedContent disposal; the pane on
+    // the session does.
+    paneSelectionUid: String? = null,
     pulseLabelsOnEntry: Boolean = false,
     pulseAnnotationsOnEntry: Boolean = false,
     onSelectCluster: () -> Unit = {},
@@ -89,6 +112,7 @@ fun ContentRouter(
                 selectNodeName = target.selectNodeName,
                 initialStatusFilter = target.statusFilter,
                 initialPressureOnly = target.pressureOnly,
+                initialSelectedUid = paneSelectionUid,
             )
 
             is Screen.Main.Namespaces -> NamespacesScreen(
@@ -102,6 +126,7 @@ fun ContentRouter(
                 onNavigate = onNavigate,
                 onCaptureLogs = onCaptureLogs,
                 onTailLogs = onTailLogs,
+                initialSelectedUid = paneSelectionUid,
             )
 
             is Screen.Main.Events -> EventsScreen(
@@ -109,6 +134,7 @@ fun ContentRouter(
                 onNavigate = onNavigate,
                 selectEventUid = target.selectEventUid,
                 initialTypeFilter = target.typeFilter,
+                initialSelectedUid = paneSelectionUid,
             )
 
             is Screen.Main.Pods -> PodsScreen(
@@ -124,6 +150,7 @@ fun ContentRouter(
                 onOpenTerminal = onOpenTerminal,
                 selectPodUid = target.selectPodUid,
                 initialStatusFilter = target.statusFilter,
+                initialSelectedUid = paneSelectionUid,
             )
 
             is Screen.Main.Deployments -> DeploymentsScreen(
@@ -136,6 +163,7 @@ fun ContentRouter(
                 pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
                 onNavigate = onNavigate,
                 initialDegradedOnly = target.degradedOnly,
+                initialSelectedUid = paneSelectionUid,
             )
 
             is Screen.Main.Services -> ServicesScreen(
@@ -147,6 +175,7 @@ fun ContentRouter(
                 pulseLabelsOnEntry = pulseLabelsOnEntry,
                 pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
                 onNavigate = onNavigate,
+                initialSelectedUid = paneSelectionUid,
             )
 
             is Screen.Main.StatefulSets -> genericKind("StatefulSet", reactiveClient.statefulSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)

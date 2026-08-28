@@ -355,6 +355,18 @@ fun App(
                                 true
                             }
 
+                            // Cmd+[ / Ctrl+[: back through this tab's screen history.
+                            event.key == Key.LeftBracket && metaOrCtrl -> {
+                                sessionForPalette?.viewModel?.goBack()
+                                sessionForPalette != null
+                            }
+
+                            // Cmd+] / Ctrl+]: forward.
+                            event.key == Key.RightBracket && metaOrCtrl -> {
+                                sessionForPalette?.viewModel?.goForward()
+                                sessionForPalette != null
+                            }
+
                             else -> false
                         }
                     },

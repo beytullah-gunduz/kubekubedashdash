@@ -41,11 +41,14 @@ fun NamespacesScreen(
     onNavigate: (Screen) -> Unit,
     onCaptureLogs: (String) -> Unit = {},
     onTailLogs: (String) -> Unit = {},
+    // Seeds the row highlight when the screen is (re)created while its
+    // detail pane is already open (Back/Forward restore, tab switch).
+    initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: NamespacesScreenViewModel = viewModel { NamespacesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
-    var selectedUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var pendingDelete by remember { mutableStateOf<GenericResourceInfo?>(null) }
     val delete = rememberConfirmableAction()
 

@@ -67,6 +67,8 @@ internal fun SessionPaneContent(
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
+    val canGoBack by sessionVm.canGoBack.collectAsState()
+    val canGoForward by sessionVm.canGoForward.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
     val selectedNamespace by sessionVm.selectedNamespace.collectAsState()
     val namespaceList by sessionVm.namespaces.collectAsState()
@@ -159,6 +161,10 @@ internal fun SessionPaneContent(
                         Column(modifier = Modifier.fillMaxSize()) {
                             SessionContentHeader(
                                 screen = currentScreen,
+                                canGoBack = canGoBack,
+                                canGoForward = canGoForward,
+                                onBack = sessionVm::goBack,
+                                onForward = sessionVm::goForward,
                                 clusterContext = clusterContext,
                                 selectedNamespace = selectedNamespace,
                                 namespaces = namespaceList,
@@ -178,6 +184,7 @@ internal fun SessionPaneContent(
                                     pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
                                     onNavigate = sessionVm::navigate,
                                     clusterHealth = clusterHealth,
+                                    paneSelectionUid = extraPaneScreen.paneSelectionUid(),
                                     onSelectCluster = onSelectCluster,
                                     onDiscoverEks = onDiscoverEks,
                                     onOpenLogs = onOpenLogs,

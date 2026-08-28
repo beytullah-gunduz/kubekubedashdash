@@ -73,6 +73,9 @@ fun PodsScreen(
     // cluster-health banner clicking "3 pods in error"), seed the filter
     // chip with it. The user can clear or expand it via the existing menu.
     initialStatusFilter: Set<String>? = null,
+    // Seeds the row highlight when the screen is (re)created while its
+    // detail pane is already open (Back/Forward restore, tab switch).
+    initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: PodsScreenViewModel = viewModel { PodsScreenViewModel(reactiveClient) }
@@ -83,7 +86,7 @@ fun PodsScreen(
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
     var statsExpanded by remember { mutableStateOf(true) }
-    var selectedPodUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedPodUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     LaunchedEffect(initialStatusFilter) {
         // Nav-driven seed: a banner click landing on Pods with a typed status
         // allowlist writes through to VM state. The persistent value is the
