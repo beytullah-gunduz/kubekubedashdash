@@ -283,6 +283,27 @@ fun ResourceTable(
             }
         } else {
             val lazyListState = rememberLazyListState()
+            // Bring an externally-set selection into view (jump-to-pod and
+            // friends land with the row far offscreen on long lists). Keyed on
+            // the id, not just the rows: snapshots arrive continuously and
+            // re-scrolling on each would yank the user back while they browse.
+            // A row selected by clicking it is already visible, so the
+            // fully-in-viewport check makes that case a no-op.
+            var scrolledToId by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(selectedRowId, sortedRows) {
+                val id = selectedRowId
+                if (id == null || id == scrolledToId) return@LaunchedEffect
+                val index = sortedRows.indexOfFirst { it.id == id }
+                if (index < 0) return@LaunchedEffect // not in this snapshot yet; retry on the next
+                val info = lazyListState.layoutInfo
+                val fullyVisible = info.visibleItemsInfo.any {
+                    it.index == index &&
+                        it.offset >= info.viewportStartOffset &&
+                        it.offset + it.size <= info.viewportEndOffset
+                }
+                if (!fullyVisible) lazyListState.animateScrollToItem(index)
+                scrolledToId = id
+            }
             if (scrollToTopOnChange) {
                 var previousSize by remember { mutableStateOf(sortedRows.size) }
                 LaunchedEffect(sortedRows) {
