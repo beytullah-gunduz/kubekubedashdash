@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,6 +26,9 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_circle_filled
+import com.kubekubedashdash.resources.clear_all_filled
+import com.kubekubedashdash.resources.lock_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
@@ -36,6 +37,7 @@ import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
 import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbButton
 import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -223,27 +225,45 @@ fun NodesScreen(
                             kind = "nodes",
                             onClear = { viewModel.selection.set(emptySet()) },
                         ) {
-                            TextButton(onClick = {
+                            BulkVerbButton(
+                                icon = Res.drawable.lock_filled,
+                                label = "Cordon",
+                                description = "Stop new pods from scheduling on the selected nodes — " +
+                                    "existing pods keep running.",
+                                tint = KdTextPrimary,
+                            ) {
                                 val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
                                 viewModel.bulkRunner.armOrReattach(BulkVerbs.Cordon, snapshot) { v, items ->
                                     bulkItems = items
                                     bulkVerb = v
                                 }
-                            }) { Text("Cordon", color = KdTextPrimary) }
-                            TextButton(onClick = {
+                            }
+                            BulkVerbButton(
+                                icon = Res.drawable.check_circle_filled,
+                                label = "Uncordon",
+                                description = "Allow pods to be scheduled on the selected nodes again — " +
+                                    "reverses a cordon.",
+                                tint = KdTextPrimary,
+                            ) {
                                 val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
                                 viewModel.bulkRunner.armOrReattach(BulkVerbs.Uncordon, snapshot) { v, items ->
                                     bulkItems = items
                                     bulkVerb = v
                                 }
-                            }) { Text("Uncordon", color = KdTextPrimary) }
-                            TextButton(onClick = {
+                            }
+                            BulkVerbButton(
+                                icon = Res.drawable.clear_all_filled,
+                                label = "Drain",
+                                description = "Cordon the selected nodes and evict their pods — to safely " +
+                                    "empty them before maintenance. Respects PodDisruptionBudgets.",
+                                tint = KdError,
+                            ) {
                                 val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
                                 viewModel.bulkRunner.armOrReattach(BulkVerbs.Drain, snapshot) { v, items ->
                                     bulkItems = items
                                     bulkVerb = v
                                 }
-                            }) { Text("Drain", color = KdError) }
+                            }
                         }
                     }
                     NodeTable(

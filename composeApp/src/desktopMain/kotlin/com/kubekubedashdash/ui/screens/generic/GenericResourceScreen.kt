@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +37,7 @@ import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
+import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.filter_list_filled
@@ -63,6 +62,7 @@ import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
 import com.kubekubedashdash.ui.components.BulkVerb
+import com.kubekubedashdash.ui.components.BulkVerbButton
 import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
@@ -302,13 +302,19 @@ fun GenericResourceScreen(
                                     kind = pluralizeKind(kind).lowercase(),
                                     onClear = { viewModel.selection.set(emptySet()) },
                                 ) {
-                                    TextButton(onClick = {
+                                    BulkVerbButton(
+                                        icon = Res.drawable.delete_filled,
+                                        label = "Delete",
+                                        description = "Delete the selected ${pluralizeKind(kind).lowercase()}. " +
+                                            "This cannot be undone.",
+                                        tint = KdError,
+                                    ) {
                                         val snapshot = filtered.filter { it.uid in selectedUids }
                                         viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
                                             bulkItems = items
                                             bulkVerb = v
                                         }
-                                    }) { Text("Delete", color = KdError) }
+                                    }
                                 }
                             }
                         }

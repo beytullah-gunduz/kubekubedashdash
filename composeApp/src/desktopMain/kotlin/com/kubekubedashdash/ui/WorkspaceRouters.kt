@@ -149,63 +149,63 @@ fun ContentRouter(
                 onNavigate = onNavigate,
             )
 
-            is Screen.Main.StatefulSets -> genericKind("StatefulSet", reactiveClient.statefulSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.StatefulSets -> genericKind("StatefulSet", reactiveClient.statefulSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.DaemonSets -> genericKind("DaemonSet", reactiveClient.daemonSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.DaemonSets -> genericKind("DaemonSet", reactiveClient.daemonSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onOpenLogs = onOpenLogs, onNavigate = onNavigate)
+            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate, onOpenLogs = onOpenLogs)
 
             is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.Secrets -> genericKind("Secret", reactiveClient.secrets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.Secrets -> genericKind("Secret", reactiveClient.secrets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.Ingresses -> genericKind("Ingress", reactiveClient.ingresses, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.Ingresses -> genericKind("Ingress", reactiveClient.ingresses, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.Endpoints -> genericKind("Endpoint", reactiveClient.endpoints, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.Endpoints -> genericKind("Endpoint", reactiveClient.endpoints, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.NetworkPolicies -> genericKind("NetworkPolicy", reactiveClient.networkPolicies, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.NetworkPolicies -> genericKind("NetworkPolicy", reactiveClient.networkPolicies, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.PersistentVolumes -> genericKind("PersistentVolume", reactiveClient.persistentVolumes, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.PersistentVolumes -> genericKind("PersistentVolume", reactiveClient.persistentVolumes, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.PersistentVolumeClaims -> genericKind("PersistentVolumeClaim", reactiveClient.persistentVolumeClaims, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.PersistentVolumeClaims -> genericKind("PersistentVolumeClaim", reactiveClient.persistentVolumeClaims, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ServiceAccounts -> genericKind("ServiceAccount", reactiveClient.serviceAccounts, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ServiceAccounts -> genericKind("ServiceAccount", reactiveClient.serviceAccounts, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.Roles -> genericKind("Role", reactiveClient.roles, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.Roles -> genericKind("Role", reactiveClient.roles, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ClusterRoles -> genericKind("ClusterRole", reactiveClient.clusterRoles, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ClusterRoles -> genericKind("ClusterRole", reactiveClient.clusterRoles, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.RoleBindings -> genericKind("RoleBinding", reactiveClient.roleBindings, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.RoleBindings -> genericKind("RoleBinding", reactiveClient.roleBindings, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ClusterRoleBindings -> genericKind("ClusterRoleBinding", reactiveClient.clusterRoleBindings, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ClusterRoleBindings -> genericKind("ClusterRoleBinding", reactiveClient.clusterRoleBindings, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.HorizontalPodAutoscalers -> genericKind("HorizontalPodAutoscaler", reactiveClient.horizontalPodAutoscalers, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.HorizontalPodAutoscalers -> genericKind("HorizontalPodAutoscaler", reactiveClient.horizontalPodAutoscalers, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.PodDisruptionBudgets -> genericKind("PodDisruptionBudget", reactiveClient.podDisruptionBudgets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.PodDisruptionBudgets -> genericKind("PodDisruptionBudget", reactiveClient.podDisruptionBudgets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ResourceQuotas -> genericKind("ResourceQuota", reactiveClient.resourceQuotas, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ResourceQuotas -> genericKind("ResourceQuota", reactiveClient.resourceQuotas, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.LimitRanges -> genericKind("LimitRange", reactiveClient.limitRanges, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.LimitRanges -> genericKind("LimitRange", reactiveClient.limitRanges, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.PriorityClasses -> genericKind("PriorityClass", reactiveClient.priorityClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.PriorityClasses -> genericKind("PriorityClass", reactiveClient.priorityClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.ValidatingWebhookConfigurations -> genericKind("ValidatingWebhookConfiguration", reactiveClient.validatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.ValidatingWebhookConfigurations -> genericKind("ValidatingWebhookConfiguration", reactiveClient.validatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.MutatingWebhookConfigurations -> genericKind("MutatingWebhookConfiguration", reactiveClient.mutatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.MutatingWebhookConfigurations -> genericKind("MutatingWebhookConfiguration", reactiveClient.mutatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.IngressClasses -> genericKind("IngressClass", reactiveClient.ingressClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.IngressClasses -> genericKind("IngressClass", reactiveClient.ingressClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
             is Screen.Main.EndpointSlices -> genericKind("EndpointSlice", reactiveClient.endpointSlices, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.CSIDrivers -> genericKind("CSIDriver", reactiveClient.csiDrivers, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.CSIDrivers -> genericKind("CSIDriver", reactiveClient.csiDrivers, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
-            is Screen.Main.CertificateSigningRequests -> genericKind("CertificateSigningRequest", reactiveClient.certificateSigningRequests, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry)
+            is Screen.Main.CertificateSigningRequests -> genericKind("CertificateSigningRequest", reactiveClient.certificateSigningRequests, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
@@ -254,7 +254,7 @@ private fun genericKind(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
-    onNavigate: (Screen) -> Unit = {},
+    onNavigate: (Screen) -> Unit,
     onOpenLogs: ((String, String, String?) -> Unit)? = null,
 ) = GenericResourceScreen(
     kind = kind,
