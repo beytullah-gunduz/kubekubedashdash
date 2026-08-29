@@ -185,3 +185,11 @@ tasks.withType<Test>().configureEach {
     dependsOn(generateEmptyKubeconfig)
     environment("KUBECONFIG", emptyKubeconfig.get().asFile.absolutePath)
 }
+
+// Force the transitive mockwebserver down to 7.7.0 (see gradle/libs.versions.toml).
+// This must apply to every configuration, not just test ones: kubernetes-server-mock
+// is an `implementation` dependency of desktopMain and MockClusterProvider runs a
+// real KubernetesMockServer for the demo cluster, so the deadlock ships.
+configurations.configureEach {
+    resolutionStrategy.force("io.fabric8:mockwebserver:${libs.versions.fabric8.mockwebserver.get()}")
+}
