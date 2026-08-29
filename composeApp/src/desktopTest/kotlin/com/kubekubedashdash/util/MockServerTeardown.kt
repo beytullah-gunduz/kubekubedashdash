@@ -35,8 +35,10 @@ private const val SLOW_DESTROY_MS = 9_000L
  * hand socket teardown to Vert.x without awaiting it.
  *
  * Call only from an ordinary test thread. `vm.viewModelScope` runs on
- * `Dispatchers.Main.immediate`, which resolves to the Swing EDT here, and
- * [runBlocking] on the EDT would deadlock.
+ * `Dispatchers.Main.immediate`, which resolves to the Swing EDT here; calling
+ * this from the EDT would stall the join until [JOIN_TIMEOUT_MS] rather than
+ * deadlock outright, since the timeout is driven by [runBlocking]'s own event
+ * loop on the calling thread. Either way, don't.
  */
 internal fun shutdownCleanly(
     vararg scopes: CoroutineScope,
@@ -60,22 +62,32 @@ internal fun shutdownCleanly(
             )
         }
     }
-    manager?.close()
-    client?.close()
+    // Every close and destroy gets its turn even if an earlier one throws, and
+    // the first failure is rethrown at the end. Bailing out mid-list would
+    // leave a mock server alive — its Vert.x event-loop groups and listening
+    // socket would survive for the rest of the worker JVM, adding scheduling
+    // pressure to every later test class and obscuring which teardown failed
+    // first. Failures are still surfaced, never swallowed: a suppressed
+    // shutdown timeout is exactly what makes this class of flake invisible.
+    val failures = mutableListOf<Throwable>()
+    manager?.let { runCatching { it.close() }.onFailure(failures::add) }
+    client?.let { runCatching { it.close() }.onFailure(failures::add) }
     servers.forEach { server ->
         val startedAt = System.nanoTime()
-        // Deliberately NOT wrapped in runCatching: fabric8 gives up after 10s and
-        // throws, and swallowing that would turn a genuinely red build green.
         // A second destroy() of an already-destroyed server is a real no-op in
-        // fabric8 7.8.0 (its `shutdown` flag short-circuits), so the one test
-        // that destroys its server mid-body needs no guard here.
-        server.destroy()
+        // fabric8 7.8.0 (its `shutdown` flag short-circuits before the awaits),
+        // so the one test that destroys its server mid-body needs no guard.
+        runCatching { server.destroy() }.onFailure(failures::add)
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         if (elapsedMs >= SLOW_DESTROY_MS) {
             System.err.println(
                 "[shutdownCleanly] $label: server.destroy() took ${elapsedMs}ms " +
-                    "(fabric8 abandons the shutdown at 10000ms)",
+                    "(each of fabric8's two shutdown awaits gives up at 10000ms)",
             )
         }
+    }
+    failures.firstOrNull()?.let { first ->
+        failures.drop(1).forEach(first::addSuppressed)
+        throw first
     }
 }
