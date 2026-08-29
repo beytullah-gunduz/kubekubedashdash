@@ -112,12 +112,14 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
         } else {
             connector?.let { conn ->
                 SwingPanel(
-                    background = Color.Black,
                     modifier = Modifier.fillMaxSize(),
                     // Reuse the session's widget across reattach so scrollback and
                     // shell state persist; create it once on first attach.
                     factory = {
-                        (session.widget ?: createTerminalWidget(conn, ThemeManager.isDarkTheme).also { session.widget = it }).component
+                        val widget = session.widget ?: createTerminalWidget(conn, ThemeManager.isDarkTheme).also { session.widget = it }
+                        // 1.12.0 deprecated SwingPanel(background = …); the deprecated
+                        // overload set exactly this on the component it returned.
+                        widget.component.apply { background = java.awt.Color.BLACK }
                     },
                 )
             }
