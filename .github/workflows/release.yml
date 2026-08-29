@@ -83,6 +83,21 @@ jobs:
       - name: Run tests
         run: ./gradlew :composeApp:desktopTest
 
+      # The Gradle console summary prints only the exception class and
+      # file:line — the message string, which distinguishes fabric8's two
+      # 10s shutdown awaits, lives only in the XML/HTML report. Upload it so
+      # the next red run is diagnosable.
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-report-${{ github.job }}-${{ runner.os }}
+          path: |
+            composeApp/build/reports/tests/desktopTest/**
+            composeApp/build/test-results/desktopTest/**
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Build installer
         run: ./gradlew :composeApp:${{ matrix.task }} -Papp.version=${{ steps.version.outputs.version }}
 

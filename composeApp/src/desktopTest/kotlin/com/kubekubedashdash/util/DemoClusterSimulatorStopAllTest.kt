@@ -33,8 +33,7 @@ class DemoClusterSimulatorStopAllTest {
 
     @AfterTest
     fun tearDown() {
-        client.close()
-        server.destroy()
+        shutdownCleanly(label = "DemoClusterSimulatorStopAllTest", client = client, servers = listOf(server))
     }
 
     private fun node(name: String) = NodeBuilder().withNewMetadata().withName(name).endMetadata().build()
