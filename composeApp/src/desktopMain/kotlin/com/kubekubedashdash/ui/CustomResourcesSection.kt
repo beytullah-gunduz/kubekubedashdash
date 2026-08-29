@@ -1,6 +1,8 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,10 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,7 +26,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
@@ -141,38 +146,62 @@ private fun matchesSearch(crd: CrdInfo, query: String): Boolean {
     return crd.shortNames.any { it.lowercase().contains(q) }
 }
 
+// BasicTextField + DecorationBox instead of the high-level OutlinedTextField:
+// M3's OutlinedTextField bakes in ~16dp vertical content padding, which at
+// 32dp height clips both the typed text and the placeholder out of view.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CrdSearchBox(query: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdBorder,
+        unfocusedBorderColor = KdBorder,
+        focusedContainerColor = KdSurface,
+        unfocusedContainerColor = KdSurface,
+    )
+    BasicTextField(
         value = query,
         onValueChange = onChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall,
-        leadingIcon = {
-            Icon(
-                painterResource(Res.drawable.search_filled),
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = KdTextSecondary,
-            )
-        },
-        placeholder = {
-            Text("Search CRDs", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-        },
-        shape = RoundedCornerShape(6.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = KdBorder,
-            unfocusedBorderColor = KdBorder,
-            focusedContainerColor = KdSurface,
-            unfocusedContainerColor = KdSurface,
-            focusedTextColor = KdTextPrimary,
-            unfocusedTextColor = KdTextPrimary,
-            cursorColor = KdTextPrimary,
-        ),
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
+        cursorBrush = SolidColor(KdTextPrimary),
+        interactionSource = interactionSource,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .height(32.dp),
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = query,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text("Search CRDs", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                },
+                leadingIcon = {
+                    Icon(
+                        painterResource(Res.drawable.search_filled),
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = KdTextSecondary,
+                    )
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                },
+            )
+        },
     )
 }
 
