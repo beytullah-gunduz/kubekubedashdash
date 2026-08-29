@@ -56,7 +56,6 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.logback.classic)
             implementation(libs.androidx.datastore.core)
             implementation(libs.androidx.datastore.preferences)
@@ -68,8 +67,13 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.jna)
             implementation(libs.json.path)
-            implementation(libs.jediterm.core)
-            implementation(libs.jediterm.ui)
+            // jediterm 3.74 declares kotlin-stdlib 2.4.0 in its Gradle metadata but its
+            // jars contain zero Kotlin classes; without the exclude, highest-wins would
+            // raise the compile+runtime stdlib above the pinned 2.3.21 compiler.
+            // (String notation: the KMP dependency handler has no configure-block
+            // overload for catalog accessors, and catalog dependencies are immutable.)
+            implementation("org.jetbrains.jediterm:jediterm-core:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
+            implementation("org.jetbrains.jediterm:jediterm-ui:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
         }
     }
 }
