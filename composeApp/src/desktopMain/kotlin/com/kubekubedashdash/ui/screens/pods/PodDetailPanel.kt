@@ -1,6 +1,5 @@
 package com.kubekubedashdash.ui.screens.pods
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,23 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -65,30 +55,25 @@ import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.clear_all_filled
-import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.delete_filled
-import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.info_filled
-import com.kubekubedashdash.resources.refresh_24
 import com.kubekubedashdash.resources.terminal_filled
-import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.MetricsLineChart
-import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
-import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailAction
+import com.kubekubedashdash.ui.screens.DetailActionMenuItem
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
 import com.kubekubedashdash.ui.screens.GenericYamlTab
-import com.kubekubedashdash.ui.screens.logviewer.LogLine
 import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
 import kotlinx.coroutines.Dispatchers
@@ -101,7 +86,6 @@ import org.jetbrains.compose.resources.painterResource
 private enum class DetailTab(val label: String, val icon: DrawableResource) {
     Overview("Overview", Res.drawable.info_filled),
     Yaml("YAML", Res.drawable.code_filled),
-    Logs("Logs", Res.drawable.terminal_filled),
 }
 
 private val detailTabs = DetailTab.entries.toList()
@@ -173,6 +157,8 @@ fun PodDetailPanel(
                         forceDelete.clearError()
                         showForceDeleteDialog = true
                     },
+                    onOpenLogs = onOpenLogs,
+                    onOpenTerminal = onOpenTerminal,
                 )
                 PanelTabs(activeTab, tabs) { newTab ->
                     activeTab = newTab
@@ -196,8 +182,6 @@ fun PodDetailPanel(
                         )
 
                         DetailTab.Yaml -> GenericYamlTab("Pod", pod.name, pod.namespace)
-
-                        DetailTab.Logs -> LogsTab(pod, onOpenLogs, onOpenTerminal)
                     }
                 }
             }
@@ -268,7 +252,37 @@ private fun PanelHeader(
     actionsEnabled: Boolean,
     onEvictClick: () -> Unit,
     onForceDeleteClick: () -> Unit,
+    onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit,
+    onOpenTerminal: (podName: String, namespace: String, container: String) -> Unit,
 ) {
+    val containers = pod.containers
+    val terminalAction = DetailAction(
+        icon = Res.drawable.terminal_filled,
+        label = "Open terminal",
+        description = "Open an interactive shell in a container of this pod, docked at the bottom of the window.",
+        enabled = containers.isNotEmpty(),
+        onClick = { containers.firstOrNull()?.let { onOpenTerminal(pod.name, pod.namespace, it.name) } },
+        menuItems = if (containers.size > 1) {
+            containers.map { c ->
+                DetailActionMenuItem(label = c.name, onClick = { onOpenTerminal(pod.name, pod.namespace, c.name) })
+            }
+        } else {
+            emptyList()
+        },
+    )
+    val logsAction = DetailAction(
+        icon = Res.drawable.article_filled,
+        label = "View logs",
+        description = "Stream this pod's logs in the log viewer, docked at the bottom of the window.",
+        onClick = { onOpenLogs(pod.name, pod.namespace, containers.firstOrNull()?.name) },
+        menuItems = if (containers.size > 1) {
+            containers.map { c ->
+                DetailActionMenuItem(label = c.name, onClick = { onOpenLogs(pod.name, pod.namespace, c.name) })
+            }
+        } else {
+            emptyList()
+        },
+    )
     val evictAction = DetailAction(
         icon = Res.drawable.clear_all_filled,
         label = "Evict pod",
@@ -289,7 +303,10 @@ private fun PanelHeader(
         name = pod.name,
         subtitle = pod.namespace,
         status = pod.status,
-        actions = listOf(evictAction, forceDeleteAction),
+        actionGroups = listOf(
+            listOf(terminalAction, logsAction),
+            listOf(evictAction, forceDeleteAction),
+        ),
         onClose = onClose,
     )
 }
@@ -501,203 +518,6 @@ private fun ContainerCard(container: ContainerInfo) {
                 if (container.ready) KdSuccess else KdError,
             )
             InfoRow("Restarts", "${container.restartCount}")
-        }
-    }
-}
-
-// ── Logs Tab (preview → drawer) ──────────────────────────────────────────────────
-
-private const val LOGS_PREVIEW_TAIL = 50
-
-@Composable
-private fun LogsTab(
-    pod: PodInfo,
-    onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit,
-    onOpenTerminal: (podName: String, namespace: String, container: String) -> Unit,
-) {
-    val kubeClient = LocalReactiveKubeClient.current
-    var lines by remember(pod.uid) { mutableStateOf(listOf<String>()) }
-    var loading by remember(pod.uid) { mutableStateOf(true) }
-    var refreshTick by remember(pod.uid) { mutableStateOf(0) }
-    val firstContainer = pod.containers.firstOrNull()?.name
-
-    LaunchedEffect(pod.uid, refreshTick) {
-        loading = true
-        val logs = withContext(Dispatchers.IO) {
-            kubeClient.getPodLogs(pod.name, pod.namespace, firstContainer, tailLines = LOGS_PREVIEW_TAIL)
-        }
-        lines = logs.lines().filter { it.isNotEmpty() }
-        loading = false
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = if (firstContainer != null && pod.containers.size > 1) {
-                    "Last $LOGS_PREVIEW_TAIL lines · $firstContainer · open viewer to switch container"
-                } else {
-                    "Last $LOGS_PREVIEW_TAIL lines"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = KdTextSecondary,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(
-                onClick = { refreshTick++ },
-                modifier = Modifier.size(28.dp),
-            ) {
-                Icon(
-                    painterResource(Res.drawable.refresh_24),
-                    "Refresh preview",
-                    Modifier.size(14.dp),
-                    tint = KdTextSecondary,
-                )
-            }
-            OpenTerminalButton(pod = pod, onOpenTerminal = onOpenTerminal)
-            Spacer(Modifier.width(6.dp))
-            OpenInLogViewerButton(pod = pod, onOpenLogs = onOpenLogs)
-        }
-
-        Surface(
-            modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
-            shape = RoundedCornerShape(6.dp),
-            color = Color(0xFF0D1117),
-        ) {
-            when {
-                loading && lines.isEmpty() -> ResourceLoadingIndicator()
-
-                lines.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No recent log output. Open viewer to stream live.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdTextSecondary,
-                    )
-                }
-
-                else -> SelectionContainer {
-                    LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                        items(lines) { line ->
-                            LogLine(line, highlight = "", wrap = false)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OpenInLogViewerButton(
-    pod: PodInfo,
-    onOpenLogs: (String, String, String?) -> Unit,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(
-            onClick = {
-                if (pod.containers.size > 1) {
-                    menuOpen = true
-                } else {
-                    onOpenLogs(pod.name, pod.namespace, pod.containers.firstOrNull()?.name)
-                }
-            },
-            modifier = Modifier.height(28.dp),
-            shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = KdPrimary),
-            border = BorderStroke(1.dp, KdPrimary.copy(alpha = 0.5f)),
-        ) {
-            Icon(painterResource(Res.drawable.terminal_filled), null, Modifier.size(12.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Open in log viewer", style = MaterialTheme.typography.labelSmall)
-            if (pod.containers.size > 1) {
-                Spacer(Modifier.width(2.dp))
-                Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
-            }
-        }
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            modifier = Modifier.background(KdSurface),
-        ) {
-            pod.containers.forEach { c ->
-                DropdownMenuItem(
-                    text = { Text(c.name, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
-                    onClick = {
-                        menuOpen = false
-                        onOpenLogs(pod.name, pod.namespace, c.name)
-                    },
-                    leadingIcon = {
-                        Icon(
-                            painterResource(Res.drawable.view_in_ar_filled),
-                            null,
-                            Modifier.size(14.dp),
-                            tint = KdTextSecondary,
-                        )
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OpenTerminalButton(
-    pod: PodInfo,
-    onOpenTerminal: (String, String, String) -> Unit,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(
-            onClick = {
-                if (pod.containers.size > 1) {
-                    menuOpen = true
-                } else {
-                    pod.containers.firstOrNull()?.let { c ->
-                        onOpenTerminal(pod.name, pod.namespace, c.name)
-                    }
-                }
-            },
-            modifier = Modifier.height(28.dp),
-            shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = KdPrimary),
-            border = BorderStroke(1.dp, KdPrimary.copy(alpha = 0.5f)),
-        ) {
-            Icon(painterResource(Res.drawable.terminal_filled), null, Modifier.size(12.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Open terminal", style = MaterialTheme.typography.labelSmall)
-            if (pod.containers.size > 1) {
-                Spacer(Modifier.width(2.dp))
-                Icon(painterResource(Res.drawable.expand_more_filled), null, Modifier.size(14.dp))
-            }
-        }
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            modifier = Modifier.background(KdSurface),
-        ) {
-            pod.containers.forEach { c ->
-                DropdownMenuItem(
-                    text = { Text(c.name, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
-                    onClick = {
-                        menuOpen = false
-                        onOpenTerminal(pod.name, pod.namespace, c.name)
-                    },
-                    leadingIcon = {
-                        Icon(
-                            painterResource(Res.drawable.view_in_ar_filled),
-                            null,
-                            Modifier.size(14.dp),
-                            tint = KdTextSecondary,
-                        )
-                    },
-                )
-            }
         }
     }
 }
