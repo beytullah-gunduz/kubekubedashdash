@@ -1,24 +1,30 @@
 package com.kubekubedashdash.ui.screens
 
+import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
@@ -424,6 +430,12 @@ internal fun GenericYamlTab(
     }
     val lines = remember(displayText) { displayText.lines() }
 
+    // Keyed on resource identity (not displayText) so scroll position survives a
+    // Reveal/Decode toggle but resets when the user selects a different resource —
+    // this composable is recomposed in place, never recreated, on selection change.
+    val vScroll = remember(kind, name, namespace) { ScrollState(0) }
+    val hScroll = remember(kind, name, namespace) { ScrollState(0) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
@@ -462,29 +474,49 @@ internal fun GenericYamlTab(
         if (loading) {
             ResourceLoadingIndicator()
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
-                items(lines.size) { i ->
-                    Row {
-                        Text(
-                            "${i + 1}",
-                            modifier = Modifier.width(36.dp),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = kdMonoFamily(),
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp,
-                            ),
-                            color = KdTextSecondary.copy(alpha = 0.35f),
-                        )
-                        Text(
-                            text = highlightYamlLine(lines[i]),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = kdMonoFamily(),
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp,
-                            ),
-                        )
+            // Hoisted so kdMonoFamily() + TextStyle.copy() run once per composition
+            // (not once per line) and the gutter/content Texts provably share one style.
+            val lineStyle = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = kdMonoFamily(),
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+            Box(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+                    // Line-number gutter: outside SelectionContainer, not selectable.
+                    // Shares vScroll with the content column below — never add
+                    // padding/spacing/a trailing element to one without the other,
+                    // or their content heights (and thus scroll sync) drift apart.
+                    Column(Modifier.verticalScroll(vScroll)) {
+                        repeat(lines.size) { i ->
+                            Text(
+                                "${i + 1}",
+                                modifier = Modifier.width(36.dp),
+                                style = lineStyle,
+                                color = KdTextSecondary.copy(alpha = 0.35f),
+                                maxLines = 1,
+                                softWrap = false,
+                            )
+                        }
+                    }
+                    SelectionContainer(Modifier.weight(1f)) {
+                        Column(
+                            Modifier.fillMaxWidth().verticalScroll(vScroll).horizontalScroll(hScroll),
+                        ) {
+                            lines.forEach { line ->
+                                Text(text = highlightYamlLine(line), style = lineStyle, softWrap = false)
+                            }
+                        }
                     }
                 }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(vScroll),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
+                HorizontalScrollbar(
+                    adapter = rememberScrollbarAdapter(hScroll),
+                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(end = 12.dp),
+                )
             }
         }
     }
