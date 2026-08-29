@@ -1601,7 +1601,7 @@ class ReactiveKubeClient(
                         send(items)
                     }
             }
-            while (!informer.hasSynced()) delay(50)
+            awaitInformerSync(informer, "Tail informer for namespace=$namespace")
             val items = informer.store.list().map(CapturePodMapper::map)
             log.info("Tail informer synced with {} items for namespace={}", items.size, namespace)
             send(items)

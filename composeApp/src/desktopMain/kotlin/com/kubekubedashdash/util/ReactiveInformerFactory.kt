@@ -98,7 +98,7 @@ internal class ReactiveInformerFactory(
                                 }
                             }
                     }
-                    while (!informer.hasSynced()) delay(50)
+                    awaitInformerSync(informer, "Cluster-scoped informer")
                     val items = informer.store.list()
                     log.info("Cluster-scoped informer synced with {} items", items.size)
                     send(ResourceState.Success(items.map(mapper)))
@@ -175,7 +175,7 @@ internal class ReactiveInformerFactory(
                                 }
                             }
                     }
-                    while (!informer.hasSynced()) delay(50)
+                    awaitInformerSync(informer, "Namespaced informer for namespace=$nsLabel")
                     val items = informer.store.list()
                     log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
                     send(ResourceState.Success(items.mapNotNull(mapper)))
