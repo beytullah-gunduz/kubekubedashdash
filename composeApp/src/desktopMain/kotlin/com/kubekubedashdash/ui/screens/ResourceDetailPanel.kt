@@ -455,9 +455,10 @@ internal fun GenericYamlTab(
     val goNext = { if (matches.isNotEmpty()) current = (current + 1) % matches.size }
     val goPrev = { if (matches.isNotEmpty()) current = (current - 1 + matches.size) % matches.size }
 
-    // Keyed on resource identity (not displayText) so scroll position survives a
-    // Reveal/Decode toggle but resets when the user selects a different resource —
-    // this composable is recomposed in place, never recreated, on selection change.
+    // Keyed on resource identity (not displayText) so a Reveal/Decode toggle does not
+    // reset the scroll (an active search may still re-centre its match), while selecting
+    // a different resource does — this composable is recomposed in place, never
+    // recreated, on selection change.
     val vScroll = remember(kind, name, namespace) { ScrollState(0) }
     val hScroll = remember(kind, name, namespace) { ScrollState(0) }
 
@@ -495,7 +496,9 @@ internal fun GenericYamlTab(
                                 true
                             }
 
-                            event.key == Key.Escape -> {
+                            // Only consume Escape while it has something to clear, so a
+                            // future panel-level Escape handler is not pre-empted.
+                            event.key == Key.Escape && query.isNotEmpty() -> {
                                 query = ""
                                 true
                             }
@@ -596,11 +599,24 @@ internal fun GenericYamlTab(
                                 val text = remember(line, ranges, curRange) {
                                     buildAnnotatedString {
                                         append(highlightYamlLine(line))
+                                        // highlightYamlLine rebuilds a line whose indent
+                                        // contains non-space whitespace (e.g. a tab)
+                                        // shorter than the original, so clamp the raw-line
+                                        // match indices to the built length.
+                                        val n = length
                                         ranges?.forEach {
-                                            addStyle(SpanStyle(background = KdWarning.copy(alpha = 0.35f)), it.range.first, it.range.last + 1)
+                                            addStyle(
+                                                SpanStyle(background = KdWarning.copy(alpha = 0.35f)),
+                                                it.range.first.coerceAtMost(n),
+                                                (it.range.last + 1).coerceAtMost(n),
+                                            )
                                         }
                                         curRange?.let {
-                                            addStyle(SpanStyle(background = KdWarning.copy(alpha = 0.7f)), it.first, it.last + 1)
+                                            addStyle(
+                                                SpanStyle(background = KdWarning.copy(alpha = 0.7f)),
+                                                it.first.coerceAtMost(n),
+                                                (it.last + 1).coerceAtMost(n),
+                                            )
                                         }
                                     }
                                 }
@@ -634,8 +650,8 @@ internal fun GenericYamlTab(
     }
 }
 
-// Copied from LogViewer.kt's FilterLogsTextField pattern (not shared — see workstream
-// non-goals) so the YAML pane doesn't take a dependency on the log viewer package.
+// Copied from LogViewer.kt's FilterLogsTextField pattern (intentionally not shared) so
+// the YAML pane doesn't take a dependency on the log viewer package.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun YamlSearchField(

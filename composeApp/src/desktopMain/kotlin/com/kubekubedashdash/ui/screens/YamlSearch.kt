@@ -3,7 +3,7 @@ package com.kubekubedashdash.ui.screens
 import com.kubekubedashdash.ui.screens.logviewer.matchRanges
 
 /** One occurrence of a search query at [line] (0-based index into the YAML) within [range]. */
-data class YamlSearchMatch(val line: Int, val range: IntRange)
+internal data class YamlSearchMatch(val line: Int, val range: IntRange)
 
 /**
  * Flattened, document-ordered matches of [query] across [lines]; empty for a blank query.
