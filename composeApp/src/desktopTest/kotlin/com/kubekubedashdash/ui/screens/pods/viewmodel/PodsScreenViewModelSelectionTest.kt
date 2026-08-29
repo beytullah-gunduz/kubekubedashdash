@@ -3,10 +3,10 @@ package com.kubekubedashdash.ui.screens.pods.viewmodel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -39,9 +39,7 @@ class PodsScreenViewModelSelectionTest {
 
     @AfterTest
     fun tearDown() {
-        vm.viewModelScope.cancel()
-        scope.cancel()
-        manager.close()
+        shutdownCleanly(scope, vm.viewModelScope, label = "PodsScreenViewModelSelectionTest", manager = manager)
     }
 
     @Test

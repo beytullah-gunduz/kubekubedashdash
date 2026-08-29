@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
@@ -11,7 +12,6 @@ import io.fabric8.mockwebserver.MockWebServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -82,9 +82,7 @@ class SessionViewModelConnectionTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
-        manager.close()
-        runCatching { server.destroy() }
+        shutdownCleanly(scope, label = "SessionViewModelConnectionTest", manager = manager, servers = listOf(server))
     }
 
     @Test

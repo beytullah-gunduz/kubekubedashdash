@@ -5,11 +5,11 @@ import com.kubekubedashdash.util.AwsProfile
 import com.kubekubedashdash.util.EksCluster
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
@@ -70,9 +70,7 @@ class EksDiscoveryViewModelTest {
 
     @AfterTest
     fun tearDown() {
-        vm.viewModelScope.cancel()
-        scope.cancel()
-        manager.close()
+        shutdownCleanly(scope, vm.viewModelScope, label = "EksDiscoveryViewModelTest", manager = manager)
         kubeconfigFile.delete()
     }
 

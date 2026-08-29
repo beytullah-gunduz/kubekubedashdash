@@ -9,7 +9,6 @@ import io.fabric8.mockwebserver.MockWebServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -82,10 +81,12 @@ class KubeConnectionManagerSwitchTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
-        manager.close()
-        serverA.destroy()
-        serverB.destroy()
+        shutdownCleanly(
+            scope,
+            label = "KubeConnectionManagerSwitchTest",
+            manager = manager,
+            servers = listOf(serverA, serverB),
+        )
     }
 
     @Test

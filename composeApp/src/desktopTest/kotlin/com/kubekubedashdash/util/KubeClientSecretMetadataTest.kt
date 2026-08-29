@@ -60,8 +60,7 @@ class KubeClientSecretMetadataTest {
 
     @AfterTest
     fun tearDown() {
-        manager.close()
-        server.destroy()
+        shutdownCleanly(label = "KubeClientSecretMetadataTest", manager = manager, servers = listOf(server))
     }
 
     @Test

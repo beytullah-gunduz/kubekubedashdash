@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
@@ -13,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -84,11 +84,13 @@ class PodsScreenViewModelPendingSelectTest {
 
     @AfterTest
     fun tearDown() {
-        stateCollector?.cancel()
-        vm.viewModelScope.cancel()
-        scope.cancel()
-        manager.close()
-        server.destroy()
+        shutdownCleanly(
+            scope,
+            vm.viewModelScope,
+            label = "PodsScreenViewModelPendingSelectTest",
+            manager = manager,
+            servers = listOf(server),
+        )
     }
 
     private suspend fun awaitSnapshot(predicate: (List<com.kubekubedashdash.models.PodInfo>) -> Boolean) {

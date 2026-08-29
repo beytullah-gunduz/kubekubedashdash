@@ -3,10 +3,10 @@ package com.kubekubedashdash.ui.screens.viewmodel
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -33,8 +33,7 @@ class SessionViewModelHistoryTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
-        manager.close()
+        shutdownCleanly(scope, label = "SessionViewModelHistoryTest", manager = manager)
     }
 
     private val detail = Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "ns-a")

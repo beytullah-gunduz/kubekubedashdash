@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -83,9 +82,7 @@ class ReactiveKubeClientLogStreamTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
-        manager.close()
-        server.destroy()
+        shutdownCleanly(scope, label = "ReactiveKubeClientLogStreamTest", manager = manager, servers = listOf(server))
     }
 
     private fun seedPod(name: String, namespace: String) {

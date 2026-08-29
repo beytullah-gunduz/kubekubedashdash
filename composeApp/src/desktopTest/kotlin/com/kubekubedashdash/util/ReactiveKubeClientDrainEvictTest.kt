@@ -12,7 +12,6 @@ import io.fabric8.mockwebserver.MockWebServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -148,9 +147,7 @@ class ReactiveKubeClientDrainEvictTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
-        manager.close()
-        server.destroy()
+        shutdownCleanly(scope, label = "ReactiveKubeClientDrainEvictTest", manager = manager, servers = listOf(server))
     }
 
     @Test
