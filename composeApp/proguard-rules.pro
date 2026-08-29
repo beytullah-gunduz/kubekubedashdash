@@ -102,6 +102,11 @@
 -dontwarn org.codehaus.commons.compiler.**
 -dontwarn org.codehaus.janino.**
 
+# Newer logback 1.5.x (present in 1.5.38, absent in 1.5.15) adds an XZ
+# rolling-compression strategy backed by the optional org.tukaani:xz library,
+# which we don't ship (logback.xml uses no .xz rollover suffix).
+-dontwarn org.tukaani.xz.**
+
 # Logback-classic also references the legacy log4j 1.x and log4j2 APIs
 # (LoggerFactory bridges). Optional unless those APIs are on the classpath.
 -dontwarn org.apache.log4j.**
