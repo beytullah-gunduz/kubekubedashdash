@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,10 +34,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +71,7 @@ import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
+import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
@@ -92,6 +97,15 @@ data class DetailField(
 )
 
 /**
+ * One entry of a [DetailAction] dropdown menu — e.g. a container to open a
+ * terminal or log view for. Rendered with the container icon.
+ */
+data class DetailActionMenuItem(
+    val label: String,
+    val onClick: () -> Unit,
+)
+
+/**
  * An action button rendered in the [ResourceDetailPanel] header alongside Delete.
  *
  * @param label       Button tooltip / accessibility label.
@@ -99,6 +113,7 @@ data class DetailField(
  * @param destructive When true the icon renders in [KdError] red; otherwise [KdTextSecondary].
  * @param enabled     Controls whether the button responds to clicks.
  * @param onClick     Invoked when the button is clicked.
+ * @param menuItems   When non-empty, clicking opens a dropdown of these entries instead of invoking [onClick].
  */
 data class DetailAction(
     val label: String,
@@ -108,6 +123,7 @@ data class DetailAction(
     val tint: Color? = null,
     val description: String? = null,
     val onClick: () -> Unit,
+    val menuItems: List<DetailActionMenuItem> = emptyList(),
 )
 
 class ExtraTab(
@@ -274,12 +290,17 @@ fun ResourceDetailPanel(
 
 // ── Shared panel header ─────────────────────────────────────────────────────────
 
+/**
+ * @param actions      Flat, ungrouped header actions. Ignored when [actionGroups] is non-empty.
+ * @param actionGroups Actions split into divider-separated groups; takes precedence over [actions].
+ */
 @Composable
 fun DetailPanelHeader(
     name: String,
     subtitle: String,
     status: String?,
     actions: List<DetailAction> = emptyList(),
+    actionGroups: List<List<DetailAction>> = emptyList(),
     onDelete: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
@@ -295,13 +316,74 @@ fun DetailPanelHeader(
                 Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
             }
         }
-        actions.forEach { action ->
-            TooltipIconButton(icon = action.icon, label = action.label, tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary, description = action.description, enabled = action.enabled, onClick = action.onClick)
+        val groups = actionGroups.ifEmpty { listOf(actions) }.filter { it.isNotEmpty() }
+        groups.forEachIndexed { index, group ->
+            if (index > 0) HeaderGroupDivider()
+            group.forEach { action -> key(action.label) { HeaderActionButton(action) } }
         }
+        if (groups.size > 1) HeaderGroupDivider()
         if (onDelete != null) {
             TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, description = "Permanently remove this resource — it won't come back unless recreated.", onClick = onDelete)
         }
         TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
+    }
+}
+
+@Composable
+private fun HeaderGroupDivider() {
+    VerticalDivider(
+        modifier = Modifier.padding(horizontal = 4.dp).height(16.dp),
+        color = KdBorder,
+    )
+}
+
+@Composable
+private fun HeaderActionButton(action: DetailAction) {
+    val tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary
+    if (action.menuItems.isEmpty()) {
+        TooltipIconButton(
+            icon = action.icon,
+            label = action.label,
+            tint = tint,
+            description = action.description,
+            enabled = action.enabled,
+            onClick = action.onClick,
+        )
+    } else {
+        var menuOpen by remember { mutableStateOf(false) }
+        Box {
+            TooltipIconButton(
+                icon = action.icon,
+                label = action.label,
+                tint = tint,
+                description = action.description,
+                enabled = action.enabled,
+                onClick = { menuOpen = true },
+            )
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                modifier = Modifier.background(KdSurface),
+            ) {
+                action.menuItems.forEach { item ->
+                    DropdownMenuItem(
+                        text = { Text(item.label, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
+                        onClick = {
+                            menuOpen = false
+                            item.onClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                painterResource(Res.drawable.view_in_ar_filled),
+                                null,
+                                Modifier.size(14.dp),
+                                tint = KdTextSecondary,
+                            )
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
