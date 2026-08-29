@@ -5,6 +5,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,15 +25,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -52,8 +56,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
@@ -61,8 +75,10 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
@@ -71,6 +87,9 @@ import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.keyboard_arrow_down_filled
+import com.kubekubedashdash.resources.keyboard_arrow_up_filled
+import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
@@ -430,17 +449,84 @@ internal fun GenericYamlTab(
     }
     val lines = remember(displayText) { displayText.lines() }
 
+    var query by remember(kind, name, namespace) { mutableStateOf("") }
+    val matches = remember(lines, query) { findYamlMatches(lines, query) }
+    var current by remember(lines, query) { mutableIntStateOf(0) }
+    val goNext = { if (matches.isNotEmpty()) current = (current + 1) % matches.size }
+    val goPrev = { if (matches.isNotEmpty()) current = (current - 1 + matches.size) % matches.size }
+
     // Keyed on resource identity (not displayText) so scroll position survives a
     // Reveal/Decode toggle but resets when the user selects a different resource —
     // this composable is recomposed in place, never recreated, on selection change.
     val vScroll = remember(kind, name, namespace) { ScrollState(0) }
     val hScroll = remember(kind, name, namespace) { ScrollState(0) }
 
+    // Set from the first content line's onTextLayout; used to scroll a match into view
+    // without measuring the viewport (ScrollState.viewportSize is already the viewport).
+    var lineHeightPx by remember { mutableIntStateOf(0) }
+    LaunchedEffect(current, matches, lineHeightPx) {
+        val m = matches.getOrNull(current) ?: return@LaunchedEffect
+        if (lineHeightPx <= 0) return@LaunchedEffect
+        val target = (m.line * lineHeightPx - vScroll.viewportSize / 2 + lineHeightPx / 2)
+            .coerceIn(0, vScroll.maxValue)
+        vScroll.animateScrollTo(target)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            YamlSearchField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.weight(1f).height(34.dp)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when {
+                            event.key == Key.Enter && event.isShiftPressed -> {
+                                goPrev()
+                                true
+                            }
+
+                            event.key == Key.Enter -> {
+                                goNext()
+                                true
+                            }
+
+                            event.key == Key.Escape -> {
+                                query = ""
+                                true
+                            }
+
+                            else -> false
+                        }
+                    },
+            )
+            if (query.isNotBlank()) {
+                Text(
+                    "${if (matches.isEmpty()) 0 else current + 1}/${matches.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                )
+            }
+            IconButton(onClick = goPrev, modifier = Modifier.size(24.dp), enabled = matches.isNotEmpty()) {
+                Icon(
+                    painterResource(Res.drawable.keyboard_arrow_up_filled),
+                    "Previous match",
+                    Modifier.size(14.dp),
+                    tint = KdTextSecondary.copy(alpha = if (matches.isEmpty()) 0.3f else 1f),
+                )
+            }
+            IconButton(onClick = goNext, modifier = Modifier.size(24.dp), enabled = matches.isNotEmpty()) {
+                Icon(
+                    painterResource(Res.drawable.keyboard_arrow_down_filled),
+                    "Next match",
+                    Modifier.size(14.dp),
+                    tint = KdTextSecondary.copy(alpha = if (matches.isEmpty()) 0.3f else 1f),
+                )
+            }
             if (isSecret) {
                 // Masked mode → Reveal/Hide (shield); unmasked mode → Decode/Raw (swap).
                 val (buttonIcon, buttonLabel) = when {
@@ -458,7 +544,6 @@ internal fun GenericYamlTab(
                     Spacer(Modifier.width(4.dp))
                     Text(buttonLabel, style = MaterialTheme.typography.labelSmall)
                 }
-                Spacer(Modifier.width(4.dp))
             }
             TextButton(
                 onClick = { yaml?.let { text -> copyToClipboard(text) } },
@@ -481,6 +566,8 @@ internal fun GenericYamlTab(
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
             )
+            val matchesByLine = remember(matches) { matches.groupBy { it.line } }
+            val cur = matches.getOrNull(current)
             Box(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
                     // Line-number gutter: outside SelectionContainer, not selectable.
@@ -503,8 +590,33 @@ internal fun GenericYamlTab(
                         Column(
                             Modifier.fillMaxWidth().verticalScroll(vScroll).horizontalScroll(hScroll),
                         ) {
-                            lines.forEach { line ->
-                                Text(text = highlightYamlLine(line), style = lineStyle, softWrap = false)
+                            lines.forEachIndexed { i, line ->
+                                val ranges = matchesByLine[i]
+                                val curRange = cur?.takeIf { it.line == i }?.range
+                                val text = remember(line, ranges, curRange) {
+                                    buildAnnotatedString {
+                                        append(highlightYamlLine(line))
+                                        ranges?.forEach {
+                                            addStyle(SpanStyle(background = KdWarning.copy(alpha = 0.35f)), it.range.first, it.range.last + 1)
+                                        }
+                                        curRange?.let {
+                                            addStyle(SpanStyle(background = KdWarning.copy(alpha = 0.7f)), it.first, it.last + 1)
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = text,
+                                    style = lineStyle,
+                                    softWrap = false,
+                                    // Text(AnnotatedString, ...) requires a non-nullable
+                                    // onTextLayout; a no-op callback for every line but the
+                                    // first keeps lineHeightPx sourced from line 0 only.
+                                    onTextLayout = if (i == 0) {
+                                        { r -> lineHeightPx = r.size.height }
+                                    } else {
+                                        {}
+                                    },
+                                )
                             }
                         }
                     }
@@ -520,6 +632,64 @@ internal fun GenericYamlTab(
             }
         }
     }
+}
+
+// Copied from LogViewer.kt's FilterLogsTextField pattern (not shared — see workstream
+// non-goals) so the YAML pane doesn't take a dependency on the log viewer package.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun YamlSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdPrimary,
+        unfocusedBorderColor = KdBorder,
+        cursorColor = KdPrimary,
+        focusedContainerColor = KdSurfaceVariant,
+        unfocusedContainerColor = KdSurfaceVariant,
+    )
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(
+            color = KdTextPrimary,
+            fontFamily = kdMonoFamily(),
+        ),
+        cursorBrush = SolidColor(KdPrimary),
+        interactionSource = interactionSource,
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = value,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text("Search YAML…", style = MaterialTheme.typography.bodySmall, color = KdTextPlaceholder)
+                },
+                leadingIcon = {
+                    Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(16.dp), tint = KdTextPlaceholder)
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                },
+            )
+        },
+    )
 }
 
 private fun copyToClipboard(text: String) {
