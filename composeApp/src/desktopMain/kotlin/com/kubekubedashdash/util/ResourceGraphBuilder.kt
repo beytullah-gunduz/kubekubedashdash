@@ -301,7 +301,7 @@ object ResourceGraphBuilder {
                             RootWorkload(rsOwner.uid, "Deployment", dep.metadata?.name ?: rsOwner.name ?: "", "Deployment:${rsOwner.uid}")
                         } else {
                             val rsUid = ownerRef.uid ?: return null
-                            RootWorkload(rsUid, "ReplicaSet", rs?.metadata?.name ?: ownerRef.name ?: "", "ReplicaSet:$rsUid")
+                            RootWorkload(rsUid, "ReplicaSet", rs.metadata?.name ?: ownerRef.name ?: "", "ReplicaSet:$rsUid")
                         }
                     } else {
                         val rsUid = ownerRef.uid ?: return null
@@ -318,7 +318,7 @@ object ResourceGraphBuilder {
                             RootWorkload(jobOwner.uid, "CronJob", cj.metadata?.name ?: jobOwner.name ?: "", "CronJob:${jobOwner.uid}")
                         } else {
                             val jobUid = ownerRef.uid ?: return null
-                            RootWorkload(jobUid, "Job", job?.metadata?.name ?: ownerRef.name ?: "", "Job:$jobUid")
+                            RootWorkload(jobUid, "Job", job.metadata?.name ?: ownerRef.name ?: "", "Job:$jobUid")
                         }
                     } else {
                         val jobUid = ownerRef.uid ?: return null
