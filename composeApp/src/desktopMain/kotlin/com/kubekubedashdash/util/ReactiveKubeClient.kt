@@ -1080,11 +1080,27 @@ class ReactiveKubeClient(
                 if (informer == null) {
                     awaitCancellation()
                 } else {
-                    while (!informer.hasSynced()) delay(50)
-                    val items = informer.store.list().mapNotNull(::mapCrd)
-                    log.info("CRD informer synced with {} CRDs", items.size)
-                    send(ResourceState.Success(items))
                     try {
+                        try {
+                            awaitInformerSync(informer, "CRD informer")
+                            val items = informer.store.list().mapNotNull(::mapCrd)
+                            log.info("CRD informer synced with {} CRDs", items.size)
+                            send(ResourceState.Success(items))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            // Deliberately an Error, not the empty list the
+                            // creation-failure path above reports. That path
+                            // means "no permission to list CRDs", which is a
+                            // normal cluster shape; this one means the informer
+                            // died or never synced. Reporting a dead informer as
+                            // "this cluster has no CRDs" is what let this class
+                            // of fault hide. Not fed to reportError: CRD
+                            // discovery is optional and must not trip the
+                            // connection-health counter.
+                            log.error("CRD informer failed: {}", e.message)
+                            send(ResourceState.Error(e.message ?: "Unknown error"))
+                        }
                         awaitCancellation()
                     } finally {
                         informer.close()
