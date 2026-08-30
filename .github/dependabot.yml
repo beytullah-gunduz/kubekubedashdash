@@ -8,6 +8,13 @@ updates:
     labels:
       - "dependencies"
       - "gradle"
+    # Let releases soak before adopting them. A pinned version faithfully
+    # reproduces a bad release forever, so time-in-the-wild is the only
+    # defence against a release that was already broken when published.
+    # Security updates ignore cooldown, so real CVE fixes still arrive fast.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       gradle-minor-patch:
         update-types:
@@ -20,3 +27,7 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    # Same rationale as above. This ecosystem supports only `default-days`;
+    # the semver-* keys are not available for github-actions.
+    cooldown:
+      default-days: 7
