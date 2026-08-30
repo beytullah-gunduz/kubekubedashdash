@@ -3,6 +3,12 @@ kotlin = "2.3.21"
 compose-multiplatform = "1.12.0"
 compose-material3 = "1.12.0-alpha03"
 fabric8 = "7.8.0"
+# 7.8.0's VertxMockWebSocket.send() blocks on the Vert.x write future
+# (awaitWrite, 30s). WatchEventsListener calls it off the event loop while
+# onClosed() blocks the event loop in awaitTermination -> deadlock on every
+# watch close. 7.7.0 is the newest release without the blocking write and the
+# oldest with the idempotent shutdown guard MockServerTeardown.kt relies on.
+fabric8-mockwebserver = "7.7.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 lifecycle = "2.11.0"
