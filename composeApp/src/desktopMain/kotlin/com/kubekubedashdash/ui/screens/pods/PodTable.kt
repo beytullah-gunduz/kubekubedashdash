@@ -96,7 +96,7 @@ internal fun PodTable(
                     }
                 },
                 actions = buildList {
-                    add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}") })
+                    add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}", "Copied command") })
                     if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
                     if (onOpenTerminal != null) add(RowAction("Open terminal") { onOpenTerminal(pod) })
                     if (onEvict != null && !isStale) add(RowAction("Evict") { onEvict(pod) })

@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -45,11 +46,13 @@ fun rememberCopyToClipboard(): CopyToClipboard {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val feedback = LocalCopyFeedback.current
-    return CopyToClipboard { text, label ->
-        scope.launch {
-            clipboard.setClipEntry(ClipEntry(StringSelection(text)))
+    return remember(clipboard, scope, feedback) {
+        CopyToClipboard { text, label ->
+            scope.launch {
+                clipboard.setClipEntry(ClipEntry(StringSelection(text)))
+            }
+            feedback(label)
         }
-        feedback(label)
     }
 }
 

@@ -52,10 +52,19 @@ fun CopyFeedbackHost(content: @Composable () -> Unit) {
     var message by remember { mutableStateOf("") }
     var visible by remember { mutableStateOf(false) }
     var seq by remember { mutableIntStateOf(0) }
-    val show: (String) -> Unit = { label ->
-        message = label
-        visible = true
-        seq += 1
+    // Remembered deliberately. LocalCopyFeedback is a staticCompositionLocalOf,
+    // which skips subtree diffing: a value that changes identity recomposes the
+    // ENTIRE provider content, and this host wraps the whole window. `seq += 1`
+    // invalidates this scope on every copy, so an unremembered lambda would hand
+    // the local a fresh instance per copy and force a full-window recomposition.
+    // It only writes through captured MutableState delegates, so a keyless
+    // remember is safe.
+    val show: (String) -> Unit = remember {
+        { label: String ->
+            message = label
+            visible = true
+            seq += 1
+        }
     }
     LaunchedEffect(seq) {
         if (seq == 0) return@LaunchedEffect
