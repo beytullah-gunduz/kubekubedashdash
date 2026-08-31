@@ -12,6 +12,7 @@ import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 
@@ -46,6 +47,7 @@ internal fun NamespaceTable(
         val rows = namespaces.map { ns ->
             TableRow(
                 id = ns.uid,
+                identity = RowIdentity("Namespace", ns.name),
                 cells = visible.map { it.cell(ns) },
                 actions = buildList {
                     if (onCaptureLogs != null) add(RowAction("Capture logs…") { onCaptureLogs(ns) })

@@ -14,6 +14,7 @@ import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
@@ -77,6 +78,7 @@ internal fun PodTable(
                 pinId = "pod:${pod.namespace}:${pod.name}",
                 backgroundColor = if (staleError) KdError.copy(alpha = 0.10f) else null,
                 selectable = !isStale,
+                identity = RowIdentity("Pod", pod.name, pod.namespace),
                 cells = visible.map { col ->
                     when {
                         !isStale -> col.cell(pod)
@@ -94,12 +96,9 @@ internal fun PodTable(
                     }
                 },
                 actions = buildList {
+                    add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}") })
                     if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
                     if (onOpenTerminal != null) add(RowAction("Open terminal") { onOpenTerminal(pod) })
-                    add(RowAction("Copy name") { copyToClipboard(pod.name) })
-                    add(RowAction("Copy kubectl get") { copyToClipboard("kubectl get pod ${pod.name} -n ${pod.namespace}") })
-                    add(RowAction("Copy kubectl describe") { copyToClipboard("kubectl describe pod ${pod.name} -n ${pod.namespace}") })
-                    add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}") })
                     if (onEvict != null && !isStale) add(RowAction("Evict") { onEvict(pod) })
                     if (onDelete != null) add(RowAction("Delete") { onDelete(pod) })
                 },

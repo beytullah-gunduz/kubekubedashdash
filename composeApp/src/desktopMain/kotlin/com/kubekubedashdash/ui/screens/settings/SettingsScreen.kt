@@ -75,6 +75,7 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.clusterInitial
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -345,6 +346,7 @@ fun SettingsScreen(
     val mockRunning by viewModel.mockIsRunning.collectAsState()
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+    val copyToClipboard = rememberCopyToClipboard()
 
     // Each SettingsSection registers its absolute layout y-offset here as
     // it's measured. The nav rail uses these to scroll on click.
@@ -755,10 +757,7 @@ fun SettingsScreen(
                                         modifier = Modifier.weight(1f),
                                     )
                                     IconButton(
-                                        onClick = {
-                                            val sel = java.awt.datatransfer.StringSelection(mcpBearerToken.orEmpty())
-                                            java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
-                                        },
+                                        onClick = { copyToClipboard(mcpBearerToken.orEmpty(), "Copied token") },
                                     ) {
                                         Icon(
                                             painterResource(Res.drawable.content_copy_filled),

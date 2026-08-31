@@ -14,6 +14,7 @@ import com.kubekubedashdash.models.ServiceInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.TableRow
 
 internal fun serviceTypeColor(type: String): Color? = when (type) {
@@ -50,7 +51,11 @@ internal fun ServiceTable(
         val visible = svcColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = services.map { svc ->
-            TableRow(id = svc.uid, cells = visible.map { it.cell(svc) })
+            TableRow(
+                id = svc.uid,
+                identity = RowIdentity("Service", svc.name, svc.namespace),
+                cells = visible.map { it.cell(svc) },
+            )
         }
 
         ResourceTable(

@@ -12,6 +12,7 @@ import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 
@@ -25,6 +26,7 @@ private class GenericColumn(
 @Composable
 internal fun GenericTable(
     resources: List<GenericResourceInfo>,
+    kind: String,
     namespacedKind: Boolean,
     selectedUid: String?,
     onClick: (GenericResourceInfo) -> Unit,
@@ -66,6 +68,7 @@ internal fun GenericTable(
         val rows = resources.map { r ->
             TableRow(
                 id = r.uid,
+                identity = RowIdentity(kind, r.name, r.namespace),
                 cells = visible.map { it.cell(r) },
                 actions = (extraActions?.invoke(r) ?: emptyList()) +
                     (if (onDelete != null) listOf(RowAction("Delete") { onDelete(r) }) else emptyList()),

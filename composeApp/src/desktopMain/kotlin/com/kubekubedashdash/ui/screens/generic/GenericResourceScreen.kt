@@ -326,6 +326,7 @@ fun GenericResourceScreen(
                         } else {
                             GenericTable(
                                 resources = filtered,
+                                kind = kind,
                                 namespacedKind = namespacedKind,
                                 selectedUid = selected?.uid,
                                 onClick = { res -> viewModel.selectItem(res) },
