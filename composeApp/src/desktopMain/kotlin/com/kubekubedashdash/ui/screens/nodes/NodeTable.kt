@@ -12,10 +12,9 @@ import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
-import com.kubekubedashdash.ui.components.RowAction
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
-import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 
 private class NodeColumn(
     val header: String,
@@ -50,7 +49,6 @@ internal fun NodeTable(
     selectedUids: Set<String> = emptySet(),
     onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
-    val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nodeColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
@@ -59,6 +57,7 @@ internal fun NodeTable(
             TableRow(
                 id = node.uid,
                 selectable = !isStale,
+                identity = RowIdentity("Node", node.name),
                 cells = visible.map { col ->
                     val base = col.cell(node)
                     when {
@@ -71,17 +70,6 @@ internal fun NodeTable(
                         else -> base.copy(color = KdTextSecondary, content = null)
                     }
                 },
-                actions = listOf(
-                    RowAction("Copy name") {
-                        copyToClipboard(node.name)
-                    },
-                    RowAction("Copy kubectl get") {
-                        copyToClipboard("kubectl get node ${node.name}")
-                    },
-                    RowAction("Copy kubectl describe") {
-                        copyToClipboard("kubectl describe node ${node.name}")
-                    },
-                ),
             )
         }
 

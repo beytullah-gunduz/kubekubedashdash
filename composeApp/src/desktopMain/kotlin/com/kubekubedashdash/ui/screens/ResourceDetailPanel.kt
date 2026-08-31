@@ -104,14 +104,13 @@ import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.util.SecretYamlMasking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
 
 // ── Data class for key-value rows in the overview ───────────────────────────────
 
@@ -500,6 +499,7 @@ internal fun GenericYamlTab(
     plural: String? = null,
 ) {
     val kubeClient = LocalReactiveKubeClient.current
+    val copyToClipboard = rememberCopyToClipboard()
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
     LaunchedEffect(kind, name, namespace, apiGroup, apiVersion) {
@@ -788,8 +788,4 @@ private fun YamlSearchField(
             )
         },
     )
-}
-
-private fun copyToClipboard(text: String) {
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }

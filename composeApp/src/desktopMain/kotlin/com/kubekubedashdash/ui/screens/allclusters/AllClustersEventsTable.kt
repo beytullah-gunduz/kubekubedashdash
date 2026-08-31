@@ -54,6 +54,7 @@ import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.Sparkline
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.components.kdFocusRing
@@ -101,6 +102,9 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
             id = "${ev.sessionId.orEmpty()}:${ev.uid}",
             cells = visibleColumns.map { it.cell(ev) },
             backgroundColor = rowBg,
+            identity = ev.objectName.takeIf { it.isNotBlank() }?.let {
+                RowIdentity(kind = null, name = it, namespace = ev.namespace.ifBlank { null })
+            },
         )
     }
 

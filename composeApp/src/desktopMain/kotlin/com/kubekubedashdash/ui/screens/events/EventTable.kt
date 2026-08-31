@@ -32,6 +32,7 @@ import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.TableRow
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -110,6 +111,13 @@ internal fun EventTable(
                 id = ev.uid,
                 cells = visibleColumns.map { it.cell(ev) },
                 backgroundColor = rowBg,
+                identity = ev.objectName.takeIf { it.isNotBlank() }?.let {
+                    RowIdentity(
+                        kind = ev.objectKind.ifBlank { null },
+                        name = it,
+                        namespace = ev.namespace.ifBlank { null },
+                    )
+                },
             )
         }
 

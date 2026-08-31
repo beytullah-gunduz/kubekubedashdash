@@ -14,6 +14,7 @@ import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
+import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.TableRow
 
 private class DeployColumn(
@@ -52,6 +53,7 @@ internal fun DeploymentTable(
         val rows = deployments.map { dep ->
             TableRow(
                 id = dep.uid,
+                identity = RowIdentity("Deployment", dep.name, dep.namespace),
                 cells = visible.map { it.cell(dep) },
                 actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(dep) }) else emptyList(),
             )

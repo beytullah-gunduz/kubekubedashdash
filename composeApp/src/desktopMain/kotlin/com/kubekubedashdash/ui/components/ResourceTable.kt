@@ -118,10 +118,16 @@ data class TableRow(
     val cells: List<CellData>,
     val backgroundColor: Color? = null,
     /**
-     * Right-click / Ctrl-click menu items for this row. When non-empty,
-     * `ResourceTable` wraps the row in a [ContextMenuArea]. Keep this list
-     * short — typically 2–4 items — and start with the safe ones (copy
-     * name, copy a `kubectl` command). Mutations belong in their own pass.
+     * When set, `ResourceTable` synthesizes copy items at the top of this row's
+     * menu — in BOTH the right-click menu and the hover `⋮` menu.
+     */
+    val identity: RowIdentity? = null,
+    /**
+     * Per-screen menu items for this row, appended AFTER the copy items that
+     * `ResourceTable` synthesizes from [identity]. Put only screen-specific
+     * actions here (view logs, open terminal, mutations) — copy-identity items
+     * are the table's job, so every table gets them consistently. Mutations go
+     * last: the menu has no separators, so order is the only safety signal.
      */
     val actions: List<RowAction> = emptyList(),
     /** Stable key used for pin persistence. Defaults to [id] when null. */
@@ -160,6 +166,7 @@ fun ResourceTable(
 ) {
     var sortColumn by remember { mutableStateOf(defaultSortColumn) }
     var sortAscending by remember { mutableStateOf(defaultSortAscending) }
+    val copyToClipboard = rememberCopyToClipboard()
 
     val sortedRows = remember(rows, sortColumn, sortAscending) {
         if (sortColumn < 0 || sortColumn >= columns.size) {
@@ -401,12 +408,63 @@ fun ResourceTable(
                                     false
                                 }
 
+                                Key.C -> if (event.isMetaPressed || event.isCtrlPressed) {
+                                    // Mirror the right-click rule: the keyboard cursor wins
+                                    // unless it is itself part of the checkbox selection;
+                                    // otherwise the selection; otherwise the open row.
+                                    // `false` on the no-target path so the key is not swallowed.
+                                    val cursor = sortedRows.getOrNull(keyboardIndex)
+                                    // isNotEmpty(), not size > 1: a single ticked checkbox is
+                                    // still an explicit selection, and with no keyboard cursor
+                                    // and no open row it was previously copying nothing at all.
+                                    val useSelection =
+                                        selectedIds.isNotEmpty() && (cursor == null || cursor.id in selectedIds)
+                                    val targets = when {
+                                        useSelection ->
+                                            sortedRows.filter { it.id in selectedIds }.mapNotNull { it.identity }
+
+                                        cursor != null -> listOfNotNull(cursor.identity)
+
+                                        else -> listOfNotNull(
+                                            sortedRows.firstOrNull { it.id == selectedRowId }?.identity,
+                                        )
+                                    }
+                                    if (targets.isEmpty()) {
+                                        false
+                                    } else {
+                                        copyToClipboard(
+                                            targets.joinToString("\n") { it.name },
+                                            if (targets.size == 1) "Copied" else "Copied ${targets.size} names",
+                                        )
+                                        true
+                                    }
+                                } else {
+                                    false
+                                }
+
                                 else -> false
                             }
                         }
                         .kdFocusRing(),
                 ) {
                     itemsIndexed(sortedRows, key = { _, row -> row.id }) { index, row ->
+                        // A1/A5: ONE menu, TWO renderers. `hasMenu` is the cheap
+                        // composition-time gate; `buildMenu` is evaluated only at
+                        // open time by both renderers.
+                        val hasMenu = row.identity != null || row.actions.isNotEmpty()
+                        val buildMenu: () -> List<RowAction> = {
+                            val multi = row.id in selectedIds && selectedIds.size > 1
+                            val targets = if (multi) {
+                                sortedRows.filter { it.id in selectedIds }.mapNotNull { it.identity }
+                            } else {
+                                listOfNotNull(row.identity)
+                            }
+                            // A6: in multi mode the row's own actions are clicked-row-scoped while
+                            // the copies are selection-scoped; mixing them in a separator-less menu
+                            // invites deleting one pod when the user meant five. Bulk mutations live
+                            // in the bulk-selection bar, so multi mode shows copies only.
+                            copyRowActions(targets, copyToClipboard) + if (multi) emptyList() else row.actions
+                        }
                         val rowItem: @Composable () -> Unit = {
                             TableRowItem(
                                 row = row,
@@ -445,17 +503,15 @@ fun ResourceTable(
                                 } else {
                                     null
                                 },
+                                hasMenu = hasMenu,
+                                buildMenu = buildMenu,
                             )
                         }
-                        if (row.actions.isEmpty()) {
+                        if (!hasMenu) {
                             rowItem()
                         } else {
                             ContextMenuArea(
-                                items = {
-                                    row.actions.map { action ->
-                                        ContextMenuItem(action.label, action.onSelect)
-                                    }
-                                },
+                                items = { buildMenu().map { ContextMenuItem(it.label, it.onSelect) } },
                                 content = rowItem,
                             )
                         }
@@ -485,6 +541,8 @@ private fun TableRowItem(
     isChecked: Boolean = false,
     checkEnabled: Boolean = true,
     onSelectClick: (() -> Unit)? = null,
+    hasMenu: Boolean = false,
+    buildMenu: () -> List<RowAction> = { emptyList() },
 ) {
     var hovered by remember { mutableStateOf(false) }
     // Switched from zebra striping to a hairline border between rows.
@@ -578,7 +636,7 @@ private fun TableRowItem(
                 }
             }
         }
-        if (row.actions.isNotEmpty()) {
+        if (hasMenu) {
             var menuExpanded by remember { mutableStateOf(false) }
             Box {
                 Text(
@@ -588,14 +646,25 @@ private fun TableRowItem(
                     modifier = Modifier.padding(horizontal = 4.dp).clickable { menuExpanded = true },
                 )
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    row.actions.forEach { action ->
-                        DropdownMenuItem(
-                            text = { Text(action.label, style = MaterialTheme.typography.bodySmall) },
-                            onClick = {
-                                menuExpanded = false
-                                action.onSelect()
-                            },
-                        )
+                    // Called HERE, never in the row body: DropdownMenu does not
+                    // compose its content while collapsed, so this keeps the
+                    // menu build lazy for the ⋮ path too.
+                    val items = buildMenu()
+                    if (items.isEmpty()) {
+                        // Defer the close: writing menuExpanded during composition
+                        // is a Compose state-write hazard. Unreachable once every
+                        // selectable table sets `identity`, but cheap to fence.
+                        LaunchedEffect(Unit) { menuExpanded = false }
+                    } else {
+                        items.forEach { action ->
+                            DropdownMenuItem(
+                                text = { Text(action.label, style = MaterialTheme.typography.bodySmall) },
+                                onClick = {
+                                    menuExpanded = false
+                                    action.onSelect()
+                                },
+                            )
+                        }
                     }
                 }
             }

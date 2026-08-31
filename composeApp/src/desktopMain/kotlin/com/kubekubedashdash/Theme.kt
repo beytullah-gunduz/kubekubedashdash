@@ -30,6 +30,7 @@ import com.kubekubedashdash.resources.inter_medium
 import com.kubekubedashdash.resources.inter_regular
 import com.kubekubedashdash.resources.inter_semibold
 import com.kubekubedashdash.resources.jetbrains_mono_regular
+import com.kubekubedashdash.ui.components.CopyFeedbackHost
 import org.jetbrains.compose.resources.Font
 
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
@@ -315,7 +316,7 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
             LocalContextMenuRepresentation provides contextMenuRepresentation,
             LocalScrollbarStyle provides scrollbarStyle,
         ) {
-            content()
+            CopyFeedbackHost { content() }
         }
     }
 }
