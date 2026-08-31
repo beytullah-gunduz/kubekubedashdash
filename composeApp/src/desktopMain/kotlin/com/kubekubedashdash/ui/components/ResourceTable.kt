@@ -414,8 +414,11 @@ fun ResourceTable(
                                     // otherwise the selection; otherwise the open row.
                                     // `false` on the no-target path so the key is not swallowed.
                                     val cursor = sortedRows.getOrNull(keyboardIndex)
+                                    // isNotEmpty(), not size > 1: a single ticked checkbox is
+                                    // still an explicit selection, and with no keyboard cursor
+                                    // and no open row it was previously copying nothing at all.
                                     val useSelection =
-                                        selectedIds.size > 1 && (cursor == null || cursor.id in selectedIds)
+                                        selectedIds.isNotEmpty() && (cursor == null || cursor.id in selectedIds)
                                     val targets = when {
                                         useSelection ->
                                             sortedRows.filter { it.id in selectedIds }.mapNotNull { it.identity }

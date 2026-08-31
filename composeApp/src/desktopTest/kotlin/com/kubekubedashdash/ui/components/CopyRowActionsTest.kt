@@ -40,6 +40,15 @@ class CopyRowActionsTest {
         )
         actions.first { it.label == "Copy kubectl get" }.onSelect()
         assertEquals("kubectl get pod api-0 -n team-a" to "Copied command", log.last())
+
+        // Pin the payloads too, not just the labels: asserting labels alone would
+        // let Copy name and Copy namespace swap their arguments undetected.
+        actions.first { it.label == "Copy name" }.onSelect()
+        assertEquals("api-0" to "Copied", log.last())
+        actions.first { it.label == "Copy namespace" }.onSelect()
+        assertEquals("team-a" to "Copied", log.last())
+        actions.first { it.label == "Copy kubectl describe" }.onSelect()
+        assertEquals("kubectl describe pod api-0 -n team-a" to "Copied command", log.last())
     }
 
     @Test
