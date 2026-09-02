@@ -36,7 +36,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +65,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
@@ -390,14 +390,15 @@ fun SidebarSection(
     defaultExpanded: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    var expanded by rememberSaveable(title) { mutableStateOf(defaultExpanded) }
+    val expandedOverrides by PreferenceRepository.sidebarSectionsExpanded.collectAsState()
+    val expanded = expandedOverrides[title] ?: defaultExpanded
 
     Column(modifier = Modifier.fillMaxWidth()) {
         if (!collapsed) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
+                    .clickable { PreferenceRepository.setSidebarSectionExpanded(title, !expanded) }
                     .padding(horizontal = 18.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

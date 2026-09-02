@@ -28,6 +28,11 @@ object PreferenceRepository {
     const val MIN_LOG_DRAWER_HEIGHT_DP = 140
     const val MAX_LOG_DRAWER_HEIGHT_DP = 800
 
+    /** Keys into [statsPanelsExpanded] — one per screen with a collapsible stats panel. */
+    const val STATS_PANEL_CLUSTER = "cluster"
+    const val STATS_PANEL_PODS = "pods"
+    const val STATS_PANEL_NODES = "nodes"
+
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val json = Json { ignoreUnknownKeys = true }
@@ -55,6 +60,8 @@ object PreferenceRepository {
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
     private val MASK_SECRET_VALUES by lazy { booleanPreferencesKey("mask_secret_values") }
     private val CAPTURE_DESTINATION_DIR by lazy { stringPreferencesKey("capture_destination_dir") }
+    private val SIDEBAR_SECTIONS_EXPANDED by lazy { stringPreferencesKey("sidebar_sections_expanded") }
+    private val STATS_PANELS_EXPANDED by lazy { stringPreferencesKey("stats_panels_expanded") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -120,6 +127,19 @@ object PreferenceRepository {
     private val _captureDestinationDir = MutableStateFlow(defaultCaptureDestinationDir())
     val captureDestinationDir: StateFlow<String> = _captureDestinationDir.asStateFlow()
 
+    // Sidebar section expand overrides keyed by section title. Absent key =
+    // the section's compile-time default (SidebarSection.defaultExpanded).
+    private val _sidebarSectionsExpanded = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val sidebarSectionsExpanded: StateFlow<Map<String, Boolean>> = _sidebarSectionsExpanded.asStateFlow()
+
+    // Stats-panel expand overrides keyed by STATS_PANEL_*. Absent key = expanded.
+    private val _statsPanelsExpanded = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val statsPanelsExpanded: StateFlow<Map<String, Boolean>> = _statsPanelsExpanded.asStateFlow()
+
+    // Guards the one-shot seed of the two Map<String, Boolean> blobs above.
+    // Only ever touched from the single init collector coroutine.
+    private var boolMapsSeeded = false
+
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
@@ -157,6 +177,19 @@ object PreferenceRepository {
                     .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
                 _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
                 _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
+                // Seed ONCE. This collector re-fires on every DataStore commit
+                // (including unrelated keys), and setSidebarSectionExpanded /
+                // setStatsPanelExpanded write the flow synchronously while
+                // persisting from an unordered ioScope.launch — re-seeding on
+                // later emissions would overwrite a just-toggled value with the
+                // stale persisted one (visible flip-back). After the first
+                // emission the in-memory flow is authoritative; the process has
+                // exactly one DataStore, so nothing else can change it.
+                if (!boolMapsSeeded) {
+                    boolMapsSeeded = true
+                    _sidebarSectionsExpanded.value = BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED])
+                    _statsPanelsExpanded.value = BoolMapCodec.decode(p[STATS_PANELS_EXPANDED])
+                }
             }
         }
     }
@@ -249,6 +282,26 @@ object PreferenceRepository {
         if (_captureDestinationDir.value == value) return
         _captureDestinationDir.value = value
         ioScope.launch { dataStore.edit { it[CAPTURE_DESTINATION_DIR] = value } }
+    }
+
+    fun setSidebarSectionExpanded(title: String, expanded: Boolean) {
+        _sidebarSectionsExpanded.value = _sidebarSectionsExpanded.value + (title to expanded)
+        ioScope.launch {
+            dataStore.edit { prefs ->
+                val current = BoolMapCodec.decode(prefs[SIDEBAR_SECTIONS_EXPANDED])
+                prefs[SIDEBAR_SECTIONS_EXPANDED] = BoolMapCodec.encode(current + (title to expanded))
+            }
+        }
+    }
+
+    fun setStatsPanelExpanded(key: String, expanded: Boolean) {
+        _statsPanelsExpanded.value = _statsPanelsExpanded.value + (key to expanded)
+        ioScope.launch {
+            dataStore.edit { prefs ->
+                val current = BoolMapCodec.decode(prefs[STATS_PANELS_EXPANDED])
+                prefs[STATS_PANELS_EXPANDED] = BoolMapCodec.encode(current + (key to expanded))
+            }
+        }
     }
 
     fun setDemoTargets(value: DemoClusterSimulator.Targets) {

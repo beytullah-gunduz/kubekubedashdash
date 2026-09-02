@@ -85,7 +85,8 @@ fun PodsScreen(
     val statusFilter by viewModel.statusFilter.collectAsState()
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
-    var statsExpanded by remember { mutableStateOf(true) }
+    val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
+    val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_PODS] ?: true
     var selectedPodUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     LaunchedEffect(initialStatusFilter) {
         // Nav-driven seed: a banner click landing on Pods with a typed status
@@ -170,7 +171,7 @@ fun PodsScreen(
                                 pods = allPods,
                                 usage = resourceUsage,
                                 expanded = statsExpanded,
-                                onToggle = { statsExpanded = !statsExpanded },
+                                onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_PODS, !statsExpanded) },
                             )
                         }
                         ResourceCountHeader(
