@@ -58,6 +58,11 @@ private fun NavEntry.forHistory(): NavEntry = when (val s = screen) {
     else -> this
 }
 
+/** Identity of the LIST a header filter applies to. History entries are
+ *  always stripped of "jump to this resource" parameters by [forHistory],
+ *  so the live screen must be stripped the same way before comparing. */
+private fun Screen.filterScope(): Screen = NavEntry(this, null).forHistory().screen
+
 /**
  * Per-cluster-session UI state. One instance per [com.kubekubedashdash.model.ClusterSession]
  * — owns the navigation state, namespace selection, connection-status flags, and retry
@@ -122,6 +127,11 @@ class SessionViewModel(
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    // Bumped by Cmd/Ctrl+F; the content header observes it and moves focus into
+    // the filter field. A counter, not a Boolean, so repeated presses re-fire.
+    private val _searchFocusRequests = MutableStateFlow(0)
+    val searchFocusRequests: StateFlow<Int> = _searchFocusRequests.asStateFlow()
 
     // Per-screen label/annotation selectors, keyed by Screen.Main subclass simpleName
     // so each resource-kind screen keeps its own filter independent of others.
@@ -330,6 +340,10 @@ class SessionViewModel(
             NavEntry(screen, null)
         }
         if (target == currentEntry()) return
+        // The filter box is stored per session but means "filter THIS list";
+        // a main-screen change must not carry "nginx" from Pods into Deployments.
+        // Opening or closing a detail pane keeps the main screen and the filter.
+        if (target.screen != _currentScreen.value) _searchQuery.value = ""
         recordCurrent()
         // Close the pane before switching the main screen (order preserved
         // from the original navigate) so a stale pane is never composed
@@ -344,6 +358,7 @@ class SessionViewModel(
         val entry = _backStack.value.lastOrNull() ?: return
         _backStack.update { it.dropLast(1) }
         _forwardStack.update { it + currentEntry().forHistory() }
+        if (entry.screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
         if (entry.extraPane == null) _extraPaneScreen.value = null
         _currentScreen.value = entry.screen
         _extraPaneScreen.value = entry.extraPane
@@ -354,6 +369,7 @@ class SessionViewModel(
         val entry = _forwardStack.value.lastOrNull() ?: return
         _forwardStack.update { it.dropLast(1) }
         _backStack.update { it + currentEntry().forHistory() }
+        if (entry.screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
         if (entry.extraPane == null) _extraPaneScreen.value = null
         _currentScreen.value = entry.screen
         _extraPaneScreen.value = entry.extraPane
@@ -442,6 +458,10 @@ class SessionViewModel(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun requestSearchFocus() {
+        _searchFocusRequests.update { it + 1 }
     }
 
     fun setLabelQuery(screenKey: String, query: String) {

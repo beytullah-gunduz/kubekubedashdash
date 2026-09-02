@@ -9,7 +9,7 @@ import com.kubekubedashdash.models.ServiceInfo
 sealed class Screen(val title: String) {
 
     sealed class Main(title: String) : Screen(title) {
-        data object ClusterOverview : Main("Cluster")
+        data object ClusterOverview : Main("Cluster Overview")
         data class Nodes(
             val selectNodeName: String? = null,
             // Pre-seeds the existing status filter chip on entry. Driven by
