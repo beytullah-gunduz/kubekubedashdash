@@ -9,6 +9,10 @@ import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.services.session.SessionPersistence
+import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
+import com.kubekubedashdash.util.toPosition
+import com.kubekubedashdash.util.toSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,9 +74,23 @@ object WorkspaceManager {
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
-        val workspace = Workspace()
+        // The bootstrap window must know its saved geometry before it
+        // composes; tabs/clusters are restored later by AppViewModel.
+        val geometry = SessionPersistence.initialGeometry()
+        val workspace = Workspace(
+            initialPosition = geometry?.toPosition(),
+            initialSize = geometry?.toSize(),
+            initialMaximized = geometry?.maximized ?: false,
+            initialGeometry = geometry,
+        )
         workspace.addSession(ClusterSession(id = SessionId.new()), makeActive = true)
         _workspaces.value = listOf(workspace)
+    }
+
+    /** Append a workspace (= open a new OS window). Used by session restore. */
+    fun addWorkspace(workspace: Workspace): Workspace {
+        _workspaces.update { it + workspace }
+        return workspace
     }
 
     /**
@@ -100,12 +118,19 @@ object WorkspaceManager {
      * app launch), [NEW_TAB] is downgraded to [CURRENT_VIEW] so the user doesn't
      * end up with two pending sessions.
      */
-    fun openCluster(workspace: Workspace, ctx: String, target: OpenTarget) {
+    fun openCluster(
+        workspace: Workspace,
+        ctx: String,
+        target: OpenTarget,
+        /** Session restore only: where the tab lands after its first connect. */
+        restore: SessionViewModel.RestoreTarget? = null,
+    ) {
         when (target) {
             OpenTarget.CURRENT_VIEW -> {
                 val session = workspace.activeSession ?: ClusterSession().also {
                     workspace.addSession(it, makeActive = true)
                 }
+                restore?.let(session.viewModel::prepareRestore)
                 session.viewModel.connectToCluster(ctx)
             }
 
@@ -114,11 +139,12 @@ object WorkspaceManager {
                 if (active == null || active.viewModel.selectedContext.value.isBlank()) {
                     // Bootstrap state: no real "current" view to add to. Just
                     // connect the existing empty session in place.
-                    openCluster(workspace, ctx, OpenTarget.CURRENT_VIEW)
+                    openCluster(workspace, ctx, OpenTarget.CURRENT_VIEW, restore)
                     return
                 }
                 val session = ClusterSession()
                 workspace.addSession(session, makeActive = true)
+                restore?.let(session.viewModel::prepareRestore)
                 session.viewModel.connectToCluster(ctx)
             }
 
@@ -127,6 +153,7 @@ object WorkspaceManager {
                 val session = ClusterSession()
                 newWorkspace.addSession(session, makeActive = true)
                 _workspaces.update { it + newWorkspace }
+                restore?.let(session.viewModel::prepareRestore)
                 session.viewModel.connectToCluster(ctx)
             }
         }
@@ -265,6 +292,12 @@ object WorkspaceManager {
      */
     fun closeWorkspace(workspaceId: WorkspaceId) {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
+        // Closing the last window is the quit path: the list empties and the app
+        // exits before the poll or the shutdown hook can see anything, so save
+        // now, while every tab is still attached. This is a ~2 KB synchronous
+        // write on the EDT; if the user closed their last TAB the tab list is
+        // already empty and saveFinal records that (next launch: the picker).
+        if (_workspaces.value.size == 1) SessionPersistence.saveFinal()
         // Release every tab's resources, not just cluster sessions: terminal
         // sessions and the cluster's log/exec registry entries would otherwise
         // leak in the process-wide registries when an OS window closes.

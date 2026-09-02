@@ -107,6 +107,24 @@ class SessionViewModel(
         _extraPaneWidth.value = width.coerceIn(400f, 1200f)
     }
 
+    /**
+     * Where a restored tab lands after its first successful connect, instead
+     * of the connect path's defaults (overview, all namespaces, default pane
+     * width). Set by session restore right before [connectToCluster] on a
+     * fresh session; consumed exactly once by the next ConnectSucceeded and
+     * dropped by a ConnectFailed, so a later manual connect is never
+     * hijacked. (A ConnectFailed still queued from an earlier attempt would
+     * clear it too; restore only ever prepares brand-new sessions.)
+     */
+    data class RestoreTarget(val namespace: String, val screen: Screen.Main, val paneWidthDp: Float)
+
+    @Volatile
+    private var pendingRestore: RestoreTarget? = null
+
+    fun prepareRestore(target: RestoreTarget) {
+        pendingRestore = target
+    }
+
     private val _selectedNamespace = MutableStateFlow("All Namespaces")
     val selectedNamespace: StateFlow<String> = _selectedNamespace.asStateFlow()
 
@@ -246,10 +264,14 @@ class SessionViewModel(
             ConnEvent.ConnectSucceeded -> {
                 _isConnected.value = true
                 _connectionError.value = null
-                _currentScreen.value = Screen.Main.ClusterOverview
+                // A restored tab lands where it was; everything else on the overview.
+                val restore = pendingRestore
+                pendingRestore = null
+                _currentScreen.value = restore?.screen ?: Screen.Main.ClusterOverview
             }
 
             is ConnEvent.ConnectFailed -> {
+                pendingRestore = null
                 _isConnected.value = false
                 _connectionError.value = event.message
                 _currentScreen.value = Screen.Main.ConnectionError(event.message, 10)
@@ -439,9 +461,18 @@ class SessionViewModel(
                         // off the live label.
                         _selectedContext.value = reactiveClient.getCurrentContext()
                     }
+                    // Apply the restore target BEFORE emitting. The reducer consumes
+                    // pendingRestore on its own coroutine one dispatch later, so
+                    // anything written after the emit could be observed — by the UI
+                    // and by tests — while still holding its default. Emitting last
+                    // makes the screen change the final step, so awaiting it proves
+                    // the rest already landed.
+                    val restore = pendingRestore
+                    val namespace = restore?.namespace ?: "All Namespaces"
+                    _selectedNamespace.value = namespace
+                    reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
+                    restore?.let { setExtraPaneWidth(it.paneWidthDp) }
                     emitConnEvent(ConnEvent.ConnectSucceeded)
-                    _selectedNamespace.value = "All Namespaces"
-                    reactiveClient.setSelectedNamespace(null)
                 },
                 onFailure = { e ->
                     emitConnEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock))
