@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -368,6 +369,25 @@ fun App(
                             }
 
                             else -> false
+                        }
+                    }
+                    // Escape closes the active tab's detail pane. Bubble phase
+                    // (onKeyEvent, not onPreviewKeyEvent) so focused descendants
+                    // get first refusal: the table clears its cursor/selection,
+                    // the YAML search clears its query, modals and the palette
+                    // dismiss themselves — only an unconsumed Escape lands here.
+                    // activeSession, NOT sessionForPalette/titleSession: those
+                    // fall back to the first cluster tab, so Escape on a
+                    // Terminal / Logs / All Clusters tab would close an
+                    // invisible pane in another tab.
+                    .onKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown || event.key != Key.Escape) return@onKeyEvent false
+                        val vm = activeSession?.viewModel
+                        if (vm != null && vm.extraPaneScreen.value != null) {
+                            vm.closeExtraPane()
+                            true
+                        } else {
+                            false
                         }
                     },
             ) {

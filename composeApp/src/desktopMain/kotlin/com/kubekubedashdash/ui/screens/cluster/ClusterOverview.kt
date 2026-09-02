@@ -18,9 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +33,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
@@ -81,7 +80,8 @@ fun ClusterOverviewScreen(
     val phaseCounts by viewModel.podPhaseCounts.collectAsState()
     val health = clusterHealth
 
-    var statsExpanded by remember { mutableStateOf(true) }
+    val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
+    val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_CLUSTER] ?: true
 
     // Connection error gets a centered error screen — same as before.
     // Loading no longer hides the scaffold; per-card flows render
@@ -202,7 +202,7 @@ fun ClusterOverviewScreen(
             podsHistory = podsHistory,
             topNodes = topNodes,
             expanded = statsExpanded,
-            onToggle = { statsExpanded = !statsExpanded },
+            onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_CLUSTER, !statsExpanded) },
             onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
         )
 

@@ -75,6 +75,7 @@ fun ContentRouter(
     pulseLabelsOnEntry: Boolean = false,
     pulseAnnotationsOnEntry: Boolean = false,
     onSelectCluster: () -> Unit = {},
+    onRetryNow: () -> Unit = {},
     onDiscoverEks: () -> Unit = {},
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
@@ -91,7 +92,12 @@ fun ContentRouter(
         when (target) {
             is Screen.Main.Connecting -> ConnectingScreen()
 
-            is Screen.Main.ConnectionError -> ConnectionErrorScreen(target.error, target.retryCountdown)
+            is Screen.Main.ConnectionError -> ConnectionErrorScreen(
+                error = target.error,
+                retryCountdown = target.retryCountdown,
+                onRetryNow = onRetryNow,
+                onSwitchCluster = onSelectCluster,
+            )
 
             is Screen.Main.ClusterOverview -> ClusterOverviewScreen(
                 onNavigate = onNavigate,

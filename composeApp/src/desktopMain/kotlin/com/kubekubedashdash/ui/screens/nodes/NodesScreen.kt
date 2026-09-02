@@ -23,6 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -91,7 +92,8 @@ fun NodesScreen(
     val bulkState by viewModel.bulkRunner.state.collectAsState()
     val statusFilter by viewModel.statusFilter.collectAsState()
     val pressureOnly by viewModel.pressureOnly.collectAsState()
-    var statsExpanded by remember { mutableStateOf(true) }
+    val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
+    val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_NODES] ?: true
     var selectedNodeUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkItems by remember { mutableStateOf<List<NodeInfo>>(emptyList()) }
@@ -174,7 +176,7 @@ fun NodesScreen(
                             podsLoaded = podsLoaded,
                             podsHistory = podsHistory,
                             expanded = statsExpanded,
-                            onToggle = { statsExpanded = !statsExpanded },
+                            onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_NODES, !statsExpanded) },
                         )
                     }
                     ResourceCountHeader(

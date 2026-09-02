@@ -186,6 +186,7 @@ internal fun SessionPaneContent(
                                     clusterHealth = clusterHealth,
                                     paneSelectionUid = extraPaneScreen.paneSelectionUid(),
                                     onSelectCluster = onSelectCluster,
+                                    onRetryNow = sessionVm::retryNow,
                                     onDiscoverEks = onDiscoverEks,
                                     onOpenLogs = onOpenLogs,
                                     onOpenTerminal = onOpenTerminal,
