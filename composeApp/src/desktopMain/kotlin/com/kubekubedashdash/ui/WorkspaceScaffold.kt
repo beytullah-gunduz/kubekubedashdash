@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.ui.components.ReconnectOverlay
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 
@@ -78,6 +79,10 @@ internal fun SessionPaneContent(
     val sessionIsConnected by sessionVm.isConnected.collectAsState()
     val sessionConnectionError by sessionVm.connectionError.collectAsState()
     val clusterHealth by sessionVm.clusterHealth.collectAsState()
+    val reconnecting by sessionVm.reconnecting.collectAsState()
+    val reconnectError by sessionVm.reconnectError.collectAsState()
+    val retryCountdown by sessionVm.retryCountdown.collectAsState()
+    val isConnecting by sessionVm.isConnecting.collectAsState()
 
     val screenKey = screenKeyOf(currentScreen)
     val labelQuery by remember(screenKey) {
@@ -126,115 +131,130 @@ internal fun SessionPaneContent(
         LocalIsConnected provides sessionIsConnected,
         LocalConnectionError provides sessionConnectionError,
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            ListDetailPaneScaffold(
-                paneExpansionState = expansionState,
-                paneExpansionDragHandle = if (sidebarCollapsed) {
-                    null
-                } else {
-                    { state ->
-                        val interactionSource = remember { MutableInteractionSource() }
-                        VerticalDragHandle(
-                            modifier = Modifier.paneExpansionDraggable(
-                                state,
-                                LocalMinimumInteractiveComponentSize.current,
-                                interactionSource,
-                            ),
-                            interactionSource = interactionSource,
-                        )
-                    }
-                },
-                directive = navigator.scaffoldDirective,
-                scaffoldState = navigator.scaffoldState,
-                listPane = {
-                    AnimatedPane {
-                        Sidebar(
-                            currentScreen = currentScreen,
-                            onNavigate = { sessionVm.navigate(it) },
-                            collapsed = sidebarCollapsed,
-                            clusterHealth = clusterHealth,
-                        )
-                    }
-                },
-                detailPane = {
-                    AnimatedPane {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            SessionContentHeader(
-                                screen = currentScreen,
-                                canGoBack = canGoBack,
-                                canGoForward = canGoForward,
-                                onBack = sessionVm::goBack,
-                                onForward = sessionVm::goForward,
-                                searchFocusRequests = searchFocusRequests,
-                                selectedNamespace = selectedNamespace,
-                                namespaces = namespaceList,
-                                onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
-                                searchQuery = searchQuery,
-                                onSearchChange = { sessionVm.setSearchQuery(it) },
+        // The overlay must be a later sibling of the session Row inside one
+        // Box: Compose hit-testing then routes every pointer event to the
+        // scrim while it is visible, and AnimatedVisibility composes nothing
+        // while it is not.
+        Box(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                ListDetailPaneScaffold(
+                    paneExpansionState = expansionState,
+                    paneExpansionDragHandle = if (sidebarCollapsed) {
+                        null
+                    } else {
+                        { state ->
+                            val interactionSource = remember { MutableInteractionSource() }
+                            VerticalDragHandle(
+                                modifier = Modifier.paneExpansionDraggable(
+                                    state,
+                                    LocalMinimumInteractiveComponentSize.current,
+                                    interactionSource,
+                                ),
+                                interactionSource = interactionSource,
                             )
-                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                ContentRouter(
+                        }
+                    },
+                    directive = navigator.scaffoldDirective,
+                    scaffoldState = navigator.scaffoldState,
+                    listPane = {
+                        AnimatedPane {
+                            Sidebar(
+                                currentScreen = currentScreen,
+                                onNavigate = { sessionVm.navigate(it) },
+                                collapsed = sidebarCollapsed,
+                                clusterHealth = clusterHealth,
+                            )
+                        }
+                    },
+                    detailPane = {
+                        AnimatedPane {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                SessionContentHeader(
                                     screen = currentScreen,
+                                    canGoBack = canGoBack,
+                                    canGoForward = canGoForward,
+                                    onBack = sessionVm::goBack,
+                                    onForward = sessionVm::goForward,
+                                    searchFocusRequests = searchFocusRequests,
+                                    selectedNamespace = selectedNamespace,
+                                    namespaces = namespaceList,
+                                    onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
                                     searchQuery = searchQuery,
-                                    labelQuery = labelQuery,
-                                    onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
-                                    annotationQuery = annotationQuery,
-                                    onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
-                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
-                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                    onNavigate = sessionVm::navigate,
-                                    clusterHealth = clusterHealth,
-                                    paneSelectionUid = extraPaneScreen.paneSelectionUid(),
-                                    onSelectCluster = onSelectCluster,
-                                    onRetryNow = sessionVm::retryNow,
-                                    onDiscoverEks = onDiscoverEks,
-                                    onOpenLogs = onOpenLogs,
-                                    onOpenTerminal = onOpenTerminal,
-                                    onCaptureLogs = onCaptureLogs,
-                                    onTailLogs = onTailLogs,
+                                    onSearchChange = { sessionVm.setSearchQuery(it) },
                                 )
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                    ContentRouter(
+                                        screen = currentScreen,
+                                        searchQuery = searchQuery,
+                                        labelQuery = labelQuery,
+                                        onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
+                                        annotationQuery = annotationQuery,
+                                        onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
+                                        pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                        pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                        onNavigate = sessionVm::navigate,
+                                        clusterHealth = clusterHealth,
+                                        paneSelectionUid = extraPaneScreen.paneSelectionUid(),
+                                        onSelectCluster = onSelectCluster,
+                                        onRetryNow = sessionVm::retryNow,
+                                        onDiscoverEks = onDiscoverEks,
+                                        onOpenLogs = onOpenLogs,
+                                        onOpenTerminal = onOpenTerminal,
+                                        onCaptureLogs = onCaptureLogs,
+                                        onTailLogs = onTailLogs,
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-            )
+                    },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
 
-            val extraPaneWidth by sessionVm.extraPaneWidth.collectAsState()
+                val extraPaneWidth by sessionVm.extraPaneWidth.collectAsState()
 
-            AnimatedVisibility(
-                visible = extraPaneScreen != null,
-                enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
-                exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
-            ) {
-                Row(modifier = Modifier.fillMaxHeight()) {
-                    com.kubekubedashdash.ui.components.ResizeHandle { delta ->
-                        sessionVm.setExtraPaneWidth(extraPaneWidth - delta)
+                AnimatedVisibility(
+                    visible = extraPaneScreen != null,
+                    enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
+                    exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
+                ) {
+                    Row(modifier = Modifier.fillMaxHeight()) {
+                        com.kubekubedashdash.ui.components.ResizeHandle { delta ->
+                            sessionVm.setExtraPaneWidth(extraPaneWidth - delta)
+                        }
+                        ExtraPaneRouter(
+                            screen = extraPaneScreen,
+                            onNavigate = sessionVm::navigate,
+                            onClose = { sessionVm.closeExtraPane() },
+                            modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
+                            onOpenLogs = onOpenLogs,
+                            onOpenTerminal = onOpenTerminal,
+                            labelQuery = labelQuery,
+                            onToggleLabel = { k, v ->
+                                sessionVm.setLabelQuery(
+                                    screenKey,
+                                    toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
+                                )
+                            },
+                            annotationQuery = annotationQuery,
+                            onToggleAnnotation = { k, v ->
+                                sessionVm.setAnnotationQuery(
+                                    screenKey,
+                                    toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
+                                )
+                            },
+                        )
                     }
-                    ExtraPaneRouter(
-                        screen = extraPaneScreen,
-                        onNavigate = sessionVm::navigate,
-                        onClose = { sessionVm.closeExtraPane() },
-                        modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
-                        onOpenLogs = onOpenLogs,
-                        onOpenTerminal = onOpenTerminal,
-                        labelQuery = labelQuery,
-                        onToggleLabel = { k, v ->
-                            sessionVm.setLabelQuery(
-                                screenKey,
-                                toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
-                            )
-                        },
-                        annotationQuery = annotationQuery,
-                        onToggleAnnotation = { k, v ->
-                            sessionVm.setAnnotationQuery(
-                                screenKey,
-                                toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
-                            )
-                        },
-                    )
                 }
             }
+            ReconnectOverlay(
+                visible = reconnecting,
+                error = reconnectError,
+                retryCountdown = retryCountdown,
+                isConnecting = isConnecting,
+                onRetryNow = sessionVm::retryNow,
+                onSwitchCluster = onSelectCluster,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
