@@ -2,22 +2,30 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.services.session.RestorePlanner
+import com.kubekubedashdash.services.session.SessionPersistence
+import com.kubekubedashdash.services.session.SessionRestorer
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteChecker
 import com.kubekubedashdash.util.PrerequisiteResult
+import com.kubekubedashdash.util.ScreenBoundsProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.slf4j.LoggerFactory
 
 /**
  * App-shell ViewModel — owns process-wide state that is meaningful at app
@@ -34,6 +42,7 @@ import kotlinx.coroutines.withContext
  * `.docs/multi-cluster-plan.md`.
  */
 class AppViewModel private constructor() : ViewModel() {
+    private val log = LoggerFactory.getLogger(AppViewModel::class.java)
 
     private val _contexts = MutableStateFlow<List<String>>(emptyList())
     val contexts: StateFlow<List<String>> = _contexts.asStateFlow()
@@ -79,6 +88,7 @@ class AppViewModel private constructor() : ViewModel() {
         val loaded = loadContextsSync()
         _contexts.value = loaded
         val hasReal = loaded.any { !DemoContext.isMockContext(it) }
+        restoreSessionOnce(loaded)
         if (hasReal && !anyWorkspaceHasActiveCluster()) {
             WorkspaceManager.workspaces.value.firstOrNull()?.showClusterSelector()
         }
@@ -87,6 +97,35 @@ class AppViewModel private constructor() : ViewModel() {
     private fun anyWorkspaceHasActiveCluster(): Boolean = WorkspaceManager.workspaces.value.any { ws ->
         ws.tabs.value.filterIsInstance<WorkspaceTab.Cluster>()
             .any { it.session.viewModel.selectedContext.value.isNotBlank() }
+    }
+
+    @Volatile
+    private var restoreAttempted = false
+
+    /**
+     * First call only: rebuild the last session's windows and tabs, then start
+     * saving. Runs on viewModelScope's main dispatcher, which is what
+     * WorkspaceManager's mutators expect. A restored tab sets its context
+     * synchronously, so the picker check that follows stays quiet; with
+     * nothing to restore the picker behaves exactly as before.
+     */
+    private suspend fun restoreSessionOnce(availableContexts: List<String>) {
+        if (restoreAttempted) return
+        restoreAttempted = true
+        // The preference flows are seeded asynchronously from DataStore; wait
+        // for that first emission so a user who turned restore OFF is not
+        // overridden by the compile-time default.
+        withTimeoutOrNull(2_000) { PreferenceRepository.preferencesLoaded.first { it } }
+        if (PreferenceRepository.restoreSessionOnLaunch.value) {
+            val plan = RestorePlanner.plan(
+                SessionPersistence.initialSnapshot,
+                availableContexts,
+                ScreenBoundsProvider.current(),
+            )
+            runCatching { SessionRestorer.apply(plan) }
+                .onFailure { log.warn("Session restore failed: {}", it::class.simpleName) }
+        }
+        SessionPersistence.start()
     }
 
     private fun runPrerequisiteChecks() {

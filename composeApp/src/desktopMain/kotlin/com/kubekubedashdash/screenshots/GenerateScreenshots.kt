@@ -25,6 +25,7 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.services.session.SessionPersistence
 import com.kubekubedashdash.ui.App
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.DemoContext
@@ -74,6 +75,9 @@ private fun unregisterWindow(id: WorkspaceId) {
 
 fun main() {
     System.setProperty("LOG_DIR", SystemDirectories.logsDirectory)
+    // Deterministic layout: never restore the developer's saved session into a
+    // screenshot run, and never write this run's layout back over it.
+    SessionPersistence.disable()
     Thread.setDefaultUncaughtExceptionHandler { thread, t ->
         log.error("uncaught in {}", thread.name, t)
     }

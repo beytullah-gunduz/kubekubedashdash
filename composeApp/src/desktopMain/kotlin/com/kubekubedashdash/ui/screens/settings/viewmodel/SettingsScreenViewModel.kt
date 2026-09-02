@@ -99,6 +99,12 @@ class SettingsScreenViewModel : ViewModel() {
         PreferenceRepository.setMaskSecretValues(value)
     }
 
+    val restoreSessionOnLaunch: StateFlow<Boolean> = PreferenceRepository.restoreSessionOnLaunch
+
+    fun setRestoreSessionOnLaunch(value: Boolean) {
+        PreferenceRepository.setRestoreSessionOnLaunch(value)
+    }
+
     // ── Demo cluster simulator ─────────────────────────────────────────────────
     //
     // With per-tab mock instances, controls in this panel apply *globally* to every
