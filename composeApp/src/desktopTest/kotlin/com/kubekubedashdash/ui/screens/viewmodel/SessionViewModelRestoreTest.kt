@@ -50,11 +50,25 @@ class SessionViewModelRestoreTest {
     fun `a prepared restore lands on its namespace, screen and pane width`() = runBlocking<Unit> {
         viewModel.prepareRestore(SessionViewModel.RestoreTarget("production", Screen.Main.Pods(), 600f))
         viewModel.connectToCluster(DemoContext.MOCK_CONTEXT_NAME)
-        withTimeout(30_000) { viewModel.currentScreen.first { it == Screen.Main.Pods() } }
+        // Capture at the instant the screen flips: the connect path must have
+        // applied namespace and width BEFORE emitting the success event.
+        var namespaceAtFlip: String? = null
+        var widthAtFlip: Float? = null
+        withTimeout(30_000) {
+            viewModel.currentScreen.first { screen ->
+                val flipped = screen == Screen.Main.Pods()
+                if (flipped) {
+                    namespaceAtFlip = viewModel.selectedNamespace.value
+                    widthAtFlip = viewModel.extraPaneWidth.value
+                }
+                flipped
+            }
+        }
 
-        assertEquals("production", viewModel.selectedNamespace.value)
+        assertEquals("production", namespaceAtFlip)
+        assertEquals(600f, widthAtFlip)
         assertEquals("production", reactiveClient.selectedNamespace.value)
-        assertEquals(600f, viewModel.extraPaneWidth.value)
+        assertNull(viewModel.persistedRestoreView)
     }
 
     @Test

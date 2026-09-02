@@ -72,6 +72,14 @@ object SessionPersistence {
         return if (screens.isEmpty() || g.isVisibleOn(screens)) g else g.copy(x = null, y = null)
     }
 
+    /**
+     * Called whenever a cluster is opened, so closing it again before the first
+     * poll tick still counts as "this run had a cluster tab" for [saveFinal].
+     */
+    fun noteClusterOpened() {
+        sawClusterTabs = true
+    }
+
     fun start() {
         if (disabled || started) return
         started = true
@@ -120,11 +128,16 @@ object SessionPersistence {
         WorkspaceView(
             tabs = clusterTabs.map { tab ->
                 val vm = tab.session.viewModel
+                // A restored tab that has not connected yet still holds the
+                // Connecting-screen defaults; persist where it is GOING, or a slow
+                // or unreachable cluster would downgrade the saved place within a
+                // second of launch.
+                val pending = vm.persistedRestoreView
                 TabView(
                     context = vm.selectedContext.value,
-                    namespace = vm.selectedNamespace.value,
-                    screen = vm.currentScreen.value,
-                    paneWidthDp = vm.extraPaneWidth.value,
+                    namespace = pending?.namespace ?: vm.selectedNamespace.value,
+                    screen = pending?.screen ?: vm.currentScreen.value,
+                    paneWidthDp = pending?.paneWidthDp ?: vm.extraPaneWidth.value,
                 )
             },
             activeTabIndex = clusterTabs.indexOfFirst { it.key == activeKey },

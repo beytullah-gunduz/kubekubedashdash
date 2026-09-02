@@ -37,6 +37,20 @@ class WindowGeometryConversionsTest {
     }
 
     @Test
+    fun toGeometryFallsBackToTheDefaultSizeWhenUnspecified() {
+        val geometry = WindowState(size = DpSize.Unspecified).toGeometry(null)
+        assertEquals(1440, geometry.widthDp)
+        assertEquals(960, geometry.heightDp)
+    }
+
+    @Test
+    fun toGeometryHasNoPositionWhenPlatformPlaced() {
+        val geometry = WindowState(position = WindowPosition.PlatformDefault, size = DpSize(800.dp, 600.dp)).toGeometry(null)
+        assertNull(geometry.x)
+        assertNull(geometry.y)
+    }
+
+    @Test
     fun toGeometryReadsFloatingPositionAndSize() {
         val state = WindowState(
             placement = WindowPlacement.Floating,

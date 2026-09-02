@@ -125,6 +125,7 @@ object WorkspaceManager {
         /** Session restore only: where the tab lands after its first connect. */
         restore: SessionViewModel.RestoreTarget? = null,
     ) {
+        SessionPersistence.noteClusterOpened()
         when (target) {
             OpenTarget.CURRENT_VIEW -> {
                 val session = workspace.activeSession ?: ClusterSession().also {

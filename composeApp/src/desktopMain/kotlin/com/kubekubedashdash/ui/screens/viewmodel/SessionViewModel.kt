@@ -121,8 +121,19 @@ class SessionViewModel(
     @Volatile
     private var pendingRestore: RestoreTarget? = null
 
+    /**
+     * Persistence-only mirror of [pendingRestore]. It survives a failed connect
+     * so the save poll keeps writing the restored place (not the
+     * Connecting-screen defaults) until the tab really lands somewhere; only a
+     * successful connect clears it.
+     */
+    @Volatile
+    private var restoredView: RestoreTarget? = null
+    val persistedRestoreView: RestoreTarget? get() = restoredView
+
     fun prepareRestore(target: RestoreTarget) {
         pendingRestore = target
+        restoredView = target
     }
 
     private val _selectedNamespace = MutableStateFlow("All Namespaces")
@@ -267,6 +278,7 @@ class SessionViewModel(
                 // A restored tab lands where it was; everything else on the overview.
                 val restore = pendingRestore
                 pendingRestore = null
+                restoredView = null
                 _currentScreen.value = restore?.screen ?: Screen.Main.ClusterOverview
             }
 

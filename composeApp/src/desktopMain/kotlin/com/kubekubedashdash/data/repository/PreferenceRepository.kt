@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -159,7 +160,10 @@ object PreferenceRepository {
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
-            dataStore.data.collect { p ->
+            // A DataStore read failure would otherwise end this collector with
+            // preferencesLoaded still false, and launch-time readers would wait
+            // out their timeout on every start; flag "loaded" with the defaults.
+            dataStore.data.catch { _preferencesLoaded.value = true }.collect { p ->
                 _themeMode.value = p[THEME_MODE]
                     ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                     ?: ThemeMode.SYSTEM
