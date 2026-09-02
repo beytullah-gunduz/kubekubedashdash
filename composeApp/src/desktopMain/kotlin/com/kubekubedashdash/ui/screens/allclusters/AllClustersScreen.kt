@@ -18,11 +18,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
@@ -50,7 +48,8 @@ fun AllClustersScreen() {
     val presets by viewModel.presets.collectAsState()
     val heatmapData by viewModel.heatmapData.collectAsState()
 
-    var statsExpanded by remember { mutableStateOf(true) }
+    val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
+    val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_ALL_CLUSTERS] ?: true
 
     Column(
         modifier = Modifier
@@ -80,7 +79,7 @@ fun AllClustersScreen() {
                 podsHistory = podsHistory,
                 topNodes = topNodes,
                 expanded = statsExpanded,
-                onToggle = { statsExpanded = !statsExpanded },
+                onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_ALL_CLUSTERS, !statsExpanded) },
                 onNodeClick = {},
             )
             Spacer(Modifier.height(16.dp))

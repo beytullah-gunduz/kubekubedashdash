@@ -32,6 +32,7 @@ object PreferenceRepository {
     const val STATS_PANEL_CLUSTER = "cluster"
     const val STATS_PANEL_PODS = "pods"
     const val STATS_PANEL_NODES = "nodes"
+    const val STATS_PANEL_ALL_CLUSTERS = "all_clusters"
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -184,11 +185,15 @@ object PreferenceRepository {
                 // later emissions would overwrite a just-toggled value with the
                 // stale persisted one (visible flip-back). After the first
                 // emission the in-memory flow is authoritative; the process has
-                // exactly one DataStore, so nothing else can change it.
+                // exactly one DataStore, so nothing else can change it. The
+                // in-memory map is merged on top of the persisted one so a toggle
+                // that races ahead of this first emission is not thrown away.
                 if (!boolMapsSeeded) {
                     boolMapsSeeded = true
-                    _sidebarSectionsExpanded.value = BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED])
-                    _statsPanelsExpanded.value = BoolMapCodec.decode(p[STATS_PANELS_EXPANDED])
+                    _sidebarSectionsExpanded.value =
+                        BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED]) + _sidebarSectionsExpanded.value
+                    _statsPanelsExpanded.value =
+                        BoolMapCodec.decode(p[STATS_PANELS_EXPANDED]) + _statsPanelsExpanded.value
                 }
             }
         }
