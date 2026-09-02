@@ -40,9 +40,11 @@ internal fun GenericTable(
     // appends a built-in Age column below, so drop the duplicate here. Assumes
     // the printer Age tracks metadata.creationTimestamp (the kubectl
     // convention); a CRD that redefines it loses the printer value.
-    val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
-        .filterNot { it.equals("Age", ignoreCase = true) }
     val hasStatus = resources.any { it.status != null }
+    // A printer "Status" likewise duplicates the built-in status column when the
+    // kind already carries one (Jobs); keep it only when it is the sole status.
+    val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
+        .filterNot { it.equals("Age", ignoreCase = true) || (hasStatus && it.equals("Status", ignoreCase = true)) }
 
     val columns = buildList<GenericColumn> {
         add(GenericColumn("Name", 2.5f, 0.dp) { CellData(it.name, KdPrimary) })

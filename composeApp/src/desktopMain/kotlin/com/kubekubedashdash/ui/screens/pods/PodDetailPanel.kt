@@ -372,7 +372,7 @@ private fun OverviewTab(
             InfoRow("Status", pod.status, statusColor(pod.status))
             InfoRow("Namespace", pod.namespace)
             if (pod.node == NONE_PLACEHOLDER) {
-                InfoRow("Node", EMPTY_DASH)
+                InfoRow("Node", NONE_PLACEHOLDER)
             } else {
                 ClickableInfoRow("Node", pod.node) { onNavigateToNode?.invoke(pod.node) }
             }

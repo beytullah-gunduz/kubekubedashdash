@@ -387,6 +387,8 @@ fun GenericResourceScreen(
                                         when {
                                             key.equals("Age", ignoreCase = true) -> Unit
 
+                                            res.status != null && key.equals("Status", ignoreCase = true) -> Unit
+
                                             res.status == null && key.equals("Status", ignoreCase = true) && value.isNotBlank() && value != NONE_PLACEHOLDER ->
                                                 add(DetailField(key, value, statusColor(value)))
 
