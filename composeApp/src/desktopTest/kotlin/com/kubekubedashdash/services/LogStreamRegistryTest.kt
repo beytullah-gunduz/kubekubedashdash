@@ -1,8 +1,12 @@
 package com.kubekubedashdash.services
 
 import com.kubekubedashdash.model.SessionId
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -115,5 +119,19 @@ class LogStreamRegistryTest {
         assertTrue(idB1.key in remaining)
         assertFalse(idA1.key in remaining)
         assertFalse(idA2.key in remaining)
+    }
+
+    @Test
+    fun `lines past the cap are evicted and counted`() = runBlocking {
+        val id = LogStreamId("session1", "pod1", "default", null)
+        val total = LogStreamRegistry.MAX_LINES + 10
+        LogStreamRegistry.openOrFocusStream(id, "pod1") { (1..total).asFlow().map { "line $it" } }
+        val stream = LogStreamRegistry.tabs.value.getValue(id.key) as ActiveLogStream
+
+        withTimeout(10_000) { stream.droppedLines.first { it == 10 } }
+
+        assertEquals(LogStreamRegistry.MAX_LINES, stream.lines.value.size)
+        assertEquals("line 11", stream.lines.value.first())
+        assertEquals("line $total", stream.lines.value.last())
     }
 }

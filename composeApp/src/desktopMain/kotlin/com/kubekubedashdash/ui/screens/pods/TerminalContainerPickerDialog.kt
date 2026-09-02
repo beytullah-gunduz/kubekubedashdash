@@ -31,8 +31,8 @@ import com.kubekubedashdash.resources.view_in_ar_filled
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * Modal that asks the user which container to exec into when [pod] has more
- * than one. Equivalent shape to the container dropdown on the detail-panel
+ * Modal that asks the user which container to act on (terminal or logs) when
+ * [pod] has more than one. Equivalent shape to the container dropdown on the detail-panel
  * header actions (`HeaderActionButton` in `ResourceDetailPanel.kt`), but
  * rendered as a centered dialog because the row-action menu doesn't have a
  * stable anchor point for an inline dropdown.
@@ -42,13 +42,14 @@ fun TerminalContainerPickerDialog(
     pod: PodInfo,
     onPick: (container: String) -> Unit,
     onDismiss: () -> Unit,
+    title: String = "Open terminal in container",
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = KdSurface,
         title = {
             Text(
-                "Open terminal in container",
+                title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = KdTextPrimary,
