@@ -23,6 +23,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
@@ -33,9 +38,9 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.article_filled
+import com.kubekubedashdash.resources.cancel_filled
 import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.check_circle_filled
-import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.dns_filled
@@ -250,7 +255,22 @@ fun GenericResourceScreen(
                 if (selected?.uid != row.uid) viewModel.selectItem(row)
             }
 
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Escape closes this screen's inline detail panel. Bubble
+                    // phase (onKeyEvent) so the table's own Escape — clear the
+                    // keyboard cursor, then the selection — wins first. The
+                    // workspace extra pane has its own handler on the App root.
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && selected != null) {
+                            viewModel.clearSelection()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            ) {
                 val maxPanel = (maxWidth.value - MIN_LIST_DP).coerceAtLeast(280f)
                 Row(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -384,7 +404,7 @@ fun GenericResourceScreen(
                                         ),
                                         DetailAction(
                                             label = "Deny",
-                                            icon = Res.drawable.close_filled,
+                                            icon = Res.drawable.cancel_filled,
                                             destructive = true,
                                             description = "Reject this certificate request — use when the requester shouldn't be granted a cert.",
                                             enabled = !csrAction.inFlight,

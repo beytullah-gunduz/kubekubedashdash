@@ -345,7 +345,9 @@ fun DetailPanelHeader(
             if (index > 0) HeaderGroupDivider()
             group.forEach { action -> key(action.label) { HeaderActionButton(action) } }
         }
-        if (groups.size > 1) HeaderGroupDivider()
+        // Any verb group is separated from Delete/Close so a destructive verb
+        // never sits flush against the Close button.
+        if (groups.isNotEmpty()) HeaderGroupDivider()
         if (onDelete != null) {
             TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, description = "Permanently remove this resource — it won't come back unless recreated.", onClick = onDelete)
         }
