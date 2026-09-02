@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
  * Uses the demo-mock cluster so no test reads a kubeconfig. Loss is injected
  * via [ReactiveKubeClient.reportError] — the same entry the liveness probe
  * uses — until the consecutive-failure threshold trips HealthErrorReported,
- * which swaps the screen to ConnectionError and arms the countdown.
+ * which raises [SessionViewModel.reconnecting] and arms the countdown.
  */
 class SessionViewModelRetryNowTest {
 
@@ -71,13 +71,13 @@ class SessionViewModelRetryNowTest {
     }
 
     /**
-     * Injects failures until the reducer swaps the screen to ConnectionError.
+     * Injects failures until the reducer raises [SessionViewModel.reconnecting].
      * Loops because the liveness probe's concurrent reportSuccess can reset
      * the consecutive-failure counter between individual calls.
      */
     private suspend fun forceConnectionLoss() {
         withTimeout(30_000) {
-            while (viewModel.currentScreen.value !is Screen.Main.ConnectionError) {
+            while (!viewModel.reconnecting.value) {
                 reactiveClient.reportError("injected connection loss")
                 delay(50)
             }
@@ -101,12 +101,16 @@ class SessionViewModelRetryNowTest {
         // still remain, so any reconnect inside the 5 s budget below can only
         // have come from retryNow() and not from scheduleRetry's own timer.
         withTimeout(10_000) { viewModel.retryCountdown.first { it >= 8 } }
-        assertIs<Screen.Main.ConnectionError>(viewModel.currentScreen.value)
+        // A loss on a live session no longer swaps the screen: the reconnect
+        // flag is the disconnected signal and the overview stays put.
+        assertTrue(viewModel.reconnecting.value)
+        assertIs<Screen.Main.ClusterOverview>(viewModel.currentScreen.value)
 
         viewModel.retryNow()
 
         // The whole point: reconnect lands well before the countdown would have.
-        withTimeout(5_000) { viewModel.currentScreen.first { it == Screen.Main.ClusterOverview } }
+        withTimeout(5_000) { viewModel.isConnected.first { it } }
+        withTimeout(5_000) { viewModel.reconnecting.first { !it } }
         assertTrue(viewModel.isConnected.value)
         assertEquals(0, viewModel.retryCountdown.value)
         // The countdown job is really dead: while alive it writes _retryCountdown
