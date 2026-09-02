@@ -30,6 +30,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
@@ -41,10 +42,12 @@ import com.kubekubedashdash.KdTextSecondary
  * content stays rendered (informers keep their last store on a watch-time
  * loss) but is dimmed and made inert: the scrim is the top-most hit target
  * and consumes every pointer event, so no click, drag or wheel scroll reaches
- * the dead cluster's screen. A centred card shows the cause, the retry state,
- * a manual retry and a way out to another cluster. The session's screen, pane
- * and namespace are intentionally untouched — on reconnect the overlay fades
- * and the user is exactly where they were.
+ * the dead cluster's screen (popup layers — an already-open dropdown or a
+ * tooltip — sit above the scrim and are the one exception). A centred card
+ * shows the cause, the retry state, a manual retry and a way out to another
+ * cluster. The session's screen, pane and namespace are intentionally
+ * untouched — on reconnect the overlay fades and the user is exactly where
+ * they were.
  *
  * Keyboard input is not blocked (Compose scrims block pointers only); actions
  * reached that way fail against the dead cluster with their usual surfaces.
@@ -91,11 +94,16 @@ fun ReconnectOverlay(
                     )
                     if (!error.isNullOrBlank()) {
                         Spacer(Modifier.height(8.dp))
+                        // Bounded: a multi-hundred-character TLS/RBAC message must
+                        // not push the buttons — the only pointer-reachable exits —
+                        // off a short window.
                         Text(
                             error,
                             style = MaterialTheme.typography.bodyMedium,
                             color = KdTextSecondary,
                             textAlign = TextAlign.Center,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     Spacer(Modifier.height(16.dp))

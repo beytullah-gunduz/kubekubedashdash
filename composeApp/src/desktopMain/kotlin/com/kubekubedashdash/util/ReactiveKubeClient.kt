@@ -1187,8 +1187,8 @@ class ReactiveKubeClient(
      *
      * This low-frequency `/version` GET keeps `reportSuccess`/`reportError`
      * honest while connected, so the existing
-     * `SessionViewModel.observeConnectionHealth` path (→ ConnectionError
-     * screen + `scheduleRetry`) now detects a dead cluster exactly like it
+     * `SessionViewModel.observeConnectionHealth` path (→ the reconnect
+     * overlay + `scheduleRetry`) now detects a dead cluster exactly like it
      * already does for an explicit connect failure — NO new connection-state
      * writer is introduced; the fix feeds the existing pipeline.
      * `reportError`'s ≥3-consecutive threshold debounces transient blips, so

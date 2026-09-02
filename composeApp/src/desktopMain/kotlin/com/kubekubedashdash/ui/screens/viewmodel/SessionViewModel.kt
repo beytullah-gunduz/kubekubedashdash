@@ -125,7 +125,8 @@ class SessionViewModel(
      * Persistence-only mirror of [pendingRestore]. It survives a failed connect
      * so the save poll keeps writing the restored place (not the
      * Connecting-screen defaults) until the tab really lands somewhere; only a
-     * successful connect clears it.
+     * successful user-initiated connect clears it (a reconnect never sees it
+     * non-null: it implies a prior success that already cleared it).
      */
     @Volatile
     private var restoredView: RestoreTarget? = null
@@ -255,10 +256,10 @@ class SessionViewModel(
         /** connectToCluster() began an attempt. [isReconnect]: a live session lost its cluster and is getting it back in place. */
         data class ConnectStarted(val isReconnect: Boolean) : ConnEvent
 
-        /** connectToCluster() succeeded. */
+        /** connectToCluster() succeeded. [isReconnect] as on [ConnectStarted]: only the flags change, the screen stays. */
         data class ConnectSucceeded(val isReconnect: Boolean) : ConnEvent
 
-        /** connectToCluster() failed; [retry] mirrors the old `if (!isMock)`. */
+        /** connectToCluster() failed; [retry] mirrors the old `if (!isMock)`. [isReconnect] as on [ConnectStarted]: the scrim stays up. */
         data class ConnectFailed(val message: String?, val retry: Boolean, val isReconnect: Boolean) : ConnEvent
 
         /** A non-null connectionError surfaced (≥3-failure threshold / liveness probe). */
