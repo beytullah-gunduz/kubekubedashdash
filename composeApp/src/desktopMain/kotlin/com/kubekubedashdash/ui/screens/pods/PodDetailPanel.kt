@@ -72,6 +72,8 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailActionMenuItem
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
@@ -106,6 +108,7 @@ fun PodDetailPanel(
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val kubeClient = LocalReactiveKubeClient.current
+    val feedback = LocalActionFeedback.current
     var activeTab by remember { mutableStateOf(DetailTab.Overview) }
     var metricsHistory by remember(pod.uid) { mutableStateOf(listOf<PodMetricsSnapshot>()) }
     val scope = rememberCoroutineScope()
@@ -204,7 +207,10 @@ fun PodDetailPanel(
                     evict.run(
                         failureMessage = "Eviction failed",
                         block = { kubeClient.actions.evictPod(pod.name, pod.namespace) },
-                        onSuccess = { showEvictDialog = false },
+                        onSuccess = {
+                            showEvictDialog = false
+                            feedback.success("Evicted Pod ${resourceRef(pod.name, pod.namespace)}")
+                        },
                     )
                 },
                 onDismiss = {
@@ -231,7 +237,10 @@ fun PodDetailPanel(
                     forceDelete.run(
                         failureMessage = "Force delete failed",
                         block = { kubeClient.actions.forceDeletePod(pod.name, pod.namespace) },
-                        onSuccess = { showForceDeleteDialog = false },
+                        onSuccess = {
+                            showForceDeleteDialog = false
+                            feedback.success("Force-deleted Pod ${resourceRef(pod.name, pod.namespace)}")
+                        },
                     )
                 },
                 onDismiss = {

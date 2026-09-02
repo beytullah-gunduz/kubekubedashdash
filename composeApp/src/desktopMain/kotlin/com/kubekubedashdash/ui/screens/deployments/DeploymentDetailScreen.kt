@@ -19,6 +19,10 @@ import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.ScaleDialog
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.UndoAction
+import com.kubekubedashdash.ui.feedback.replicaCount
+import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ExtraTab
@@ -35,6 +39,7 @@ fun DeploymentDetailScreen(
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val client = LocalReactiveKubeClient.current
+    val feedback = LocalActionFeedback.current
 
     var showScaleDialog by remember(deployment.uid) { mutableStateOf(false) }
     val scale = rememberConfirmableAction()
@@ -124,7 +129,24 @@ fun DeploymentDetailScreen(
                             replicas = replicas,
                         )
                     },
-                    onSuccess = { showScaleDialog = false },
+                    onSuccess = {
+                        showScaleDialog = false
+                        val ref = resourceRef(deployment.name, deployment.namespace)
+                        feedback.success(
+                            "Scaled Deployment $ref to ${replicaCount(replicas)}",
+                            undo = UndoAction(
+                                successTitle = "Restored Deployment $ref to ${replicaCount(currentReplicas)}",
+                                failureTitle = "Undo failed: Deployment $ref still has ${replicaCount(replicas)}",
+                            ) {
+                                client.actions.scaleWorkload(
+                                    kind = "Deployment",
+                                    name = deployment.name,
+                                    namespace = deployment.namespace,
+                                    replicas = currentReplicas,
+                                )
+                            },
+                        )
+                    },
                 )
             },
             onDismiss = {
@@ -152,7 +174,10 @@ fun DeploymentDetailScreen(
                             namespace = deployment.namespace,
                         )
                     },
-                    onSuccess = { showRestartDialog = false },
+                    onSuccess = {
+                        showRestartDialog = false
+                        feedback.success("Rollout restart started for Deployment ${resourceRef(deployment.name, deployment.namespace)}")
+                    },
                 )
             },
             onDismiss = {

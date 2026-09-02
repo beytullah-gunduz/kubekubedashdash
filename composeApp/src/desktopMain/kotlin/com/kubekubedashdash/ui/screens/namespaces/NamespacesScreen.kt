@@ -27,6 +27,7 @@ import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.rememberResourceFilter
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenViewModel
 
 @Composable
@@ -51,6 +52,7 @@ fun NamespacesScreen(
     var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var pendingDelete by remember { mutableStateOf<GenericResourceInfo?>(null) }
     val delete = rememberConfirmableAction()
+    val feedback = LocalActionFeedback.current
 
     ResourceListScaffold(state) { data ->
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
@@ -115,7 +117,13 @@ fun NamespacesScreen(
                 delete.run(
                     failureMessage = "Delete failed",
                     block = { reactiveClient.actions.deleteResource("namespace", ns.name, namespace = null) },
-                    onSuccess = { pendingDelete = null },
+                    onSuccess = {
+                        pendingDelete = null
+                        feedback.success(
+                            "Deleted Namespace \"${ns.name}\"",
+                            detail = "It may stay in Terminating while finalizers run.",
+                        )
+                    },
                 )
             },
             onDismiss = {
