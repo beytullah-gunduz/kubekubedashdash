@@ -1,6 +1,7 @@
 package com.kubekubedashdash.model
 
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.window.WindowPosition
 import com.kubekubedashdash.services.OpenTarget
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,7 +73,25 @@ data class LogRequest(
 class Workspace(
     val id: WorkspaceId = WorkspaceId.new(),
     val initialPosition: WindowPosition? = null,
+    /** Restored floating window size; null = the app default. */
+    val initialSize: DpSize? = null,
+    /** Restored maximized state. */
+    val initialMaximized: Boolean = false,
+    /** Restored geometry, seeding [geometry] so a window that opens maximized still knows its floating size. */
+    initialGeometry: WindowGeometry? = null,
 ) {
+    /**
+     * Live geometry of the OS window hosting this workspace, mirrored in by
+     * Main.kt so session persistence can save it. Seeded from the restored
+     * geometry; updated on every move/resize once the window has laid out.
+     */
+    private val _geometry = MutableStateFlow(initialGeometry)
+    val geometry: StateFlow<WindowGeometry?> = _geometry.asStateFlow()
+
+    fun updateGeometry(value: WindowGeometry) {
+        _geometry.value = value
+    }
+
     private val _tabs = MutableStateFlow<List<WorkspaceTab>>(emptyList())
     val tabs: StateFlow<List<WorkspaceTab>> = _tabs.asStateFlow()
 

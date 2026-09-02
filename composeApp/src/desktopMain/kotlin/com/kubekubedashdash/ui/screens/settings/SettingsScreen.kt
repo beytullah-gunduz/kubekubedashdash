@@ -568,6 +568,36 @@ fun SettingsScreen(
                                     }
                                 }
                             }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val restoreSession by viewModel.restoreSessionOnLaunch.collectAsState()
+                            Text(
+                                "Restore last session",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Reopen the windows, clusters, namespaces and screens you had when you last quit. Off: start with the cluster picker.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Switch(
+                                    checked = restoreSession,
+                                    onCheckedChange = { viewModel.setRestoreSessionOnLaunch(it) },
+                                )
+                                Text(
+                                    if (restoreSession) "Restored at launch" else "Start with the picker",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (restoreSession) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                )
+                            }
                         }
 
                         Spacer(Modifier.height(16.dp))

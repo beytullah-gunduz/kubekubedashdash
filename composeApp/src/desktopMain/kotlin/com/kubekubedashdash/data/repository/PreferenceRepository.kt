@@ -60,6 +60,7 @@ object PreferenceRepository {
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
     private val MASK_SECRET_VALUES by lazy { booleanPreferencesKey("mask_secret_values") }
+    private val RESTORE_SESSION_ON_LAUNCH by lazy { booleanPreferencesKey("restore_session_on_launch") }
     private val CAPTURE_DESTINATION_DIR by lazy { stringPreferencesKey("capture_destination_dir") }
     private val SIDEBAR_SECTIONS_EXPANDED by lazy { stringPreferencesKey("sidebar_sections_expanded") }
     private val STATS_PANELS_EXPANDED by lazy { stringPreferencesKey("stats_panels_expanded") }
@@ -125,6 +126,20 @@ object PreferenceRepository {
     private val _maskSecretValues = MutableStateFlow(true)
     val maskSecretValues: StateFlow<Boolean> = _maskSecretValues.asStateFlow()
 
+    // Whether launch rebuilds the last session's windows and tabs. Window
+    // geometry is restored regardless; saving always runs so switching this
+    // back on restores the latest state.
+    private val _restoreSessionOnLaunch = MutableStateFlow(true)
+    val restoreSessionOnLaunch: StateFlow<Boolean> = _restoreSessionOnLaunch.asStateFlow()
+
+    /**
+     * True once the first DataStore emission has seeded every flow above.
+     * Session restore reads [restoreSessionOnLaunch] exactly once, at launch,
+     * and must not act on the compile-time default.
+     */
+    private val _preferencesLoaded = MutableStateFlow(false)
+    val preferencesLoaded: StateFlow<Boolean> = _preferencesLoaded.asStateFlow()
+
     private val _captureDestinationDir = MutableStateFlow(defaultCaptureDestinationDir())
     val captureDestinationDir: StateFlow<String> = _captureDestinationDir.asStateFlow()
 
@@ -177,6 +192,7 @@ object PreferenceRepository {
                 _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
                     .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
                 _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
+                _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
                 _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
                 // Seed ONCE. This collector re-fires on every DataStore commit
                 // (including unrelated keys), and setSidebarSectionExpanded /
@@ -195,6 +211,7 @@ object PreferenceRepository {
                     _statsPanelsExpanded.value =
                         BoolMapCodec.decode(p[STATS_PANELS_EXPANDED]) + _statsPanelsExpanded.value
                 }
+                _preferencesLoaded.value = true
             }
         }
     }
@@ -281,6 +298,11 @@ object PreferenceRepository {
     fun setMaskSecretValues(value: Boolean) {
         _maskSecretValues.value = value
         ioScope.launch { dataStore.edit { it[MASK_SECRET_VALUES] = value } }
+    }
+
+    fun setRestoreSessionOnLaunch(value: Boolean) {
+        _restoreSessionOnLaunch.value = value
+        ioScope.launch { dataStore.edit { it[RESTORE_SESSION_ON_LAUNCH] = value } }
     }
 
     fun setCaptureDestinationDir(value: String) {

@@ -7,12 +7,12 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.res.useResource
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -20,8 +20,10 @@ import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.App
+import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.toGeometry
 import org.slf4j.LoggerFactory
 
 fun main() {
@@ -82,9 +84,18 @@ fun main() {
         workspaces.forEach { workspace ->
             key(workspace.id) {
                 val windowState = rememberWindowState(
-                    size = DpSize(1440.dp, 960.dp),
+                    placement = if (workspace.initialMaximized) WindowPlacement.Maximized else WindowPlacement.Floating,
+                    size = workspace.initialSize ?: DEFAULT_WINDOW_SIZE,
                     position = workspace.initialPosition ?: WindowPosition.PlatformDefault,
                 )
+                // Mirror the live geometry into the workspace so session
+                // persistence can save it. workspace.geometry.value is read as a
+                // plain (untracked) previous value; snapshotFlow re-evaluates only
+                // on WindowState changes, which is exactly what we want.
+                LaunchedEffect(windowState) {
+                    snapshotFlow { windowState.toGeometry(workspace.geometry.value) }
+                        .collect { workspace.updateGeometry(it) }
+                }
                 Window(
                     onCloseRequest = { WorkspaceManager.closeWorkspace(workspace.id) },
                     title = "KubeKubeDashDash",
