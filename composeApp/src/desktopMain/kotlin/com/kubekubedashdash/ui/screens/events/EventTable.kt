@@ -73,12 +73,12 @@ internal fun EventTable(
                 cell = { ev -> CellData(ev.message) },
             ),
             EventColumn(
-                def = ColumnDef("Count", 0.2f),
+                def = ColumnDef("Count", width = 56.dp),
                 cell = { ev -> CellData("${ev.count}", sortValue = ev.count.toString().padStart(10, '0')) },
                 minTableWidth = 1100.dp,
             ),
             EventColumn(
-                def = ColumnDef("Last Seen", 0.35f),
+                def = ColumnDef("Last Seen", width = 88.dp),
                 cell = { ev -> CellData(ev.lastSeen, sortValue = ev.lastSeenTimestamp) },
                 minTableWidth = 950.dp,
             ),

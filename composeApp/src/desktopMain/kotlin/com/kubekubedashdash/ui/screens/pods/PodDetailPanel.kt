@@ -63,8 +63,10 @@ import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.terminal_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
+import com.kubekubedashdash.ui.components.EMPTY_DASH
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.MetricsLineChart
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
@@ -369,7 +371,11 @@ private fun OverviewTab(
         SectionCard("Pod Info") {
             InfoRow("Status", pod.status, statusColor(pod.status))
             InfoRow("Namespace", pod.namespace)
-            ClickableInfoRow("Node", pod.node) { onNavigateToNode?.invoke(pod.node) }
+            if (pod.node == NONE_PLACEHOLDER) {
+                InfoRow("Node", EMPTY_DASH)
+            } else {
+                ClickableInfoRow("Node", pod.node) { onNavigateToNode?.invoke(pod.node) }
+            }
             InfoRow("IP", pod.ip)
             InfoRow("Ready", pod.ready)
             InfoRow("Restarts", "${pod.restarts}", restartCountColor(pod.restarts))
@@ -466,7 +472,13 @@ private fun InfoRow(label: String, value: String, valueColor: Color? = null) {
                 Text(value, style = MaterialTheme.typography.bodySmall, color = valueColor, fontWeight = FontWeight.Medium)
             }
         } else {
-            Text(value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary, fontWeight = FontWeight.Medium)
+            val isNone = value == NONE_PLACEHOLDER
+            Text(
+                if (isNone) EMPTY_DASH else value,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isNone) KdTextSecondary else KdTextPrimary,
+                fontWeight = FontWeight.Medium,
+            )
         }
     }
 }

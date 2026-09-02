@@ -99,7 +99,9 @@ import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.EMPTY_DASH
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.TooltipIconButton
@@ -432,7 +434,13 @@ fun DetailFieldsCard(fields: List<DetailField>, modifier: Modifier = Modifier) {
                             Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
                         }
                     } else {
-                        Text(f.value, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary, fontWeight = FontWeight.Medium)
+                        val isNone = f.value == NONE_PLACEHOLDER
+                        Text(
+                            if (isNone) EMPTY_DASH else f.value,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isNone) KdTextSecondary else KdTextPrimary,
+                            fontWeight = FontWeight.Medium,
+                        )
                     }
                 }
             }

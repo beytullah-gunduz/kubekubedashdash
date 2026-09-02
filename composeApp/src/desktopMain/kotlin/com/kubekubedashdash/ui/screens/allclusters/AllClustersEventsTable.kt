@@ -148,8 +148,8 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
             GroupedColumnHeader("Reason", Modifier.width(150.dp))
             if (tableWidth >= 800.dp) GroupedColumnHeader("Object", Modifier.weight(1.5f))
             GroupedColumnHeader("Message", Modifier.weight(3f))
-            if (tableWidth >= 1100.dp) GroupedColumnHeader("Count", Modifier.weight(0.2f))
-            if (tableWidth >= 950.dp) GroupedColumnHeader("Last Seen", Modifier.weight(0.35f))
+            if (tableWidth >= 1100.dp) GroupedColumnHeader("Count", Modifier.width(56.dp))
+            if (tableWidth >= 950.dp) GroupedColumnHeader("Last Seen", Modifier.width(88.dp))
             if (tableWidth >= 650.dp) GroupedColumnHeader("Clusters", Modifier.weight(1f))
         }
 
@@ -292,12 +292,12 @@ private fun GroupHeaderRow(
             CellText(group.latestMessage)
         }
         if (tableWidth >= 1100.dp) {
-            Box(modifier = Modifier.weight(0.2f)) {
+            Box(modifier = Modifier.width(56.dp)) {
                 CellText("${group.totalCount}")
             }
         }
         if (tableWidth >= 950.dp) {
-            Box(modifier = Modifier.weight(0.35f)) {
+            Box(modifier = Modifier.width(88.dp)) {
                 CellText(group.lastSeen)
             }
         }
@@ -340,10 +340,10 @@ private fun MemberRow(
         }
         Box(modifier = Modifier.weight(3f)) { CellText(ev.message) }
         if (tableWidth >= 1100.dp) {
-            Box(modifier = Modifier.weight(0.2f)) { CellText("${ev.count}") }
+            Box(modifier = Modifier.width(56.dp)) { CellText("${ev.count}") }
         }
         if (tableWidth >= 950.dp) {
-            Box(modifier = Modifier.weight(0.35f)) { CellText(ev.lastSeen) }
+            Box(modifier = Modifier.width(88.dp)) { CellText(ev.lastSeen) }
         }
         if (tableWidth >= 650.dp) {
             Box(modifier = Modifier.weight(1f)) { CellText(ev.cluster ?: "—") }
@@ -418,12 +418,12 @@ private fun buildRawColumns() = listOf(
         cell = { ev -> CellData(ev.message) },
     ),
     EventColumn(
-        def = ColumnDef("Count", weight = 0.2f),
+        def = ColumnDef("Count", width = 56.dp),
         cell = { ev -> CellData("${ev.count}", sortValue = ev.count.toString().padStart(10, '0')) },
         minTableWidth = 1100.dp,
     ),
     EventColumn(
-        def = ColumnDef("Last Seen", weight = 0.35f),
+        def = ColumnDef("Last Seen", width = 88.dp),
         cell = { ev -> CellData(ev.lastSeen, sortValue = ev.lastSeenTimestamp) },
         minTableWidth = 950.dp,
     ),
