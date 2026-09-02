@@ -38,6 +38,7 @@ import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import org.jetbrains.compose.resources.DrawableResource
 
 /**
@@ -124,7 +125,7 @@ internal fun rememberPaletteEntries(
                 add(
                     PaletteEntry(
                         label = node.name,
-                        sublabel = node.roles.ifBlank { null },
+                        sublabel = node.roles.takeIf { it.isNotBlank() && it != NONE_PLACEHOLDER },
                         category = "Nodes",
                         icon = Res.drawable.dns_filled,
                         onActivate = { onNavigate(Screen.Main.Nodes(selectNodeName = node.name)) },

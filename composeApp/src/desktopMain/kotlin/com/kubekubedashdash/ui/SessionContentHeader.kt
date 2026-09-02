@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,12 +34,15 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.VisualTransformation
@@ -87,12 +91,12 @@ internal fun SessionContentHeader(
     canGoForward: Boolean,
     onBack: () -> Unit,
     onForward: () -> Unit,
-    clusterContext: String,
     selectedNamespace: String,
     namespaces: List<String>,
     onNamespaceChange: (String) -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
+    searchFocusRequests: Int,
 ) {
     if (!screen.showsContentHeader()) return
 
@@ -100,30 +104,49 @@ internal fun SessionContentHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                // The filter field is the tallest child and is absent on Overview /
+                // Topology; pin the row to its height so content below never shifts.
+                .heightIn(min = if (sessionHeaderIsMacOS) 30.dp else 32.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             HistoryNavButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack)
             HistoryNavButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
-            if (clusterContext.isNotBlank()) {
-                Text(
-                    text = clusterContext,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = KdTextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                Spacer(Modifier.weight(1f))
-            }
+            // Page title. The cluster name already lives in the tab chip and
+            // title bar; repeating it here left the screen itself unnamed.
+            Text(
+                text = screen.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = KdTextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
 
             if (screen.showsNamespaceSelector()) {
                 CompactNamespaceSelector(selectedNamespace, namespaces, onNamespaceChange)
             }
 
-            CompactSearchField(searchQuery, onSearchChange)
+            if (screen.showsSearchField()) {
+                val searchFocusRequester = remember { FocusRequester() }
+                // Baseline captured when the field enters composition: only a
+                // press that happens WHILE the field exists moves focus. Without
+                // it, one earlier Cmd+F would auto-focus the box on every later
+                // Overview/Topology -> list navigation (the field is re-created
+                // there, so the effect would re-run with a stale counter). The
+                // requester may be unattached for a frame; that is tolerated.
+                val focusBaseline = remember { searchFocusRequests }
+                LaunchedEffect(searchFocusRequests) {
+                    if (searchFocusRequests > focusBaseline) runCatching { searchFocusRequester.requestFocus() }
+                }
+                CompactSearchField(
+                    searchQuery = searchQuery,
+                    onSearchChange = onSearchChange,
+                    placeholder = "Filter ${screen.title}…",
+                    focusRequester = searchFocusRequester,
+                )
+            }
         }
         HorizontalDivider(
             color = KdBorder,
@@ -136,6 +159,15 @@ internal fun SessionContentHeader(
 private fun Screen.showsContentHeader(): Boolean = when (this) {
     is Screen.Main.Connecting,
     is Screen.Main.ConnectionError,
+    -> false
+
+    else -> true
+}
+
+/** The header filter only reaches list screens; Overview and Topology never read it. */
+private fun Screen.showsSearchField(): Boolean = when (this) {
+    is Screen.Main.ClusterOverview,
+    is Screen.Main.ClusterTopology,
     -> false
 
     else -> true
@@ -200,6 +232,8 @@ private fun HistoryNavButton(
 private fun CompactSearchField(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
+    placeholder: String,
+    focusRequester: FocusRequester,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val colors = OutlinedTextFieldDefaults.colors(
@@ -216,7 +250,7 @@ private fun CompactSearchField(
         textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
         cursorBrush = SolidColor(KdPrimary),
         interactionSource = interactionSource,
-        modifier = Modifier.width(200.dp).height(if (sessionHeaderIsMacOS) 30.dp else 32.dp),
+        modifier = Modifier.width(200.dp).height(if (sessionHeaderIsMacOS) 30.dp else 32.dp).focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
                 value = searchQuery,
@@ -226,7 +260,13 @@ private fun CompactSearchField(
                 visualTransformation = VisualTransformation.None,
                 interactionSource = interactionSource,
                 placeholder = {
-                    Text("Search...", style = MaterialTheme.typography.bodySmall, color = KdTextPlaceholder)
+                    Text(
+                        placeholder,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KdTextPlaceholder,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 },
                 leadingIcon = {
                     Icon(painterResource(Res.drawable.search_filled), null, Modifier.size(14.dp), tint = KdTextPlaceholder)

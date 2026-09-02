@@ -356,6 +356,12 @@ fun App(
                                 true
                             }
 
+                            // Cmd+F / Ctrl+F: focus the current screen's filter field.
+                            event.key == Key.F && metaOrCtrl -> {
+                                activeSession?.viewModel?.requestSearchFocus()
+                                activeSession != null
+                            }
+
                             // Cmd+[ / Ctrl+[: back through this tab's screen history.
                             event.key == Key.LeftBracket && metaOrCtrl -> {
                                 sessionForPalette?.viewModel?.goBack()

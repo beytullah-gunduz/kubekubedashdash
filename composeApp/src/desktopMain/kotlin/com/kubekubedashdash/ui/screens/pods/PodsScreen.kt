@@ -100,6 +100,7 @@ fun PodsScreen(
     var pendingDelete by remember { mutableStateOf<PodInfo?>(null) }
     val delete = rememberConfirmableAction()
     var terminalPickerPod by remember { mutableStateOf<PodInfo?>(null) }
+    var logsPickerPod by remember { mutableStateOf<PodInfo?>(null) }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkPods by remember { mutableStateOf<List<PodInfo>>(emptyList()) }
     var pendingEvict by remember { mutableStateOf<PodInfo?>(null) }
@@ -260,7 +261,16 @@ fun PodsScreen(
                                 selectedPodUid = pod.uid
                                 onNavigate(Screen.Detail.PodDetail(pod))
                             },
-                            onViewLogs = { pod -> onOpenLogs(pod.name, pod.namespace, null) },
+                            onViewLogs = { pod ->
+                                when {
+                                    pod.containers.size == 1 ->
+                                        onOpenLogs(pod.name, pod.namespace, pod.containers.first().name)
+
+                                    pod.containers.size > 1 -> logsPickerPod = pod
+
+                                    else -> onOpenLogs(pod.name, pod.namespace, null)
+                                }
+                            },
                             onOpenTerminal = { pod ->
                                 when {
                                     pod.containers.size == 1 ->
@@ -390,6 +400,18 @@ fun PodsScreen(
                 onOpenTerminal(pod.name, pod.namespace, container)
             },
             onDismiss = { terminalPickerPod = null },
+        )
+    }
+
+    logsPickerPod?.let { pod ->
+        TerminalContainerPickerDialog(
+            pod = pod,
+            title = "Stream logs from container",
+            onPick = { container ->
+                logsPickerPod = null
+                onOpenLogs(pod.name, pod.namespace, container)
+            },
+            onDismiss = { logsPickerPod = null },
         )
     }
 }

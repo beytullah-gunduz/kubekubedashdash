@@ -239,6 +239,8 @@ fun ClusterTopologyGraph(
                 .sorted()
                 .map { it to workloadGroupCol }
             (nonWorkloadKinds + workloadSubKinds)
+                // "Pod" arrives twice: as a standalone kind and as a workload sub-kind.
+                .distinctBy { it.first }
                 .sortedBy { it.second }
                 .forEach { (label, _) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {

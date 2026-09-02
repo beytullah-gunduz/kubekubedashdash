@@ -10,6 +10,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.RowIdentity
@@ -35,8 +36,15 @@ internal fun GenericTable(
     selectedUids: Set<String> = emptySet(),
     onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
-    val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
+    // CRD printer columns almost always include their own "Age"; the table
+    // appends a built-in Age column below, so drop the duplicate here. Assumes
+    // the printer Age tracks metadata.creationTimestamp (the kubectl
+    // convention); a CRD that redefines it loses the printer value.
     val hasStatus = resources.any { it.status != null }
+    // A printer "Status" likewise duplicates the built-in status column when the
+    // kind already carries one (Jobs); keep it only when it is the sole status.
+    val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
+        .filterNot { it.equals("Age", ignoreCase = true) || (hasStatus && it.equals("Status", ignoreCase = true)) }
 
     val columns = buildList<GenericColumn> {
         add(GenericColumn("Name", 2.5f, 0.dp) { CellData(it.name, KdPrimary) })
@@ -57,7 +65,20 @@ internal fun GenericTable(
                 i == extraKeys.lastIndex -> (500 + i * 100).dp
                 else -> (450 + i * 100).dp
             }
-            add(GenericColumn(key, 1f, minW) { r -> CellData(r.extraColumns[key] ?: "") })
+            // A printer column named "Status" carries the same vocabulary as the
+            // built-in status column (Running / Completed / Failed …); give it the
+            // icon + colour treatment when the row has no real status column.
+            val isStatusKey = !hasStatus && key.equals("Status", ignoreCase = true)
+            add(
+                GenericColumn(key, 1f, minW) { r ->
+                    val v = r.extraColumns[key] ?: ""
+                    if (isStatusKey && v.isNotBlank() && v != NONE_PLACEHOLDER) {
+                        CellData(text = v, sortValue = v, content = { StatusCell(v) })
+                    } else {
+                        CellData(v)
+                    }
+                },
+            )
         }
         add(GenericColumn("Age", 0.7f, 0.dp) { CellData(it.age) })
     }

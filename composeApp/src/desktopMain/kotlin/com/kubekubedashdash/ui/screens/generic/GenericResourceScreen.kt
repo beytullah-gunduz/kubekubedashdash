@@ -73,6 +73,7 @@ import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.LiveDataDot
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResizeHandle
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
@@ -381,7 +382,18 @@ fun GenericResourceScreen(
                                         add(DetailField("Status", res.status, statusColor(res.status)))
                                     }
                                     res.extraColumns.forEach { (key, value) ->
-                                        add(DetailField(key, value))
+                                        // The built-in Age field follows; skip a printer-column twin. A
+                                        // printer "Status" gets the same colour the list cell gives it.
+                                        when {
+                                            key.equals("Age", ignoreCase = true) -> Unit
+
+                                            res.status != null && key.equals("Status", ignoreCase = true) -> Unit
+
+                                            res.status == null && key.equals("Status", ignoreCase = true) && value.isNotBlank() && value != NONE_PLACEHOLDER ->
+                                                add(DetailField(key, value, statusColor(value)))
+
+                                            else -> add(DetailField(key, value))
+                                        }
                                     }
                                     add(DetailField("Age", res.age))
                                 }

@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -112,6 +113,10 @@ data class CellData(
     val sortValue: String? = null,
     val content: (@Composable () -> Unit)? = null,
 )
+
+/** kubectl's placeholder for an absent value; rendered as [EMPTY_DASH]. */
+internal const val NONE_PLACEHOLDER = "<none>"
+internal const val EMPTY_DASH = "—"
 
 data class TableRow(
     val id: String,
@@ -470,7 +475,8 @@ fun ResourceTable(
                                 row = row,
                                 columns = columns,
                                 isEven = index % 2 == 0,
-                                isSelected = row.id == selectedRowId || index == keyboardIndex,
+                                isSelected = row.id == selectedRowId,
+                                isCursor = index == keyboardIndex,
                                 onClick = if (onRowClick != null || selectable) {
                                     {
                                         val mods = windowInfo.keyboardModifiers
@@ -533,6 +539,7 @@ private fun TableRowItem(
     columns: List<ColumnDef>,
     @Suppress("UNUSED_PARAMETER") isEven: Boolean,
     isSelected: Boolean = false,
+    isCursor: Boolean = false,
     onClick: (() -> Unit)?,
     pinnable: Boolean = false,
     isPinned: Boolean = false,
@@ -549,17 +556,27 @@ private fun TableRowItem(
     // The previous striping used 30% KdSurfaceVariant which read as
     // near-solid on dark theme and inconsistent on light, so the rows
     // had no clear separation either way.
+    // Three states, not one: the open (selected) row keeps its tint under the
+    // pointer and gets a leading accent stripe; the keyboard-cursor row shares
+    // the hover tint but gets a muted stripe. Before this, selected and cursor
+    // shared one colour with hover, so the row you had opened disappeared under
+    // the row you were pointing at.
     val baseBg = when {
         isSelected -> KdSelected
-        hovered -> KdHover
+        isCursor || hovered -> KdHover
         else -> Color.Transparent
     }
-    val bg = if (row.backgroundColor != null && !isSelected && !hovered) {
+    val bg = if (row.backgroundColor != null && !isSelected && !isCursor && !hovered) {
         row.backgroundColor
     } else {
         baseBg
     }
     val separatorColor = KdBorder.copy(alpha = 0.6f)
+    val stripeColor = when {
+        isSelected -> KdPrimary
+        isCursor -> KdTextSecondary
+        else -> null
+    }
 
     Row(
         modifier = Modifier
@@ -573,6 +590,9 @@ private fun TableRowItem(
                     end = Offset(size.width, size.height - strokeWidth / 2),
                     strokeWidth = strokeWidth,
                 )
+                if (stripeColor != null) {
+                    drawRect(color = stripeColor, size = Size(3.dp.toPx(), size.height))
+                }
             }
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .onPointerEvent(PointerEventType.Enter) { hovered = true }
@@ -628,10 +648,13 @@ private fun TableRowItem(
                 if (cell?.content != null) {
                     cell.content.invoke()
                 } else {
+                    // "<none>" reads as data; show a muted dash instead. Sort and
+                    // search still see the raw value (CellData is untouched).
+                    val isNone = cell?.text == NONE_PLACEHOLDER
                     OverflowTooltipText(
-                        text = cell?.text ?: "",
+                        text = if (isNone) EMPTY_DASH else cell?.text ?: "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = cell?.color ?: KdTextPrimary,
+                        color = if (isNone) KdTextSecondary else cell?.color ?: KdTextPrimary,
                     )
                 }
             }

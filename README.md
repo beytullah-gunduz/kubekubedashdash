@@ -28,8 +28,6 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 
 A dedicated tab (alongside your per-cluster tabs) that aggregates everything you have open into one screen:
 
-![All Clusters aggregated view](docs/screenshots/23-all-clusters.png)
-
 - **Combined statistics** — pod-phase breakdown, aggregated CPU/memory usage with history sparklines, pod-count gauges, and top nodes across every connected cluster
 - **Cluster summary cards** — sorted by recent error count, with inline issue badges; click a card to activate that cluster's tab (in this window or another)
 - **Event triage** — a filterable event stream spanning all clusters; filter by cluster, namespace, reason, and type, save and reapply filter presets, group related events, and toggle a reason **heatmap** across clusters

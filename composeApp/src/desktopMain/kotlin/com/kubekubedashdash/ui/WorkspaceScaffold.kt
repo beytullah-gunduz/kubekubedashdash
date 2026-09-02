@@ -72,7 +72,7 @@ internal fun SessionPaneContent(
     val searchQuery by sessionVm.searchQuery.collectAsState()
     val selectedNamespace by sessionVm.selectedNamespace.collectAsState()
     val namespaceList by sessionVm.namespaces.collectAsState()
-    val clusterContext by sessionVm.selectedContext.collectAsState()
+    val searchFocusRequests by sessionVm.searchFocusRequests.collectAsState()
     val labelMap by sessionVm.labelQueries.collectAsState()
     val annotationMap by sessionVm.annotationQueries.collectAsState()
     val sessionIsConnected by sessionVm.isConnected.collectAsState()
@@ -165,7 +165,7 @@ internal fun SessionPaneContent(
                                 canGoForward = canGoForward,
                                 onBack = sessionVm::goBack,
                                 onForward = sessionVm::goForward,
-                                clusterContext = clusterContext,
+                                searchFocusRequests = searchFocusRequests,
                                 selectedNamespace = selectedNamespace,
                                 namespaces = namespaceList,
                                 onNamespaceChange = { sessionVm.setSelectedNamespace(it) },

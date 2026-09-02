@@ -45,6 +45,8 @@ data class ActiveLogStream(
     val id: LogStreamId,
     override val displayLabel: String,
     val lines: StateFlow<List<String>>,
+    /** Lines evicted from [lines] by the [LogStreamRegistry.MAX_LINES] cap, since the stream opened. */
+    val droppedLines: StateFlow<Int>,
     override val openedAt: Long,
 ) : DrawerLogTab {
     override val key: String get() = id.key
@@ -105,7 +107,7 @@ object LogStreamRegistry {
     val focusedKey: StateFlow<String?> = _focusedKey.asStateFlow()
     private val jobs = ConcurrentHashMap<String, Job>()
 
-    private const val MAX_LINES = 5_000
+    internal const val MAX_LINES = 5_000
 
     fun openOrFocus(
         session: ClusterSession,
@@ -135,14 +137,24 @@ object LogStreamRegistry {
             return id
         }
         val state = MutableStateFlow<List<String>>(emptyList())
+        val dropped = MutableStateFlow(0)
         val job = scope.launch {
             flowFactory()
-                .runningFold(emptyList<String>()) { acc, line -> (acc + line).takeLast(MAX_LINES) }
-                .collect { state.value = it }
+                .runningFold(emptyList<String>() to 0) { (acc, droppedSoFar), line ->
+                    val next = acc + line
+                    val overflow = next.size - MAX_LINES
+                    if (overflow > 0) next.takeLast(MAX_LINES) to (droppedSoFar + overflow) else next to droppedSoFar
+                }
+                .collect { (lines, droppedCount) ->
+                    // lines first, then the count: a reader waiting on droppedLines
+                    // must observe the lines that produced it.
+                    state.value = lines
+                    dropped.value = droppedCount
+                }
         }
         jobs[id.key] = job
         _tabs.update {
-            it + (id.key to ActiveLogStream(id, displayLabel, state.asStateFlow(), System.currentTimeMillis()))
+            it + (id.key to ActiveLogStream(id, displayLabel, state.asStateFlow(), dropped.asStateFlow(), System.currentTimeMillis()))
         }
         _focusedKey.value = id.key
         return id

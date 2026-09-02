@@ -29,8 +29,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
@@ -741,11 +743,15 @@ fun UsageBarRow(row: QuotaUsageRow) {
             )
         }
         Spacer(Modifier.height(4.dp))
+        // The card behind this row is already KdSurfaceVariant, so a 4 dp track
+        // in the same colour was invisible and only Material's stop dot showed.
         LinearProgressIndicator(
             progress = { row.fraction },
-            modifier = Modifier.fillMaxWidth().height(4.dp),
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
             color = barColor,
-            trackColor = KdSurfaceVariant,
+            trackColor = KdBorder,
+            gapSize = 0.dp,
+            drawStopIndicator = {},
         )
     }
 }

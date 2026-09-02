@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
@@ -55,6 +56,7 @@ import org.jetbrains.compose.resources.painterResource
 @Composable
 fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
     val lines by stream.lines.collectAsState()
+    val droppedLines by stream.droppedLines.collectAsState()
     val listState = rememberLazyListState()
     var filterText by remember(stream.id.key) { mutableStateOf("") }
     val copyToClipboard = rememberCopyToClipboard()
@@ -91,6 +93,15 @@ fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
                     tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
                 )
             }
+        }
+
+        if (droppedLines > 0) {
+            Text(
+                "↑ $droppedLines older lines dropped — use Capture logs for a complete record.",
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextBright,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+            )
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
