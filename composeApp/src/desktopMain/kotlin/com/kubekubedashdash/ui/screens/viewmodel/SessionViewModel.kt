@@ -366,6 +366,24 @@ class SessionViewModel(
         _extraPaneScreen.value = null
     }
 
+    /**
+     * User-initiated retry from the connection-error screen: cancels the
+     * pending countdown and starts a fresh attempt against the current
+     * context immediately. No-op while no context is selected (bootstrap
+     * state — the only time the error screen can show with a blank context).
+     *
+     * The countdown job is cancelled, not joined; a cancellation landing
+     * mid-iteration can write one last ConnectionError screen value, which
+     * the ConnectSucceeded/ConnectFailed transition immediately supersedes.
+     */
+    fun retryNow() {
+        val ctx = _selectedContext.value
+        if (ctx.isBlank()) return
+        retryJob?.cancel()
+        _retryCountdown.value = 0
+        connectToCluster(ctx)
+    }
+
     private fun currentEntry() = NavEntry(_currentScreen.value, _extraPaneScreen.value)
 
     /** Shared "a new navigation happened" bookkeeping: clear the forward
