@@ -36,9 +36,9 @@ class PaletteVerbsTest {
     }
 
     @Test
-    fun `verbsForTarget NODE is cordon, drain and delete, in catalog order`() {
+    fun `verbsForTarget NODE is cordon and drain — a node cannot be deleted here`() {
         val ids = verbsForTarget(VerbTarget.NODE).map { it.id }
-        assertEquals(listOf("cordon", "drain", "delete"), ids)
+        assertEquals(listOf("cordon", "drain"), ids)
     }
 
     @Test
@@ -63,10 +63,18 @@ class PaletteVerbsTest {
         )
     }
 
+    /**
+     * `ClusterActions.deleteResource` dispatches by kind name and has no branch
+     * for Node, StatefulSet, DaemonSet or ReplicaSet — those reach its generic
+     * branch, which needs a group/version a `PendingVerb` never carries. The
+     * catalog must not offer a verb that is guaranteed to fail.
+     */
     @Test
-    fun `delete targets every VerbTarget`() {
+    fun `delete targets only the kinds the action layer can actually delete`() {
         val delete = PALETTE_VERBS.first { it.id == "delete" }
-        assertEquals(VerbTarget.entries.toSet(), delete.targets)
+        assertEquals(setOf(VerbTarget.POD, VerbTarget.DEPLOYMENT, VerbTarget.CRONJOB), delete.targets)
+        assertFalse(VerbTarget.NODE in delete.targets)
+        assertFalse(VerbTarget.STATEFULSET in delete.targets)
     }
 
     @Test

@@ -72,6 +72,7 @@ import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
 import com.kubekubedashdash.ui.palette.PendingVerb
+import com.kubekubedashdash.ui.palette.VerbDialogHost
 import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
@@ -263,8 +264,9 @@ fun App(
         }
         var captureDialogNamespace by remember { mutableStateOf<String?>(null) }
         // Raised by CommandPalette's target mode (D9) when a verb's target is
-        // picked; a pending verb with no host to render its dialog is inert —
-        // wiring VerbDialogHost onto this state is a later wave.
+        // picked; VerbDialogHost (mounted below, beside the capture dialog)
+        // renders its dialog and clears this back to null on dismiss or after
+        // a successful run.
         var pendingVerb by remember { mutableStateOf<PendingVerb?>(null) }
         // remember-ed so the lambda keeps a stable identity across recompositions:
         // rememberPaletteEntries keys its capture-entry list on it, and an
@@ -728,6 +730,10 @@ fun App(
                             onDismiss = { captureDialogNamespace = null },
                         )
                     }
+                }
+
+                pendingVerb?.let { verb ->
+                    VerbDialogHost(pending = verb, onDismiss = { pendingVerb = null })
                 }
             }
         }
