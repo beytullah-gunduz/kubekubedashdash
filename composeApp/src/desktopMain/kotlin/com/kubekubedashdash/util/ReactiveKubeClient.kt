@@ -13,6 +13,7 @@ import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.models.ServiceInfo
+import com.kubekubedashdash.services.LogStreamOptions
 import com.kubekubedashdash.services.logcapture.CapturePodMapper
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.LogQuery
@@ -31,8 +32,10 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestConditionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.BytesLimitTerminateTimeTailPrettyLoggable
+import io.fabric8.kubernetes.client.dsl.ContainerResource
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecWatch
+import io.fabric8.kubernetes.client.dsl.Loggable
 import io.fabric8.kubernetes.client.dsl.TailPrettyLoggable
 import io.fabric8.kubernetes.client.dsl.TimeTailPrettyLoggable
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
@@ -1644,7 +1647,37 @@ class ReactiveKubeClient(
         return tailable.getLogInputStream()
     }
 
-    fun streamPodLogs(name: String, namespace: String, container: String?): Flow<String> = flow {
+    /**
+     * Builds the fabric8 log source shared by [streamPodLogs]'s one-shot and
+     * live branches, applying [options] in the order forced by the DSL's
+     * interface chain (verified against kubernetes-client-api-7.7.0):
+     *   usingTimestamps() -> terminated() -> sinceSeconds() -> tailingLines()
+     * [Loggable] is the base every level extends, so this single helper
+     * serves both the `.log` and `.watchLog()` call sites. [tailLines] is
+     * always applied — it bounds volume independently of [LogStreamOptions.sinceSeconds],
+     * which only narrows the time window.
+     */
+    private fun podLogSource(
+        name: String,
+        namespace: String,
+        container: String?,
+        options: LogStreamOptions,
+        tailLines: Int,
+    ): Loggable {
+        val op = k8s.pods().inNamespace(namespace).withName(name)
+        val withC: ContainerResource = if (container != null) op.inContainer(container) else op
+        val timestamped: BytesLimitTerminateTimeTailPrettyLoggable = if (options.timestamps) withC.usingTimestamps() else withC
+        val terminated: TimeTailPrettyLoggable = if (options.previous) timestamped.terminated() else timestamped
+        val windowed: TailPrettyLoggable = options.sinceSeconds?.let { terminated.sinceSeconds(it) } ?: terminated
+        return windowed.tailingLines(tailLines)
+    }
+
+    fun streamPodLogs(
+        name: String,
+        namespace: String,
+        container: String?,
+        options: LogStreamOptions = LogStreamOptions(),
+    ): Flow<String> = flow {
         // Probe phase once so terminal pods (Succeeded/Failed) get a one-shot
         // historical read instead of watchLog() with follow=true, which on a
         // terminated container can return immediately with no data.
@@ -1659,12 +1692,19 @@ class ReactiveKubeClient(
             )
             null
         }
-        if (phase == "Succeeded" || phase == "Failed") {
-            log.debug("Reading historical logs pod={} namespace={} phase={}", name, namespace, phase)
+        if (phase == "Succeeded" || phase == "Failed" || options.previous) {
+            // A previous container is never followed — it produces no new
+            // output — so `options.previous` forces the one-shot branch
+            // regardless of the current pod's phase.
+            log.debug(
+                "Reading historical logs pod={} namespace={} phase={} previous={}",
+                name,
+                namespace,
+                phase,
+                options.previous,
+            )
             try {
-                val op = k8s.pods().inNamespace(namespace).withName(name)
-                val withC = if (container != null) op.inContainer(container) else op
-                val text = withC.tailingLines(5_000).log
+                val text = podLogSource(name, namespace, container, options, tailLines = 5_000).log
                 if (!text.isNullOrEmpty()) {
                     text.lineSequence().forEach { emit(it) }
                 }
@@ -1673,16 +1713,19 @@ class ReactiveKubeClient(
                 emit("[fetch error: ${e.message}]")
             }
         } else {
-            emitAll(streamLivePodLogs(name, namespace, container))
+            emitAll(streamLivePodLogs(name, namespace, container, options))
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun streamLivePodLogs(name: String, namespace: String, container: String?): Flow<String> = callbackFlow {
+    private fun streamLivePodLogs(
+        name: String,
+        namespace: String,
+        container: String?,
+        options: LogStreamOptions,
+    ): Flow<String> = callbackFlow {
         log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
         val watch = try {
-            val op = k8s.pods().inNamespace(namespace).withName(name)
-            val withC = if (container != null) op.inContainer(container) else op
-            withC.tailingLines(100).watchLog()
+            podLogSource(name, namespace, container, options, tailLines = 100).watchLog()
         } catch (e: Exception) {
             log.error("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
             trySend("Error: ${e.message}")
