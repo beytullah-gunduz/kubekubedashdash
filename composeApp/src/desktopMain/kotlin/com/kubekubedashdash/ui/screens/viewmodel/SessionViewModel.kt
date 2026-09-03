@@ -317,10 +317,14 @@ class SessionViewModel(
                 _reconnectError.value = null
                 if (!event.isReconnect) {
                     // A restored tab lands where it was; everything else on the
-                    // overview. A reconnect keeps the screen it never left.
+                    // overview. A reconnect keeps the screen it never left. A
+                    // pane from the previous cluster (possibly expanded over the
+                    // whole content area) must not survive a switch.
                     val restore = pendingRestore
                     pendingRestore = null
                     restoredView = null
+                    _extraPaneScreen.value = null
+                    _extraPaneExpanded.value = false
                     _currentScreen.value = restore?.screen ?: Screen.Main.ClusterOverview
                 }
             }

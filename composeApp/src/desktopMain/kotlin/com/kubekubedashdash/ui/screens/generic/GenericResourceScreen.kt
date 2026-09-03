@@ -273,7 +273,6 @@ fun GenericResourceScreen(
                 DetailHost(
                     visible = selected != null,
                     kindKey = kind,
-                    fallbackWidthDp = null,
                     onWidthChange = {},
                     expanded = detailExpanded,
                     onExpandedChange = viewModel::setDetailExpanded,

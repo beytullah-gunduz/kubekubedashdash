@@ -39,7 +39,8 @@ import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 
 /**
- * Per-session content area: sidebar + ContentRouter + optional ExtraPane.
+ * Per-session content area: sidebar + one DetailHost that lays the
+ * ContentRouter and the optional detail pane out together.
  * Each [HorizontalPager] page composes its own copy of this so adjacent
  * cluster sessions render in parallel during a swipe. The
  * [CompositionLocalProvider] routes every `viewModel { … }` lookup, plus
@@ -76,7 +77,6 @@ internal fun SessionPaneContent(
     val reconnectError by sessionVm.reconnectError.collectAsState()
     val retryCountdown by sessionVm.retryCountdown.collectAsState()
     val isConnecting by sessionVm.isConnecting.collectAsState()
-    val extraPaneWidth by sessionVm.extraPaneWidth.collectAsState()
     val extraPaneExpanded by sessionVm.extraPaneExpanded.collectAsState()
 
     val screenKey = screenKeyOf(currentScreen)
@@ -183,7 +183,6 @@ internal fun SessionPaneContent(
                                 DetailHost(
                                     visible = extraPaneScreen != null,
                                     kindKey = extraPaneScreen.detailKindKey(),
-                                    fallbackWidthDp = extraPaneWidth,
                                     onWidthChange = sessionVm::setExtraPaneWidth,
                                     expanded = extraPaneExpanded,
                                     onExpandedChange = sessionVm::setExtraPaneExpanded,

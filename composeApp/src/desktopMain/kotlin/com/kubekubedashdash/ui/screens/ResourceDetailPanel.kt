@@ -365,8 +365,8 @@ fun DetailPanelHeader(
                 onClick = controls.onToggleExpand,
             )
         }
-        // Any verb group is separated from Delete/Close so a destructive verb
-        // never sits flush against the Close button.
+        // Verb groups and the host's Expand are separated from Delete/Close so
+        // a destructive verb never sits flush against the Close button.
         if (groups.isNotEmpty() || hostControls != null) HeaderGroupDivider()
         if (onDelete != null) {
             TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, description = "Permanently remove this resource — it won't come back unless recreated.", onClick = onDelete)

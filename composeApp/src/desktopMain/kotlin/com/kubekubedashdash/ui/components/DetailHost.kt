@@ -1,6 +1,9 @@
 package com.kubekubedashdash.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -17,14 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -63,23 +68,22 @@ object DetailHostDefaults {
 fun detailLayoutFor(contentWidthDp: Float): DetailLayout = if (contentWidthDp < DetailHostDefaults.OVERLAY_BELOW_DP) DetailLayout.Overlay else DetailLayout.Split
 
 /**
- * Detail width for Split mode: the per-kind memory, else the caller's
- * fallback (the session's last drag), else [DetailHostDefaults.DEFAULT_FRACTION]
- * of the content; clamped so the list keeps [DetailHostDefaults.MIN_LIST_DP]
- * beside the handle and the detail keeps [DetailHostDefaults.MIN_DETAIL_DP]
- * (the detail floor wins if both cannot hold, which the overlay rule keeps
- * unreachable).
+ * Detail width for Split mode: the per-kind memory, else
+ * [DetailHostDefaults.DEFAULT_FRACTION] of the content; clamped so the list
+ * keeps [DetailHostDefaults.MIN_LIST_DP] beside the handle and the detail
+ * keeps [DetailHostDefaults.MIN_DETAIL_DP] (the detail floor wins if both
+ * cannot hold, which the overlay rule keeps unreachable).
  */
-fun detailWidthFor(contentWidthDp: Float, remembered: Float?, fallback: Float?): Float {
-    val wanted = remembered ?: fallback ?: (contentWidthDp * DetailHostDefaults.DEFAULT_FRACTION)
+fun detailWidthFor(contentWidthDp: Float, remembered: Float?): Float {
+    val wanted = remembered ?: (contentWidthDp * DetailHostDefaults.DEFAULT_FRACTION)
     val max = (contentWidthDp - DetailHostDefaults.MIN_LIST_DP - DetailHostDefaults.HANDLE_DP)
         .coerceAtLeast(DetailHostDefaults.MIN_DETAIL_DP)
     return wanted.coerceIn(DetailHostDefaults.MIN_DETAIL_DP, max)
 }
 
-/** Sheet width for Overlay mode: the same preference chain, but never covering the last [DetailHostDefaults.OVERLAY_MARGIN_DP] of the list. */
-fun overlayWidthFor(contentWidthDp: Float, remembered: Float?, fallback: Float?): Float {
-    val wanted = remembered ?: fallback ?: (contentWidthDp * DetailHostDefaults.DEFAULT_FRACTION)
+/** Sheet width for Overlay mode: the same preference, but never covering the last [DetailHostDefaults.OVERLAY_MARGIN_DP] of the list. */
+fun overlayWidthFor(contentWidthDp: Float, remembered: Float?): Float {
+    val wanted = remembered ?: (contentWidthDp * DetailHostDefaults.DEFAULT_FRACTION)
     val max = (contentWidthDp - DetailHostDefaults.OVERLAY_MARGIN_DP).coerceAtLeast(DetailHostDefaults.MIN_DETAIL_DP)
     return wanted.coerceIn(DetailHostDefaults.MIN_DETAIL_DP, max)
 }
@@ -122,16 +126,15 @@ private fun Modifier.blockFallThrough(): Modifier = pointerInput(Unit) {
  * the detail moves between slots through `movableContentOf`, so its tab
  * state survives too.
  *
- * Width: per-kind memory in [PreferenceRepository] (keyed by [kindKey]) →
- * [fallbackWidthDp] → 42 % of the content width. A drag runs against a live
- * value and is committed once on release: to the memory (when [kindKey] is
- * non-null) and to [onWidthChange].
+ * Width: per-kind memory in [PreferenceRepository] (keyed by [kindKey]),
+ * else 42 % of the content width. A drag runs against a live value and is
+ * committed once on release: to the memory (when [kindKey] is non-null) and
+ * to [onWidthChange].
  */
 @Composable
 fun DetailHost(
     visible: Boolean,
     kindKey: String?,
-    fallbackWidthDp: Float?,
     onWidthChange: (Float) -> Unit,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -153,47 +156,65 @@ fun DetailHost(
     val ignoreMemory by ScreenshotHooks.ignorePaneWidthMemory.collectAsState()
     val remembered = if (ignoreMemory) null else kindKey?.let { widths[it] }
 
+    // The view-model drops the expanded flag in the same step that closes the
+    // pane, so the mode is frozen at the last visible value while the pane
+    // fades out; otherwise the expanded layer would vanish without its exit.
+    var lastExpanded by remember { mutableStateOf(false) }
+    SideEffect { if (visible) lastExpanded = expanded }
+    val expandedLayer = if (visible) expanded else lastExpanded
+
     BoxWithConstraints(modifier = modifier) {
         val contentWidth = maxWidth.value
-        val showExpanded = visible && expanded
-        val split = !showExpanded && detailLayoutFor(contentWidth) == DetailLayout.Split
+        val split = !expandedLayer && detailLayoutFor(contentWidth) == DetailLayout.Split
         // The handle reports deltas faster than a preference write can round-trip
         // through recomposition, so the drag runs against a snapshot-state live
-        // width READ INSIDE the callback (never captured). It is re-clamped
-        // whenever the settled width changes (memory, session fallback, window
-        // resize) and committed once on release — one DataStore write per drag.
-        val settled = detailWidthFor(contentWidth, remembered, fallbackWidthDp)
-        val live = remember { mutableFloatStateOf(settled) }
-        LaunchedEffect(settled) { live.floatValue = settled }
+        // width READ INSIDE the callback (never captured). The state is keyed on
+        // the settled width, which is constant for the whole drag (memory and
+        // content width only change on release or on a window resize), so it
+        // re-initialises exactly when it should and never a frame late.
+        val settled = detailWidthFor(contentWidth, remembered)
+        val live = remember(settled) { mutableFloatStateOf(settled) }
         val splitWidth = live.floatValue
+        var dragging by remember { mutableStateOf(false) }
 
-        val listEndPadding = if (split && visible) (splitWidth + DetailHostDefaults.HANDLE_DP).dp else 0.dp
+        // The list's reserved end space follows the pane's fade so list and
+        // detail move together; it snaps while a drag is live.
+        val listEndTarget = if (split && visible) (splitWidth + DetailHostDefaults.HANDLE_DP).dp else 0.dp
+        val listEndPadding by animateDpAsState(
+            targetValue = listEndTarget,
+            animationSpec = if (dragging) snap() else tween(150),
+            label = "detailHostListEnd",
+        )
         Box(modifier = Modifier.fillMaxSize().padding(end = listEndPadding)) { list() }
 
         when {
-            showExpanded -> Box(modifier = Modifier.fillMaxSize().blockFallThrough()) { detailWithControls() }
+            expandedLayer -> AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+                Box(modifier = Modifier.fillMaxSize().blockFallThrough()) { detailWithControls() }
+            }
 
             split -> AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(),
-                exit = fadeOut(),
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.CenterEnd),
             ) {
                 Row(modifier = Modifier.fillMaxHeight()) {
                     ResizeHandle(
                         onDragStopped = {
+                            dragging = false
                             if (kindKey != null) PreferenceRepository.setDetailPaneWidth(kindKey, live.floatValue)
                             onWidthChange(live.floatValue)
                         },
                     ) { delta ->
-                        live.floatValue = detailWidthFor(contentWidth, live.floatValue - delta, null)
+                        dragging = true
+                        live.floatValue = detailWidthFor(contentWidth, live.floatValue - delta)
                     }
                     Box(modifier = Modifier.width(splitWidth.dp).fillMaxHeight()) { detailWithControls() }
                 }
             }
 
             else -> {
-                val sheetWidth = overlayWidthFor(contentWidth, remembered, fallbackWidthDp)
+                val sheetWidth = overlayWidthFor(contentWidth, remembered)
                 AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
                     Box(
                         modifier = Modifier
