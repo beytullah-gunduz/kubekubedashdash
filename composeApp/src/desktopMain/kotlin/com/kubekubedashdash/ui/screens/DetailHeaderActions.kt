@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -69,6 +71,7 @@ import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.DIVIDER_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.H_PADDING_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.ICON_BUTTON_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.TITLE_MIN_DP
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 // ── Shared panel header ─────────────────────────────────────────────────────────
@@ -234,41 +237,11 @@ private fun HeaderVerbButton(action: DetailAction) {
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         if (action.menuItems.isEmpty()) {
-            TextButton(
-                onClick = action.onClick,
-                enabled = action.enabled,
-                modifier = Modifier.height(28.dp),
-                shape = RoundedCornerShape(6.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = tint,
-                    disabledContentColor = tint.copy(alpha = 0.38f),
-                ),
-            ) {
-                Icon(painterResource(action.icon), null, Modifier.size(14.dp))
-                Spacer(Modifier.width(5.dp))
-                Text(action.label, style = MaterialTheme.typography.labelMedium)
-            }
+            VerbButton(action.label, action.icon, tint, action.enabled, hasMenu = false, onClick = action.onClick)
         } else {
             var menuOpen by remember { mutableStateOf(false) }
             Box {
-                TextButton(
-                    onClick = { menuOpen = true },
-                    enabled = action.enabled,
-                    modifier = Modifier.height(28.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = tint,
-                        disabledContentColor = tint.copy(alpha = 0.38f),
-                    ),
-                ) {
-                    Icon(painterResource(action.icon), null, Modifier.size(14.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text(action.label, style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.width(5.dp))
-                    Icon(painterResource(Res.drawable.keyboard_arrow_down_filled), null, Modifier.size(14.dp))
-                }
+                VerbButton(action.label, action.icon, tint, action.enabled, hasMenu = true) { menuOpen = true }
                 DropdownMenu(
                     expanded = menuOpen,
                     onDismissRequest = { menuOpen = false },
@@ -298,6 +271,42 @@ private fun HeaderVerbButton(action: DetailAction) {
 }
 
 /**
+ * The one button shape every header verb uses, plain or menu-opening: 28 dp
+ * tall, leading icon, label, optional trailing chevron. Colour comes from the
+ * button's own [ButtonDefaults.textButtonColors] so a disabled verb dims
+ * itself — never pass `color`/`tint` to the content.
+ */
+@Composable
+private fun VerbButton(
+    label: String,
+    icon: DrawableResource,
+    tint: Color,
+    enabled: Boolean,
+    hasMenu: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.height(28.dp),
+        shape = RoundedCornerShape(6.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = tint,
+            disabledContentColor = tint.copy(alpha = 0.38f),
+        ),
+    ) {
+        Icon(painterResource(icon), null, Modifier.size(14.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        if (hasMenu) {
+            Spacer(Modifier.width(5.dp))
+            Icon(painterResource(Res.drawable.keyboard_arrow_down_filled), null, Modifier.size(14.dp))
+        }
+    }
+}
+
+/**
  * The `Actions ▾` overflow button — collapses verbs that didn't fit into a
  * dropdown, each row carrying its description (D7). A container-picker action
  * (non-empty [DetailAction.menuItems]) renders as a non-clickable section
@@ -307,6 +316,10 @@ private fun HeaderVerbButton(action: DetailAction) {
 @Composable
 private fun ActionsOverflowButton(overflowed: List<DetailAction>) {
     var menuOpen by remember { mutableStateOf(false) }
+    // A window or pane resize re-partitions the strip. Dismiss rather than let
+    // rows appear under the cursor mid-click — the mis-click this feature exists
+    // to remove.
+    LaunchedEffect(overflowed.size) { menuOpen = false }
     val firstDestructiveIndex = overflowed.indexOfFirst { it.destructive }
     Box {
         TextButton(
@@ -323,7 +336,7 @@ private fun ActionsOverflowButton(overflowed: List<DetailAction>) {
         DropdownMenu(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
-            modifier = Modifier.background(KdSurface).widthIn(max = 320.dp),
+            modifier = Modifier.background(KdSurface),
         ) {
             overflowed.forEachIndexed { index, action ->
                 if (index == firstDestructiveIndex && index > 0) {
@@ -366,7 +379,11 @@ private fun ActionsOverflowButton(overflowed: List<DetailAction>) {
 
 @Composable
 private fun ActionsOverflowRow(action: DetailAction, onClick: () -> Unit) {
-    val tint = action.tint ?: if (action.destructive) KdError else KdTextPrimary
+    val base = action.tint ?: if (action.destructive) KdError else KdTextPrimary
+    // A DropdownMenuItem dims a disabled row through LocalContentColor, which an
+    // explicit colour would override — so the alpha is applied here instead.
+    val tint = if (action.enabled) base else base.copy(alpha = 0.38f)
+    val descriptionColor = if (action.enabled) KdTextSecondary else KdTextSecondary.copy(alpha = 0.38f)
     DropdownMenuItem(
         enabled = action.enabled,
         text = {
@@ -380,8 +397,9 @@ private fun ActionsOverflowRow(action: DetailAction, onClick: () -> Unit) {
                     Text(
                         action.description,
                         style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary,
+                        color = descriptionColor,
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(start = 22.dp),
                     )
                 }

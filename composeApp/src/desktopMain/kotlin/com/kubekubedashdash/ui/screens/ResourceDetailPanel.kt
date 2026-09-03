@@ -126,9 +126,10 @@ data class DetailActionMenuItem(
 /**
  * An action button rendered in the [ResourceDetailPanel] header alongside Delete.
  *
- * @param label       Button tooltip / accessibility label.
- * @param icon        Icon to display (16 dp).
- * @param destructive When true the icon renders in [KdError] red; otherwise [KdTextSecondary].
+ * @param label       The button's text, and the bold first line of its tooltip.
+ * @param icon        Icon to display (14 dp), left of the label.
+ * @param destructive When true the verb is red and grouped after the divider,
+ *                    ahead of Delete; otherwise it renders in [KdTextPrimary].
  * @param enabled     Controls whether the button responds to clicks.
  * @param onClick     Invoked when the button is clicked.
  * @param menuItems   When non-empty, clicking opens a dropdown of these entries instead of invoking [onClick].
