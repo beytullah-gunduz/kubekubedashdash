@@ -142,7 +142,11 @@ class ActionFeedbackState(
         }
     }
 
-    /** Drops every toast and timer. No production caller today; kept for tests and a future window-close hook. */
+    /**
+     * Drops every toast and expiry timer. An undo already in flight is not
+     * cancelled and still reports its outcome as a new toast. No production
+     * caller today; kept for tests.
+     */
     fun clear() {
         timers.values.forEach { it.cancel() }
         timers.clear()

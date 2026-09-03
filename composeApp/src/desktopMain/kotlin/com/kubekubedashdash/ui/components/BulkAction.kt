@@ -36,6 +36,17 @@ object BulkVerbs {
 /** Completion-toast title for a clean bulk run: "Evicted 3 Pods", "Deleted 1 ConfigMap" (D7: kinds as the screen names them). */
 fun bulkDoneTitle(verb: BulkVerb, count: Int, kindSingular: String, kindPlural: String): String = "${verb.doneLabel} $count ${if (count == 1) kindSingular else kindPlural}"
 
+/**
+ * The [BulkRunState.Finished] of a run that succeeded for every item and was
+ * not stopped early — the only outcome that closes the dialog by itself and
+ * toasts a summary. Null for anything else (no run, still running, a
+ * failure, a cancel).
+ */
+fun <T> cleanBulkFinish(runState: BulkRunState<T>?): BulkRunState.Finished<T>? {
+    val finished = runState as? BulkRunState.Finished<T> ?: return null
+    return if (finished.failures.isEmpty() && !finished.cancelled) finished else null
+}
+
 data class BulkFailure<out T>(val item: T, val reason: String)
 
 sealed interface BulkRunState<out T> {

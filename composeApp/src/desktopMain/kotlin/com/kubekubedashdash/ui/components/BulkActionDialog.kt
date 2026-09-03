@@ -45,9 +45,11 @@ internal fun <T> BulkActionDialog(
     // only when the mounted snapshot is the run that finished — a dialog that
     // reattached to a run already in flight mounts with no snapshot.
     val feedback = LocalActionFeedback.current
-    LaunchedEffect(runState) {
-        val finished = runState as? BulkRunState.Finished ?: return@LaunchedEffect
-        if (finished.failures.isNotEmpty() || finished.cancelled) return@LaunchedEffect
+    // Keyed on the clean Finished value (null while Running), not on every
+    // progress tick, so the effect is created once per outcome.
+    val cleanFinish = cleanBulkFinish(runState)
+    LaunchedEffect(cleanFinish) {
+        val finished = cleanFinish ?: return@LaunchedEffect
         val undoAction = if (undo != null && items.size == finished.total) undo(items) else null
         feedback.success(bulkDoneTitle(finished.verb, finished.attempted, kindSingular, kindPlural), undo = undoAction)
         onDismiss()

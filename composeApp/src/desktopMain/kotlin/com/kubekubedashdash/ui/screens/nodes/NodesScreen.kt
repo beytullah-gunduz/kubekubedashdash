@@ -51,7 +51,6 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.NODE_PRESSURE_THRESHOLD
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
-import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.flow.first
 
 internal const val MAX_HISTORY_SIZE = 20
@@ -290,6 +289,9 @@ fun NodesScreen(
     }
 
     bulkVerb?.let { verb ->
+        val cordonNode: (String, Boolean) -> Result<Unit> = { name, unschedulable ->
+            reactiveClient.actions.cordonNode(name, unschedulable)
+        }
         BulkActionDialog(
             verb = verb,
             items = bulkItems,
@@ -340,8 +342,8 @@ fun NodesScreen(
             // Parenthesised on purpose: `-> { … }` in a `when` branch parses as a
             // BLOCK, not a lambda. The parens force the expression reading.
             undo = when (verb) {
-                BulkVerbs.Cordon -> ({ nodes: List<NodeInfo> -> cordonUndo(reactiveClient, nodes, unschedulable = false) })
-                BulkVerbs.Uncordon -> ({ nodes: List<NodeInfo> -> cordonUndo(reactiveClient, nodes, unschedulable = true) })
+                BulkVerbs.Cordon -> ({ nodes: List<NodeInfo> -> cordonUndo(nodes, unschedulable = false, cordon = cordonNode) })
+                BulkVerbs.Uncordon -> ({ nodes: List<NodeInfo> -> cordonUndo(nodes, unschedulable = true, cordon = cordonNode) })
                 else -> null
             },
         )
@@ -359,7 +361,11 @@ fun NodesScreen(
  * carrying the count — the toast has no per-item list. Returns null when the
  * run changed nothing, so no Undo is offered.
  */
-private fun cordonUndo(client: ReactiveKubeClient, nodes: List<NodeInfo>, unschedulable: Boolean): UndoAction? {
+internal fun cordonUndo(
+    nodes: List<NodeInfo>,
+    unschedulable: Boolean,
+    cordon: (name: String, unschedulable: Boolean) -> Result<Unit>,
+): UndoAction? {
     val affected = nodes.filter { it.unschedulable == unschedulable }
     if (affected.isEmpty()) return null
     val verb = if (unschedulable) "Cordoned" else "Uncordoned"
@@ -369,11 +375,11 @@ private fun cordonUndo(client: ReactiveKubeClient, nodes: List<NodeInfo>, unsche
         successTitle = "$verb ${affected.size} $noun",
         failureTitle = "Undo failed: some nodes are still $stillState",
     ) {
-        val failed = affected.count { client.actions.cordonNode(it.name, unschedulable).isFailure }
+        val failed = affected.count { cordon(it.name, unschedulable).isFailure }
         if (failed == 0) {
             Result.success(Unit)
         } else {
-            Result.failure(IllegalStateException("$failed of ${affected.size} $noun could not be ${verb.lowercase()}"))
+            Result.failure(IllegalStateException("$failed of ${affected.size} ${noun.lowercase()} could not be ${verb.lowercase()}"))
         }
     }
 }

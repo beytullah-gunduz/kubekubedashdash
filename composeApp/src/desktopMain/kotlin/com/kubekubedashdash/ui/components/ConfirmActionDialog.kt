@@ -18,7 +18,9 @@ import com.kubekubedashdash.KdError
  * (confirm label renders in error red); false for constructive/approve actions.
  *
  * [inFlight] and [errorMessage] are owned by the caller so the dialog remains
- * mounted across the network round-trip without a separate snackbar.
+ * mounted across the network round-trip: a failure stays inline here and is
+ * never double-reported; a success is reported by the feedback layer
+ * (`ui/feedback`) after the caller closes the dialog.
  */
 @Composable
 fun ConfirmActionDialog(

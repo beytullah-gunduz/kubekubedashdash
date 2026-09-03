@@ -340,7 +340,8 @@ internal fun NodeDetailPanel(
                             if (dr.failed == 0) {
                                 feedback.success("Drained Node \"${node.name}\"", detail = counts)
                             } else {
-                                feedback.warning("Node \"${node.name}\" not fully drained — ${dr.failed} pods could not be evicted", detail = counts)
+                                val pods = if (dr.failed == 1) "1 pod" else "${dr.failed} pods"
+                                feedback.warning("Node \"${node.name}\" not fully drained — $pods could not be evicted", detail = counts)
                             }
                         },
                     )

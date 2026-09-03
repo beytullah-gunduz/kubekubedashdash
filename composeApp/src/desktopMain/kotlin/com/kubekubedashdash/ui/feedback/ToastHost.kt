@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -77,9 +78,11 @@ fun ActionFeedbackHost(content: @Composable () -> Unit) {
 
 /**
  * The stack itself. An empty stack is a plain Column with no pointer
- * modifiers, so it is not a hit target and everything beneath stays live;
- * each card consumes what its buttons do not, so a click on a card body never
- * falls through to the row under it.
+ * modifiers, so it is not a hit target and everything beneath stays live.
+ * Each card carries a pointer-input node, which is what keeps a click on the
+ * card body from falling through to the row under it: hit testing stops at
+ * the top-most subtree that has one. Each card is its own polite live region
+ * so a screen reader announces "Success, Cordoned Node …" as one string.
  */
 @Composable
 fun ToastHost(state: ActionFeedbackState, modifier: Modifier = Modifier) {
@@ -87,8 +90,7 @@ fun ToastHost(state: ActionFeedbackState, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .padding(16.dp)
-            .width(360.dp)
-            .semantics { liveRegion = LiveRegionMode.Polite },
+            .width(360.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         toasts.forEach { toast ->
@@ -128,12 +130,21 @@ private fun ToastCard(toast: Toast, onUndo: () -> Unit, onDismiss: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
             .pointerInput(Unit) {
-                // Children see the Main pass first, so Undo and × keep working;
-                // whatever they did not take is consumed here.
+                // Presence alone blocks fall-through (hit testing stops at this
+                // subtree). Consume press, release and wheel so no ancestor
+                // reacts to them — but NEVER a move: the Undo/× buttons check
+                // the Final pass of every move for consumption while pressed
+                // (waitForUpOrCancellation), and a consumed move cancels their
+                // tap. A parent's Main pass runs before that Final check.
                 awaitPointerEventScope {
                     while (true) {
-                        awaitPointerEvent().changes.forEach { it.consume() }
+                        val event = awaitPointerEvent()
+                        val terminal = event.type == PointerEventType.Press ||
+                            event.type == PointerEventType.Release ||
+                            event.type == PointerEventType.Scroll
+                        if (terminal) event.changes.forEach { if (!it.isConsumed) it.consume() }
                     }
                 }
             },

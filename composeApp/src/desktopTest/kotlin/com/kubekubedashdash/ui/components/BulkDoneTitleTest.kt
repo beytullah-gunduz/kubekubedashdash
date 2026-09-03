@@ -21,5 +21,7 @@ class BulkDoneTitleTest {
         assertEquals("Deleted 2 ConfigMaps", bulkDoneTitle(BulkVerbs.Delete, 2, "ConfigMap", "ConfigMaps"))
         assertEquals("Cordoned 2 Nodes", bulkDoneTitle(BulkVerbs.Cordon, 2, "Node", "Nodes"))
         assertEquals("Rollout restart started for 3 Deployments", bulkDoneTitle(BulkVerbs.Restart, 3, "Deployment", "Deployments"))
+        assertEquals("Uncordoned 2 Nodes", bulkDoneTitle(BulkVerbs.Uncordon, 2, "Node", "Nodes"))
+        assertEquals("Drained 1 Node", bulkDoneTitle(BulkVerbs.Drain, 1, "Node", "Nodes"))
     }
 }
