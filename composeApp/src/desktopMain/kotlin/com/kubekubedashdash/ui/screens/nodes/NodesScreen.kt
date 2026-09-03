@@ -48,8 +48,10 @@ import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.NODE_PRESSURE_THRESHOLD
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.flow.first
 
 internal const val MAX_HISTORY_SIZE = 20
@@ -335,6 +337,43 @@ fun NodesScreen(
                 bulkVerb = null
                 bulkItems = emptyList()
             },
+            // Parenthesised on purpose: `-> { … }` in a `when` branch parses as a
+            // BLOCK, not a lambda. The parens force the expression reading.
+            undo = when (verb) {
+                BulkVerbs.Cordon -> ({ nodes: List<NodeInfo> -> cordonUndo(reactiveClient, nodes, unschedulable = false) })
+                BulkVerbs.Uncordon -> ({ nodes: List<NodeInfo> -> cordonUndo(reactiveClient, nodes, unschedulable = true) })
+                else -> null
+            },
         )
+    }
+}
+
+/**
+ * Inverse of a clean bulk cordon/uncordon: flips back only the nodes the run
+ * actually CHANGED, one by one, off the EDT (the feedback layer runs it on IO).
+ * A node already in the target state before the run was a no-op for the run,
+ * and flipping it here would undo a cordon the operator set by hand earlier.
+ * [unschedulable] is the value the undo SETS: false undoes a cordon, so the
+ * run set !unschedulable and changed exactly the nodes whose snapshot value
+ * was [unschedulable]. A partially failed undo is reported as one failure
+ * carrying the count — the toast has no per-item list. Returns null when the
+ * run changed nothing, so no Undo is offered.
+ */
+private fun cordonUndo(client: ReactiveKubeClient, nodes: List<NodeInfo>, unschedulable: Boolean): UndoAction? {
+    val affected = nodes.filter { it.unschedulable == unschedulable }
+    if (affected.isEmpty()) return null
+    val verb = if (unschedulable) "Cordoned" else "Uncordoned"
+    val stillState = if (unschedulable) "schedulable" else "cordoned"
+    val noun = if (affected.size == 1) "Node" else "Nodes"
+    return UndoAction(
+        successTitle = "$verb ${affected.size} $noun",
+        failureTitle = "Undo failed: some nodes are still $stillState",
+    ) {
+        val failed = affected.count { client.actions.cordonNode(it.name, unschedulable).isFailure }
+        if (failed == 0) {
+            Result.success(Unit)
+        } else {
+            Result.failure(IllegalStateException("$failed of ${affected.size} $noun could not be ${verb.lowercase()}"))
+        }
     }
 }

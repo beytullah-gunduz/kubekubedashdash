@@ -11,18 +11,30 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One grouped-action verb as shown in the bulk bar and dialog. */
-data class BulkVerb(val actionLabel: String, val progressLabel: String, val destructive: Boolean)
+/** One grouped-action verb as shown in the bulk bar, the dialog and the completion toast. */
+data class BulkVerb(
+    val actionLabel: String,
+    val progressLabel: String,
+    /** Past tense for the completion toast: "Evicted 3 Pods". */
+    val doneLabel: String,
+    val destructive: Boolean,
+)
 
 /** The canonical verbs; screens compare by identity in `when` branches. */
 object BulkVerbs {
-    val Delete = BulkVerb("Delete", "Deleting", destructive = true)
-    val Evict = BulkVerb("Evict", "Evicting", destructive = false)
-    val Restart = BulkVerb("Restart", "Restarting", destructive = false)
-    val Cordon = BulkVerb("Cordon", "Cordoning", destructive = false)
-    val Uncordon = BulkVerb("Uncordon", "Uncordoning", destructive = false)
-    val Drain = BulkVerb("Drain", "Draining", destructive = true)
+    val Delete = BulkVerb("Delete", "Deleting", "Deleted", destructive = true)
+    val Evict = BulkVerb("Evict", "Evicting", "Evicted", destructive = false)
+
+    // "Rollout restart started for 3 Deployments": the annotation patch kicks
+    // off a rolling update; nothing has actually restarted when the run ends.
+    val Restart = BulkVerb("Restart", "Restarting", "Rollout restart started for", destructive = false)
+    val Cordon = BulkVerb("Cordon", "Cordoning", "Cordoned", destructive = false)
+    val Uncordon = BulkVerb("Uncordon", "Uncordoning", "Uncordoned", destructive = false)
+    val Drain = BulkVerb("Drain", "Draining", "Drained", destructive = true)
 }
+
+/** Completion-toast title for a clean bulk run: "Evicted 3 Pods", "Deleted 1 ConfigMap" (D7: kinds as the screen names them). */
+fun bulkDoneTitle(verb: BulkVerb, count: Int, kindSingular: String, kindPlural: String): String = "${verb.doneLabel} $count ${if (count == 1) kindSingular else kindPlural}"
 
 data class BulkFailure<out T>(val item: T, val reason: String)
 
