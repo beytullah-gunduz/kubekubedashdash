@@ -4,16 +4,13 @@ import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,17 +19,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,34 +34,32 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
-import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextBright
-import com.kubekubedashdash.KdTextPlaceholder
-import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.expand_more_filled
-import com.kubekubedashdash.resources.filter_list_filled
+import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.services.ActiveNamespaceTail
 import com.kubekubedashdash.services.logtail.TailLine
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
 import com.kubekubedashdash.ui.screens.logviewer.logSeverityColor
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -131,12 +123,12 @@ internal fun podPrefixColor(podName: String): Color = ClusterColor.fromContext(o
 /**
  * The lines the tail pane should render: notices always pass through
  * (a muted pod's disappearance is still news the user needs), and regular
- * lines are hidden when their pod is muted or when [filterText] doesn't
- * match.
+ * lines are hidden when their pod is muted — regardless of whether [matcher]
+ * matches them — or when [matcher] doesn't match.
  */
 internal fun visibleTailLines(
     lines: List<TailLine>,
-    filterText: String,
+    matcher: LogMatcher,
     mutedPods: Set<String>,
 ): List<TailLine> = lines.filter { line ->
     if (line.notice) {
@@ -144,7 +136,7 @@ internal fun visibleTailLines(
     } else if (line.podName in mutedPods) {
         false
     } else {
-        filterText.isBlank() || line.text.contains(filterText, ignoreCase = true)
+        matcher.matches(line.text)
     }
 }
 
@@ -152,21 +144,30 @@ internal fun visibleTailLines(
 fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modifier) {
     val state by tab.task.state.collectAsState()
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var filterText by remember(tab.key) { mutableStateOf("") }
+    var useRegex by remember(tab.key) { mutableStateOf(false) }
+    var caseSensitive by remember(tab.key) { mutableStateOf(false) }
+    var wrap by remember(tab.key) { mutableStateOf(false) }
     var mutedPods by remember(tab.key) { mutableStateOf(emptySet<String>()) }
     val copyToClipboard = rememberCopyToClipboard()
+    val logSaver = rememberLogSaver()
 
-    val visibleLines = remember(state.lines, filterText, mutedPods) {
-        visibleTailLines(state.lines, filterText, mutedPods)
+    val matcher = remember(filterText, useRegex, caseSensitive) { LogMatcher(filterText, useRegex, caseSensitive) }
+    val visibleLines = remember(state.lines, matcher, mutedPods) {
+        visibleTailLines(state.lines, matcher, mutedPods)
     }
 
-    // `stickToBottom` is a live mirror of "the viewport is currently
-    // pinned to the last line", recomputed from the list's own layout on
-    // every scroll rather than a one-shot flag. A manual scroll away from
-    // the bottom flips it off immediately (pausing auto-scroll on a busy
-    // namespace so the user can actually read); scrolling back to the
+    // stickToBottom (D6, D11) — the pattern this pane originated and
+    // DrawerLogPane.kt copied verbatim: a live mirror of "the viewport is
+    // currently pinned to the last line", recomputed from the list's own
+    // layout on every scroll rather than a one-shot flag. A manual scroll
+    // away from the bottom flips it off immediately (pausing auto-scroll on
+    // a busy namespace so the user can actually read); scrolling back to the
     // bottom — by hand or via our own animateScrollToItem below, which
-    // always lands exactly there — flips it back on.
+    // always lands exactly there — flips it back on. See DrawerLogPane.kt
+    // for why an `autoScrolling` guard or a `layoutInfo`-vs-
+    // `visibleLines.lastIndex` comparison are both broken here.
     var stickToBottom by remember(tab.key) { mutableStateOf(true) }
     LaunchedEffect(listState) {
         snapshotFlow {
@@ -188,17 +189,66 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            TailFilterField(
+            LogFilterField(
                 value = filterText,
                 onValueChange = { filterText = it },
+                regex = useRegex,
+                onRegexChange = { useRegex = it },
+                caseSensitive = caseSensitive,
+                onCaseChange = { caseSensitive = it },
+                invalid = matcher.invalid,
+                placeholder = "Filter tail…",
                 modifier = Modifier.weight(1f),
             )
+
+            LogToolbarDivider()
+
+            LogToolbarToggle(
+                label = "Follow",
+                on = stickToBottom,
+                onToggle = {
+                    if (stickToBottom) {
+                        stickToBottom = false
+                    } else {
+                        scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
+                    }
+                },
+                description = "Keep the view pinned to the newest line as more arrive.",
+            )
+            LogToolbarToggle(
+                label = "Wrap",
+                on = wrap,
+                onToggle = { wrap = !wrap },
+                description = "Wrap long lines instead of scrolling each one sideways.",
+            )
+
+            LogToolbarDivider()
 
             PodMuteMenu(
                 pods = state.attachedPods,
                 muted = mutedPods,
                 onToggle = { pod -> mutedPods = if (pod in mutedPods) mutedPods - pod else mutedPods + pod },
             )
+
+            LogToolbarDivider()
+
+            IconButton(
+                onClick = {
+                    logSaver(
+                        "tail-${tab.task.namespace}",
+                        visibleLines.map { line -> if (line.notice) line.text else "[${line.podName}] ${line.text}" },
+                    )
+                },
+                modifier = Modifier.size(28.dp),
+                enabled = visibleLines.isNotEmpty(),
+            ) {
+                Icon(
+                    painterResource(Res.drawable.save_filled),
+                    contentDescription = "Save visible lines",
+                    modifier = Modifier.size(14.dp),
+                    tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
+                )
+            }
 
             IconButton(
                 onClick = {
@@ -253,7 +303,7 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
                     state = listState,
                     modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
-                    items(visibleLines) { line -> TailLineRow(line) }
+                    items(visibleLines) { line -> TailLineRow(line, wrap) }
                 }
             }
             VerticalScrollbar(
@@ -265,7 +315,7 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
 }
 
 @Composable
-private fun TailLineRow(line: TailLine) {
+private fun TailLineRow(line: TailLine, wrap: Boolean) {
     val style = MaterialTheme.typography.bodySmall.copy(
         fontFamily = kdMonoFamily(),
         fontSize = 11.sp,
@@ -287,11 +337,17 @@ private fun TailLineRow(line: TailLine) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(vertical = 1.dp),
+            .padding(vertical = 1.dp)
+            .then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
     ) {
         Text("[${line.podName}] ", style = style, color = podPrefixColor(line.podName), maxLines = 1)
-        Text(line.text, style = style, color = logSeverityColor(line.text, default = KdTextBright), maxLines = 1)
+        Text(
+            line.text,
+            style = style,
+            color = logSeverityColor(line.text, default = KdTextBright),
+            maxLines = if (wrap) Int.MAX_VALUE else 1,
+            modifier = if (wrap) Modifier.weight(1f) else Modifier,
+        )
     }
 }
 
@@ -344,69 +400,4 @@ private fun PodMuteMenu(
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TailFilterField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val colors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = KdPrimary,
-        unfocusedBorderColor = KdBorder,
-        cursorColor = KdPrimary,
-        focusedContainerColor = KdSurfaceVariant,
-        unfocusedContainerColor = KdSurfaceVariant,
-    )
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.labelSmall.copy(
-            fontFamily = kdMonoFamily(),
-            color = KdTextPrimary,
-        ),
-        cursorBrush = SolidColor(KdPrimary),
-        interactionSource = interactionSource,
-        modifier = modifier.height(32.dp),
-        decorationBox = { innerTextField ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = value,
-                innerTextField = innerTextField,
-                enabled = true,
-                singleLine = true,
-                visualTransformation = VisualTransformation.None,
-                interactionSource = interactionSource,
-                placeholder = {
-                    Text(
-                        "Filter tail…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextPlaceholder,
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        painterResource(Res.drawable.filter_list_filled),
-                        null,
-                        Modifier.size(14.dp),
-                        tint = KdTextSecondary,
-                    )
-                },
-                colors = colors,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                container = {
-                    OutlinedTextFieldDefaults.Container(
-                        enabled = true,
-                        isError = false,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        shape = RoundedCornerShape(6.dp),
-                    )
-                },
-            )
-        },
-    )
 }
