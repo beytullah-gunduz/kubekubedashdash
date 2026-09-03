@@ -52,6 +52,22 @@ internal fun Screen?.paneSelectionUid(): String? = when (this) {
     else -> null
 }
 
+/**
+ * Width-memory key of a detail-pane screen — the resource kind it shows —
+ * or null when no pane is open. Generic kinds use their kind string from
+ * their own screen, so a ConfigMap panel remembers one width everywhere.
+ */
+internal fun Screen?.detailKindKey(): String? = when (this) {
+    is Screen.Detail.PodDetail -> "Pod"
+    is Screen.Detail.NodeDetail -> "Node"
+    is Screen.Detail.DeploymentDetail -> "Deployment"
+    is Screen.Detail.ServiceDetail -> "Service"
+    is Screen.Detail.NamespaceDetail -> "Namespace"
+    is Screen.Detail.EventDetail -> "Event"
+    is Screen.Detail.ResourceDetail -> kind
+    else -> null
+}
+
 @Composable
 fun ContentRouter(
     screen: Screen,

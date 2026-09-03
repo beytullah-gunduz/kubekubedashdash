@@ -26,7 +26,7 @@ import com.kubekubedashdash.KdPrimary
 import java.awt.Cursor
 
 @Composable
-fun ResizeHandle(onResize: (Float) -> Unit) {
+fun ResizeHandle(onDragStopped: () -> Unit = {}, onResize: (Float) -> Unit) {
     val density = LocalDensity.current
     var dragging by remember { mutableStateOf(false) }
     var hovered by remember { mutableStateOf(false) }
@@ -51,6 +51,7 @@ fun ResizeHandle(onResize: (Float) -> Unit) {
                 onDragStopped = {
                     dragging = false
                     hovered = false
+                    onDragStopped()
                 },
             ),
         contentAlignment = Alignment.Center,
