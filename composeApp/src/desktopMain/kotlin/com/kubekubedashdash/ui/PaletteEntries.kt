@@ -43,9 +43,9 @@ import org.jetbrains.compose.resources.DrawableResource
 
 /**
  * Collects palette entries for the active cluster session — sidebar
- * destinations, cluster tabs (for switching), namespaces, plus pods and nodes
- * already cached on the reactive client. Returns a list shaped for
- * [CommandPalette].
+ * destinations, cluster tabs (for switching), namespaces, plus pods,
+ * deployments, and nodes already cached on the reactive client. Returns a
+ * list shaped for [CommandPalette].
  */
 @Composable
 internal fun rememberPaletteEntries(
@@ -59,42 +59,43 @@ internal fun rememberPaletteEntries(
 ): List<PaletteEntry> {
     val screenEntries = remember(onNavigate) {
         listOf(
-            paletteScreen("Cluster Overview", Res.drawable.dashboard_filled, Screen.Main.ClusterOverview, onNavigate),
-            paletteScreen("Nodes", Res.drawable.dns_filled, Screen.Main.Nodes(), onNavigate),
-            paletteScreen("Namespaces", Res.drawable.folder_special_filled, Screen.Main.Namespaces, onNavigate),
-            paletteScreen("Events", Res.drawable.notifications_filled, Screen.Main.Events(), onNavigate),
-            paletteScreen("Pods", Res.drawable.view_in_ar_filled, Screen.Main.Pods(), onNavigate),
-            paletteScreen("Deployments", Res.drawable.layers_filled, Screen.Main.Deployments(), onNavigate),
-            paletteScreen("StatefulSets", Res.drawable.storage_filled, Screen.Main.StatefulSets, onNavigate),
-            paletteScreen("DaemonSets", Res.drawable.dynamic_feed_filled, Screen.Main.DaemonSets, onNavigate),
-            paletteScreen("ReplicaSets", Res.drawable.content_copy_filled, Screen.Main.ReplicaSets, onNavigate),
-            paletteScreen("Jobs", Res.drawable.work_filled, Screen.Main.Jobs, onNavigate),
-            paletteScreen("CronJobs", Res.drawable.schedule_filled, Screen.Main.CronJobs, onNavigate),
-            paletteScreen("ConfigMaps", Res.drawable.description_filled, Screen.Main.ConfigMaps, onNavigate),
-            paletteScreen("Secrets", Res.drawable.lock_filled, Screen.Main.Secrets, onNavigate),
-            paletteScreen("Services", Res.drawable.cloud_filled, Screen.Main.Services, onNavigate),
-            paletteScreen("Ingresses", Res.drawable.language_filled, Screen.Main.Ingresses, onNavigate),
-            paletteScreen("Endpoints", Res.drawable.settings_ethernet_filled, Screen.Main.Endpoints, onNavigate),
-            paletteScreen("Network Policies", Res.drawable.security_filled, Screen.Main.NetworkPolicies, onNavigate),
-            paletteScreen("Persistent Volumes", Res.drawable.save_filled, Screen.Main.PersistentVolumes, onNavigate),
-            paletteScreen("PV Claims", Res.drawable.folder_open_filled, Screen.Main.PersistentVolumeClaims, onNavigate),
-            paletteScreen("Storage Classes", Res.drawable.list_filled, Screen.Main.StorageClasses, onNavigate),
-            paletteScreen("Service Accounts", Res.drawable.account_tree_filled, Screen.Main.ServiceAccounts, onNavigate),
-            paletteScreen("Roles", Res.drawable.security_filled, Screen.Main.Roles, onNavigate),
-            paletteScreen("Cluster Roles", Res.drawable.security_filled, Screen.Main.ClusterRoles, onNavigate),
-            paletteScreen("Role Bindings", Res.drawable.account_tree_filled, Screen.Main.RoleBindings, onNavigate),
-            paletteScreen("Cluster Role Bindings", Res.drawable.account_tree_filled, Screen.Main.ClusterRoleBindings, onNavigate),
-            paletteScreen("Horizontal Pod Autoscalers", Res.drawable.swap_horiz_filled, Screen.Main.HorizontalPodAutoscalers, onNavigate),
-            paletteScreen("Pod Disruption Budgets", Res.drawable.monitor_heart_filled, Screen.Main.PodDisruptionBudgets, onNavigate),
-            paletteScreen("Resource Quotas", Res.drawable.category_filled, Screen.Main.ResourceQuotas, onNavigate),
-            paletteScreen("Limit Ranges", Res.drawable.filter_list_filled, Screen.Main.LimitRanges, onNavigate),
-            paletteScreen("Priority Classes", Res.drawable.sell_filled, Screen.Main.PriorityClasses, onNavigate),
-            paletteScreen("Validating Webhook Configurations", Res.drawable.code_filled, Screen.Main.ValidatingWebhookConfigurations, onNavigate),
-            paletteScreen("Mutating Webhook Configurations", Res.drawable.code_filled, Screen.Main.MutatingWebhookConfigurations, onNavigate),
-            paletteScreen("Ingress Classes", Res.drawable.language_filled, Screen.Main.IngressClasses, onNavigate),
-            paletteScreen("Endpoint Slices", Res.drawable.settings_ethernet_filled, Screen.Main.EndpointSlices, onNavigate),
-            paletteScreen("CSI Drivers", Res.drawable.storage_filled, Screen.Main.CSIDrivers, onNavigate),
-            paletteScreen("Certificate Signing Requests", Res.drawable.lock_filled, Screen.Main.CertificateSigningRequests, onNavigate),
+            paletteScreen("Cluster Overview", Res.drawable.dashboard_filled, Screen.Main.ClusterOverview, "Cluster", onNavigate),
+            paletteScreen("Cluster Topology", Res.drawable.account_tree_filled, Screen.Main.ClusterTopology, "Cluster", onNavigate),
+            paletteScreen("Nodes", Res.drawable.dns_filled, Screen.Main.Nodes(), "Cluster", onNavigate),
+            paletteScreen("Namespaces", Res.drawable.folder_special_filled, Screen.Main.Namespaces, "Cluster", onNavigate),
+            paletteScreen("Events", Res.drawable.notifications_filled, Screen.Main.Events(), "Cluster", onNavigate),
+            paletteScreen("Pods", Res.drawable.view_in_ar_filled, Screen.Main.Pods(), "Workloads", onNavigate),
+            paletteScreen("Deployments", Res.drawable.layers_filled, Screen.Main.Deployments(), "Workloads", onNavigate),
+            paletteScreen("StatefulSets", Res.drawable.storage_filled, Screen.Main.StatefulSets, "Workloads", onNavigate),
+            paletteScreen("DaemonSets", Res.drawable.dynamic_feed_filled, Screen.Main.DaemonSets, "Workloads", onNavigate),
+            paletteScreen("ReplicaSets", Res.drawable.content_copy_filled, Screen.Main.ReplicaSets, "Workloads", onNavigate),
+            paletteScreen("Jobs", Res.drawable.work_filled, Screen.Main.Jobs, "Workloads", onNavigate),
+            paletteScreen("CronJobs", Res.drawable.schedule_filled, Screen.Main.CronJobs, "Workloads", onNavigate),
+            paletteScreen("ConfigMaps", Res.drawable.description_filled, Screen.Main.ConfigMaps, "Config", onNavigate),
+            paletteScreen("Secrets", Res.drawable.lock_filled, Screen.Main.Secrets, "Config", onNavigate),
+            paletteScreen("Services", Res.drawable.cloud_filled, Screen.Main.Services, "Network", onNavigate),
+            paletteScreen("Ingresses", Res.drawable.language_filled, Screen.Main.Ingresses, "Network", onNavigate),
+            paletteScreen("Endpoints", Res.drawable.settings_ethernet_filled, Screen.Main.Endpoints, "Network", onNavigate),
+            paletteScreen("Network Policies", Res.drawable.security_filled, Screen.Main.NetworkPolicies, "Network", onNavigate),
+            paletteScreen("Ingress Classes", Res.drawable.language_filled, Screen.Main.IngressClasses, "Network", onNavigate),
+            paletteScreen("Endpoint Slices", Res.drawable.settings_ethernet_filled, Screen.Main.EndpointSlices, "Network", onNavigate),
+            paletteScreen("Persistent Volumes", Res.drawable.save_filled, Screen.Main.PersistentVolumes, "Storage", onNavigate),
+            paletteScreen("PV Claims", Res.drawable.folder_open_filled, Screen.Main.PersistentVolumeClaims, "Storage", onNavigate),
+            paletteScreen("Storage Classes", Res.drawable.list_filled, Screen.Main.StorageClasses, "Storage", onNavigate),
+            paletteScreen("CSI Drivers", Res.drawable.storage_filled, Screen.Main.CSIDrivers, "Storage", onNavigate),
+            paletteScreen("Service Accounts", Res.drawable.account_tree_filled, Screen.Main.ServiceAccounts, "Access Control", onNavigate),
+            paletteScreen("Roles", Res.drawable.security_filled, Screen.Main.Roles, "Access Control", onNavigate),
+            paletteScreen("Cluster Roles", Res.drawable.security_filled, Screen.Main.ClusterRoles, "Access Control", onNavigate),
+            paletteScreen("Role Bindings", Res.drawable.account_tree_filled, Screen.Main.RoleBindings, "Access Control", onNavigate),
+            paletteScreen("Cluster Role Bindings", Res.drawable.account_tree_filled, Screen.Main.ClusterRoleBindings, "Access Control", onNavigate),
+            paletteScreen("Certificate Signing Requests", Res.drawable.lock_filled, Screen.Main.CertificateSigningRequests, "Access Control", onNavigate),
+            paletteScreen("Horizontal Pod Autoscalers", Res.drawable.swap_horiz_filled, Screen.Main.HorizontalPodAutoscalers, "Autoscaling & Disruption", onNavigate),
+            paletteScreen("Pod Disruption Budgets", Res.drawable.monitor_heart_filled, Screen.Main.PodDisruptionBudgets, "Autoscaling & Disruption", onNavigate),
+            paletteScreen("Resource Quotas", Res.drawable.category_filled, Screen.Main.ResourceQuotas, "Governance", onNavigate),
+            paletteScreen("Limit Ranges", Res.drawable.filter_list_filled, Screen.Main.LimitRanges, "Governance", onNavigate),
+            paletteScreen("Priority Classes", Res.drawable.sell_filled, Screen.Main.PriorityClasses, "Governance", onNavigate),
+            paletteScreen("Validating Webhook Configurations", Res.drawable.code_filled, Screen.Main.ValidatingWebhookConfigurations, "Admission Control", onNavigate),
+            paletteScreen("Mutating Webhook Configurations", Res.drawable.code_filled, Screen.Main.MutatingWebhookConfigurations, "Admission Control", onNavigate),
         )
     }
 
@@ -103,16 +104,19 @@ internal fun rememberPaletteEntries(
     val client = activeSession?.reactiveClient
     val podsState = client?.pods?.collectAsState()
     val nodesState = client?.nodes?.collectAsState()
+    val deploymentsState = client?.deployments?.collectAsState()
     val crdsState = client?.crds?.collectAsState()
     val hiddenByContext = CrdPreferenceRepository.hiddenByContext.collectAsState()
 
-    val resourceEntries = remember(podsState?.value, nodesState?.value, onNavigate) {
+    val resourceEntries = remember(podsState?.value, nodesState?.value, deploymentsState?.value, onNavigate) {
         val pods = (podsState?.value as? com.kubekubedashdash.models.ResourceState.Success)?.data.orEmpty()
         val nodes = (nodesState?.value as? com.kubekubedashdash.models.ResourceState.Success)?.data.orEmpty()
+        val deployments = (deploymentsState?.value as? com.kubekubedashdash.models.ResourceState.Success)?.data.orEmpty()
         buildList {
             pods.forEach { pod ->
                 add(
                     PaletteEntry(
+                        id = "pod:${pod.namespace}/${pod.name}",
                         label = pod.name,
                         sublabel = pod.namespace,
                         category = "Pods",
@@ -124,11 +128,24 @@ internal fun rememberPaletteEntries(
             nodes.forEach { node ->
                 add(
                     PaletteEntry(
+                        id = "node:${node.name}",
                         label = node.name,
                         sublabel = node.roles.takeIf { it.isNotBlank() && it != NONE_PLACEHOLDER },
                         category = "Nodes",
                         icon = Res.drawable.dns_filled,
                         onActivate = { onNavigate(Screen.Main.Nodes(selectNodeName = node.name)) },
+                    ),
+                )
+            }
+            deployments.forEach { deployment ->
+                add(
+                    PaletteEntry(
+                        id = "dep:${deployment.namespace}/${deployment.name}",
+                        label = deployment.name,
+                        sublabel = deployment.namespace,
+                        category = "Deployments",
+                        icon = Res.drawable.layers_filled,
+                        onActivate = { onNavigate(Screen.Main.Deployments()) },
                     ),
                 )
             }
@@ -138,6 +155,7 @@ internal fun rememberPaletteEntries(
     val namespaceEntries = remember(namespacesState?.value, onSelectNamespace) {
         (namespacesState?.value ?: emptyList()).map { ns ->
             PaletteEntry(
+                id = "ns:$ns",
                 label = ns,
                 sublabel = "namespace",
                 category = "Namespaces",
@@ -150,6 +168,7 @@ internal fun rememberPaletteEntries(
     val captureEntries = remember(namespacesState?.value, onCaptureLogs) {
         (namespacesState?.value ?: emptyList()).map { ns ->
             PaletteEntry(
+                id = "action:capture:$ns",
                 label = "Capture logs: $ns",
                 sublabel = "save all pod logs to disk",
                 category = "Actions",
@@ -163,6 +182,7 @@ internal fun rememberPaletteEntries(
         tabs.filterIsInstance<WorkspaceTab.Cluster>().mapNotNull { tab ->
             val ctx = tab.session.connectionManager.getCurrentContext().ifBlank { return@mapNotNull null }
             PaletteEntry(
+                id = "cluster:$ctx",
                 label = ctx,
                 sublabel = "switch cluster",
                 category = "Clusters",
@@ -178,6 +198,7 @@ internal fun rememberPaletteEntries(
         val crds = (crdsState?.value as? ResourceState.Success)?.data.orEmpty()
         crds.filterNot { it.key in hiddenForActive }.map { crd ->
             PaletteEntry(
+                id = "crd:${crd.group}/${crd.kind}",
                 label = crd.kind,
                 sublabel = "${crd.group}/${crd.version}",
                 category = "Custom Resources",
@@ -200,6 +221,7 @@ internal fun rememberPaletteEntries(
     val tailEntries = remember(namespacesState?.value, onTailLogs) {
         (namespacesState?.value ?: emptyList()).map { ns ->
             PaletteEntry(
+                id = "action:tail:$ns",
                 label = "Tail logs: $ns",
                 sublabel = "live merged stream",
                 category = "Actions",
@@ -216,10 +238,12 @@ private fun paletteScreen(
     label: String,
     icon: DrawableResource,
     screen: Screen,
+    category: String,
     onNavigate: (Screen) -> Unit,
 ): PaletteEntry = PaletteEntry(
+    id = "screen:${screen::class.simpleName}",
     label = label,
-    category = "Go to",
+    category = category,
     icon = icon,
     onActivate = { onNavigate(screen) },
 )
