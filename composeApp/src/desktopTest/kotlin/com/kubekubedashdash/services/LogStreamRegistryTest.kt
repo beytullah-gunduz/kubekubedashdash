@@ -14,6 +14,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -186,8 +187,12 @@ class LogStreamRegistryTest {
 
         // openedAt is carried over — the tab must not jump in the strip.
         assertEquals(before.openedAt, after.openedAt)
-        // Fresh flows, not the old ones reset in place: nothing from the
-        // first (5-over-cap) stream leaked into the republished tab.
+        // Fresh flows, not the old ones reset in place — the identity check is
+        // the load-bearing one: resetting in place would satisfy the value
+        // assertions below while leaving the cancelled collector able to write
+        // the previous options' lines back into the tab the user is reading.
+        assertNotSame(before.lines, after.lines)
+        assertNotSame(before.droppedLines, after.droppedLines)
         assertEquals(emptyList<String>(), after.lines.value)
         assertEquals(0, after.droppedLines.value)
 

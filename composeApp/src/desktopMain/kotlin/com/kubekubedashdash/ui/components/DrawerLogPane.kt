@@ -60,7 +60,13 @@ fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
     var follow by remember(stream.id.key) { mutableStateOf(true) }
 
     val matcher = remember(filterText, useRegex, caseSensitive) { LogMatcher(filterText, useRegex, caseSensitive) }
-    val visibleLines = remember(lines, matcher) { lines.filter { matcher.matches(it) } }
+    // An inactive matcher (blank query, or a pattern that does not compile)
+    // matches every line, so hand the buffer straight through rather than
+    // copying 5 000 elements and running the matcher over each of them on the
+    // UI thread for every emission.
+    val visibleLines = remember(lines, matcher) {
+        if (!matcher.active) lines else lines.filter { matcher.matches(it) }
+    }
 
     // Follow (D6) — copied verbatim from DrawerNamespaceTailPane.kt: a live
     // mirror of "the viewport is pinned to the last line", recomputed from
@@ -106,6 +112,13 @@ fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
                     if (follow) {
                         follow = false
                     } else {
+                        // Set it here rather than waiting for the scroll to be
+                        // observed: snapshotFlow only emits on CHANGE, so when
+                        // the viewport is already at the bottom — a quiet pod,
+                        // a Prev snapshot, a filter narrow enough to fit — the
+                        // scroll is a no-op, nothing re-emits, and the chip
+                        // would never come back on.
+                        follow = true
                         scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
                     }
                 },

@@ -289,7 +289,11 @@ fun rememberLogSaver(): (fileBaseName: String, lines: List<String>) -> Unit {
                     }
                     result.fold(
                         onSuccess = { feedback.success("Saved ${lines.size} lines", detail = file.name) },
-                        onFailure = { e -> feedback.failure("Couldn't save logs", detail = e.message) },
+                        // The file name, never the exception's message: a write
+                        // failure reports the absolute path, which carries the
+                        // account name into a toast (and into any screenshot
+                        // of one).
+                        onFailure = { feedback.failure("Couldn't save logs", detail = "Could not write ${file.name}") },
                     )
                 }
             }

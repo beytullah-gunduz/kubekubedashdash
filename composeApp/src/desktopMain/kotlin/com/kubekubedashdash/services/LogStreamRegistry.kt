@@ -131,6 +131,14 @@ object LogStreamRegistry {
     ): LogStreamId {
         val id = LogStreamId(session.id.value, podName, namespace, container)
         val label = "$podName${container?.let { " · $it" } ?: ""}"
+        // Re-opening logs for a tab that is already up is just a focus, so
+        // don't pay for another pod GET whose result nothing would read.
+        // openOrFocusStream re-checks this under the lock; losing the race
+        // only costs one redundant lookup.
+        if (id.key in _tabs.value) {
+            focus(id.key)
+            return id
+        }
         val containers = MutableStateFlow<List<String>>(emptyList())
         // getPodByName is a blocking fabric8 call; the registry scope is
         // Dispatchers.Default, so hop to IO rather than parking a CPU thread
@@ -244,6 +252,9 @@ object LogStreamRegistry {
     fun switchContainer(key: String, container: String?) {
         val old = _tabs.value[key] as? ActiveLogStream ?: return
         val factory = factories[key] ?: return
+        // Picking the container that is already showing is a no-op, not a
+        // reason to restart the stream and throw the buffer away.
+        if (old.id.container == container) return
         val newId = old.id.copy(container = container)
         val label = "${old.id.podName}${container?.let { " · $it" } ?: ""}"
         // That container may already have its own tab (the user opened two of

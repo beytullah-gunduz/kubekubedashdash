@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.logviewer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -70,5 +71,24 @@ class LogMatcherTest {
     fun `a blank query is not active`() {
         assertFalse(LogMatcher("").active)
         assertFalse(LogMatcher("   ").active)
+    }
+
+    /**
+     * The whole reason the compiled pattern is a body val and not a
+     * constructor property: `kotlin.text.Regex` has no `equals`, so promoting
+     * it would make every matcher unequal to an identical one, and every
+     * `remember(…, matcher)` key in the log panes would miss on each
+     * recomposition — re-filtering and re-highlighting the viewport for every
+     * arriving line, with a green test suite.
+     */
+    @Test
+    fun `two matchers built from the same inputs are equal, regex included`() {
+        assertEquals(LogMatcher("boom"), LogMatcher("boom"))
+        assertEquals(LogMatcher("err(or)?", regex = true), LogMatcher("err(or)?", regex = true))
+        assertEquals(
+            LogMatcher("err(or)?", regex = true).hashCode(),
+            LogMatcher("err(or)?", regex = true).hashCode(),
+        )
+        assertNotEquals(LogMatcher("boom"), LogMatcher("boom", caseSensitive = true))
     }
 }

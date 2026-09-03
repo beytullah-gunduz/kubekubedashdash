@@ -210,6 +210,10 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
                     if (stickToBottom) {
                         stickToBottom = false
                     } else {
+                        // See DrawerLogPane: snapshotFlow only emits on change,
+                        // so a scroll that lands where we already are would
+                        // never turn the chip back on by itself.
+                        stickToBottom = true
                         scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
                     }
                 },
