@@ -12,10 +12,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.UndoAction
 
 @Composable
 internal fun <T> BulkActionDialog(
@@ -29,7 +32,28 @@ internal fun <T> BulkActionDialog(
     onConfirm: () -> Unit,
     onCancelRun: () -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * Inverse of a clean run over the mounted [items], attached to the
+     * completion toast as Undo. Null (the default) for verbs with no cheap,
+     * safe inverse.
+     */
+    undo: ((List<T>) -> UndoAction?)? = null,
 ) {
+    // A run that finished with every item succeeding closes the dialog on its
+    // own and reports through the toast layer; a partial or stopped run keeps
+    // the dialog up with its failure list, exactly as before. Undo is offered
+    // only when the mounted snapshot is the run that finished — a dialog that
+    // reattached to a run already in flight mounts with no snapshot.
+    val feedback = LocalActionFeedback.current
+    // Keyed on the clean Finished value (null while Running), not on every
+    // progress tick, so the effect is created once per outcome.
+    val cleanFinish = cleanBulkFinish(runState)
+    LaunchedEffect(cleanFinish) {
+        val finished = cleanFinish ?: return@LaunchedEffect
+        val undoAction = if (undo != null && items.size == finished.total) undo(items) else null
+        feedback.success(bulkDoneTitle(finished.verb, finished.attempted, kindSingular, kindPlural), undo = undoAction)
+        onDismiss()
+    }
     // Header from the attached run when one exists: the runner outlives
     // screen compositions, so the mounted snapshot may not be the run the
     // body is rendering — the title must count what is actually shown.

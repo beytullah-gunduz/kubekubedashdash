@@ -52,6 +52,8 @@ import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -78,6 +80,7 @@ fun PodsScreen(
     initialSelectedUid: String? = null,
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
+    val feedback = LocalActionFeedback.current
     val viewModel: PodsScreenViewModel = viewModel { PodsScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
     val resourceUsage by viewModel.resourceUsage.collectAsState()
@@ -311,7 +314,10 @@ fun PodsScreen(
                 delete.run(
                     failureMessage = "Delete failed",
                     block = { reactiveClient.actions.deleteResource("pod", pod.name, pod.namespace) },
-                    onSuccess = { pendingDelete = null },
+                    onSuccess = {
+                        pendingDelete = null
+                        feedback.success("Deleted Pod ${resourceRef(pod.name, pod.namespace)}")
+                    },
                 )
             },
             onDismiss = {
@@ -380,7 +386,10 @@ fun PodsScreen(
                 evict.run(
                     failureMessage = "Eviction failed",
                     block = { reactiveClient.actions.evictPod(pod.name, pod.namespace) },
-                    onSuccess = { pendingEvict = null },
+                    onSuccess = {
+                        pendingEvict = null
+                        feedback.success("Evicted Pod ${resourceRef(pod.name, pod.namespace)}")
+                    },
                 )
             },
             onDismiss = {

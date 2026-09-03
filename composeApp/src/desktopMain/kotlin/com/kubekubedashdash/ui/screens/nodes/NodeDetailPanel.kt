@@ -69,6 +69,8 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.DetailFieldsCard
@@ -102,6 +104,7 @@ internal fun NodeDetailPanel(
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val kubeClient = LocalReactiveKubeClient.current
+    val feedback = LocalActionFeedback.current
     var activeTab by remember { mutableStateOf(NodeDetailTab.Overview) }
     val scope = rememberCoroutineScope()
 
@@ -287,7 +290,21 @@ internal fun NodeDetailPanel(
                     cordon.run(
                         failureMessage = "Operation failed",
                         block = { kubeClient.actions.cordonNode(node.name, targetUnschedulable) },
-                        onSuccess = { showCordonDialog = false },
+                        onSuccess = {
+                            showCordonDialog = false
+                            val verb = if (targetUnschedulable) "Cordoned" else "Uncordoned"
+                            val inverse = if (targetUnschedulable) "Uncordoned" else "Cordoned"
+                            val stillState = if (targetUnschedulable) "cordoned" else "schedulable"
+                            feedback.success(
+                                "$verb Node \"${node.name}\"",
+                                undo = UndoAction(
+                                    successTitle = "$inverse Node \"${node.name}\"",
+                                    failureTitle = "Undo failed: Node \"${node.name}\" is still $stillState",
+                                ) {
+                                    kubeClient.actions.cordonNode(node.name, !targetUnschedulable)
+                                },
+                            )
+                        },
                     )
                 },
                 onDismiss = {
@@ -319,6 +336,13 @@ internal fun NodeDetailPanel(
                         onSuccess = { dr ->
                             drainStatus = "Evicted ${dr.evicted}, skipped ${dr.skipped}, failed ${dr.failed}."
                             showDrainDialog = false
+                            val counts = "Evicted ${dr.evicted}, skipped ${dr.skipped}, failed ${dr.failed}"
+                            if (dr.failed == 0) {
+                                feedback.success("Drained Node \"${node.name}\"", detail = counts)
+                            } else {
+                                val pods = if (dr.failed == 1) "1 pod" else "${dr.failed} pods"
+                                feedback.warning("Node \"${node.name}\" not fully drained — $pods could not be evicted", detail = counts)
+                            }
                         },
                     )
                 },

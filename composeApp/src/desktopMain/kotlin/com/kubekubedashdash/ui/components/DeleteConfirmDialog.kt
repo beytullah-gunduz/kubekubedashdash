@@ -28,7 +28,9 @@ import com.kubekubedashdash.KdTextSecondary
  * radius kinds like Namespace, matching k9s/Lens convention.
  *
  * `inFlight` and `errorMessage` are owned by the caller so the dialog stays
- * mounted across the network round-trip; no separate snackbar.
+ * mounted across the network round-trip: a failure stays inline here and is
+ * never double-reported; a success is reported by the feedback layer
+ * (`ui/feedback`) after the caller closes the dialog.
  */
 @Composable
 fun DeleteConfirmDialog(

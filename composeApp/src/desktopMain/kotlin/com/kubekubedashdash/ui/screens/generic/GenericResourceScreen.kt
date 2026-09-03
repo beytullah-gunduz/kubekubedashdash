@@ -87,6 +87,10 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.UndoAction
+import com.kubekubedashdash.ui.feedback.replicaCount
+import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
@@ -198,6 +202,7 @@ fun GenericResourceScreen(
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
 
     val client = LocalReactiveKubeClient.current
+    val feedback = LocalActionFeedback.current
     var pendingDelete by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
     val delete = rememberConfirmableAction()
     var bulkVerb by remember(kind) { mutableStateOf<BulkVerb?>(null) }
@@ -577,7 +582,10 @@ fun GenericResourceScreen(
                             plural = plural,
                         )
                     },
-                    onSuccess = { pendingDelete = null },
+                    onSuccess = {
+                        pendingDelete = null
+                        feedback.success("Deleted $kind ${resourceRef(target.name, target.namespace)}")
+                    },
                 )
             },
             onDismiss = {
@@ -647,7 +655,10 @@ fun GenericResourceScreen(
                             client.actions.denyCsr(action.target.name)
                         }
                     },
-                    onSuccess = { pendingCsrAction = null },
+                    onSuccess = {
+                        pendingCsrAction = null
+                        feedback.success("${if (isApprove) "Approved" else "Denied"} CSR \"${action.target.name}\"")
+                    },
                 )
             },
             onDismiss = {
@@ -679,7 +690,24 @@ fun GenericResourceScreen(
                             replicas = replicas,
                         )
                     },
-                    onSuccess = { pendingScale = null },
+                    onSuccess = {
+                        pendingScale = null
+                        val ref = resourceRef(ps.target.name, ps.target.namespace)
+                        feedback.success(
+                            "Scaled $kind $ref to ${replicaCount(replicas)}",
+                            undo = UndoAction(
+                                successTitle = "Restored $kind $ref to ${replicaCount(currentReplicas)}",
+                                failureTitle = "Undo failed: $kind $ref still has ${replicaCount(replicas)}",
+                            ) {
+                                client.actions.scaleWorkload(
+                                    kind = kind,
+                                    name = ps.target.name,
+                                    namespace = ps.target.namespace ?: "",
+                                    replicas = currentReplicas,
+                                )
+                            },
+                        )
+                    },
                 )
             },
             onDismiss = {
@@ -707,7 +735,10 @@ fun GenericResourceScreen(
                             namespace = pr.target.namespace ?: "",
                         )
                     },
-                    onSuccess = { pendingRestart = null },
+                    onSuccess = {
+                        pendingRestart = null
+                        feedback.success("Rollout restart started for $kind ${resourceRef(pr.target.name, pr.target.namespace)}")
+                    },
                 )
             },
             onDismiss = {
@@ -734,7 +765,10 @@ fun GenericResourceScreen(
                             namespace = pt.target.namespace ?: "",
                         )
                     },
-                    onSuccess = { pendingCronJobTrigger = null },
+                    onSuccess = {
+                        pendingCronJobTrigger = null
+                        feedback.success("Triggered CronJob ${resourceRef(pt.target.name, pt.target.namespace)}")
+                    },
                 )
             },
             onDismiss = {
@@ -767,7 +801,25 @@ fun GenericResourceScreen(
                             suspend = ps.suspend,
                         )
                     },
-                    onSuccess = { pendingCronJobSuspend = null },
+                    onSuccess = {
+                        pendingCronJobSuspend = null
+                        val ref = resourceRef(ps.target.name, ps.target.namespace)
+                        val verb = if (isSuspending) "Suspended" else "Resumed"
+                        val inverse = if (isSuspending) "Resumed" else "Suspended"
+                        feedback.success(
+                            "$verb CronJob $ref",
+                            undo = UndoAction(
+                                successTitle = "$inverse CronJob $ref",
+                                failureTitle = "Undo failed: CronJob $ref is still ${if (isSuspending) "suspended" else "active"}",
+                            ) {
+                                client.actions.setCronJobSuspend(
+                                    name = ps.target.name,
+                                    namespace = ps.target.namespace ?: "",
+                                    suspend = !ps.suspend,
+                                )
+                            },
+                        )
+                    },
                 )
             },
             onDismiss = {

@@ -36,6 +36,8 @@ import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.rememberResourceFilter
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
 
@@ -83,6 +85,7 @@ fun DeploymentsScreen(
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkItems by remember { mutableStateOf<List<DeploymentInfo>>(emptyList()) }
     val delete = rememberConfirmableAction()
+    val feedback = LocalActionFeedback.current
 
     ResourceListScaffold(state, loading = { ResourceLoadingIndicator() }) { data ->
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
@@ -197,7 +200,10 @@ fun DeploymentsScreen(
                 delete.run(
                     failureMessage = "Delete failed",
                     block = { reactiveClient.actions.deleteResource("deployment", dep.name, dep.namespace) },
-                    onSuccess = { pendingDelete = null },
+                    onSuccess = {
+                        pendingDelete = null
+                        feedback.success("Deleted Deployment ${resourceRef(dep.name, dep.namespace)}")
+                    },
                 )
             },
             onDismiss = {
