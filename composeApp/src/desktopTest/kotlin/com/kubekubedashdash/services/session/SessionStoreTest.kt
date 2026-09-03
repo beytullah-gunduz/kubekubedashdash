@@ -99,4 +99,13 @@ class SessionStoreTest {
         assertFalse(tempDir.resolve("session.json.tmp").exists())
         assertEquals(second, store.load())
     }
+
+    @Test
+    fun `a file saved before the width became optional still loads`() {
+        file.writeText(
+            """{"version":1,"workspaces":[{"tabs":[{"context":"example-context","namespace":"default","paneWidthDp":800.0}],"activeTab":0}]}""",
+        )
+        val tab = SessionStore(file).load()!!.workspaces[0].tabs[0]
+        assertEquals(800f, tab.paneWidthDp)
+    }
 }

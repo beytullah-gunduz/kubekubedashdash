@@ -90,6 +90,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.delete_filled
+import com.kubekubedashdash.resources.fit_screen_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
@@ -101,6 +102,7 @@ import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.EMPTY_DASH
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
+import com.kubekubedashdash.ui.components.LocalDetailHostControls
 import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusBadge
@@ -347,9 +349,25 @@ fun DetailPanelHeader(
             if (index > 0) HeaderGroupDivider()
             group.forEach { action -> key(action.label) { HeaderActionButton(action) } }
         }
-        // Any verb group is separated from Delete/Close so a destructive verb
-        // never sits flush against the Close button.
-        if (groups.isNotEmpty()) HeaderGroupDivider()
+        // Expand / Restore comes from the host, so every panel gets it without
+        // a signature change; absent outside a DetailHost.
+        val hostControls = LocalDetailHostControls.current
+        hostControls?.let { controls ->
+            TooltipIconButton(
+                Res.drawable.fit_screen_filled,
+                if (controls.expanded) "Restore panel" else "Expand",
+                KdTextSecondary,
+                description = if (controls.expanded) {
+                    "Shrink the panel back to its normal size."
+                } else {
+                    "Give the panel the whole content area — the list comes back with Restore or Esc."
+                },
+                onClick = controls.onToggleExpand,
+            )
+        }
+        // Verb groups and the host's Expand are separated from Delete/Close so
+        // a destructive verb never sits flush against the Close button.
+        if (groups.isNotEmpty() || hostControls != null) HeaderGroupDivider()
         if (onDelete != null) {
             TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, description = "Permanently remove this resource — it won't come back unless recreated.", onClick = onDelete)
         }

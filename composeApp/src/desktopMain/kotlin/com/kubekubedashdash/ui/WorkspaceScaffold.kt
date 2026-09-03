@@ -1,18 +1,11 @@
 package com.kubekubedashdash.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -34,19 +27,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.ui.components.DetailHost
 import com.kubekubedashdash.ui.components.ReconnectOverlay
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 
 /**
- * Per-session content area: sidebar + ContentRouter + optional ExtraPane.
+ * Per-session content area: sidebar + one DetailHost that lays the
+ * ContentRouter and the optional detail pane out together.
  * Each [HorizontalPager] page composes its own copy of this so adjacent
  * cluster sessions render in parallel during a swipe. The
  * [CompositionLocalProvider] routes every `viewModel { … }` lookup, plus
@@ -83,6 +77,7 @@ internal fun SessionPaneContent(
     val reconnectError by sessionVm.reconnectError.collectAsState()
     val retryCountdown by sessionVm.retryCountdown.collectAsState()
     val isConnecting by sessionVm.isConnecting.collectAsState()
+    val extraPaneExpanded by sessionVm.extraPaneExpanded.collectAsState()
 
     val screenKey = screenKeyOf(currentScreen)
     val labelQuery by remember(screenKey) {
@@ -182,69 +177,69 @@ internal fun SessionPaneContent(
                                     searchQuery = searchQuery,
                                     onSearchChange = { sessionVm.setSearchQuery(it) },
                                 )
-                                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                    ContentRouter(
-                                        screen = currentScreen,
-                                        searchQuery = searchQuery,
-                                        labelQuery = labelQuery,
-                                        onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
-                                        annotationQuery = annotationQuery,
-                                        onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
-                                        pulseLabelsOnEntry = pulseLabelsOnEntry,
-                                        pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                        onNavigate = sessionVm::navigate,
-                                        clusterHealth = clusterHealth,
-                                        paneSelectionUid = extraPaneScreen.paneSelectionUid(),
-                                        onSelectCluster = onSelectCluster,
-                                        onRetryNow = sessionVm::retryNow,
-                                        onDiscoverEks = onDiscoverEks,
-                                        onOpenLogs = onOpenLogs,
-                                        onOpenTerminal = onOpenTerminal,
-                                        onCaptureLogs = onCaptureLogs,
-                                        onTailLogs = onTailLogs,
-                                    )
-                                }
+                                // One host for list + detail: the sidebar keeps its width and
+                                // the two share the content area (split, overlay below
+                                // 1200 dp, or the detail expanded over the list).
+                                DetailHost(
+                                    visible = extraPaneScreen != null,
+                                    kindKey = extraPaneScreen.detailKindKey(),
+                                    onWidthChange = sessionVm::setExtraPaneWidth,
+                                    expanded = extraPaneExpanded,
+                                    onExpandedChange = sessionVm::setExtraPaneExpanded,
+                                    onClose = sessionVm::closeExtraPane,
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    list = {
+                                        ContentRouter(
+                                            screen = currentScreen,
+                                            searchQuery = searchQuery,
+                                            labelQuery = labelQuery,
+                                            onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
+                                            annotationQuery = annotationQuery,
+                                            onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
+                                            pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                            onNavigate = sessionVm::navigate,
+                                            clusterHealth = clusterHealth,
+                                            paneSelectionUid = extraPaneScreen.paneSelectionUid(),
+                                            onSelectCluster = onSelectCluster,
+                                            onRetryNow = sessionVm::retryNow,
+                                            onDiscoverEks = onDiscoverEks,
+                                            onOpenLogs = onOpenLogs,
+                                            onOpenTerminal = onOpenTerminal,
+                                            onCaptureLogs = onCaptureLogs,
+                                            onTailLogs = onTailLogs,
+                                        )
+                                    },
+                                    detail = {
+                                        ExtraPaneRouter(
+                                            screen = extraPaneScreen,
+                                            onNavigate = sessionVm::navigate,
+                                            onClose = { sessionVm.closeExtraPane() },
+                                            modifier = Modifier.fillMaxSize(),
+                                            onOpenLogs = onOpenLogs,
+                                            onOpenTerminal = onOpenTerminal,
+                                            labelQuery = labelQuery,
+                                            onToggleLabel = { k, v ->
+                                                sessionVm.setLabelQuery(
+                                                    screenKey,
+                                                    toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
+                                                )
+                                            },
+                                            annotationQuery = annotationQuery,
+                                            onToggleAnnotation = { k, v ->
+                                                sessionVm.setAnnotationQuery(
+                                                    screenKey,
+                                                    toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
+                                                )
+                                            },
+                                        )
+                                    },
+                                )
                             }
                         }
                     },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    modifier = Modifier.fillMaxSize(),
                 )
-
-                val extraPaneWidth by sessionVm.extraPaneWidth.collectAsState()
-
-                AnimatedVisibility(
-                    visible = extraPaneScreen != null,
-                    enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
-                    exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
-                ) {
-                    Row(modifier = Modifier.fillMaxHeight()) {
-                        com.kubekubedashdash.ui.components.ResizeHandle { delta ->
-                            sessionVm.setExtraPaneWidth(extraPaneWidth - delta)
-                        }
-                        ExtraPaneRouter(
-                            screen = extraPaneScreen,
-                            onNavigate = sessionVm::navigate,
-                            onClose = { sessionVm.closeExtraPane() },
-                            modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
-                            onOpenLogs = onOpenLogs,
-                            onOpenTerminal = onOpenTerminal,
-                            labelQuery = labelQuery,
-                            onToggleLabel = { k, v ->
-                                sessionVm.setLabelQuery(
-                                    screenKey,
-                                    toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
-                                )
-                            },
-                            annotationQuery = annotationQuery,
-                            onToggleAnnotation = { k, v ->
-                                sessionVm.setAnnotationQuery(
-                                    screenKey,
-                                    toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
-                                )
-                            },
-                        )
-                    }
-                }
             }
             ReconnectOverlay(
                 visible = reconnecting,

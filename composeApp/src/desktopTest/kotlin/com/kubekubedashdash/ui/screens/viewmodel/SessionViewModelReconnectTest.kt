@@ -140,6 +140,10 @@ class SessionViewModelReconnectTest {
         connectAndAwait()
         viewModel.navigate(Screen.Main.Pods())
         viewModel.setSelectedNamespace("production")
+        // An open, expanded pane from the old cluster must not outlive the switch.
+        viewModel.navigate(Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "production"))
+        viewModel.setExtraPaneExpanded(true)
+        assertTrue(viewModel.extraPaneExpanded.value)
 
         // Same context, but user-initiated (no isReconnect flag): historical
         // reset-everything behaviour must be preserved.
@@ -153,6 +157,8 @@ class SessionViewModelReconnectTest {
         assertEquals("All Namespaces", viewModel.selectedNamespace.value)
         assertNull(reactiveClient.selectedNamespace.value)
         assertFalse(viewModel.reconnecting.value)
+        assertNull(viewModel.extraPaneScreen.value)
+        assertFalse(viewModel.extraPaneExpanded.value)
     }
 
     @Test

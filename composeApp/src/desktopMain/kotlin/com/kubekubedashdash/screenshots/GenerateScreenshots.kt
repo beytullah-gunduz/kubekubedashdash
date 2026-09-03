@@ -78,6 +78,7 @@ fun main() {
     // Deterministic layout: never restore the developer's saved session into a
     // screenshot run, and never write this run's layout back over it.
     SessionPersistence.disable()
+    ScreenshotHooks.ignorePaneWidthMemory.value = true
     Thread.setDefaultUncaughtExceptionHandler { thread, t ->
         log.error("uncaught in {}", thread.name, t)
     }

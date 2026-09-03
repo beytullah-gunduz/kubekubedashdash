@@ -16,4 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 object ScreenshotHooks {
     val autoSelect = MutableStateFlow<Map<String, String>>(emptyMap())
     val autoTab = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** Screenshot-only: the detail host ignores the per-kind width memory, so captures never depend on the developer's preferences. */
+    val ignorePaneWidthMemory = MutableStateFlow(false)
 }

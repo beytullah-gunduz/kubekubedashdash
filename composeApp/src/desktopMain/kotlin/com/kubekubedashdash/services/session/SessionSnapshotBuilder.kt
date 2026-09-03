@@ -8,7 +8,7 @@ data class TabView(
     val context: String,
     val namespace: String,
     val screen: Screen,
-    val paneWidthDp: Float,
+    val paneWidthDp: Float?,
 )
 
 /** One window: its cluster tabs in strip order, the active tab's index in that list (-1 if none), its geometry. */

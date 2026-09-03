@@ -66,8 +66,10 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.expand_more_filled
+import com.kubekubedashdash.resources.fit_screen_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.LocalDetailHostControls
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
@@ -193,6 +195,16 @@ fun EventDetailScreen(
                             "Event · ${event.namespace}",
                             style = MaterialTheme.typography.labelSmall,
                             color = KdTextSecondary,
+                        )
+                    }
+                }
+                LocalDetailHostControls.current?.let { controls ->
+                    IconButton(onClick = controls.onToggleExpand, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            painterResource(Res.drawable.fit_screen_filled),
+                            if (controls.expanded) "Restore panel" else "Expand",
+                            Modifier.size(16.dp),
+                            tint = KdTextSecondary,
                         )
                     }
                 }
