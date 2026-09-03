@@ -128,4 +128,23 @@ class RestorePlannerTest {
         )
         assertEquals(geometry, unknownScreensPlan[0].geometry)
     }
+
+    @Test
+    fun `a tab saved without a pane width stays without one`() {
+        val snapshot = SessionSnapshot(
+            workspaces = listOf(
+                SavedWorkspace(
+                    tabs = listOf(SavedClusterTab(context = "example-context", paneWidthDp = null)),
+                    activeTab = 0,
+                ),
+            ),
+        )
+        val plan = RestorePlanner.plan(
+            snapshot,
+            availableContexts = listOf("example-context"),
+            screens = emptyList(),
+        )
+
+        assertNull(plan[0].tabs[0].paneWidthDp)
+    }
 }

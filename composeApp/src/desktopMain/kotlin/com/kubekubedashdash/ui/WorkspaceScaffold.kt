@@ -219,13 +219,13 @@ internal fun SessionPaneContent(
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
                         com.kubekubedashdash.ui.components.ResizeHandle { delta ->
-                            sessionVm.setExtraPaneWidth(extraPaneWidth - delta)
+                            sessionVm.setExtraPaneWidth((extraPaneWidth ?: 800f) - delta)
                         }
                         ExtraPaneRouter(
                             screen = extraPaneScreen,
                             onNavigate = sessionVm::navigate,
                             onClose = { sessionVm.closeExtraPane() },
-                            modifier = Modifier.width(extraPaneWidth.dp).fillMaxHeight(),
+                            modifier = Modifier.width((extraPaneWidth ?: 800f).dp).fillMaxHeight(),
                             onOpenLogs = onOpenLogs,
                             onOpenTerminal = onOpenTerminal,
                             labelQuery = labelQuery,

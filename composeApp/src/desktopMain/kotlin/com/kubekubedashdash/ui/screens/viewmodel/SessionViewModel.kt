@@ -97,14 +97,29 @@ class SessionViewModel(
     private val _extraPaneScreen = MutableStateFlow<Screen?>(null)
     val extraPaneScreen: StateFlow<Screen?> = _extraPaneScreen.asStateFlow()
 
-    // Width of the detail/extra pane, in dp. Held on the session (not as a
-    // pane-local remember) so a user-dragged width survives switching tabs —
-    // the pager disposes inactive pages (beyondViewportPageCount = 0).
-    private val _extraPaneWidth = MutableStateFlow(800f)
-    val extraPaneWidth: StateFlow<Float> = _extraPaneWidth.asStateFlow()
+    // Last width the user dragged the detail pane to in this session, in dp,
+    // or null until the first drag. The detail host prefers the per-kind
+    // memory in PreferenceRepository, then this, then its default fraction of
+    // the content width. Held on the session (not as a pane-local remember) so
+    // it survives switching tabs — the pager disposes inactive pages
+    // (beyondViewportPageCount = 0) — and it is what session restore carries.
+    private val _extraPaneWidth = MutableStateFlow<Float?>(null)
+    val extraPaneWidth: StateFlow<Float?> = _extraPaneWidth.asStateFlow()
 
     fun setExtraPaneWidth(width: Float) {
         _extraPaneWidth.value = width.coerceIn(400f, 1200f)
+    }
+
+    // Expanded: the detail pane takes the whole content area (the list stays
+    // composed underneath so its scroll position survives). Never true
+    // without an open pane; reset whenever the pane closes or a main-screen
+    // navigation drops it.
+    private val _extraPaneExpanded = MutableStateFlow(false)
+    val extraPaneExpanded: StateFlow<Boolean> = _extraPaneExpanded.asStateFlow()
+
+    fun setExtraPaneExpanded(expanded: Boolean) {
+        if (expanded && _extraPaneScreen.value == null) return
+        _extraPaneExpanded.value = expanded
     }
 
     /**
@@ -116,7 +131,7 @@ class SessionViewModel(
      * hijacked. (A ConnectFailed still queued from an earlier attempt would
      * clear it too; restore only ever prepares brand-new sessions.)
      */
-    data class RestoreTarget(val namespace: String, val screen: Screen.Main, val paneWidthDp: Float)
+    data class RestoreTarget(val namespace: String, val screen: Screen.Main, val paneWidthDp: Float?)
 
     @Volatile
     private var pendingRestore: RestoreTarget? = null
@@ -435,7 +450,10 @@ class SessionViewModel(
         // Close the pane before switching the main screen (order preserved
         // from the original navigate) so a stale pane is never composed
         // against the incoming screen's filter key.
-        if (target.extraPane == null) _extraPaneScreen.value = null
+        if (target.extraPane == null) {
+            _extraPaneScreen.value = null
+            _extraPaneExpanded.value = false
+        }
         _currentScreen.value = target.screen
         _extraPaneScreen.value = target.extraPane
     }
@@ -446,7 +464,10 @@ class SessionViewModel(
         _backStack.update { it.dropLast(1) }
         _forwardStack.update { it + currentEntry().forHistory() }
         if (entry.screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
-        if (entry.extraPane == null) _extraPaneScreen.value = null
+        if (entry.extraPane == null) {
+            _extraPaneScreen.value = null
+            _extraPaneExpanded.value = false
+        }
         _currentScreen.value = entry.screen
         _extraPaneScreen.value = entry.extraPane
     }
@@ -457,7 +478,10 @@ class SessionViewModel(
         _forwardStack.update { it.dropLast(1) }
         _backStack.update { it + currentEntry().forHistory() }
         if (entry.screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
-        if (entry.extraPane == null) _extraPaneScreen.value = null
+        if (entry.extraPane == null) {
+            _extraPaneScreen.value = null
+            _extraPaneExpanded.value = false
+        }
         _currentScreen.value = entry.screen
         _extraPaneScreen.value = entry.extraPane
     }
@@ -467,6 +491,7 @@ class SessionViewModel(
         if (_extraPaneScreen.value == null) return
         recordCurrent()
         _extraPaneScreen.value = null
+        _extraPaneExpanded.value = false
     }
 
     /**
@@ -546,7 +571,7 @@ class SessionViewModel(
                         val namespace = restore?.namespace ?: "All Namespaces"
                         _selectedNamespace.value = namespace
                         reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
-                        restore?.let { setExtraPaneWidth(it.paneWidthDp) }
+                        restore?.paneWidthDp?.let { setExtraPaneWidth(it) }
                     }
                     emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
                 },

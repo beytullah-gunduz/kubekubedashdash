@@ -9,7 +9,7 @@ data class PlannedTab(
     val context: String,
     val namespace: String,
     val screen: Screen.Main,
-    val paneWidthDp: Float,
+    val paneWidthDp: Float?,
 )
 
 data class PlannedWorkspace(
@@ -49,7 +49,7 @@ object RestorePlanner {
                         context = tab.context,
                         namespace = tab.namespace.ifBlank { SavedClusterTab.ALL_NAMESPACES },
                         screen = ScreenCodec.decode(tab.screen),
-                        paneWidthDp = tab.paneWidthDp.coerceIn(MIN_PANE_DP, MAX_PANE_DP),
+                        paneWidthDp = tab.paneWidthDp?.coerceIn(MIN_PANE_DP, MAX_PANE_DP),
                     )
                 },
                 activeTab = active,

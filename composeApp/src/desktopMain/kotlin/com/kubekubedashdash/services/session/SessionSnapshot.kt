@@ -28,7 +28,8 @@ data class SavedClusterTab(
     val context: String,
     val namespace: String = ALL_NAMESPACES,
     val screen: SavedScreen = SavedScreen(),
-    val paneWidthDp: Float = 800f,
+    /** Last dragged detail width, or null when the user never dragged (the host then uses its default). */
+    val paneWidthDp: Float? = null,
 ) {
     companion object {
         const val ALL_NAMESPACES = "All Namespaces"

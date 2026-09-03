@@ -65,6 +65,7 @@ object PreferenceRepository {
     private val CAPTURE_DESTINATION_DIR by lazy { stringPreferencesKey("capture_destination_dir") }
     private val SIDEBAR_SECTIONS_EXPANDED by lazy { stringPreferencesKey("sidebar_sections_expanded") }
     private val STATS_PANELS_EXPANDED by lazy { stringPreferencesKey("stats_panels_expanded") }
+    private val DETAIL_PANE_WIDTHS by lazy { stringPreferencesKey("detail_pane_widths") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -153,9 +154,13 @@ object PreferenceRepository {
     private val _statsPanelsExpanded = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val statsPanelsExpanded: StateFlow<Map<String, Boolean>> = _statsPanelsExpanded.asStateFlow()
 
-    // Guards the one-shot seed of the two Map<String, Boolean> blobs above.
-    // Only ever touched from the single init collector coroutine.
-    private var boolMapsSeeded = false
+    // Detail-pane width per resource kind, in dp. Absent key = the host's default.
+    private val _detailPaneWidths = MutableStateFlow<Map<String, Float>>(emptyMap())
+    val detailPaneWidths: StateFlow<Map<String, Float>> = _detailPaneWidths.asStateFlow()
+
+    // Guards the one-shot seed of the three map blobs above (two Boolean, one
+    // Float). Only ever touched from the single init collector coroutine.
+    private var mapBlobsSeeded = false
 
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
@@ -208,12 +213,14 @@ object PreferenceRepository {
                 // exactly one DataStore, so nothing else can change it. The
                 // in-memory map is merged on top of the persisted one so a toggle
                 // that races ahead of this first emission is not thrown away.
-                if (!boolMapsSeeded) {
-                    boolMapsSeeded = true
+                if (!mapBlobsSeeded) {
+                    mapBlobsSeeded = true
                     _sidebarSectionsExpanded.value =
                         BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED]) + _sidebarSectionsExpanded.value
                     _statsPanelsExpanded.value =
                         BoolMapCodec.decode(p[STATS_PANELS_EXPANDED]) + _statsPanelsExpanded.value
+                    _detailPaneWidths.value =
+                        FloatMapCodec.decode(p[DETAIL_PANE_WIDTHS]) + _detailPaneWidths.value
                 }
                 _preferencesLoaded.value = true
             }
@@ -331,6 +338,18 @@ object PreferenceRepository {
             dataStore.edit { prefs ->
                 val current = BoolMapCodec.decode(prefs[STATS_PANELS_EXPANDED])
                 prefs[STATS_PANELS_EXPANDED] = BoolMapCodec.encode(current + (key to expanded))
+            }
+        }
+    }
+
+    /** Remembers the detail-pane width the user dragged to for [kind]; the host calls it once per drag, on release. */
+    fun setDetailPaneWidth(kind: String, widthDp: Float) {
+        if (_detailPaneWidths.value[kind] == widthDp) return
+        _detailPaneWidths.value = _detailPaneWidths.value + (kind to widthDp)
+        ioScope.launch {
+            dataStore.edit { prefs ->
+                val current = FloatMapCodec.decode(prefs[DETAIL_PANE_WIDTHS])
+                prefs[DETAIL_PANE_WIDTHS] = FloatMapCodec.encode(current + (kind to widthDp))
             }
         }
     }
