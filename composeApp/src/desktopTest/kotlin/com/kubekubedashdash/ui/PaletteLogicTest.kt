@@ -20,15 +20,20 @@ class PaletteLogicTest {
     // ── parsePaletteQuery ────────────────────────────────────────────────
 
     @Test
-    fun `no prefix keeps the whole trimmed query as text`() {
+    fun `no prefix keeps the query as typed — spacing included`() {
         assertEquals(PaletteQuery(null, "kube-proxy"), parsePaletteQuery("kube-proxy"))
-        assertEquals(PaletteQuery(null, "kube-proxy"), parsePaletteQuery("  kube-proxy  "))
+        // The text is what the search field renders, so it must survive
+        // verbatim: trimming here would eat a space as it was typed, and a
+        // trailing space is the only route to an interior one. Matching trims.
+        assertEquals(PaletteQuery(null, "  kube-proxy  "), parsePaletteQuery("  kube-proxy  "))
+        assertEquals(PaletteQuery(null, "network "), parsePaletteQuery("network "))
+        assertEquals(PaletteQuery(null, "network policies"), parsePaletteQuery("network policies"))
     }
 
     @Test
-    fun `blank and empty queries parse to no prefix and empty text`() {
+    fun `blank and empty queries parse to no prefix, keeping whitespace as typed`() {
         assertEquals(PaletteQuery(null, ""), parsePaletteQuery(""))
-        assertEquals(PaletteQuery(null, ""), parsePaletteQuery("   "))
+        assertEquals(PaletteQuery(null, "   "), parsePaletteQuery("   "))
     }
 
     @Test
@@ -37,9 +42,23 @@ class PaletteLogicTest {
     }
 
     @Test
-    fun `greater-than with text parses the prefix and trims the remainder`() {
+    fun `greater-than with text parses the prefix and keeps the remainder as typed`() {
         assertEquals(PaletteQuery(">", "restart"), parsePaletteQuery(">restart"))
-        assertEquals(PaletteQuery(">", "restart"), parsePaletteQuery("> restart"))
+        assertEquals(PaletteQuery(">", " restart"), parsePaletteQuery("> restart"))
+    }
+
+    /**
+     * The search field is driven by `prefix + text`, so the parse must be
+     * lossless or a keystroke disappears the moment it is typed. This is the
+     * exact round trip `SearchBar`'s `onTextChange` performs.
+     */
+    @Test
+    fun `prefix and text recompose the raw query for anything the user can type`() {
+        listOf("", " ", "n", "network ", "network policies", ">", "> ", ">rest art", "pod:my pod", "abc:def ghi")
+            .forEach { raw ->
+                val parsed = parsePaletteQuery(raw)
+                assertEquals(raw, (parsed.prefix ?: "") + parsed.text, "round trip failed for \"$raw\"")
+            }
     }
 
     @Test

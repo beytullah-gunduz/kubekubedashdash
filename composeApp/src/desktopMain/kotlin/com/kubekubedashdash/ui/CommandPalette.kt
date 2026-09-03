@@ -109,18 +109,22 @@ private val GO_PREFIX_CATEGORIES = setOf(
  * containing a colon still fuzzy-matches.
  */
 internal fun parsePaletteQuery(raw: String): PaletteQuery {
+    // `text` is what the search field renders, so it must round-trip:
+    // prefix + text == what the user typed. Trimming the tail here would
+    // delete a space the instant it was typed — and a space is the only way
+    // to reach an interior one. Matching trims instead (see [filterEntries]).
     val trimmedStart = raw.trimStart()
     if (trimmedStart.startsWith(">")) {
-        return PaletteQuery(prefix = ">", text = trimmedStart.removePrefix(">").trim())
+        return PaletteQuery(prefix = ">", text = trimmedStart.removePrefix(">"))
     }
     val colonIndex = trimmedStart.indexOf(':')
     if (colonIndex > 0) {
         val word = trimmedStart.substring(0, colonIndex)
         if (word.none { it.isWhitespace() } && word.lowercase() in KNOWN_WORD_PREFIXES) {
-            return PaletteQuery(prefix = "${word.lowercase()}:", text = trimmedStart.substring(colonIndex + 1).trim())
+            return PaletteQuery(prefix = "${word.lowercase()}:", text = trimmedStart.substring(colonIndex + 1))
         }
     }
-    return PaletteQuery(prefix = null, text = raw.trim())
+    return PaletteQuery(prefix = null, text = raw)
 }
 
 /** The category names a recognised [prefix] narrows the search to, or null for no restriction (including an unrecognised prefix). */
@@ -179,13 +183,16 @@ internal fun rowIndexOfEntry(rows: List<PaletteRow>, entryIndex: Int): Int = row
  * every candidate through, still capped per category.
  */
 private fun filterEntries(candidates: List<PaletteEntry>, query: String, perCategoryCap: Int): List<PaletteEntry> {
-    if (query.isEmpty()) {
+    // The raw text keeps its spacing so the field round-trips; trim here, at
+    // the one place the text is compared against anything.
+    val q = query.trim()
+    if (q.isEmpty()) {
         return candidates.groupBy { it.category }.flatMap { (_, items) -> items.take(perCategoryCap) }
     }
     return candidates.mapNotNull { entry ->
         val s = minOf(
-            fuzzyScore(query, entry.label) ?: Int.MAX_VALUE,
-            entry.sublabel?.let { fuzzyScore(query, it) } ?: Int.MAX_VALUE,
+            fuzzyScore(q, entry.label) ?: Int.MAX_VALUE,
+            entry.sublabel?.let { fuzzyScore(q, it) } ?: Int.MAX_VALUE,
         )
         if (s < Int.MAX_VALUE) entry to s else null
     }
@@ -263,7 +270,7 @@ fun CommandPalette(
                 val restrictedCategories = categoriesForPrefix(parsedQuery.prefix)
                 val candidates = if (restrictedCategories != null) entries.filter { it.category in restrictedCategories } else entries
                 val grouped = filterEntries(candidates, parsedQuery.text, perCategoryCap)
-                if (parsedQuery.text.isEmpty() && parsedQuery.prefix == null) recentEntries(entries, recents) + grouped else grouped
+                if (parsedQuery.text.isBlank() && parsedQuery.prefix == null) recentEntries(entries, recents) + grouped else grouped
             }
         }
     }
@@ -332,7 +339,7 @@ fun CommandPalette(
                         // text field handle it (deleting the last character) normally.
                         Key.Backspace -> {
                             when {
-                                parsedQuery.text.isNotEmpty() -> false
+                                parsedQuery.text.isNotBlank() -> false
 
                                 pendingVerb != null -> {
                                     pendingVerb = null
@@ -405,7 +412,7 @@ fun CommandPalette(
                             key = { row ->
                                 when (row) {
                                     is PaletteRow.Header -> "h::${row.category}"
-                                    is PaletteRow.Entry -> "e::${row.entry.category}::${row.entry.id}"
+                                    is PaletteRow.Entry -> "e::${row.entryIndex}::${row.entry.category}::${row.entry.id}"
                                 }
                             },
                         ) { row ->
@@ -458,7 +465,7 @@ private fun SearchBar(
         Box(modifier = Modifier.weight(1f)) {
             if (text.isEmpty()) {
                 Text(
-                    "Jump to a screen, cluster, namespace, pod, or node…",
+                    "Search, or type > for actions, pod: node: ns: dep: to narrow…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = KdTextSecondary,
                 )

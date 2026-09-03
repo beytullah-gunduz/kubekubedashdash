@@ -44,6 +44,15 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
     val kind = pending.kind
     val ref = resourceRef(name, namespace)
 
+    // These dialogs float at app scope with no cluster chrome behind them, and
+    // the palette can be opened from a Logs or All-Clusters tab, where it
+    // operates on the first cluster tab. Name the cluster the verb will hit so
+    // the confirmation is not ambiguous about it.
+    val onCluster = pending.session.connectionManager.getCurrentContext()
+        .takeIf { it.isNotBlank() }
+        ?.let { "\n\nCluster: $it" }
+        .orEmpty()
+
     // Reproduces NodeDetailPanel's "~N pods" drain estimate: a live count of
     // the node's pods, fetched fresh for each pending verb. null (rendered as
     // "?") while loading or for every non-drain verb.
@@ -72,7 +81,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
                     "Mark \"$name\" as unschedulable? No new pods will be scheduled on this node."
                 } else {
                     "Mark \"$name\" as schedulable again? New pods may be scheduled on this node."
-                },
+                } + onCluster,
                 confirmLabel = if (targetUnschedulable) "Cordon" else "Uncordon",
                 destructive = false,
                 inFlight = action.inFlight,
@@ -111,7 +120,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
             ConfirmActionDialog(
                 title = "Drain Node",
                 body = "Drain \"$name\"? This cordons the node and evicts pods (~$podCount pods). " +
-                    "DaemonSet and mirror/static pods are skipped.",
+                    "DaemonSet and mirror/static pods are skipped." + onCluster,
                 confirmLabel = "Drain",
                 destructive = true,
                 inFlight = action.inFlight,
@@ -144,7 +153,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
         "scale" -> {
             val currentReplicas = pending.replicas ?: 1
             ScaleDialog(
-                name = name,
+                name = scaleTargetLabel(name, pending.session.connectionManager.getCurrentContext()),
                 currentReplicas = currentReplicas,
                 inFlight = action.inFlight,
                 errorMessage = action.error,
@@ -187,7 +196,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
         "restart" -> {
             ConfirmActionDialog(
                 title = "Rollout restart",
-                body = "Restart all pods of $kind \"$name\"? Pods are recreated in a rolling update.",
+                body = "Restart all pods of $kind \"$name\"? Pods are recreated in a rolling update." + onCluster,
                 confirmLabel = "Restart",
                 destructive = false,
                 inFlight = action.inFlight,
@@ -212,7 +221,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
                 title = "Evict Pod",
                 body = "Evict \"$name\" from namespace \"$namespace\"? " +
                     "The pod will be gracefully removed — its controller will reschedule it on another node. " +
-                    "This respects PodDisruptionBudgets and may be rejected if disruption is not allowed.",
+                    "This respects PodDisruptionBudgets and may be rejected if disruption is not allowed." + onCluster,
                 confirmLabel = "Evict",
                 destructive = false,
                 inFlight = action.inFlight,
@@ -238,7 +247,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
                 title = "Force Delete Pod",
                 body = "Force-delete \"$name\" from namespace \"$namespace\"? " +
                     "This immediately removes the pod with grace period 0, bypassing graceful shutdown. " +
-                    "Only use this for a stuck or unresponsive pod — it can orphan volumes and open connections.",
+                    "Only use this for a stuck or unresponsive pod — it can orphan volumes and open connections." + onCluster,
                 confirmLabel = "Force Delete",
                 destructive = true,
                 inFlight = action.inFlight,
@@ -261,7 +270,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
         "trigger" -> {
             ConfirmActionDialog(
                 title = "Trigger CronJob",
-                body = "Run \"$name\" now? This creates a one-off Job from its template.",
+                body = "Run \"$name\" now? This creates a one-off Job from its template." + onCluster,
                 confirmLabel = "Trigger",
                 destructive = false,
                 inFlight = action.inFlight,
@@ -291,7 +300,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
                     "Suspend \"$name\"? It will stop creating new Jobs until resumed (running Jobs keep going)."
                 } else {
                     "Resume \"$name\"? It will start creating Jobs on its schedule again."
-                },
+                } + onCluster,
                 confirmLabel = if (isSuspending) "Suspend" else "Resume",
                 destructive = false,
                 inFlight = action.inFlight,
@@ -337,6 +346,7 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
                 name = name,
                 namespace = namespace,
                 requireTypedConfirm = kind.equals("Namespace", ignoreCase = true),
+                body = "Delete $kind $ref? This cannot be undone.$onCluster",
                 inFlight = action.inFlight,
                 errorMessage = action.error,
                 onConfirm = {
@@ -356,3 +366,6 @@ fun VerbDialogHost(pending: PendingVerb, onDismiss: () -> Unit) {
         else -> {}
     }
 }
+
+/** `ScaleDialog` shows only a name, so the cluster rides along with it. */
+private fun scaleTargetLabel(name: String, context: String): String = if (context.isBlank()) name else "$name  ·  $context"

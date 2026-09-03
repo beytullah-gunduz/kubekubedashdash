@@ -241,8 +241,12 @@ internal fun rememberPaletteEntries(
     // activateSelected() intercepts a "verb:" id before ever calling
     // onActivate, so this is never actually invoked. It exists only because
     // PaletteEntry requires one.
-    val verbEntries = remember(activeSession) {
-        if (activeSession != null) {
+    // Gated on a context, not just a session: the bootstrap session exists
+    // before anything is connected, and offering nine verbs against nothing is
+    // worse than offering none.
+    val verbContext = activeSession?.connectionManager?.getCurrentContext().orEmpty()
+    val verbEntries = remember(activeSession, verbContext) {
+        if (activeSession != null && verbContext.isNotBlank()) {
             PALETTE_VERBS.map { verb ->
                 PaletteEntry(
                     id = "verb:${verb.id}",
