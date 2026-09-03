@@ -23,10 +23,10 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdMonoFamily
 
 @Composable
-internal fun LogLine(line: String, highlight: String, wrap: Boolean) {
+internal fun LogLine(line: String, matcher: LogMatcher, wrap: Boolean) {
     val color = logSeverityColor(line)
 
-    val text = remember(line, highlight) { highlightOccurrences(line, highlight) }
+    val text = remember(line, matcher) { highlightOccurrences(line, matcher) }
 
     Text(
         text = text,
@@ -58,28 +58,13 @@ internal fun logSeverityColor(line: String, default: Color = Color(0xFFB0BEC5)):
     else -> default
 }
 
-/**
- * Case-insensitive, non-overlapping match ranges of [query] within [line].
- * Pure (no Compose types) so it's unit-testable; [highlightOccurrences] turns
- * the ranges into styled spans.
- */
-internal fun matchRanges(line: String, query: String): List<IntRange> {
-    if (query.isEmpty()) return emptyList()
-    val ranges = mutableListOf<IntRange>()
-    var start = line.indexOf(query, ignoreCase = true)
-    while (start >= 0) {
-        ranges += start until start + query.length
-        start = line.indexOf(query, startIndex = start + query.length, ignoreCase = true)
-    }
-    return ranges
-}
-
-/** Highlight every occurrence of [query] in [line]; plain text when [query] is blank. */
-private fun highlightOccurrences(line: String, query: String): AnnotatedString {
-    if (query.isBlank()) return AnnotatedString(line)
+/** Highlight every occurrence [matcher] finds in [line]; plain text when there are none. */
+private fun highlightOccurrences(line: String, matcher: LogMatcher): AnnotatedString {
+    val ranges = matcher.ranges(line)
+    if (ranges.isEmpty()) return AnnotatedString(line)
     return buildAnnotatedString {
         append(line)
         val style = SpanStyle(background = KdWarning.copy(alpha = 0.35f), fontWeight = FontWeight.Bold)
-        matchRanges(line, query).forEach { r -> addStyle(style, r.first, r.last + 1) }
+        ranges.forEach { r -> addStyle(style, r.first, r.last + 1) }
     }
 }

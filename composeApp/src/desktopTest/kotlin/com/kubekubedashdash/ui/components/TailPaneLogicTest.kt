@@ -5,6 +5,7 @@ import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.services.logtail.TailLine
+import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
 import com.kubekubedashdash.ui.screens.logviewer.logSeverityColor
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,7 +14,7 @@ import kotlin.test.assertNotEquals
 /**
  * Pure-function tests for the namespace tail pane: [ownerKey] (the
  * best-effort owning-workload key used to color pod-log-line prefixes),
- * [podPrefixColor], [visibleTailLines] (the filter/mute pipeline), and
+ * [podPrefixColor], [visibleTailLines] (the matcher/mute pipeline), and
  * [logSeverityColor] (extracted from [com.kubekubedashdash.ui.screens.logviewer.LogLine]
  * so the tail pane can swap its no-severity default without duplicating the
  * ERROR/WARN/DEBUG precedence). No Compose UI harness exists in this repo, so
@@ -82,14 +83,14 @@ class TailPaneLogicTest {
     @Test
     fun `visibleTailLines applies the substring filter`() {
         val lines = listOf(line("pod-a", "starting up"), line("pod-a", "connection refused"))
-        val visible = visibleTailLines(lines, filterText = "refused", mutedPods = emptySet())
+        val visible = visibleTailLines(lines, matcher = LogMatcher("refused"), mutedPods = emptySet())
         assertEquals(listOf(line("pod-a", "connection refused")), visible)
     }
 
     @Test
     fun `visibleTailLines removes muted pods`() {
         val lines = listOf(line("pod-a", "hello"), line("pod-b", "hello"))
-        val visible = visibleTailLines(lines, filterText = "", mutedPods = setOf("pod-a"))
+        val visible = visibleTailLines(lines, matcher = LogMatcher(""), mutedPods = setOf("pod-a"))
         assertEquals(listOf(line("pod-b", "hello")), visible)
     }
 
@@ -97,8 +98,41 @@ class TailPaneLogicTest {
     fun `visibleTailLines always keeps notices`() {
         val startedNotice = notice("── pod-a started ──")
         val lines = listOf(startedNotice, line("pod-a", "hello"))
-        val visible = visibleTailLines(lines, filterText = "nomatch", mutedPods = setOf("pod-a"))
+        val visible = visibleTailLines(lines, matcher = LogMatcher("nomatch"), mutedPods = setOf("pod-a"))
         assertEquals(listOf(startedNotice), visible)
+    }
+
+    @Test
+    fun `visibleTailLines applies a regex filter`() {
+        val lines = listOf(
+            line("pod-a", "starting up"),
+            line("pod-a", "connection refused"),
+            line("pod-a", "err0r seen"),
+        )
+        val visible = visibleTailLines(lines, matcher = LogMatcher("err(or|0r)", regex = true), mutedPods = emptySet())
+        assertEquals(listOf(line("pod-a", "err0r seen")), visible)
+    }
+
+    @Test
+    fun `visibleTailLines mute still wins over a matching regex filter`() {
+        val lines = listOf(line("pod-a", "connection refused"), line("pod-b", "connection refused"))
+        val visible = visibleTailLines(
+            lines,
+            matcher = LogMatcher("refused", regex = true),
+            mutedPods = setOf("pod-a"),
+        )
+        assertEquals(listOf(line("pod-b", "connection refused")), visible)
+    }
+
+    @Test
+    fun `visibleTailLines shows everything not muted for an invalid regex`() {
+        val lines = listOf(
+            line("pod-a", "starting up"),
+            line("pod-b", "connection refused"),
+            line("pod-b", "all good"),
+        )
+        val visible = visibleTailLines(lines, matcher = LogMatcher("[", regex = true), mutedPods = setOf("pod-a"))
+        assertEquals(listOf(line("pod-b", "connection refused"), line("pod-b", "all good")), visible)
     }
 
     @Test

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 data class LogStreamId(
@@ -47,6 +48,10 @@ data class ActiveLogStream(
     val lines: StateFlow<List<String>>,
     /** Lines evicted from [lines] by the [LogStreamRegistry.MAX_LINES] cap, since the stream opened. */
     val droppedLines: StateFlow<Int>,
+    /** Toolbar-driven stream options. Changing these republishes the tab — see [LogStreamRegistry.setOptions]. */
+    val options: LogStreamOptions,
+    /** Known containers for this pod, filled from a one-shot lookup — see [LogStreamRegistry.openOrFocus]. */
+    val containers: StateFlow<List<String>>,
     override val openedAt: Long,
 ) : DrawerLogTab {
     override val key: String get() = id.key
@@ -107,6 +112,15 @@ object LogStreamRegistry {
     val focusedKey: StateFlow<String?> = _focusedKey.asStateFlow()
     private val jobs = ConcurrentHashMap<String, Job>()
 
+    /**
+     * The flow factory behind each open [ActiveLogStream], keyed the same as
+     * [jobs]. Retained so [setOptions] and [switchContainer] can re-invoke it
+     * with new arguments to restart the stream in place. Must be dropped
+     * wherever a key is dropped from [jobs] — a retained entry holds a
+     * [ClusterSession] via closure.
+     */
+    private val factories = ConcurrentHashMap<String, (container: String?, options: LogStreamOptions) -> Flow<String>>()
+
     internal const val MAX_LINES = 5_000
 
     fun openOrFocus(
@@ -117,9 +131,48 @@ object LogStreamRegistry {
     ): LogStreamId {
         val id = LogStreamId(session.id.value, podName, namespace, container)
         val label = "$podName${container?.let { " · $it" } ?: ""}"
-        return openOrFocusStream(id, label) {
-            session.reactiveClient.streamPodLogs(podName, namespace, container)
+        // Re-opening logs for a tab that is already up is just a focus, so
+        // don't pay for another pod GET whose result nothing would read.
+        // openOrFocusStream re-checks this under the lock; losing the race
+        // only costs one redundant lookup.
+        if (id.key in _tabs.value) {
+            focus(id.key)
+            return id
         }
+        val containers = MutableStateFlow<List<String>>(emptyList())
+        // getPodByName is a blocking fabric8 call; the registry scope is
+        // Dispatchers.Default, so hop to IO rather than parking a CPU thread
+        // on a round trip. A failure just leaves the list empty — the
+        // container picker then does not render.
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { session.reactiveClient.getPodByName(podName, namespace)?.containers?.map { it.name } }
+                    .getOrNull()
+            }?.let { containers.value = it }
+        }
+        return openOrFocusStream(id, label, containers.asStateFlow()) { c, options ->
+            session.reactiveClient.streamPodLogs(podName, namespace, c, options)
+        }
+    }
+
+    /** Runs [flow] through the shared cap/drop pipeline into [state] and [dropped]. */
+    private fun launchCollector(
+        flow: Flow<String>,
+        state: MutableStateFlow<List<String>>,
+        dropped: MutableStateFlow<Int>,
+    ): Job = scope.launch {
+        flow
+            .runningFold(emptyList<String>() to 0) { (acc, droppedSoFar), line ->
+                val next = acc + line
+                val overflow = next.size - MAX_LINES
+                if (overflow > 0) next.takeLast(MAX_LINES) to (droppedSoFar + overflow) else next to droppedSoFar
+            }
+            .collect { (lines, droppedCount) ->
+                // lines first, then the count: a reader waiting on droppedLines
+                // must observe the lines that produced it.
+                state.value = lines
+                dropped.value = droppedCount
+            }
     }
 
     // @Synchronized: the check-then-launch-then-insert below must be atomic.
@@ -130,34 +183,108 @@ object LogStreamRegistry {
     internal fun openOrFocusStream(
         id: LogStreamId,
         displayLabel: String,
-        flowFactory: () -> Flow<String>,
+        containers: StateFlow<List<String>> = MutableStateFlow(emptyList()),
+        flowFactory: (container: String?, options: LogStreamOptions) -> Flow<String>,
     ): LogStreamId {
         if (id.key in _tabs.value) {
             _focusedKey.value = id.key
             return id
         }
+        factories[id.key] = flowFactory
+        val options = LogStreamOptions()
         val state = MutableStateFlow<List<String>>(emptyList())
         val dropped = MutableStateFlow(0)
-        val job = scope.launch {
-            flowFactory()
-                .runningFold(emptyList<String>() to 0) { (acc, droppedSoFar), line ->
-                    val next = acc + line
-                    val overflow = next.size - MAX_LINES
-                    if (overflow > 0) next.takeLast(MAX_LINES) to (droppedSoFar + overflow) else next to droppedSoFar
-                }
-                .collect { (lines, droppedCount) ->
-                    // lines first, then the count: a reader waiting on droppedLines
-                    // must observe the lines that produced it.
-                    state.value = lines
-                    dropped.value = droppedCount
-                }
-        }
-        jobs[id.key] = job
+        jobs[id.key] = launchCollector(flowFactory(id.container, options), state, dropped)
         _tabs.update {
-            it + (id.key to ActiveLogStream(id, displayLabel, state.asStateFlow(), dropped.asStateFlow(), System.currentTimeMillis()))
+            it + (
+                id.key to ActiveLogStream(
+                    id,
+                    displayLabel,
+                    state.asStateFlow(),
+                    dropped.asStateFlow(),
+                    options,
+                    containers,
+                    System.currentTimeMillis(),
+                )
+                )
         }
         _focusedKey.value = id.key
         return id
+    }
+
+    /**
+     * Restarts [key]'s stream under new [options], keeping the tab's key,
+     * label, container list and — critically — its [ActiveLogStream.openedAt]
+     * so it does not jump in the tab strip. Allocates FRESH state/dropped
+     * flows rather than resetting the existing ones: the registry holds no
+     * writable handle to those (they are locals inside [openOrFocusStream]),
+     * and fresh flows also make a zombie collector's late write (from the
+     * cancelled-but-not-yet-dead old job) land on an orphaned object instead
+     * of corrupting the tab the user is now looking at.
+     */
+    @Synchronized
+    fun setOptions(key: String, options: LogStreamOptions) {
+        val old = _tabs.value[key] as? ActiveLogStream ?: return
+        val factory = factories[key] ?: return
+        val fresh = MutableStateFlow<List<String>>(emptyList())
+        val freshDropped = MutableStateFlow(0)
+        jobs.remove(key)?.cancel()
+        jobs[key] = launchCollector(factory(old.id.container, options), fresh, freshDropped)
+        _tabs.update {
+            it + (
+                key to old.copy(
+                    lines = fresh.asStateFlow(),
+                    droppedLines = freshDropped.asStateFlow(),
+                    options = options,
+                )
+                )
+        }
+    }
+
+    /**
+     * Switches [key]'s tab to a different [container]. Unlike [setOptions]
+     * this changes tab identity — the container is part of [LogStreamId] — so
+     * the old key is closed and a new one inserted, carrying over the same
+     * factory, [ActiveLogStream.options] and [ActiveLogStream.openedAt] so
+     * the tab keeps its place in the strip.
+     */
+    @Synchronized
+    fun switchContainer(key: String, container: String?) {
+        val old = _tabs.value[key] as? ActiveLogStream ?: return
+        val factory = factories[key] ?: return
+        // Picking the container that is already showing is a no-op, not a
+        // reason to restart the stream and throw the buffer away.
+        if (old.id.container == container) return
+        val newId = old.id.copy(container = container)
+        val label = "${old.id.podName}${container?.let { " · $it" } ?: ""}"
+        // That container may already have its own tab (the user opened two of
+        // them side by side). Overwriting jobs[newId.key] would orphan its
+        // collector and leak the watchLog connection behind it, so close the
+        // tab being switched away from and just focus the one that exists.
+        if (newId.key != key && newId.key in _tabs.value) {
+            close(key)
+            _focusedKey.value = newId.key
+            return
+        }
+        close(key)
+        val state = MutableStateFlow<List<String>>(emptyList())
+        val dropped = MutableStateFlow(0)
+        factories[newId.key] = factory
+        jobs[newId.key] = launchCollector(factory(container, old.options), state, dropped)
+        _tabs.update {
+            it + (
+                newId.key to ActiveLogStream(
+                    newId,
+                    label,
+                    state.asStateFlow(),
+                    dropped.asStateFlow(),
+                    old.options,
+                    old.containers,
+                    old.openedAt,
+                )
+                )
+        }
+        _focusedKey.value = newId.key
     }
 
     /**
@@ -292,6 +419,7 @@ object LogStreamRegistry {
     @Synchronized
     fun close(key: String) {
         jobs.remove(key)?.cancel()
+        factories.remove(key)
         _tabs.update { it - key }
         if (_focusedKey.value == key) _focusedKey.value = null
     }
@@ -307,6 +435,7 @@ object LogStreamRegistry {
         jobs.keys().toList().forEach { key ->
             jobs.remove(key)?.cancel()
         }
+        factories.clear()
         _tabs.value = emptyMap()
         _focusedKey.value = null
     }
