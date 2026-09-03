@@ -31,8 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,7 +42,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -86,27 +83,20 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
-import com.kubekubedashdash.resources.delete_filled
-import com.kubekubedashdash.resources.fit_screen_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
-import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.EMPTY_DASH
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
-import com.kubekubedashdash.ui.components.LocalDetailHostControls
 import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
-import com.kubekubedashdash.ui.components.StatusBadge
-import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.util.SecretYamlMasking
@@ -310,123 +300,6 @@ fun ResourceDetailPanel(
                     page == yamlIndex -> GenericYamlTab(kind, name, namespace, apiGroup, apiVersion, plural)
 
                     else -> extraTabs[page - 1].content()
-                }
-            }
-        }
-    }
-}
-
-// ── Shared panel header ─────────────────────────────────────────────────────────
-
-/**
- * @param actions      Flat, ungrouped header actions. Ignored when [actionGroups] is non-empty.
- * @param actionGroups Actions split into divider-separated groups; takes precedence over [actions].
- */
-@Composable
-fun DetailPanelHeader(
-    name: String,
-    subtitle: String,
-    status: String?,
-    actions: List<DetailAction> = emptyList(),
-    actionGroups: List<List<DetailAction>> = emptyList(),
-    onDelete: (() -> Unit)? = null,
-    onClose: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (status != null) StatusBadge(status)
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-            }
-        }
-        val groups = actionGroups.ifEmpty { listOf(actions) }.filter { it.isNotEmpty() }
-        groups.forEachIndexed { index, group ->
-            if (index > 0) HeaderGroupDivider()
-            group.forEach { action -> key(action.label) { HeaderActionButton(action) } }
-        }
-        // Expand / Restore comes from the host, so every panel gets it without
-        // a signature change; absent outside a DetailHost.
-        val hostControls = LocalDetailHostControls.current
-        hostControls?.let { controls ->
-            TooltipIconButton(
-                Res.drawable.fit_screen_filled,
-                if (controls.expanded) "Restore panel" else "Expand",
-                KdTextSecondary,
-                description = if (controls.expanded) {
-                    "Shrink the panel back to its normal size."
-                } else {
-                    "Give the panel the whole content area — the list comes back with Restore or Esc."
-                },
-                onClick = controls.onToggleExpand,
-            )
-        }
-        // Verb groups and the host's Expand are separated from Delete/Close so
-        // a destructive verb never sits flush against the Close button.
-        if (groups.isNotEmpty() || hostControls != null) HeaderGroupDivider()
-        if (onDelete != null) {
-            TooltipIconButton(Res.drawable.delete_filled, "Delete", KdError, description = "Permanently remove this resource — it won't come back unless recreated.", onClick = onDelete)
-        }
-        TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
-    }
-}
-
-@Composable
-private fun HeaderGroupDivider() {
-    VerticalDivider(
-        modifier = Modifier.padding(horizontal = 4.dp).height(16.dp),
-        color = KdBorder,
-    )
-}
-
-@Composable
-private fun HeaderActionButton(action: DetailAction) {
-    val tint = action.tint ?: if (action.destructive) KdError else KdTextSecondary
-    if (action.menuItems.isEmpty()) {
-        TooltipIconButton(
-            icon = action.icon,
-            label = action.label,
-            tint = tint,
-            description = action.description,
-            enabled = action.enabled,
-            onClick = action.onClick,
-        )
-    } else {
-        var menuOpen by remember { mutableStateOf(false) }
-        Box {
-            TooltipIconButton(
-                icon = action.icon,
-                label = action.label,
-                tint = tint,
-                description = action.description,
-                enabled = action.enabled,
-                onClick = { menuOpen = true },
-            )
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                modifier = Modifier.background(KdSurface),
-            ) {
-                action.menuItems.forEach { item ->
-                    DropdownMenuItem(
-                        text = { Text(item.label, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
-                        onClick = {
-                            menuOpen = false
-                            item.onClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                painterResource(Res.drawable.view_in_ar_filled),
-                                null,
-                                Modifier.size(14.dp),
-                                tint = KdTextSecondary,
-                            )
-                        },
-                    )
                 }
             }
         }

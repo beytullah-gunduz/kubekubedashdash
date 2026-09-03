@@ -314,10 +314,7 @@ private fun PanelHeader(
         name = pod.name,
         subtitle = pod.namespace,
         status = pod.status,
-        actionGroups = listOf(
-            listOf(terminalAction, logsAction),
-            listOf(evictAction, forceDeleteAction),
-        ),
+        actions = listOf(terminalAction, logsAction, evictAction, forceDeleteAction),
         onClose = onClose,
     )
 }
