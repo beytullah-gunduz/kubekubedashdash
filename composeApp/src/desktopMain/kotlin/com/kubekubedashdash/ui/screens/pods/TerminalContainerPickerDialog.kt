@@ -33,7 +33,7 @@ import org.jetbrains.compose.resources.painterResource
 /**
  * Modal that asks the user which container to act on (terminal or logs) when
  * [pod] has more than one. Equivalent shape to the container dropdown on the detail-panel
- * header actions (`HeaderActionButton` in `ResourceDetailPanel.kt`), but
+ * header actions (`HeaderVerbButton` in `DetailHeaderActions.kt`), but
  * rendered as a centered dialog because the row-action menu doesn't have a
  * stable anchor point for an inline dropdown.
  */

@@ -448,7 +448,7 @@ fun GenericResourceScreen(
                             val restartActions = when (kind.lowercase()) {
                                 "statefulset", "daemonset" -> listOf(
                                     DetailAction(
-                                        label = "Rollout Restart",
+                                        label = "Rollout restart",
                                         icon = Res.drawable.rotate_right_filled,
                                         destructive = false,
                                         description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
@@ -466,7 +466,7 @@ fun GenericResourceScreen(
                                 val isSuspended = res.status == "Suspended"
                                 listOf(
                                     DetailAction(
-                                        label = "Trigger Now",
+                                        label = "Trigger now",
                                         icon = Res.drawable.rocket_filled,
                                         destructive = false,
                                         description = "Run this CronJob immediately — creates a one-off Job from its template, without waiting for the schedule.",
@@ -508,7 +508,7 @@ fun GenericResourceScreen(
                             val jobLogActions = if (kind.equals("Job", ignoreCase = true) && onOpenLogs != null) {
                                 listOf(
                                     DetailAction(
-                                        label = "View Logs",
+                                        label = "Logs",
                                         icon = Res.drawable.article_filled,
                                         destructive = false,
                                         description = "Stream logs from this Job's pods — completed pods show their final output.",
@@ -712,7 +712,7 @@ fun GenericResourceScreen(
 
     pendingRestart?.let { pr ->
         ConfirmActionDialog(
-            title = "Rollout Restart",
+            title = "Rollout restart",
             body = "Restart all pods of $kind \"${pr.target.name}\"? Pods are recreated in a rolling update.",
             confirmLabel = "Restart",
             destructive = false,

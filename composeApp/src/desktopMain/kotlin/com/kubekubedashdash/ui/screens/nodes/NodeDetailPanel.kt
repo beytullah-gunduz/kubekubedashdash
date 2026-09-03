@@ -173,7 +173,7 @@ internal fun NodeDetailPanel(
             Column(modifier = Modifier.fillMaxSize()) {
                 val cordonAction = DetailAction(
                     icon = if (node.unschedulable) Res.drawable.check_circle_filled else Res.drawable.lock_filled,
-                    label = if (node.unschedulable) "Uncordon node" else "Cordon node",
+                    label = if (node.unschedulable) "Uncordon" else "Cordon",
                     tint = if (node.unschedulable) KdWarning else null,
                     description = if (node.unschedulable) {
                         "Allow pods to be scheduled here again — reverses a cordon once the node is healthy."
@@ -188,7 +188,7 @@ internal fun NodeDetailPanel(
                 )
                 val drainAction = DetailAction(
                     icon = Res.drawable.clear_all_filled,
-                    label = "Drain node",
+                    label = "Drain",
                     description = "Cordon the node and move its pods elsewhere — to safely empty it before maintenance or shutdown.",
                     enabled = !cordon.inFlight && !drain.inFlight,
                     onClick = {

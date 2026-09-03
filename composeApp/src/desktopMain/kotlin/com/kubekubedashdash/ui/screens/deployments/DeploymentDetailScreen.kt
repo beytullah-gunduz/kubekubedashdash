@@ -64,7 +64,7 @@ fun DeploymentDetailScreen(
             },
         ),
         DetailAction(
-            label = "Rollout Restart",
+            label = "Rollout restart",
             icon = Res.drawable.rotate_right_filled,
             destructive = false,
             description = "Recreate all pods in a rolling update — to pick up new config or secrets, with no downtime.",
@@ -158,7 +158,7 @@ fun DeploymentDetailScreen(
 
     if (showRestartDialog) {
         ConfirmActionDialog(
-            title = "Rollout Restart",
+            title = "Rollout restart",
             body = "Restart all pods of Deployment \"${deployment.name}\"? Pods are recreated in a rolling update.",
             confirmLabel = "Restart",
             destructive = false,
