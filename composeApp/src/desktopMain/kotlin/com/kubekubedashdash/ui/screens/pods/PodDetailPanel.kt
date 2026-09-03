@@ -269,7 +269,7 @@ private fun PanelHeader(
     val containers = pod.containers
     val terminalAction = DetailAction(
         icon = Res.drawable.terminal_filled,
-        label = "Open terminal",
+        label = "Terminal",
         description = "Open an interactive shell in a container of this pod, docked at the bottom of the window.",
         enabled = containers.isNotEmpty(),
         onClick = { containers.firstOrNull()?.let { onOpenTerminal(pod.name, pod.namespace, it.name) } },
@@ -283,7 +283,7 @@ private fun PanelHeader(
     )
     val logsAction = DetailAction(
         icon = Res.drawable.article_filled,
-        label = "View logs",
+        label = "Logs",
         description = "Stream this pod's logs in the log viewer, docked at the bottom of the window.",
         onClick = { onOpenLogs(pod.name, pod.namespace, containers.firstOrNull()?.name) },
         menuItems = if (containers.size > 1) {
@@ -296,14 +296,14 @@ private fun PanelHeader(
     )
     val evictAction = DetailAction(
         icon = Res.drawable.clear_all_filled,
-        label = "Evict pod",
+        label = "Evict",
         description = "Gracefully remove this pod — respects PodDisruptionBudgets and lets its controller reschedule it (use to move a pod off its node).",
         enabled = actionsEnabled,
         onClick = onEvictClick,
     )
     val forceDeleteAction = DetailAction(
         icon = Res.drawable.delete_filled,
-        label = "Force delete pod",
+        label = "Force delete",
         tint = KdError,
         destructive = true,
         description = "Immediately delete this pod (grace period 0) — only for a stuck/unresponsive pod; skips graceful shutdown and can orphan resources.",
@@ -314,10 +314,7 @@ private fun PanelHeader(
         name = pod.name,
         subtitle = pod.namespace,
         status = pod.status,
-        actionGroups = listOf(
-            listOf(terminalAction, logsAction),
-            listOf(evictAction, forceDeleteAction),
-        ),
+        actions = listOf(terminalAction, logsAction, evictAction, forceDeleteAction),
         onClose = onClose,
     )
 }

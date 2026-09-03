@@ -112,13 +112,6 @@ fun ResourceDetailScreen(
                 )
             }
 
-            if (onClose != null) {
-                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
-                }
-                Spacer(Modifier.width(8.dp))
-            }
-
             if (kind.lowercase() == "pod" && namespace != null) {
                 OutlinedButton(
                     onClick = { onOpenLogs(name, namespace, null) },
@@ -130,7 +123,7 @@ fun ResourceDetailScreen(
                 ) {
                     Icon(painterResource(Res.drawable.article_filled), null, Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("View Logs", style = MaterialTheme.typography.labelMedium)
+                    Text("Logs", style = MaterialTheme.typography.labelMedium)
                 }
                 Spacer(Modifier.width(8.dp))
             }
@@ -146,6 +139,13 @@ fun ResourceDetailScreen(
                 Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Copy YAML", style = MaterialTheme.typography.labelMedium)
+            }
+
+            if (onClose != null) {
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
+                }
             }
         }
 
