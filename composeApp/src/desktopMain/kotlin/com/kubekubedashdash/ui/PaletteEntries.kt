@@ -7,6 +7,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
@@ -39,6 +40,11 @@ import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
 import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
+import com.kubekubedashdash.ui.palette.PALETTE_VERBS
+import com.kubekubedashdash.ui.palette.PaletteVerb
+import com.kubekubedashdash.ui.palette.PendingVerb
+import com.kubekubedashdash.ui.palette.VerbTarget
+import com.kubekubedashdash.ui.palette.paletteVerbIcon
 import org.jetbrains.compose.resources.DrawableResource
 
 /**
@@ -231,8 +237,257 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + captureEntries + tailEntries
+    // Verb entries only put the palette in target mode (D9) — CommandPalette's
+    // activateSelected() intercepts a "verb:" id before ever calling
+    // onActivate, so this is never actually invoked. It exists only because
+    // PaletteEntry requires one.
+    val verbEntries = remember(activeSession) {
+        if (activeSession != null) {
+            PALETTE_VERBS.map { verb ->
+                PaletteEntry(
+                    id = "verb:${verb.id}",
+                    label = verb.label,
+                    category = "Verbs",
+                    icon = paletteVerbIcon(verb.id),
+                    onActivate = {},
+                )
+            }
+        } else {
+            emptyList()
+        }
+    }
+
+    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + captureEntries + tailEntries + verbEntries
 }
+
+/**
+ * The palette entries for [verb]'s targets, read from [session]'s cached
+ * flows — built only while the palette is in target mode (D9), so the flat
+ * list [rememberPaletteEntries] returns never grows by verb × resource.
+ *
+ * Each entry's `onActivate` raises [verb] as a [PendingVerb] against that
+ * target via [onVerb]; recording the use and dismissing the palette is
+ * [CommandPalette]'s job, not this function's.
+ */
+@Composable
+internal fun rememberVerbTargets(
+    session: ClusterSession,
+    verb: PaletteVerb,
+    onVerb: (PendingVerb) -> Unit,
+): List<PaletteEntry> {
+    val client = session.reactiveClient
+    val podsState = client.pods.collectAsState()
+    val nodesState = client.nodes.collectAsState()
+    val deploymentsState = client.deployments.collectAsState()
+    val statefulSetsState = client.statefulSets.collectAsState()
+    val daemonSetsState = client.daemonSets.collectAsState()
+    val replicaSetsState = client.replicaSets.collectAsState()
+    val cronJobsState = client.cronJobs.collectAsState()
+
+    return remember(
+        verb,
+        podsState.value,
+        nodesState.value,
+        deploymentsState.value,
+        statefulSetsState.value,
+        daemonSetsState.value,
+        replicaSetsState.value,
+        cronJobsState.value,
+    ) {
+        buildList {
+            if (VerbTarget.POD in verb.targets) {
+                val pods = (podsState.value as? ResourceState.Success)?.data.orEmpty()
+                pods.forEach { pod ->
+                    add(
+                        PaletteEntry(
+                            id = "pod:${pod.namespace}/${pod.name}",
+                            label = pod.name,
+                            sublabel = pod.namespace,
+                            category = "Pods",
+                            icon = Res.drawable.view_in_ar_filled,
+                            onActivate = {
+                                onVerb(
+                                    PendingVerb(
+                                        verb = verb,
+                                        session = session,
+                                        kind = "Pod",
+                                        name = pod.name,
+                                        namespace = pod.namespace,
+                                    ),
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
+            if (VerbTarget.NODE in verb.targets) {
+                val nodes = (nodesState.value as? ResourceState.Success)?.data.orEmpty()
+                nodes.forEach { node ->
+                    add(
+                        PaletteEntry(
+                            id = "node:${node.name}",
+                            label = node.name,
+                            sublabel = node.roles.takeIf { it.isNotBlank() && it != NONE_PLACEHOLDER },
+                            category = "Nodes",
+                            icon = Res.drawable.dns_filled,
+                            onActivate = {
+                                onVerb(
+                                    PendingVerb(
+                                        verb = verb,
+                                        session = session,
+                                        kind = "Node",
+                                        name = node.name,
+                                        namespace = null,
+                                        unschedulable = node.unschedulable,
+                                    ),
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
+            if (VerbTarget.DEPLOYMENT in verb.targets) {
+                val deployments = (deploymentsState.value as? ResourceState.Success)?.data.orEmpty()
+                deployments.forEach { deployment ->
+                    val replicas = deployment.ready.split("/").getOrNull(1)?.toIntOrNull() ?: 1
+                    add(
+                        PaletteEntry(
+                            id = "dep:${deployment.namespace}/${deployment.name}",
+                            label = deployment.name,
+                            sublabel = deployment.namespace,
+                            category = "Deployments",
+                            icon = Res.drawable.layers_filled,
+                            onActivate = {
+                                onVerb(
+                                    PendingVerb(
+                                        verb = verb,
+                                        session = session,
+                                        kind = "Deployment",
+                                        name = deployment.name,
+                                        namespace = deployment.namespace,
+                                        replicas = replicas,
+                                    ),
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
+            if (VerbTarget.STATEFULSET in verb.targets) {
+                val statefulSets = (statefulSetsState.value as? ResourceState.Success)?.data.orEmpty()
+                statefulSets.forEach { res ->
+                    add(
+                        genericVerbEntry(
+                            verb = verb,
+                            session = session,
+                            kind = "StatefulSet",
+                            category = "StatefulSets",
+                            icon = Res.drawable.storage_filled,
+                            res = res,
+                            onVerb = onVerb,
+                            replicas = scaleReplicas(res),
+                        ),
+                    )
+                }
+            }
+            if (VerbTarget.DAEMONSET in verb.targets) {
+                val daemonSets = (daemonSetsState.value as? ResourceState.Success)?.data.orEmpty()
+                daemonSets.forEach { res ->
+                    add(
+                        genericVerbEntry(
+                            verb = verb,
+                            session = session,
+                            kind = "DaemonSet",
+                            category = "DaemonSets",
+                            icon = Res.drawable.dynamic_feed_filled,
+                            res = res,
+                            onVerb = onVerb,
+                        ),
+                    )
+                }
+            }
+            if (VerbTarget.REPLICASET in verb.targets) {
+                val replicaSets = (replicaSetsState.value as? ResourceState.Success)?.data.orEmpty()
+                replicaSets.forEach { res ->
+                    add(
+                        genericVerbEntry(
+                            verb = verb,
+                            session = session,
+                            kind = "ReplicaSet",
+                            category = "ReplicaSets",
+                            icon = Res.drawable.content_copy_filled,
+                            res = res,
+                            onVerb = onVerb,
+                            replicas = scaleReplicas(res),
+                        ),
+                    )
+                }
+            }
+            if (VerbTarget.CRONJOB in verb.targets) {
+                val cronJobs = (cronJobsState.value as? ResourceState.Success)?.data.orEmpty()
+                cronJobs.forEach { res ->
+                    add(
+                        genericVerbEntry(
+                            verb = verb,
+                            session = session,
+                            kind = "CronJob",
+                            category = "CronJobs",
+                            icon = Res.drawable.schedule_filled,
+                            res = res,
+                            onVerb = onVerb,
+                            suspended = res.status == "Suspended",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One [GenericResourceInfo]-backed target entry — shared by StatefulSets, DaemonSets, ReplicaSets and CronJobs. */
+private fun genericVerbEntry(
+    verb: PaletteVerb,
+    session: ClusterSession,
+    kind: String,
+    category: String,
+    icon: DrawableResource,
+    res: GenericResourceInfo,
+    onVerb: (PendingVerb) -> Unit,
+    replicas: Int? = null,
+    suspended: Boolean? = null,
+): PaletteEntry = PaletteEntry(
+    id = "${kind.lowercase()}:${res.namespace}/${res.name}",
+    label = res.name,
+    sublabel = res.namespace,
+    category = category,
+    icon = icon,
+    onActivate = {
+        onVerb(
+            PendingVerb(
+                verb = verb,
+                session = session,
+                kind = kind,
+                name = res.name,
+                namespace = res.namespace,
+                replicas = replicas,
+                suspended = suspended,
+            ),
+        )
+    },
+)
+
+/**
+ * The dialog's opening replica count for a [GenericResourceInfo] scale
+ * target (StatefulSet, ReplicaSet) — [GenericResourceInfo] has no replica
+ * field, so this is read back from its "Ready" extra column exactly as
+ * `GenericResourceScreen`'s own scale dialog does, falling back to any
+ * "x/y"-shaped column and then any numeric one before giving up at 1.
+ */
+private fun scaleReplicas(res: GenericResourceInfo): Int = res.extraColumns["Ready"]?.substringAfterLast("/")?.toIntOrNull()
+    ?: res.extraColumns.entries.firstOrNull { (_, v) -> v.contains("/") }
+        ?.let { (_, v) -> v.substringAfterLast("/").toIntOrNull() }
+    ?: res.extraColumns.values.firstOrNull { it.toIntOrNull() != null }?.toIntOrNull()
+    ?: 1
 
 private fun paletteScreen(
     label: String,

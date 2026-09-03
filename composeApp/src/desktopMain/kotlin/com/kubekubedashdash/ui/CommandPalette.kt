@@ -59,8 +59,12 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.ui.palette.PALETTE_VERBS
+import com.kubekubedashdash.ui.palette.PaletteVerb
+import com.kubekubedashdash.ui.palette.PendingVerb
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -169,6 +173,31 @@ internal fun paletteRows(entries: List<PaletteEntry>): List<PaletteRow> {
 internal fun rowIndexOfEntry(rows: List<PaletteRow>, entryIndex: Int): Int = rows.indexOfFirst { it is PaletteRow.Entry && it.entryIndex == entryIndex }
 
 /**
+ * Fuzzy-filters [candidates] by [query] against label and sublabel, then caps
+ * each category at [perCategoryCap] — the shared second half of both the
+ * normal entry list and (D9) a verb's target list. An empty [query] passes
+ * every candidate through, still capped per category.
+ */
+private fun filterEntries(candidates: List<PaletteEntry>, query: String, perCategoryCap: Int): List<PaletteEntry> {
+    if (query.isEmpty()) {
+        return candidates.groupBy { it.category }.flatMap { (_, items) -> items.take(perCategoryCap) }
+    }
+    return candidates.mapNotNull { entry ->
+        val s = minOf(
+            fuzzyScore(query, entry.label) ?: Int.MAX_VALUE,
+            entry.sublabel?.let { fuzzyScore(query, it) } ?: Int.MAX_VALUE,
+        )
+        if (s < Int.MAX_VALUE) entry to s else null
+    }
+        .groupBy { (entry, _) -> entry.category }
+        .flatMap { (_, scored) ->
+            scored.sortedBy { (_, score) -> score }
+                .take(perCategoryCap)
+                .map { (entry, _) -> entry }
+        }
+}
+
+/**
  * Cmd+K-style command palette. The screen owns the open/closed state and the
  * source-of-truth list of [PaletteEntry]; the palette filters by query, caps
  * each category, and exposes keyboard navigation (↑/↓ to move, Enter to
@@ -180,16 +209,31 @@ internal fun rowIndexOfEntry(rows: List<PaletteRow>, entryIndex: Int): Int = row
  * [categoriesForPrefix]) and renders as a chip in the search bar; Backspace
  * on an empty search text drops it.
  *
- * Activating an entry records it as a recent, then calls its `onActivate`
- * and [onDismiss] — the caller does not need to close the palette explicitly.
+ * Activating a normal entry records it as a recent, then calls its
+ * `onActivate` and [onDismiss]. Activating a `Verbs`-category entry instead
+ * puts the palette in target mode (D9): the query clears, a verb chip
+ * replaces the prefix chip, and the list narrows to that verb's targets
+ * (built by `rememberVerbTargets` against [session] only while in this
+ * mode — the flat [entries] list never grows by verb × resource). Activating
+ * a target there raises it as a `PendingVerb` via [onVerb], records
+ * `"verb:<id>"` as the recent (not the target's own id — a half-finished verb
+ * pick never pollutes Recents), and dismisses. Esc, or Backspace on an empty
+ * query, backs out of target mode instead of closing; [session] is the
+ * cluster the palette was opened against and is captured into every
+ * `PendingVerb` it raises, so a verb always acts on that cluster even if the
+ * active tab changes while a dialog raised from it is still open. Verb
+ * entries only render while [session] is non-null.
  */
 @Composable
 fun CommandPalette(
     entries: List<PaletteEntry>,
+    session: ClusterSession?,
+    onVerb: (PendingVerb) -> Unit,
     onDismiss: () -> Unit,
     perCategoryCap: Int = 8,
 ) {
     var query by remember { mutableStateOf("") }
+    var pendingVerb by remember { mutableStateOf<PaletteVerb?>(null) }
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
     var selected by remember { mutableStateOf(0) }
@@ -197,34 +241,29 @@ fun CommandPalette(
 
     val parsedQuery = remember(query) { parsePaletteQuery(query) }
 
+    val currentVerb = pendingVerb
+    val targetEntries = if (currentVerb != null && session != null) {
+        rememberVerbTargets(session, currentVerb, onVerb)
+    } else {
+        emptyList()
+    }
+
     // Fuzzy-filter + sort by score + cap per category. When the parsed text is
     // empty all (prefix-restricted) entries pass. When non-empty, entries are
     // scored by fuzzyScore against label and sublabel; non-matching entries
     // are dropped, and within each category the best-scoring (fewest gaps)
-    // entries surface first.
-    val visible by remember(entries, parsedQuery, recents) {
+    // entries surface first. In target mode (D9) the source is that verb's
+    // targets instead of the flat entry list, with no prefix restriction and
+    // no Recent group.
+    val visible by remember(entries, parsedQuery, recents, currentVerb, targetEntries) {
         derivedStateOf {
-            val restrictedCategories = categoriesForPrefix(parsedQuery.prefix)
-            val candidates = if (restrictedCategories != null) entries.filter { it.category in restrictedCategories } else entries
-            val q = parsedQuery.text
-            if (q.isEmpty()) {
-                val grouped = candidates.groupBy { it.category }
-                    .flatMap { (_, items) -> items.take(perCategoryCap) }
-                if (parsedQuery.prefix == null) recentEntries(entries, recents) + grouped else grouped
+            if (currentVerb != null) {
+                filterEntries(targetEntries, parsedQuery.text, perCategoryCap)
             } else {
-                candidates.mapNotNull { entry ->
-                    val s = minOf(
-                        fuzzyScore(q, entry.label) ?: Int.MAX_VALUE,
-                        entry.sublabel?.let { fuzzyScore(q, it) } ?: Int.MAX_VALUE,
-                    )
-                    if (s < Int.MAX_VALUE) entry to s else null
-                }
-                    .groupBy { (entry, _) -> entry.category }
-                    .flatMap { (_, scored) ->
-                        scored.sortedBy { (_, score) -> score }
-                            .take(perCategoryCap)
-                            .map { (entry, _) -> entry }
-                    }
+                val restrictedCategories = categoriesForPrefix(parsedQuery.prefix)
+                val candidates = if (restrictedCategories != null) entries.filter { it.category in restrictedCategories } else entries
+                val grouped = filterEntries(candidates, parsedQuery.text, perCategoryCap)
+                if (parsedQuery.text.isEmpty() && parsedQuery.prefix == null) recentEntries(entries, recents) + grouped else grouped
             }
         }
     }
@@ -240,11 +279,20 @@ fun CommandPalette(
     }
 
     fun activateSelected() {
-        visible.getOrNull(selected)?.let { entry ->
-            PreferenceRepository.recordPaletteUse(entry.id)
-            entry.onActivate()
-            onDismiss()
+        val entry = visible.getOrNull(selected) ?: return
+        val verbInFlight = pendingVerb
+        if (verbInFlight == null && entry.id.startsWith("verb:")) {
+            // D9: selecting a verb doesn't act — it enters target mode. Nothing
+            // is recorded and the palette stays open.
+            pendingVerb = PALETTE_VERBS.firstOrNull { "verb:${it.id}" == entry.id }
+            query = ""
+            return
         }
+        // D3: a half-finished verb records nothing; only a chosen target does,
+        // and it records the verb's id, not the (transient) target entry's id.
+        PreferenceRepository.recordPaletteUse(if (verbInFlight != null) "verb:${verbInFlight.id}" else entry.id)
+        entry.onActivate()
+        onDismiss()
     }
 
     Box(
@@ -267,20 +315,37 @@ fun CommandPalette(
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
+                        // In target mode (D9), Escape backs out to the verb list
+                        // instead of closing the palette; Escape again then closes it.
                         Key.Escape -> {
-                            onDismiss()
+                            if (pendingVerb != null) {
+                                pendingVerb = null
+                                query = ""
+                            } else {
+                                onDismiss()
+                            }
                             true
                         }
 
-                        // Drop the whole prefix chip in one keystroke once the search
-                        // text is empty; otherwise let the text field handle it
-                        // (deleting the last character) normally.
+                        // Drop the whole prefix chip / back out of target mode in one
+                        // keystroke once the search text is empty; otherwise let the
+                        // text field handle it (deleting the last character) normally.
                         Key.Backspace -> {
-                            if (parsedQuery.text.isEmpty() && parsedQuery.prefix != null) {
-                                query = ""
-                                true
-                            } else {
-                                false
+                            when {
+                                parsedQuery.text.isNotEmpty() -> false
+
+                                pendingVerb != null -> {
+                                    pendingVerb = null
+                                    query = ""
+                                    true
+                                }
+
+                                parsedQuery.prefix != null -> {
+                                    query = ""
+                                    true
+                                }
+
+                                else -> false
                             }
                         }
 
@@ -316,7 +381,7 @@ fun CommandPalette(
         ) {
             Column {
                 SearchBar(
-                    prefix = parsedQuery.prefix,
+                    prefix = currentVerb?.let { "${it.label} ▸" } ?: parsedQuery.prefix,
                     text = parsedQuery.text,
                     onTextChange = { newText -> query = (parsedQuery.prefix ?: "") + newText },
                     focusRequester = focusRequester,
