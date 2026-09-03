@@ -168,7 +168,11 @@ fun App(
         val selectedContext by (titleVm?.selectedContext ?: emptyString).collectAsState()
         val isConnected by (titleVm?.isConnected ?: emptyBool).collectAsState()
         val isConnecting by (titleVm?.isConnecting ?: emptyBool).collectAsState()
-        val showFirstRun = !hasRealContexts && !isConnected
+        val isReconnecting by (titleVm?.reconnecting ?: emptyBool).collectAsState()
+        // A tab that lost its cluster keeps its screen under the reconnect
+        // scrim; on a machine with no real context that must not fall back to
+        // the first-run screen, which would hide the scrim (and its exits).
+        val showFirstRun = !hasRealContexts && !isConnected && !isReconnecting
 
         // Pager state mirrors workspace.activeTabKey. Tab clicks / drag-drop
         // / close events drive activeTabKey externally and the LaunchedEffect

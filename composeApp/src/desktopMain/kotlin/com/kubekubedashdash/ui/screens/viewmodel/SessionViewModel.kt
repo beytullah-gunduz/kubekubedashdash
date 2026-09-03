@@ -125,7 +125,8 @@ class SessionViewModel(
      * Persistence-only mirror of [pendingRestore]. It survives a failed connect
      * so the save poll keeps writing the restored place (not the
      * Connecting-screen defaults) until the tab really lands somewhere; only a
-     * successful connect clears it.
+     * successful user-initiated connect clears it (a reconnect never sees it
+     * non-null: it implies a prior success that already cleared it).
      */
     @Volatile
     private var restoredView: RestoreTarget? = null
@@ -153,6 +154,19 @@ class SessionViewModel(
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    // True while a previously-connected session has lost its cluster and the
+    // retry loop is (or should be) working to get it back in place. Drives the
+    // ReconnectOverlay scrim; deliberately NOT set by initial-connect failures,
+    // which keep the full-page ConnectionError screen.
+    private val _reconnecting = MutableStateFlow(false)
+    val reconnecting: StateFlow<Boolean> = _reconnecting.asStateFlow()
+
+    // The message that raised the scrim. `connectionError` can be cleared by a
+    // liveness-probe success mid-outage; this one is stable until the
+    // reconnect lands or the user switches cluster.
+    private val _reconnectError = MutableStateFlow<String?>(null)
+    val reconnectError: StateFlow<String?> = _reconnectError.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -239,14 +253,14 @@ class SessionViewModel(
     // beat later. The connect path is async anyway and all consumers observe
     // via collectAsState, so the skew is imperceptible.
     private sealed interface ConnEvent {
-        /** connectToCluster() began an attempt. */
-        data object ConnectStarted : ConnEvent
+        /** connectToCluster() began an attempt. [isReconnect]: a live session lost its cluster and is getting it back in place. */
+        data class ConnectStarted(val isReconnect: Boolean) : ConnEvent
 
-        /** connectToCluster() succeeded. */
-        data object ConnectSucceeded : ConnEvent
+        /** connectToCluster() succeeded. [isReconnect] as on [ConnectStarted]: only the flags change, the screen stays. */
+        data class ConnectSucceeded(val isReconnect: Boolean) : ConnEvent
 
-        /** connectToCluster() failed; [retry] mirrors the old `if (!isMock)`. */
-        data class ConnectFailed(val message: String?, val retry: Boolean) : ConnEvent
+        /** connectToCluster() failed; [retry] mirrors the old `if (!isMock)`. [isReconnect] as on [ConnectStarted]: the scrim stays up. */
+        data class ConnectFailed(val message: String?, val retry: Boolean, val isReconnect: Boolean) : ConnEvent
 
         /** A non-null connectionError surfaced (≥3-failure threshold / liveness probe). */
         data class HealthErrorReported(val message: String) : ConnEvent
@@ -266,47 +280,78 @@ class SessionViewModel(
 
     private fun applyConnectionEvent(event: ConnEvent) {
         when (event) {
-            ConnEvent.ConnectStarted -> {
+            is ConnEvent.ConnectStarted -> {
                 _retryCountdown.value = 0
-                _connectionError.value = null
-                _currentScreen.value = Screen.Main.Connecting
+                if (!event.isReconnect) {
+                    // A user-initiated connect starts from a clean slate (a switch
+                    // away from a dead cluster drops its scrim here). isConnected
+                    // is deliberately left alone, exactly as before: the first-run
+                    // gate in App.kt and the tab chip read it, and a switch from a
+                    // live cluster must not flash them.
+                    _reconnecting.value = false
+                    _reconnectError.value = null
+                    _connectionError.value = null
+                    _currentScreen.value = Screen.Main.Connecting
+                }
             }
 
-            ConnEvent.ConnectSucceeded -> {
+            is ConnEvent.ConnectSucceeded -> {
                 _isConnected.value = true
                 _connectionError.value = null
-                // A restored tab lands where it was; everything else on the overview.
-                val restore = pendingRestore
-                pendingRestore = null
-                restoredView = null
-                _currentScreen.value = restore?.screen ?: Screen.Main.ClusterOverview
+                _reconnecting.value = false
+                _reconnectError.value = null
+                if (!event.isReconnect) {
+                    // A restored tab lands where it was; everything else on the
+                    // overview. A reconnect keeps the screen it never left.
+                    val restore = pendingRestore
+                    pendingRestore = null
+                    restoredView = null
+                    _currentScreen.value = restore?.screen ?: Screen.Main.ClusterOverview
+                }
             }
 
             is ConnEvent.ConnectFailed -> {
                 pendingRestore = null
                 _isConnected.value = false
                 _connectionError.value = event.message
-                _currentScreen.value = Screen.Main.ConnectionError(event.message, 10)
-                if (event.retry) scheduleRetry()
+                if (event.isReconnect) {
+                    // Keep the card's cause current across reconnect attempts, but
+                    // never blank it: a null message must not erase the reason the
+                    // scrim went up. The scrim itself stays whether or not a retry
+                    // re-arms below: the card's buttons are the exit, a bare stale
+                    // screen would have none.
+                    event.message?.let { _reconnectError.value = it }
+                } else {
+                    _reconnecting.value = false
+                    _currentScreen.value = Screen.Main.ConnectionError(event.message, 10)
+                }
+                if (event.retry) scheduleRetry(event.isReconnect)
             }
 
-            // Only acts when currently connected — same guard the old
-            // observeConnectionHealth had (a connectionError while already
-            // disconnected, e.g. mid-connect, must not stomp the in-flight
-            // attempt's screen).
+            // Only acts when currently connected — same guard as before (an error
+            // while already disconnected, e.g. mid-connect, must not stomp the
+            // in-flight attempt). A loss on a live session raises the reconnect
+            // scrim instead of swapping the screen: the view, the open pane and
+            // the namespace stay exactly where they were.
             is ConnEvent.HealthErrorReported -> {
                 if (_isConnected.value) {
                     _isConnected.value = false
                     _connectionError.value = event.message
-                    _currentScreen.value = Screen.Main.ConnectionError(event.message, 10)
-                    scheduleRetry()
+                    _reconnectError.value = event.message
+                    // The scrim goes up whether or not a retry can be armed: its
+                    // card always has an exit (Retry now, Switch cluster…).
+                    _reconnecting.value = true
+                    scheduleRetry(isReconnect = true)
                 }
             }
 
             // clusterInfo Success → connected (the first sync after connect()
-            // lands here; verified by SessionViewModelConnectionTest).
+            // lands here; verified by SessionViewModelConnectionTest). While the
+            // scrim is up only ConnectSucceeded may declare the session live
+            // again — a stale clusterInfo re-emission must not flap isConnected
+            // under the overlay and re-enable the liveness guard.
             ConnEvent.ClusterReachable -> {
-                if (!_isConnected.value) _isConnected.value = true
+                if (!_isConnected.value && !_reconnecting.value) _isConnected.value = true
             }
 
             // Best-effort fast path only: informers park in
@@ -347,18 +392,26 @@ class SessionViewModel(
         }
     }
 
-    private fun scheduleRetry() {
+    /**
+     * Arms the 10 s countdown against the current context; a no-op when no
+     * context is selected (bootstrap state only). Only a user-initiated
+     * attempt rewrites the full-page error screen per tick — a reconnect
+     * keeps the screen it never left and the overlay shows the countdown.
+     */
+    private fun scheduleRetry(isReconnect: Boolean) {
         retryJob?.cancel()
         val ctx = _selectedContext.value
         if (ctx.isBlank()) return
         retryJob = scope.launch {
             for (countdown in 10 downTo 1) {
                 _retryCountdown.value = countdown
-                _currentScreen.value = Screen.Main.ConnectionError(_connectionError.value, countdown)
+                if (!isReconnect) {
+                    _currentScreen.value = Screen.Main.ConnectionError(_connectionError.value, countdown)
+                }
                 delay(1_000)
             }
             _retryCountdown.value = 0
-            connectToCluster(ctx)
+            connectToCluster(ctx, isReconnect)
         }
     }
 
@@ -417,10 +470,12 @@ class SessionViewModel(
     }
 
     /**
-     * User-initiated retry from the connection-error screen: cancels the
-     * pending countdown and starts a fresh attempt against the current
-     * context immediately. No-op while no context is selected (bootstrap
-     * state — the only time the error screen can show with a blank context).
+     * User-initiated retry from the connection-error screen or the reconnect
+     * overlay: cancels the pending countdown and starts a fresh attempt
+     * against the current context immediately. While the overlay is up the
+     * attempt is a reconnect (screen and namespace untouched); from the
+     * full-page error screen it is a normal connect. No-op while no context
+     * is selected (bootstrap state).
      *
      * The countdown job is cancelled, not joined; a cancellation landing
      * mid-iteration can write one last ConnectionError screen value, which
@@ -431,7 +486,7 @@ class SessionViewModel(
         if (ctx.isBlank()) return
         retryJob?.cancel()
         _retryCountdown.value = 0
-        connectToCluster(ctx)
+        connectToCluster(ctx, isReconnect = _reconnecting.value)
     }
 
     private fun currentEntry() = NavEntry(_currentScreen.value, _extraPaneScreen.value)
@@ -448,12 +503,17 @@ class SessionViewModel(
         _backStack.update { (it + current.forHistory()).takeLast(MAX_HISTORY) }
     }
 
-    fun connectToCluster(ctx: String) {
+    /**
+     * @param isReconnect a live session lost its cluster and is getting it back
+     *  in place: no Connecting screen, and on success no navigation, no
+     *  namespace reset, no restore target. Everything else is a normal connect.
+     */
+    fun connectToCluster(ctx: String, isReconnect: Boolean = false) {
         retryJob?.cancel()
         connectJob?.cancel()
         _selectedContext.value = ctx
         _isConnecting.value = true
-        emitConnEvent(ConnEvent.ConnectStarted)
+        emitConnEvent(ConnEvent.ConnectStarted(isReconnect))
         connectJob = scope.launch(Dispatchers.IO) {
             val isMock = DemoContext.isMockContext(ctx)
             val result = if (isMock) {
@@ -473,21 +533,25 @@ class SessionViewModel(
                         // off the live label.
                         _selectedContext.value = reactiveClient.getCurrentContext()
                     }
-                    // Apply the restore target BEFORE emitting. The reducer consumes
-                    // pendingRestore on its own coroutine one dispatch later, so
-                    // anything written after the emit could be observed — by the UI
-                    // and by tests — while still holding its default. Emitting last
-                    // makes the screen change the final step, so awaiting it proves
-                    // the rest already landed.
-                    val restore = pendingRestore
-                    val namespace = restore?.namespace ?: "All Namespaces"
-                    _selectedNamespace.value = namespace
-                    reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
-                    restore?.let { setExtraPaneWidth(it.paneWidthDp) }
-                    emitConnEvent(ConnEvent.ConnectSucceeded)
+                    if (!isReconnect) {
+                        // Apply the restore target BEFORE emitting. The reducer consumes
+                        // pendingRestore on its own coroutine one dispatch later, so
+                        // anything written after the emit could be observed — by the UI
+                        // and by tests — while still holding its default. Emitting last
+                        // makes the screen change the final step, so awaiting it proves
+                        // the rest already landed. A reconnect skips all of it: its
+                        // namespace and pane stay as they are, and its restore target
+                        // (if any) was consumed by the first connect.
+                        val restore = pendingRestore
+                        val namespace = restore?.namespace ?: "All Namespaces"
+                        _selectedNamespace.value = namespace
+                        reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
+                        restore?.let { setExtraPaneWidth(it.paneWidthDp) }
+                    }
+                    emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
                 },
                 onFailure = { e ->
-                    emitConnEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock))
+                    emitConnEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock, isReconnect = isReconnect))
                 },
             )
             _isConnecting.value = false
