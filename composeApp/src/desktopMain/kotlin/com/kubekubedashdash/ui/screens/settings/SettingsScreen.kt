@@ -66,6 +66,7 @@ import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
@@ -74,7 +75,11 @@ import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.clusterInitial
+import com.kubekubedashdash.ui.components.ShortcutGroups
+import com.kubekubedashdash.ui.components.UiScaleSteps
+import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
@@ -355,6 +360,7 @@ fun SettingsScreen(
         add("Appearance")
         add("Cluster colors")
         add("Tab behavior")
+        add("Keyboard shortcuts")
         add("Privacy")
         add("Integrations")
         add("Cluster discovery")
@@ -477,6 +483,38 @@ fun SettingsScreen(
                                     onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                                 )
                             }
+
+                            Spacer(Modifier.height(20.dp))
+
+                            val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
+
+                            Text(
+                                "UI zoom",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Scale the whole interface up or down. The window itself does not resize.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+
+                            FullWidthSingleChoiceSegmentedButtonRow {
+                                UiScaleSteps.forEachIndexed { index, step ->
+                                    SegmentedButton(
+                                        selected = uiScalePercent == step,
+                                        onClick = { PreferenceRepository.setUiScalePercent(step) },
+                                        shape = SegmentedButtonDefaults.itemShape(
+                                            index = index,
+                                            count = UiScaleSteps.size,
+                                        ),
+                                    ) {
+                                        Text("$step%", maxLines = 1, softWrap = false)
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -598,6 +636,15 @@ fun SettingsScreen(
                                     color = if (restoreSession) MaterialTheme.colorScheme.primary else KdTextSecondary,
                                 )
                             }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        SettingsSection(
+                            title = "Keyboard shortcuts",
+                            onLayoutTop = { y -> sectionOffsets["Keyboard shortcuts"] = y },
+                        ) {
+                            ShortcutGroups(groups = remember { appShortcuts(NativeWindowDrag.isMacOS) })
                         }
 
                         Spacer(Modifier.height(16.dp))

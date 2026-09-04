@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -180,14 +181,14 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
                                 true
                             }
 
-                            Key.DirectionUp -> if (event.isMetaPressed) {
+                            Key.DirectionUp -> if (event.isMetaPressed || event.isCtrlPressed) {
                                 coroutineScope.launch { listState.scrollToItem(0) }
                                 true
                             } else {
                                 false
                             }
 
-                            Key.DirectionDown -> if (event.isMetaPressed) {
+                            Key.DirectionDown -> if (event.isMetaPressed || event.isCtrlPressed) {
                                 if (lastIndex >= 0) {
                                     coroutineScope.launch { listState.scrollToItem(lastIndex) }
                                 }

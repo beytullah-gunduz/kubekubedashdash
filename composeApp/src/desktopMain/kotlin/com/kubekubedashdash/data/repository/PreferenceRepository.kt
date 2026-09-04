@@ -11,6 +11,7 @@ import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.ui.components.TableDensity
+import com.kubekubedashdash.ui.components.clampUiScale
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +69,7 @@ object PreferenceRepository {
     private val PALETTE_RECENTS by lazy { stringPreferencesKey("palette_recents") }
     private val TABLE_DENSITY by lazy { stringPreferencesKey("table_density") }
     private val TABLE_COLUMNS_HIDDEN by lazy { stringPreferencesKey("table_columns_hidden") }
+    private val UI_SCALE_PERCENT by lazy { intPreferencesKey("ui_scale_percent") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -177,6 +179,11 @@ object PreferenceRepository {
     private val _hiddenTableColumns = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val hiddenTableColumns: StateFlow<Map<String, Boolean>> = _hiddenTableColumns.asStateFlow()
 
+    // UI zoom, as a percentage of 100 — see UiScaleSteps for the reachable
+    // set. Read once at the theme root and scaled into LocalDensity.
+    private val _uiScalePercent = MutableStateFlow(100)
+    val uiScalePercent: StateFlow<Int> = _uiScalePercent.asStateFlow()
+
     // Guards the one-shot seed of the five blobs above (three Boolean maps, one
     // Float map, one String list). Only ever touched from the single init
     // collector coroutine.
@@ -236,6 +243,11 @@ object PreferenceRepository {
                 // that races ahead of this first emission is not thrown away.
                 if (!mapBlobsSeeded) {
                     mapBlobsSeeded = true
+                    // Seeded under the same guard, for the same reason: holding
+                    // Cmd+= repeats the key, and each step persists from an
+                    // unordered ioScope.launch, so re-seeding on a later
+                    // emission could snap the zoom back to a stale value.
+                    _uiScalePercent.value = clampUiScale(p[UI_SCALE_PERCENT] ?: 100)
                     _sidebarSectionsExpanded.value =
                         BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED]) + _sidebarSectionsExpanded.value
                     _statsPanelsExpanded.value =
@@ -373,6 +385,12 @@ object PreferenceRepository {
     fun setTableDensity(value: TableDensity) {
         _tableDensity.value = value
         ioScope.launch { dataStore.edit { it[TABLE_DENSITY] = value.key } }
+    }
+
+    fun setUiScalePercent(value: Int) {
+        val clamped = clampUiScale(value)
+        _uiScalePercent.value = clamped
+        ioScope.launch { dataStore.edit { it[UI_SCALE_PERCENT] = clamped } }
     }
 
     /**
