@@ -142,7 +142,7 @@ fun PodsScreen(
                 val activeStatusFilter = statusFilter
                 val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
                 val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, annotationSelector, pinnedIds) {
+                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, annotationSelector) {
                     allPods
                         .filter { pod ->
                             val passesSearch = searchQuery.isBlank() ||
@@ -156,7 +156,6 @@ fun PodsScreen(
                                 matchesMapSelector(pod.annotations, annotationSelector)
                             passesSearch && passesStatus && passesLabels && passesAnnotations
                         }
-                        .sortedByDescending { pod -> "pod:${pod.namespace}:${pod.name}" in pinnedIds }
                 }
 
                 val visibleSelectableUids = remember(filtered, stalePods) {

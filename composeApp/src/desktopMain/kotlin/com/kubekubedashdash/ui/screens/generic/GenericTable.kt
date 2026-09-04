@@ -35,6 +35,8 @@ internal fun GenericTable(
     extraActions: ((GenericResourceInfo) -> List<RowAction>)? = null,
     selectedUids: Set<String> = emptySet(),
     onSelectionChange: ((Set<String>) -> Unit)? = null,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     // CRD printer columns almost always include their own "Age"; the table
     // appends a built-in Age column below, so drop the duplicate here. Assumes
@@ -89,6 +91,11 @@ internal fun GenericTable(
         val rows = resources.map { r ->
             TableRow(
                 id = r.uid,
+                pinId = if (namespacedKind) {
+                    "${kind.lowercase()}:${r.namespace}:${r.name}"
+                } else {
+                    "${kind.lowercase()}:${r.name}"
+                },
                 identity = RowIdentity(kind, r.name, r.namespace),
                 cells = visible.map { it.cell(r) },
                 actions = (extraActions?.invoke(r) ?: emptyList()) +
@@ -102,6 +109,10 @@ internal fun GenericTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> resources.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No resources found",
+            tableKey = kind,
+            pinnable = onTogglePin != null,
+            pinnedIds = pinnedIds,
+            onTogglePin = onTogglePin,
             selectable = onSelectionChange != null,
             selectedIds = selectedUids,
             onSelectionChange = onSelectionChange,

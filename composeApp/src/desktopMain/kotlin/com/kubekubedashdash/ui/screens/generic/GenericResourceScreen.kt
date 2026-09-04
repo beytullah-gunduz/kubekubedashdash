@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -24,6 +25,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -87,6 +89,7 @@ import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
 
 /**
@@ -188,6 +191,8 @@ fun GenericResourceScreen(
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
     val detailExpanded by viewModel.detailExpanded.collectAsState()
+    val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
+    val scope = rememberCoroutineScope()
     // A cleared selection ends the expanded state so the next open starts as a
     // split. Keyed on the null-ness: the selected item itself re-emits on
     // every cluster tick.
@@ -367,6 +372,8 @@ fun GenericResourceScreen(
                                     },
                                     selectedUids = selectedUids,
                                     onSelectionChange = if (bulkEnabled) viewModel.selection::set else null,
+                                    pinnedIds = pinnedIds,
+                                    onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
                                 )
                             }
                         }

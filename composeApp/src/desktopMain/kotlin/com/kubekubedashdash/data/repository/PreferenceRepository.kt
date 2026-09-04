@@ -10,6 +10,7 @@ import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
+import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
 import kotlinx.coroutines.CoroutineScope
@@ -65,6 +66,8 @@ object PreferenceRepository {
     private val STATS_PANELS_EXPANDED by lazy { stringPreferencesKey("stats_panels_expanded") }
     private val DETAIL_PANE_WIDTHS by lazy { stringPreferencesKey("detail_pane_widths") }
     private val PALETTE_RECENTS by lazy { stringPreferencesKey("palette_recents") }
+    private val TABLE_DENSITY by lazy { stringPreferencesKey("table_density") }
+    private val TABLE_COLUMNS_HIDDEN by lazy { stringPreferencesKey("table_columns_hidden") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -164,7 +167,17 @@ object PreferenceRepository {
     private val _paletteRecents = MutableStateFlow<List<String>>(emptyList())
     val paletteRecents: StateFlow<List<String>> = _paletteRecents.asStateFlow()
 
-    // Guards the one-shot seed of the four blobs above (two Boolean maps, one
+    // Global row-density setting shared by every ResourceTable.
+    private val _tableDensity = MutableStateFlow(TableDensity.Comfortable)
+    val tableDensity: StateFlow<TableDensity> = _tableDensity.asStateFlow()
+
+    // Per-table column visibility, keyed "<tableKey>::<header>" (see
+    // ui.components.tableColumnKey). Absent key = visible, so a column added
+    // later appears by default.
+    private val _hiddenTableColumns = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val hiddenTableColumns: StateFlow<Map<String, Boolean>> = _hiddenTableColumns.asStateFlow()
+
+    // Guards the one-shot seed of the five blobs above (three Boolean maps, one
     // Float map, one String list). Only ever touched from the single init
     // collector coroutine.
     private var mapBlobsSeeded = false
@@ -210,6 +223,7 @@ object PreferenceRepository {
                 _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
                 _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
                 _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
+                _tableDensity.value = TableDensity.fromKey(p[TABLE_DENSITY])
                 // Seed ONCE. This collector re-fires on every DataStore commit
                 // (including unrelated keys), and setSidebarSectionExpanded /
                 // setStatsPanelExpanded write the flow synchronously while
@@ -226,6 +240,8 @@ object PreferenceRepository {
                         BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED]) + _sidebarSectionsExpanded.value
                     _statsPanelsExpanded.value =
                         BoolMapCodec.decode(p[STATS_PANELS_EXPANDED]) + _statsPanelsExpanded.value
+                    _hiddenTableColumns.value =
+                        BoolMapCodec.decode(p[TABLE_COLUMNS_HIDDEN]) + _hiddenTableColumns.value
                     _detailPaneWidths.value =
                         FloatMapCodec.decode(p[DETAIL_PANE_WIDTHS]) + _detailPaneWidths.value
                     // Concatenation, not a map merge: the in-memory list (a
@@ -350,6 +366,35 @@ object PreferenceRepository {
             dataStore.edit { prefs ->
                 val current = BoolMapCodec.decode(prefs[STATS_PANELS_EXPANDED])
                 prefs[STATS_PANELS_EXPANDED] = BoolMapCodec.encode(current + (key to expanded))
+            }
+        }
+    }
+
+    fun setTableDensity(value: TableDensity) {
+        _tableDensity.value = value
+        ioScope.launch { dataStore.edit { it[TABLE_DENSITY] = value.key } }
+    }
+
+    /**
+     * Hides or shows one column of one table. [entryKey] is whatever
+     * `tableColumnKey(...)` produced for that column — the ONE place an entry
+     * key is spelled, so a table with duplicate headers (a CRD's printer
+     * columns) stores and reads the same disambiguated key.
+     */
+    fun setTableColumnHidden(entryKey: String, hidden: Boolean) {
+        // Showing a column drops its entry rather than storing `false`: the
+        // blob is keyed per table per column, and a user who toggles their way
+        // around every generic kind would otherwise grow it forever.
+        _hiddenTableColumns.value = if (hidden) {
+            _hiddenTableColumns.value + (entryKey to true)
+        } else {
+            _hiddenTableColumns.value - entryKey
+        }
+        ioScope.launch {
+            dataStore.edit { prefs ->
+                val current = BoolMapCodec.decode(prefs[TABLE_COLUMNS_HIDDEN])
+                val next = if (hidden) current + (entryKey to true) else current - entryKey
+                prefs[TABLE_COLUMNS_HIDDEN] = BoolMapCodec.encode(next)
             }
         }
     }

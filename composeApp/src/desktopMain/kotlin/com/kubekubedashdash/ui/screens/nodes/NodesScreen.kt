@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -20,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -53,6 +55,7 @@ import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.NODE_PRESSURE_THRESHOLD
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 internal const val MAX_HISTORY_SIZE = 20
 
@@ -92,6 +95,8 @@ fun NodesScreen(
     val bulkState by viewModel.bulkRunner.state.collectAsState()
     val statusFilter by viewModel.statusFilter.collectAsState()
     val pressureOnly by viewModel.pressureOnly.collectAsState()
+    val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
+    val scope = rememberCoroutineScope()
     var selectedNodeUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkItems by remember { mutableStateOf<List<NodeInfo>>(emptyList()) }
@@ -289,6 +294,8 @@ fun NodesScreen(
                     staleUids = staleNodes.keys,
                     selectedUids = selectedUids,
                     onSelectionChange = viewModel.selection::set,
+                    pinnedIds = pinnedIds,
+                    onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
                 )
             }
         }

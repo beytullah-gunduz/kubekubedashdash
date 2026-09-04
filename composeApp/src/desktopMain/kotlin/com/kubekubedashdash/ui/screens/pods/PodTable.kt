@@ -111,6 +111,7 @@ internal fun PodTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> pods.find { it.uid == row.id }?.let(onPodClick) },
             emptyMessage = "No pods found",
+            tableKey = "Pods",
             pinnable = onTogglePin != null,
             pinnedIds = pinnedIds,
             onTogglePin = onTogglePin,

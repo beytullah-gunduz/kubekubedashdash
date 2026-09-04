@@ -99,7 +99,6 @@ internal fun EventTable(
 
         val visibleColumns = allColumns.filter { it.minTableWidth == null || tableWidth >= it.minTableWidth }
         val columns = visibleColumns.map { it.def }
-        val defaultSortIndex = visibleColumns.indexOfFirst { it.def.header == "Last Seen" }
 
         val rows = events.map { ev ->
             val rowBg = when (ev.type) {
@@ -133,8 +132,10 @@ internal fun EventTable(
             },
             selectedRowId = selectedUid,
             emptyMessage = "No events found",
-            defaultSortColumn = defaultSortIndex,
+            defaultSortHeader = "Last Seen",
             defaultSortAscending = false,
+            identityHeader = "Object",
+            tableKey = "Events",
             scrollToTopOnChange = true,
         )
     }
