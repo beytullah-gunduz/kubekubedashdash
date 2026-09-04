@@ -74,7 +74,10 @@ import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.clusterInitial
+import com.kubekubedashdash.ui.components.ShortcutGroups
+import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
@@ -355,6 +358,7 @@ fun SettingsScreen(
         add("Appearance")
         add("Cluster colors")
         add("Tab behavior")
+        add("Keyboard shortcuts")
         add("Privacy")
         add("Integrations")
         add("Cluster discovery")
@@ -598,6 +602,15 @@ fun SettingsScreen(
                                     color = if (restoreSession) MaterialTheme.colorScheme.primary else KdTextSecondary,
                                 )
                             }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        SettingsSection(
+                            title = "Keyboard shortcuts",
+                            onLayoutTop = { y -> sectionOffsets["Keyboard shortcuts"] = y },
+                        ) {
+                            ShortcutGroups(groups = remember { appShortcuts(NativeWindowDrag.isMacOS) })
                         }
 
                         Spacer(Modifier.height(16.dp))

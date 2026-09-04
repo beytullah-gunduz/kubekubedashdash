@@ -67,6 +67,7 @@ import com.kubekubedashdash.services.logtail.DefaultNamespaceTailGateway
 import com.kubekubedashdash.services.logtail.NamespaceTailEngine
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
+import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
@@ -222,6 +223,7 @@ fun App(
 
         val settingsOpen by workspace.showSettings.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
+        var shortcutsOpen by remember { mutableStateOf(false) }
         var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
 
         // Scope pod-log tabs to this window's clusters so they don't bleed
@@ -348,6 +350,14 @@ fun App(
                             // Cmd+K / Ctrl+K: toggle command palette.
                             event.key == Key.K && metaOrCtrl -> {
                                 paletteOpen = !paletteOpen
+                                true
+                            }
+
+                            // Cmd+/ / Ctrl+/: toggle the keyboard shortcut sheet. Gated
+                            // off while Settings or the palette is already up so it can
+                            // never fire behind another surface.
+                            event.key == Key.Slash && metaOrCtrl && !settingsOpen && !paletteOpen -> {
+                                shortcutsOpen = !shortcutsOpen
                                 true
                             }
 
@@ -712,6 +722,10 @@ fun App(
                         onVerb = { pendingVerb = it },
                         onDismiss = { paletteOpen = false },
                     )
+                }
+
+                if (shortcutsOpen) {
+                    ShortcutSheet(onDismiss = { shortcutsOpen = false })
                 }
 
                 captureDialogNamespace?.let { ns ->
