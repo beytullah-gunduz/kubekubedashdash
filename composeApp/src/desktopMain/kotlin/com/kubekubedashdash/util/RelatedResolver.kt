@@ -32,13 +32,15 @@ fun ownerChain(
 ): List<RelatedRef> {
     val chain = mutableListOf<RelatedRef>()
     val seenUids = mutableSetOf<String>()
-    var current = start.firstOrNull() ?: return emptyList()
+    // ownerReferences ordering is not guaranteed; `controller: true` is the
+    // field that names the real parent.
+    var current = (start.firstOrNull { it.controller } ?: start.firstOrNull()) ?: return emptyList()
     var depth = 0
     while (depth < maxDepth) {
         if (!seenUids.add(current.uid)) break // cycle: this uid was already walked
         chain += RelatedRef(kind = current.kind, name = current.name, namespace = namespace, uid = current.uid)
         val owners = lookupOwners(current.uid) ?: break // unknown to the cache: chain ends here, inclusive
-        val next = owners.firstOrNull() ?: break // no further owner: chain ends here, inclusive
+        val next = (owners.firstOrNull { it.controller } ?: owners.firstOrNull()) ?: break // no further owner: chain ends here, inclusive
         current = next
         depth++
     }
@@ -67,10 +69,39 @@ fun childrenOf(
     val childPods = pods
         .filter { pod -> pod.owners.any { it.uid in ownerUids } }
         .map { pod -> RelatedRef(kind = "Pod", name = pod.name, namespace = pod.namespace, uid = pod.uid) }
-    return childReplicaSets + childPods
+    // Pods first: a Deployment keeps revisionHistoryLimit (10 by default) old
+    // ReplicaSets, all of them owned by it, so ReplicaSets-first would fill the
+    // rendered cap with dead revisions and push every running pod behind the
+    // overflow chip.
+    return childPods + childReplicaSets
 }
 
-/** Services whose non-empty selector is a subset of [labels] — the rule at ResourceGraphBuilder.kt:447-452. */
-fun servicesFor(labels: Map<String, String>, services: List<ServiceInfo>): List<RelatedRef> = services
-    .filter { svc -> svc.selector.isNotEmpty() && svc.selector.all { (k, v) -> labels[k] == v } }
+/**
+ * Services in [namespace] whose non-empty selector is a subset of [labels].
+ *
+ * The namespace guard is load-bearing and easy to lose: the informer behind
+ * `client.services` runs `inAnyNamespace()` whenever the app is scoped to All
+ * Namespaces, which is the default, so without it a pod would match a
+ * same-labelled Service from an unrelated namespace and the chip — which shows
+ * no namespace — would give the reader no way to notice. The rule this mirrors
+ * (`ResourceGraphBuilder.kt:447-455`) has the same guard.
+ *
+ * An empty selector matches nothing: a headless or selectorless Service must
+ * not claim every pod.
+ */
+fun servicesFor(namespace: String?, labels: Map<String, String>, services: List<ServiceInfo>): List<RelatedRef> = services
+    .filter { svc ->
+        svc.namespace == namespace &&
+            svc.selector.isNotEmpty() &&
+            svc.selector.all { (k, v) -> labels[k] == v }
+    }
     .map { svc -> RelatedRef(kind = "Service", name = svc.name, namespace = svc.namespace, uid = svc.uid) }
+
+/**
+ * Jobs whose owners contain [uid] — the CronJob → Jobs relation. Separate from
+ * [childrenOf], which is shaped for Deployment → ReplicaSet → Pod and labels
+ * its non-pod results "ReplicaSet".
+ */
+fun jobsOwnedBy(uid: String, jobs: List<GenericResourceInfo>): List<RelatedRef> = jobs
+    .filter { job -> job.owners.any { it.uid == uid } }
+    .map { job -> RelatedRef(kind = "Job", name = job.name, namespace = job.namespace, uid = job.uid) }

@@ -4,6 +4,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.util.RelatedRef
+import com.kubekubedashdash.util.jobsOwnedBy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -73,13 +74,16 @@ class RelatedScreenTest {
         assertEquals(Screen.Detail.ResourceDetail(kind = "ConfigMap", name = "app-config", namespace = "example-ns"), screen)
     }
 
+    /**
+     * A CRD kind has no route: `getResourceYaml` resolves a kind by name only
+     * for the built-ins, and needs a group and version for anything else — so
+     * a SparkApplication chip would land on a pane reading "# Resource not
+     * found". Naming it as plain text is honest; a dead link is not.
+     */
     @Test
-    fun `relatedScreen routes an unknown CRD kind to ResourceDetail the same as any other kind`() {
-        val ref = RelatedRef(kind = "SparkApplication", name = "my-job", namespace = "example-ns", uid = "spark-1")
-
-        val screen = relatedScreen(ref)
-
-        assertEquals(Screen.Detail.ResourceDetail(kind = "SparkApplication", name = "my-job", namespace = "example-ns"), screen)
+    fun `relatedScreen has no destination for a CRD kind, so it renders as text`() {
+        assertNull(relatedScreen(RelatedRef(kind = "SparkApplication", name = "my-job", namespace = "example-ns")))
+        assertNull(relatedScreen(RelatedRef(kind = "Workflow", name = "wf-1", namespace = "example-ns")))
     }
 
     @Test

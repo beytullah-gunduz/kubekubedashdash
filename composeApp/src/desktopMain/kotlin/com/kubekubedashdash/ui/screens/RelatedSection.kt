@@ -15,6 +15,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
@@ -30,6 +32,7 @@ import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.childrenOf
+import com.kubekubedashdash.util.jobsOwnedBy
 import com.kubekubedashdash.util.ownerChain
 import com.kubekubedashdash.util.servicesFor
 import kotlinx.coroutines.flow.StateFlow
@@ -47,22 +50,35 @@ private const val CHILDREN_CHIP_CAP = 12
  */
 fun relatedScreen(ref: RelatedRef): Screen? {
     if (ref.name.isBlank()) return null
-    return if (ref.kind == "Pod" && ref.uid != null) {
-        Screen.Main.Pods(selectPodUid = ref.uid)
-    } else {
+    val uid = ref.uid?.takeIf { it.isNotBlank() }
+    // With a uid a Pod opens its real panel; without one it still resolves by
+    // name in the detail pane below, which is better than nothing. What it must
+    // not do is open the Pods screen waiting on a selection that never arrives.
+    if (ref.kind == "Pod" && uid != null) return Screen.Main.Pods(selectPodUid = uid)
+    // ResourceDetail resolves a kind by name only for the built-ins below; for
+    // anything else `getResourceYaml` needs a group and version that a relation
+    // reference does not carry, and the pane would render "# Resource not
+    // found". A CRD owner — a SparkApplication, an Argo Workflow — is real and
+    // worth naming, so it renders as plain text rather than a dead link.
+    return if (ref.kind.lowercase() in DETAIL_ROUTABLE_KINDS) {
         Screen.Detail.ResourceDetail(kind = ref.kind, name = ref.name, namespace = ref.namespace)
+    } else {
+        null
     }
 }
 
 /**
- * Jobs whose owners contain [uid] — the CronJob → Jobs relation. Not covered
- * by `childrenOf`, whose `replicaSets` parameter is shaped for the
- * Deployment → ReplicaSet → Pod case and would mislabel a Job as a
- * ReplicaSet if reused here.
+ * The kinds `ReactiveKubeClient.getResourceYaml` resolves from a kind string
+ * alone — the `when` branches that do not need a group/version.
  */
-fun jobsOwnedBy(uid: String, jobs: List<GenericResourceInfo>): List<RelatedRef> = jobs
-    .filter { job -> job.owners.any { it.uid == uid } }
-    .map { job -> RelatedRef(kind = "Job", name = job.name, namespace = job.namespace, uid = job.uid) }
+private val DETAIL_ROUTABLE_KINDS = setOf(
+    "pod", "deployment", "service", "node", "namespace", "configmap", "secret",
+    "statefulset", "daemonset", "replicaset", "job", "cronjob", "ingress",
+    "persistentvolume", "persistentvolumeclaim", "storageclass", "serviceaccount",
+    "role", "clusterrole", "rolebinding", "clusterrolebinding",
+    "horizontalpodautoscaler", "poddisruptionbudget", "resourcequota",
+    "limitrange", "priorityclass",
+)
 
 /**
  * Assembles [RelatedResources] for the resource identified by [kind]/[uid],
@@ -87,13 +103,17 @@ fun rememberRelated(
     // the one kind that needs every flow, to walk past its immediate owner.
     "Pod" -> {
         val pods = client.pods.successOrEmpty()
-        val replicaSets = client.replicaSets.successOrEmpty()
-        val jobs = client.jobs.successOrEmpty()
+        // Collecting a flow STARTS its informer, and in the default
+        // All-Namespaces scope that is a cluster-wide watch. Subscribe only to
+        // the ones this pod's own owner reference can actually lead to.
+        val ownerKinds = owners.map { it.kind }.toSet()
+        val replicaSets = if ("ReplicaSet" in ownerKinds) client.replicaSets.successOrEmpty() else emptyList()
+        val jobs = if ("Job" in ownerKinds) client.jobs.successOrEmpty() else emptyList()
         val services = client.services.successOrEmpty()
         remember(uid, namespace, owners, labels, pods, replicaSets, jobs, services) {
             RelatedResources(
                 owners = ownerChain(owners, namespace, lookupOwnersAcross(pods, replicaSets, jobs)),
-                services = servicesFor(labels, services),
+                services = servicesFor(namespace, labels, services),
             )
         }
     }
@@ -230,7 +250,11 @@ private fun RelatedChip(text: String, onClick: (() -> Unit)?) {
     Surface(
         shape = RoundedCornerShape(4.dp),
         color = KdSurfaceVariant,
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        modifier = if (onClick != null) {
+            Modifier.pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick)
+        } else {
+            Modifier
+        },
     ) {
         Text(
             text,

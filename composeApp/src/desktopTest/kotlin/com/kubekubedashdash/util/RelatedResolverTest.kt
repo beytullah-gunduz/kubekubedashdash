@@ -202,7 +202,7 @@ class RelatedResolverTest {
         val labels = mapOf("app" to "frontend", "tier" to "web")
         val svc = service(uid = "svc-1", selector = mapOf("app" to "frontend"))
 
-        val result = servicesFor(labels, listOf(svc))
+        val result = servicesFor("example-ns", labels, listOf(svc))
 
         assertEquals(listOf("svc-1"), result.map { it.uid })
     }
@@ -212,7 +212,7 @@ class RelatedResolverTest {
         val labels = mapOf("app" to "frontend")
         val svc = service(uid = "svc-1", selector = mapOf("app" to "frontend", "tier" to "web"))
 
-        val result = servicesFor(labels, listOf(svc))
+        val result = servicesFor("example-ns", labels, listOf(svc))
 
         assertTrue(result.isEmpty())
     }
@@ -222,8 +222,55 @@ class RelatedResolverTest {
         val labels = mapOf("app" to "frontend")
         val headless = service(uid = "svc-1", selector = emptyMap())
 
-        val result = servicesFor(labels, listOf(headless))
+        val result = servicesFor("example-ns", labels, listOf(headless))
 
         assertTrue(result.isEmpty())
+    }
+
+    /**
+     * The informer behind `client.services` runs `inAnyNamespace()` whenever
+     * the app is scoped to All Namespaces — which is the default — so without
+     * a namespace guard a pod matches a same-labelled Service from an
+     * unrelated namespace, and the chip shows no namespace to give it away.
+     */
+    @Test
+    fun `a service in another namespace never matches, however well its selector fits`() {
+        val labels = mapOf("app" to "redis")
+        val here = service(uid = "svc-a", name = "redis", namespace = "team-a", selector = mapOf("app" to "redis"))
+        val there = service(uid = "svc-b", name = "redis", namespace = "team-b", selector = mapOf("app" to "redis"))
+
+        val matched = servicesFor("team-a", labels, listOf(here, there))
+
+        assertEquals(1, matched.size)
+        assertEquals("team-a", matched.single().namespace)
+    }
+
+    /**
+     * A Deployment keeps revisionHistoryLimit (10 by default) old ReplicaSets,
+     * all owned by it. Rendering is capped, so ReplicaSets-first would fill the
+     * row with dead revisions and hide every running pod behind the overflow.
+     */
+    @Test
+    fun `a deployment lists its pods before its replica sets`() {
+        val depOwner = listOf(OwnerRefInfo(kind = "Deployment", name = "frontend", uid = "dep-1"))
+        val rsOld = generic(uid = "rs-old", name = "frontend-old", owners = depOwner)
+        val rsNew = generic(uid = "rs-new", name = "frontend-new", owners = depOwner)
+        val p1 = pod(uid = "pod-1", name = "frontend-abc", owners = listOf(OwnerRefInfo("ReplicaSet", "frontend-new", "rs-new")))
+
+        val children = childrenOf("dep-1", listOf(p1), listOf(rsOld, rsNew), includeReplicaSets = true)
+
+        assertEquals("Pod", children.first().kind, "pods must come before replica sets, or the cap hides them")
+        assertEquals(listOf("Pod", "ReplicaSet", "ReplicaSet"), children.map { it.kind })
+    }
+
+    /** ownerReferences ordering is not guaranteed; `controller: true` names the real parent. */
+    @Test
+    fun `the controller reference wins over whichever owner happens to be first`() {
+        val refs = listOf(
+            OwnerRefInfo(kind = "ReplicaSet", name = "not-the-controller", uid = "rs-x"),
+            OwnerRefInfo(kind = "ReplicaSet", name = "the-controller", uid = "rs-y", controller = true),
+        )
+        val chain = ownerChain(refs, "example-ns", { null })
+        assertEquals("the-controller", chain.single().name)
     }
 }

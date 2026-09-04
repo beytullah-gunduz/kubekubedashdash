@@ -9,4 +9,10 @@ import kotlinx.serialization.Serializable
  * carried through partially populated — see `ResourceMappers.mapOwnerRefs`.
  */
 @Serializable
-data class OwnerRefInfo(val kind: String, val name: String, val uid: String)
+data class OwnerRefInfo(
+    val kind: String,
+    val name: String,
+    val uid: String,
+    /** True for the `controller: true` reference — the real parent. */
+    val controller: Boolean = false,
+)

@@ -43,7 +43,7 @@ object ResourceMappers {
         val kind = ref.kind?.ifBlank { null } ?: return@mapNotNull null
         val name = ref.name?.ifBlank { null } ?: return@mapNotNull null
         val uid = ref.uid?.ifBlank { null } ?: return@mapNotNull null
-        OwnerRefInfo(kind = kind, name = name, uid = uid)
+        OwnerRefInfo(kind = kind, name = name, uid = uid, controller = ref.controller == true)
     } ?: emptyList()
 
     fun mapPod(pod: Pod): PodInfo {

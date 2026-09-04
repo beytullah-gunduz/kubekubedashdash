@@ -40,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -271,7 +273,7 @@ private fun OwnerBreadcrumb(hops: List<RelatedRef>, onOwnerClick: ((RelatedRef) 
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = if (onOwnerClick != null) {
-                    Modifier.clickable { onOwnerClick(ref) }
+                    Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { onOwnerClick(ref) }
                 } else {
                     Modifier
                 },
