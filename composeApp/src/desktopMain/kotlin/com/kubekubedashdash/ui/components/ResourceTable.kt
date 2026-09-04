@@ -97,6 +97,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
 import com.kubekubedashdash.resources.arrow_upward_filled
+import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.star_filled
 import com.kubekubedashdash.resources.star_outline
 import kotlinx.coroutines.launch
@@ -162,6 +163,12 @@ fun ResourceTable(
     defaultSortAscending: Boolean = true,
     /** Index into [columns] that never hides and breaks primary-sort ties (D6/D7). */
     identityColumn: Int = 0,
+    /**
+     * Identifies this table for the per-table column-visibility preference and
+     * enables the trailing options menu (column picker + density). Null (the
+     * default) is today's behaviour: no menu, no hiding (D4).
+     */
+    tableKey: String? = null,
     scrollToTopOnChange: Boolean = false,
     pinnable: Boolean = false,
     pinnedIds: Set<String> = emptySet(),
@@ -183,6 +190,15 @@ fun ResourceTable(
     // subscribed per row and non-skippable.
     val density by PreferenceRepository.tableDensity.collectAsState()
     val rowPadding = density.rowPadding
+    val hiddenColumns by PreferenceRepository.hiddenTableColumns.collectAsState()
+
+    // Full-list indices, never a filtered copy: the sort, defaultSortColumn
+    // and hidden-column keys all speak positions/headers against the full
+    // `columns` list, so a filtered `columns` copy would silently re-target
+    // every one of them.
+    val visibleIndices = remember(columns, tableKey, identityColumn, hiddenColumns) {
+        visibleColumnIndices(columns, tableKey, identityColumn, hiddenColumns)
+    }
 
     val sortedRows = remember(rows, columns, sortHeader, sortAscending, identityColumn, pinnedIds) {
         sortTableRows(
@@ -263,7 +279,8 @@ fun ResourceTable(
                 }
             }
             if (pinnable) Spacer(Modifier.width(30.dp))
-            columns.forEach { col ->
+            visibleIndices.forEach { index ->
+                val col = columns[index]
                 Row(
                     modifier = Modifier
                         .then(if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f))
@@ -292,6 +309,81 @@ fun ResourceTable(
                         )
                     }
                     col.headerExtra?.invoke()
+                }
+            }
+            // D9: the 24dp trailing slot is unconditional in the header AND
+            // every row so the two stay in register; only the options `⋮`
+            // inside is gated on tableKey != null.
+            Box(modifier = Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+                if (tableKey != null) {
+                    var optionsExpanded by remember { mutableStateOf(false) }
+                    Text(
+                        text = "⋮",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = KdTextSecondary,
+                        modifier = Modifier.clickable { optionsExpanded = true },
+                    )
+                    DropdownMenu(expanded = optionsExpanded, onDismissRequest = { optionsExpanded = false }) {
+                        Text(
+                            "Columns",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdTextSecondary,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                        columns.indices.filter { it != identityColumn }.forEach { i ->
+                            val col = columns[i]
+                            val entryKey = tableColumnKey(tableKey, columns, i)
+                            val hiddenNow = hiddenColumns[entryKey] == true
+                            val locked = isLastVisibleColumn(columns, tableKey, identityColumn, hiddenColumns, i)
+                            DropdownMenuItem(
+                                enabled = !locked,
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(
+                                            checked = !hiddenNow,
+                                            enabled = !locked,
+                                            onCheckedChange = { checked ->
+                                                PreferenceRepository.setTableColumnHidden(entryKey, !checked)
+                                            },
+                                        )
+                                        Text(col.header, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                onClick = { PreferenceRepository.setTableColumnHidden(entryKey, !hiddenNow) },
+                            )
+                        }
+                        HorizontalDivider()
+                        Text(
+                            "Density",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdTextSecondary,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                        TableDensity.entries.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+                                            if (density == option) {
+                                                Icon(
+                                                    painterResource(Res.drawable.check_filled),
+                                                    contentDescription = null,
+                                                    tint = KdPrimary,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            if (option == TableDensity.Comfortable) "Comfortable" else "Compact",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                },
+                                onClick = { PreferenceRepository.setTableDensity(option) },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -484,6 +576,7 @@ fun ResourceTable(
                             TableRowItem(
                                 row = row,
                                 columns = columns,
+                                visibleIndices = visibleIndices,
                                 rowPadding = rowPadding,
                                 isEven = index % 2 == 0,
                                 isSelected = row.id == selectedRowId,
@@ -548,6 +641,8 @@ fun ResourceTable(
 private fun TableRowItem(
     row: TableRow,
     columns: List<ColumnDef>,
+    /** Indices into [columns] to render, in order — never a filtered copy of [columns]. */
+    visibleIndices: List<Int>,
     rowPadding: Dp,
     @Suppress("UNUSED_PARAMETER") isEven: Boolean,
     isSelected: Boolean = false,
@@ -654,7 +749,8 @@ private fun TableRowItem(
                 )
             }
         }
-        columns.forEachIndexed { index, col ->
+        visibleIndices.forEach { index ->
+            val col = columns[index]
             val cell = row.cells.getOrNull(index)
             Box(modifier = if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f)) {
                 if (cell?.content != null) {
@@ -671,14 +767,16 @@ private fun TableRowItem(
                 }
             }
         }
-        if (hasMenu) {
-            var menuExpanded by remember { mutableStateOf(false) }
-            Box {
+        // D9: the 24dp trailing slot is unconditional so header and body stay
+        // in register; a row with no menu renders the empty box.
+        Box(modifier = Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+            if (hasMenu) {
+                var menuExpanded by remember { mutableStateOf(false) }
                 Text(
                     text = "⋮",
                     style = MaterialTheme.typography.bodyLarge,
                     color = KdTextSecondary.copy(alpha = if (hovered || menuExpanded) 1f else 0.3f),
-                    modifier = Modifier.padding(horizontal = 4.dp).clickable { menuExpanded = true },
+                    modifier = Modifier.clickable { menuExpanded = true },
                 )
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     // Called HERE, never in the row body: DropdownMenu does not

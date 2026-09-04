@@ -2,18 +2,19 @@ package com.kubekubedashdash.ui.components
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 /**
  * Tests for the pure table-controls model in TableOptions.kt:
- * [TableDensity.fromKey]'s key round-trip, and [sortTableRows]'
- * pin-first / header-based / identity-tiebreak ordering (D5-D8). The menu,
- * persistence and column-hiding pieces this file also declares
- * ([tableColumnKey], [visibleColumnIndices], [isLastVisibleColumn]) are
- * exercised by WS2, which owns the call sites that need them.
+ * [TableDensity.fromKey]'s key round-trip, [sortTableRows]'
+ * pin-first / header-based / identity-tiebreak ordering (D5-D8), and the
+ * column-picker helpers [tableColumnKey], [visibleColumnIndices] and
+ * [isLastVisibleColumn] exercised by the ResourceTable options menu (WS2).
  */
 class TableOptionsTest {
 
     private val nameStatus = listOf(ColumnDef(header = "Name"), ColumnDef(header = "Status"))
+    private val nameStatusAge = listOf(ColumnDef(header = "Name"), ColumnDef(header = "Status"), ColumnDef(header = "Age"))
 
     private fun row(id: String, name: String, status: String, pinId: String? = null) = TableRow(
         id = id,
@@ -163,5 +164,84 @@ class TableOptionsTest {
             emptyList(),
             sortTableRows(emptyList(), nameStatus, "Status", ascending = true, identityColumn = 0, pinnedIds = emptySet()),
         )
+    }
+
+    // ── visibleColumnIndices ─────────────────────────────────────────────────
+
+    @Test
+    fun `visibleColumnIndices returns every index when tableKey is null`() {
+        val hidden = mapOf(tableColumnKey("Pods", nameStatusAge, 1) to true)
+        assertEquals(listOf(0, 1, 2), visibleColumnIndices(nameStatusAge, tableKey = null, identityColumn = 0, hidden = hidden))
+    }
+
+    @Test
+    fun `a hidden middle column is dropped and survivors keep their original indices`() {
+        val hidden = mapOf(tableColumnKey("Pods", nameStatusAge, 1) to true)
+        val visible = visibleColumnIndices(nameStatusAge, tableKey = "Pods", identityColumn = 0, hidden = hidden)
+        assertEquals(listOf(0, 2), visible)
+    }
+
+    @Test
+    fun `the identity column stays visible even when the map marks it hidden`() {
+        val hidden = mapOf(tableColumnKey("Pods", nameStatusAge, 0) to true)
+        val visible = visibleColumnIndices(nameStatusAge, tableKey = "Pods", identityColumn = 0, hidden = hidden)
+        assertEquals(listOf(0, 1, 2), visible)
+    }
+
+    @Test
+    fun `identityColumn 2 stays visible even when the map marks it hidden`() {
+        val hidden = mapOf(tableColumnKey("Events", typeAgeObject, 2) to true)
+        val visible = visibleColumnIndices(typeAgeObject, tableKey = "Events", identityColumn = 2, hidden = hidden)
+        assertEquals(listOf(0, 1, 2), visible)
+    }
+
+    @Test
+    fun `an unknown header in the hidden map is ignored`() {
+        val hidden = mapOf("Pods::Nonexistent" to true)
+        val visible = visibleColumnIndices(nameStatusAge, tableKey = "Pods", identityColumn = 0, hidden = hidden)
+        assertEquals(listOf(0, 1, 2), visible)
+    }
+
+    // ── isLastVisibleColumn ──────────────────────────────────────────────────
+
+    @Test
+    fun `isLastVisibleColumn is true only for the final visible hideable column`() {
+        // Status is already hidden, leaving Age as the sole hideable survivor.
+        val hidden = mapOf(tableColumnKey("Pods", nameStatusAge, 1) to true)
+        assertEquals(true, isLastVisibleColumn(nameStatusAge, "Pods", identityColumn = 0, hidden = hidden, index = 2))
+    }
+
+    @Test
+    fun `isLastVisibleColumn is false with two hideable columns still visible`() {
+        assertEquals(false, isLastVisibleColumn(nameStatusAge, "Pods", identityColumn = 0, hidden = emptyMap(), index = 1))
+        assertEquals(false, isLastVisibleColumn(nameStatusAge, "Pods", identityColumn = 0, hidden = emptyMap(), index = 2))
+    }
+
+    @Test
+    fun `isLastVisibleColumn is never true for the identity column`() {
+        // Both hideable columns hidden; the identity column is never itself
+        // "the last hideable column" because it was never hideable at all.
+        val hidden = mapOf(
+            tableColumnKey("Pods", nameStatusAge, 1) to true,
+            tableColumnKey("Pods", nameStatusAge, 2) to true,
+        )
+        assertEquals(false, isLastVisibleColumn(nameStatusAge, "Pods", identityColumn = 0, hidden = hidden, index = 0))
+    }
+
+    // ── tableColumnKey ───────────────────────────────────────────────────────
+
+    @Test
+    fun `tableColumnKey disambiguates two columns sharing a header`() {
+        val duplicated = listOf(ColumnDef(header = "Value"), ColumnDef(header = "Value"))
+        val key0 = tableColumnKey("ConfigMap", duplicated, 0)
+        val key1 = tableColumnKey("ConfigMap", duplicated, 1)
+        assertNotEquals(key0, key1)
+        assertEquals("ConfigMap::Value#0", key0)
+        assertEquals("ConfigMap::Value#1", key1)
+    }
+
+    @Test
+    fun `tableColumnKey omits the index suffix when headers are unique`() {
+        assertEquals("Pods::Status", tableColumnKey("Pods", nameStatusAge, 1))
     }
 }
