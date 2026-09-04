@@ -287,6 +287,18 @@ fun errorPodStatuses(): Set<String> = setOf(
     "NotReady",
 )
 
+/**
+ * Canonical warning-tier pod status strings, in the camel-cased form
+ * `PodInfo.status` reports them — keep in sync with [podStatusSeverity]'s
+ * WARNING branch above when adding new states.
+ */
+fun pendingPodStatuses(): Set<String> = setOf(
+    "Pending",
+    "Waiting",
+    "ContainerCreating",
+    "Terminating",
+)
+
 internal fun nodeStatusSeverity(status: String): HealthSeverity = when (status.lowercase()) {
     "ready", "true" -> HealthSeverity.OK
     "notready", "false" -> HealthSeverity.ERROR
