@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -30,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,13 +58,19 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.ui.palette.PALETTE_VERBS
+import com.kubekubedashdash.ui.palette.PaletteVerb
+import com.kubekubedashdash.ui.palette.PendingVerb
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 /** A single navigable item in the command palette. */
 data class PaletteEntry(
+    val id: String,
     val label: String,
     val category: String,
     val icon: DrawableResource,
@@ -71,65 +78,228 @@ data class PaletteEntry(
     val sublabel: String? = null,
 )
 
+/** A parsed palette query: a recognised leading prefix (if any), and the remaining fuzzy-match text. */
+internal data class PaletteQuery(val prefix: String?, val text: String)
+
+/** One row in the palette's flattened list — a category header, or an entry that keeps its index into the filtered entry list. */
+internal sealed interface PaletteRow {
+    data class Header(val category: String) : PaletteRow
+    data class Entry(val entry: PaletteEntry, val entryIndex: Int) : PaletteRow
+}
+
+private val KNOWN_WORD_PREFIXES = setOf("pod", "node", "ns", "dep", "crd", "go")
+
+// The nine sidebar section titles screen entries are grouped under (ui/Sidebar.kt:152-206),
+// plus "Cluster" for the five ungrouped top-level items — the `go:` prefix's scope.
+private val GO_PREFIX_CATEGORIES = setOf(
+    "Cluster",
+    "Workloads",
+    "Config",
+    "Network",
+    "Storage",
+    "Access Control",
+    "Autoscaling & Disruption",
+    "Governance",
+    "Admission Control",
+)
+
+/**
+ * Parses a leading `>` or `<word>:` prefix off [raw]. An unrecognised
+ * `word:` is NOT a prefix — it is left in [PaletteQuery.text], so a name
+ * containing a colon still fuzzy-matches.
+ */
+internal fun parsePaletteQuery(raw: String): PaletteQuery {
+    // `text` is what the search field renders, so it must round-trip:
+    // prefix + text == what the user typed. Trimming the tail here would
+    // delete a space the instant it was typed — and a space is the only way
+    // to reach an interior one. Matching trims instead (see [filterEntries]).
+    val trimmedStart = raw.trimStart()
+    if (trimmedStart.startsWith(">")) {
+        return PaletteQuery(prefix = ">", text = trimmedStart.removePrefix(">"))
+    }
+    val colonIndex = trimmedStart.indexOf(':')
+    if (colonIndex > 0) {
+        val word = trimmedStart.substring(0, colonIndex)
+        if (word.none { it.isWhitespace() } && word.lowercase() in KNOWN_WORD_PREFIXES) {
+            return PaletteQuery(prefix = "${word.lowercase()}:", text = trimmedStart.substring(colonIndex + 1))
+        }
+    }
+    return PaletteQuery(prefix = null, text = raw)
+}
+
+/** The category names a recognised [prefix] narrows the search to, or null for no restriction (including an unrecognised prefix). */
+internal fun categoriesForPrefix(prefix: String?): Set<String>? = when (prefix) {
+    null -> null
+    ">" -> setOf("Actions", "Verbs")
+    "pod:" -> setOf("Pods")
+    "node:" -> setOf("Nodes")
+    "ns:" -> setOf("Namespaces")
+    "dep:" -> setOf("Deployments")
+    "crd:" -> setOf("Custom Resources")
+    "go:" -> GO_PREFIX_CATEGORIES
+    else -> emptySet()
+}
+
+/**
+ * Resolves stored recent-use ids against the current [entries], most-recent
+ * first (deduped, in case [recentIds] itself was not); an id that no longer
+ * resolves (another cluster's pod, a deleted node) is skipped rather than
+ * removed from the store. Every returned entry has its category overridden
+ * to "Recent" — load-bearing: without the copy, `entries.groupBy { it.category }`
+ * would merge these straight back into their own groups and no Recent header
+ * would ever render, and the category override is also what keeps a recent
+ * entry's row key distinct from its non-recent counterpart when the same
+ * entry appears twice.
+ */
+internal fun recentEntries(entries: List<PaletteEntry>, recentIds: List<String>): List<PaletteEntry> {
+    val byId = entries.associateBy { it.id }
+    return recentIds.distinct().mapNotNull { id -> byId[id]?.copy(category = "Recent") }
+}
+
+/**
+ * Flattens (already category-clustered) [entries] into rows, inserting one
+ * [PaletteRow.Header] whenever the category changes from the previous entry.
+ */
+internal fun paletteRows(entries: List<PaletteEntry>): List<PaletteRow> {
+    val rows = mutableListOf<PaletteRow>()
+    var previousCategory: String? = null
+    entries.forEachIndexed { index, entry ->
+        if (entry.category != previousCategory) {
+            rows += PaletteRow.Header(entry.category)
+            previousCategory = entry.category
+        }
+        rows += PaletteRow.Entry(entry, index)
+    }
+    return rows
+}
+
+/** The index in [rows] of the [PaletteRow.Entry] whose `entryIndex` is [entryIndex], or -1 if absent. */
+internal fun rowIndexOfEntry(rows: List<PaletteRow>, entryIndex: Int): Int = rows.indexOfFirst { it is PaletteRow.Entry && it.entryIndex == entryIndex }
+
+/**
+ * Fuzzy-filters [candidates] by [query] against label and sublabel, then caps
+ * each category at [perCategoryCap] — the shared second half of both the
+ * normal entry list and (D9) a verb's target list. An empty [query] passes
+ * every candidate through, still capped per category.
+ */
+private fun filterEntries(candidates: List<PaletteEntry>, query: String, perCategoryCap: Int): List<PaletteEntry> {
+    // The raw text keeps its spacing so the field round-trips; trim here, at
+    // the one place the text is compared against anything.
+    val q = query.trim()
+    if (q.isEmpty()) {
+        return candidates.groupBy { it.category }.flatMap { (_, items) -> items.take(perCategoryCap) }
+    }
+    return candidates.mapNotNull { entry ->
+        val s = minOf(
+            fuzzyScore(q, entry.label) ?: Int.MAX_VALUE,
+            entry.sublabel?.let { fuzzyScore(q, it) } ?: Int.MAX_VALUE,
+        )
+        if (s < Int.MAX_VALUE) entry to s else null
+    }
+        .groupBy { (entry, _) -> entry.category }
+        .flatMap { (_, scored) ->
+            scored.sortedBy { (_, score) -> score }
+                .take(perCategoryCap)
+                .map { (entry, _) -> entry }
+        }
+}
+
 /**
  * Cmd+K-style command palette. The screen owns the open/closed state and the
  * source-of-truth list of [PaletteEntry]; the palette filters by query, caps
  * each category, and exposes keyboard navigation (↑/↓ to move, Enter to
  * activate, Esc to dismiss).
  *
- * Activating an entry calls its `onActivate` and then [onDismiss] — the
- * caller does not need to close the palette explicitly.
+ * On an empty query with no prefix, a `Recent` group of previously-activated
+ * entries (`PreferenceRepository.paletteRecents`) renders first. A leading
+ * `>` or `<word>:` narrows the search to a fixed set of categories (see
+ * [categoriesForPrefix]) and renders as a chip in the search bar; Backspace
+ * on an empty search text drops it.
+ *
+ * Activating a normal entry records it as a recent, then calls its
+ * `onActivate` and [onDismiss]. Activating a `Verbs`-category entry instead
+ * puts the palette in target mode (D9): the query clears, a verb chip
+ * replaces the prefix chip, and the list narrows to that verb's targets
+ * (built by `rememberVerbTargets` against [session] only while in this
+ * mode — the flat [entries] list never grows by verb × resource). Activating
+ * a target there raises it as a `PendingVerb` via [onVerb], records
+ * `"verb:<id>"` as the recent (not the target's own id — a half-finished verb
+ * pick never pollutes Recents), and dismisses. Esc, or Backspace on an empty
+ * query, backs out of target mode instead of closing; [session] is the
+ * cluster the palette was opened against and is captured into every
+ * `PendingVerb` it raises, so a verb always acts on that cluster even if the
+ * active tab changes while a dialog raised from it is still open. Verb
+ * entries only render while [session] is non-null.
  */
 @Composable
 fun CommandPalette(
     entries: List<PaletteEntry>,
+    session: ClusterSession?,
+    onVerb: (PendingVerb) -> Unit,
     onDismiss: () -> Unit,
     perCategoryCap: Int = 8,
 ) {
     var query by remember { mutableStateOf("") }
+    var pendingVerb by remember { mutableStateOf<PaletteVerb?>(null) }
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
     var selected by remember { mutableStateOf(0) }
+    val recents by PreferenceRepository.paletteRecents.collectAsState()
 
-    // Fuzzy-filter + sort by score + cap per category. When query is empty all
-    // entries pass. When non-empty, entries are scored by fuzzyScore against
-    // label and sublabel; non-matching entries are dropped, and within each
-    // category the best-scoring (fewest gaps) entries surface first.
-    val visible by remember(entries, query) {
+    val parsedQuery = remember(query) { parsePaletteQuery(query) }
+
+    val currentVerb = pendingVerb
+    val targetEntries = if (currentVerb != null && session != null) {
+        rememberVerbTargets(session, currentVerb, onVerb)
+    } else {
+        emptyList()
+    }
+
+    // Fuzzy-filter + sort by score + cap per category. When the parsed text is
+    // empty all (prefix-restricted) entries pass. When non-empty, entries are
+    // scored by fuzzyScore against label and sublabel; non-matching entries
+    // are dropped, and within each category the best-scoring (fewest gaps)
+    // entries surface first. In target mode (D9) the source is that verb's
+    // targets instead of the flat entry list, with no prefix restriction and
+    // no Recent group.
+    val visible by remember(entries, parsedQuery, recents, currentVerb, targetEntries) {
         derivedStateOf {
-            val q = query.trim()
-            if (q.isEmpty()) {
-                entries.groupBy { it.category }
-                    .flatMap { (_, items) -> items.take(perCategoryCap) }
+            if (currentVerb != null) {
+                filterEntries(targetEntries, parsedQuery.text, perCategoryCap)
             } else {
-                entries.mapNotNull { entry ->
-                    val s = minOf(
-                        fuzzyScore(q, entry.label) ?: Int.MAX_VALUE,
-                        entry.sublabel?.let { fuzzyScore(q, it) } ?: Int.MAX_VALUE,
-                    )
-                    if (s < Int.MAX_VALUE) entry to s else null
-                }
-                    .groupBy { (entry, _) -> entry.category }
-                    .flatMap { (_, scored) ->
-                        scored.sortedBy { (_, score) -> score }
-                            .take(perCategoryCap)
-                            .map { (entry, _) -> entry }
-                    }
+                val restrictedCategories = categoriesForPrefix(parsedQuery.prefix)
+                val candidates = if (restrictedCategories != null) entries.filter { it.category in restrictedCategories } else entries
+                val grouped = filterEntries(candidates, parsedQuery.text, perCategoryCap)
+                if (parsedQuery.text.isBlank() && parsedQuery.prefix == null) recentEntries(entries, recents) + grouped else grouped
             }
         }
     }
+    val rows = remember(visible) { paletteRows(visible) }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     LaunchedEffect(visible) { selected = 0 }
-    LaunchedEffect(selected) {
-        if (selected in visible.indices) listState.animateScrollToItem(selected)
+    LaunchedEffect(selected, rows) {
+        if (selected in visible.indices) {
+            val rowIndex = rowIndexOfEntry(rows, selected)
+            if (rowIndex >= 0) listState.animateScrollToItem(rowIndex)
+        }
     }
 
     fun activateSelected() {
-        visible.getOrNull(selected)?.let { entry ->
-            entry.onActivate()
-            onDismiss()
+        val entry = visible.getOrNull(selected) ?: return
+        val verbInFlight = pendingVerb
+        if (verbInFlight == null && entry.id.startsWith("verb:")) {
+            // D9: selecting a verb doesn't act — it enters target mode. Nothing
+            // is recorded and the palette stays open.
+            pendingVerb = PALETTE_VERBS.firstOrNull { "verb:${it.id}" == entry.id }
+            query = ""
+            return
         }
+        // D3: a half-finished verb records nothing; only a chosen target does,
+        // and it records the verb's id, not the (transient) target entry's id.
+        PreferenceRepository.recordPaletteUse(if (verbInFlight != null) "verb:${verbInFlight.id}" else entry.id)
+        entry.onActivate()
+        onDismiss()
     }
 
     Box(
@@ -152,9 +322,38 @@ fun CommandPalette(
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
+                        // In target mode (D9), Escape backs out to the verb list
+                        // instead of closing the palette; Escape again then closes it.
                         Key.Escape -> {
-                            onDismiss()
+                            if (pendingVerb != null) {
+                                pendingVerb = null
+                                query = ""
+                            } else {
+                                onDismiss()
+                            }
                             true
+                        }
+
+                        // Drop the whole prefix chip / back out of target mode in one
+                        // keystroke once the search text is empty; otherwise let the
+                        // text field handle it (deleting the last character) normally.
+                        Key.Backspace -> {
+                            when {
+                                parsedQuery.text.isNotBlank() -> false
+
+                                pendingVerb != null -> {
+                                    pendingVerb = null
+                                    query = ""
+                                    true
+                                }
+
+                                parsedQuery.prefix != null -> {
+                                    query = ""
+                                    true
+                                }
+
+                                else -> false
+                            }
                         }
 
                         Key.DirectionDown -> {
@@ -189,8 +388,9 @@ fun CommandPalette(
         ) {
             Column {
                 SearchBar(
-                    query = query,
-                    onQueryChange = { query = it },
+                    prefix = currentVerb?.let { "${it.label} ▸" } ?: parsedQuery.prefix,
+                    text = parsedQuery.text,
+                    onTextChange = { newText -> query = (parsedQuery.prefix ?: "") + newText },
                     focusRequester = focusRequester,
                 )
 
@@ -207,19 +407,27 @@ fun CommandPalette(
                     }
                 } else {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxWidth()) {
-                        var prevCategory: String? = null
-                        itemsIndexed(visible, key = { idx, e -> "${e.category}::${e.label}::$idx" }) { idx, entry ->
-                            val showHeader = entry.category != prevCategory
-                            prevCategory = entry.category
-                            if (showHeader) CategoryHeader(entry.category)
-                            EntryRow(
-                                entry = entry,
-                                isSelected = idx == selected,
-                                onClick = {
-                                    selected = idx
-                                    activateSelected()
-                                },
-                            )
+                        items(
+                            items = rows,
+                            key = { row ->
+                                when (row) {
+                                    is PaletteRow.Header -> "h::${row.category}"
+                                    is PaletteRow.Entry -> "e::${row.entryIndex}::${row.entry.category}::${row.entry.id}"
+                                }
+                            },
+                        ) { row ->
+                            when (row) {
+                                is PaletteRow.Header -> CategoryHeader(row.category)
+
+                                is PaletteRow.Entry -> EntryRow(
+                                    entry = row.entry,
+                                    isSelected = row.entryIndex == selected,
+                                    onClick = {
+                                        selected = row.entryIndex
+                                        activateSelected()
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -231,8 +439,9 @@ fun CommandPalette(
 
 @Composable
 private fun SearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
+    prefix: String?,
+    text: String,
+    onTextChange: (String) -> Unit,
     focusRequester: FocusRequester,
 ) {
     Row(
@@ -249,17 +458,21 @@ private fun SearchBar(
             tint = KdTextSecondary,
         )
         Spacer(Modifier.width(10.dp))
+        if (prefix != null) {
+            PrefixChip(prefix)
+            Spacer(Modifier.width(8.dp))
+        }
         Box(modifier = Modifier.weight(1f)) {
-            if (query.isEmpty()) {
+            if (text.isEmpty()) {
                 Text(
-                    "Jump to a screen, cluster, namespace, pod, or node…",
+                    "Search, or type > for actions, pod: node: ns: dep: to narrow…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = KdTextSecondary,
                 )
             }
             BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
+                value = text,
+                onValueChange = onTextChange,
                 singleLine = true,
                 cursorBrush = SolidColor(KdPrimary),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = KdTextPrimary),
@@ -269,6 +482,21 @@ private fun SearchBar(
                     .focusable(),
             )
         }
+    }
+}
+
+@Composable
+private fun PrefixChip(prefix: String) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = KdPrimary.copy(alpha = 0.15f),
+    ) {
+        Text(
+            text = prefix,
+            style = MaterialTheme.typography.labelSmall,
+            color = KdPrimary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -334,11 +562,15 @@ private fun EntryRow(
                 )
             }
         }
-        Text(
-            entry.category,
-            style = MaterialTheme.typography.labelSmall,
-            color = KdTextSecondary,
-        )
+        // The header already names the category (D6) — the trailing slot is
+        // reserved for the verb two-stage-flow hint instead (WS2).
+        if (entry.id.startsWith("verb:")) {
+            Text(
+                "↵ to pick a target",
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextSecondary,
+            )
+        }
     }
 }
 

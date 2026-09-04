@@ -66,6 +66,7 @@ object PreferenceRepository {
     private val SIDEBAR_SECTIONS_EXPANDED by lazy { stringPreferencesKey("sidebar_sections_expanded") }
     private val STATS_PANELS_EXPANDED by lazy { stringPreferencesKey("stats_panels_expanded") }
     private val DETAIL_PANE_WIDTHS by lazy { stringPreferencesKey("detail_pane_widths") }
+    private val PALETTE_RECENTS by lazy { stringPreferencesKey("palette_recents") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
@@ -158,8 +159,16 @@ object PreferenceRepository {
     private val _detailPaneWidths = MutableStateFlow<Map<String, Float>>(emptyMap())
     val detailPaneWidths: StateFlow<Map<String, Float>> = _detailPaneWidths.asStateFlow()
 
-    // Guards the one-shot seed of the three map blobs above (two Boolean, one
-    // Float). Only ever touched from the single init collector coroutine.
+    // Command-palette recent-use ids, most-recent-first, capped at 8 (matches
+    // CommandPalette's perCategoryCap so the Recent group is never silently
+    // truncated). Ids are cluster-agnostic by design; resolution against the
+    // current entry list happens in the palette, not here.
+    private val _paletteRecents = MutableStateFlow<List<String>>(emptyList())
+    val paletteRecents: StateFlow<List<String>> = _paletteRecents.asStateFlow()
+
+    // Guards the one-shot seed of the four blobs above (two Boolean maps, one
+    // Float map, one String list). Only ever touched from the single init
+    // collector coroutine.
     private var mapBlobsSeeded = false
 
     // ── Seed all flows from DataStore on startup ──────────────────────────────
@@ -221,6 +230,11 @@ object PreferenceRepository {
                         BoolMapCodec.decode(p[STATS_PANELS_EXPANDED]) + _statsPanelsExpanded.value
                     _detailPaneWidths.value =
                         FloatMapCodec.decode(p[DETAIL_PANE_WIDTHS]) + _detailPaneWidths.value
+                    // Concatenation, not a map merge: the in-memory list (a
+                    // race-ahead recordPaletteUse) goes first so it keeps
+                    // recency priority over the persisted list.
+                    val decoded = StringListCodec.decode(p[PALETTE_RECENTS])
+                    _paletteRecents.value = (_paletteRecents.value + decoded).distinct().take(8)
                 }
                 _preferencesLoaded.value = true
             }
@@ -352,6 +366,13 @@ object PreferenceRepository {
                 prefs[DETAIL_PANE_WIDTHS] = FloatMapCodec.encode(current + (kind to widthDp))
             }
         }
+    }
+
+    /** Records a palette activation: moves [id] to the front, dedupes, caps at 8. One `dataStore.edit` — a click path, not a keystroke path. */
+    fun recordPaletteUse(id: String) {
+        val updated = (listOf(id) + _paletteRecents.value).distinct().take(8)
+        _paletteRecents.value = updated
+        ioScope.launch { dataStore.edit { it[PALETTE_RECENTS] = StringListCodec.encode(updated) } }
     }
 
     fun setDemoTargets(value: DemoClusterSimulator.Targets) {
