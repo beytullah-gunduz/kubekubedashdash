@@ -53,8 +53,6 @@ fun ServicesScreen(
     var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
 
     ResourceListScaffold(state) { data ->
-        val labelOpts = remember(data) { mapSelectorOptions(data.map { it.labels }) }
-        val annotationOpts = remember(data) { mapSelectorOptions(data.map { it.annotations }) }
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
         val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
         val filtered = rememberResourceFilter(data, searchQuery, labelSelector, annotationSelector) { svc, q, labels, anns ->
@@ -83,8 +81,8 @@ fun ServicesScreen(
                         compact = compact,
                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                        labelOptions = labelOpts,
-                        annotationOptions = annotationOpts,
+                        labelOptions = { mapSelectorOptions(data.map { it.labels }) },
+                        annotationOptions = { mapSelectorOptions(data.map { it.annotations }) },
                     )
                 },
             )

@@ -123,12 +123,10 @@ fun NodesScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
-            val allNodes = s.data + staleNodes.values.toList()
+            val allNodes = remember(s.data, staleNodes) { s.data + staleNodes.values.toList() }
             val availableStatuses = remember(allNodes) {
                 allNodes.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
-            val labelOpts = remember(allNodes) { mapSelectorOptions(allNodes.map { it.labels }) }
-            val annotationOpts = remember(allNodes) { mapSelectorOptions(allNodes.map { it.annotations }) }
             val activeStatusFilter = statusFilter
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -211,15 +209,16 @@ fun NodesScreen(
                             compact = compact,
                             pulseLabelsOnEntry = pulseLabelsOnEntry,
                             pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                            labelOptions = labelOpts,
-                            annotationOptions = annotationOpts,
+                            labelOptions = { mapSelectorOptions(allNodes.map { it.labels }) },
+                            annotationOptions = { mapSelectorOptions(allNodes.map { it.annotations }) },
                             statusChip = {
                                 StatusFilterMenu(
                                     available = availableStatuses,
                                     selected = activeStatusFilter ?: availableStatuses,
                                     onToggle = { value ->
                                         val current = activeStatusFilter ?: availableStatuses
-                                        viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                        val next = if (value in current) current - value else current + value
+                                        viewModel.setStatusFilter(if (next == availableStatuses) null else next)
                                     },
                                     onSelectAll = { viewModel.setStatusFilter(null) },
                                     onSelectNone = { viewModel.setStatusFilter(emptySet()) },

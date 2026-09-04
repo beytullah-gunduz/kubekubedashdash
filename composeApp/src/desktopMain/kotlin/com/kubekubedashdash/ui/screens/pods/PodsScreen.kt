@@ -137,12 +137,10 @@ fun PodsScreen(
         with(state) {
             if (this is ResourceState.Success) {
                 val s = this
-                val allPods = s.data + stalePods.values
+                val allPods = remember(s.data, stalePods) { s.data + stalePods.values }
                 val availableStatuses = remember(allPods) {
                     allPods.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
                 }
-                val labelOpts = remember(allPods) { mapSelectorOptions(allPods.map { it.labels }) }
-                val annotationOpts = remember(allPods) { mapSelectorOptions(allPods.map { it.annotations }) }
                 val activeStatusFilter = statusFilter
                 val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
                 val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -203,15 +201,19 @@ fun PodsScreen(
                                 compact = compact,
                                 pulseLabelsOnEntry = pulseLabelsOnEntry,
                                 pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                labelOptions = labelOpts,
-                                annotationOptions = annotationOpts,
+                                labelOptions = { mapSelectorOptions(allPods.map { it.labels }) },
+                                annotationOptions = { mapSelectorOptions(allPods.map { it.annotations }) },
                                 statusChip = {
                                     StatusFilterMenu(
                                         available = availableStatuses,
                                         selected = activeStatusFilter ?: availableStatuses,
                                         onToggle = { value ->
                                             val current = activeStatusFilter ?: availableStatuses
-                                            viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                            // Re-selecting everything is not a filter: fall back to null so the
+                                            // Clear chip, the status chip's own active state and the filter pill
+                                            // all agree that nothing is being filtered.
+                                            val next = if (value in current) current - value else current + value
+                                            viewModel.setStatusFilter(if (next == availableStatuses) null else next)
                                         },
                                         onSelectAll = { viewModel.setStatusFilter(null) },
                                         onSelectNone = { viewModel.setStatusFilter(emptySet()) },

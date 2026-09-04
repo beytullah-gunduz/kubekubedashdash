@@ -62,8 +62,6 @@ fun NamespacesScreen(
     val feedback = LocalActionFeedback.current
 
     ResourceListScaffold(state) { data ->
-        val labelOpts = remember(data) { mapSelectorOptions(data.map { it.labels }) }
-        val annotationOpts = remember(data) { mapSelectorOptions(data.map { it.annotations }) }
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
         val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
         val filtered = rememberResourceFilter(data, searchQuery, labelSelector, annotationSelector) { ns, q, labels, anns ->
@@ -91,8 +89,8 @@ fun NamespacesScreen(
                         compact = compact,
                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                        labelOptions = labelOpts,
-                        annotationOptions = annotationOpts,
+                        labelOptions = { mapSelectorOptions(data.map { it.labels }) },
+                        annotationOptions = { mapSelectorOptions(data.map { it.annotations }) },
                     )
                 },
             )

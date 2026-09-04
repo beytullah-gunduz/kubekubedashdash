@@ -77,6 +77,60 @@ class MapSelectorTest {
         assertEquals(emptyList(), mapSelectorOptions(emptyList()))
     }
 
+    @Test
+    fun `excludes a pair whose value contains a comma, keeping the other pairs of the same resource`() {
+        val entries = listOf(
+            mapOf(
+                "app" to "web",
+                "aws-load-balancer-additional-resource-tags" to "Environment=prod,Owner=team",
+            ),
+        )
+        val options = mapSelectorOptions(entries)
+        assertEquals(listOf(MapSelectorOption("app", "web", 1)), options)
+    }
+
+    @Test
+    fun `excludes a pair whose key contains a comma`() {
+        val entries = listOf(
+            mapOf("app" to "web", "a,b" to "value"),
+        )
+        val options = mapSelectorOptions(entries)
+        assertEquals(listOf(MapSelectorOption("app", "web", 1)), options)
+    }
+
+    @Test
+    fun `excludes a pair whose value has leading or trailing whitespace`() {
+        val entries = listOf(
+            mapOf("app" to "web", "owner" to " team-a "),
+        )
+        val options = mapSelectorOptions(entries)
+        assertEquals(listOf(MapSelectorOption("app", "web", 1)), options)
+    }
+
+    @Test
+    fun `every option offered round-trips through toggleSelectorEntry and parseMapSelector`() {
+        // F1: a fixture that deliberately includes a comma-bearing value and a
+        // whitespace-padded value alongside clean pairs — if mapSelectorOptions
+        // ever stopped dropping those, this would be the test that catches it,
+        // since the round-trip below would fail for the offending option.
+        val entries = listOf(
+            mapOf(
+                "app" to "web",
+                "tier" to "backend",
+                "sync-options" to "Prune=false,Validate=false",
+                "owner" to " team-a ",
+            ),
+        )
+        val options = mapSelectorOptions(entries)
+        // The bad pairs really were dropped — otherwise this test could pass
+        // vacuously by never exercising the round-trip on them at all.
+        assertEquals(setOf("app", "tier"), options.map { it.key }.toSet())
+        for (option in options) {
+            val query = toggleSelectorEntry("", option.key, option.value)
+            assertEquals(option.value, parseMapSelector(query)[option.key])
+        }
+    }
+
     // ── visibleMapSelectorOptions ────────────────────────────────────────────
 
     private val sampleOptions = listOf(
@@ -144,6 +198,38 @@ class MapSelectorTest {
         assertEquals(listOf(4, 3, 2), visible.map { it.count })
     }
 
+    @Test
+    fun `search matches what the row renders, spaces around the equals sign included`() {
+        // F6: rows render "app = web" but the query language writes "app=web" —
+        // typing exactly what's on screen must still find it.
+        assertEquals(listOf(MapSelectorOption("app", "web", 1)), visibleMapSelectorOptions(sampleOptions, "app = web"))
+        assertEquals(listOf(MapSelectorOption("app", "web", 1)), visibleMapSelectorOptions(sampleOptions, "app =web"))
+    }
+
+    @Test
+    fun `whitespace-only search returns everything`() {
+        val visible = visibleMapSelectorOptions(sampleOptions, "   ")
+        assertEquals(sampleOptions.size, visible.size)
+    }
+
+    // ── matchMapSelectorOptions ──────────────────────────────────────────────
+
+    @Test
+    fun `matchMapSelectorOptions returns every match uncapped and unsorted-by-count`() {
+        // F7: matchMapSelectorOptions is the filter-only half visibleMapSelectorOptions
+        // is built from — with a blank search it must hand back every option, in
+        // input order, doing neither the count-descending sort nor the cap that
+        // visibleMapSelectorOptions layers on top.
+        val matched = matchMapSelectorOptions(sampleOptions, "")
+        assertEquals(sampleOptions, matched)
+        // Idempotence: running visibleMapSelectorOptions over the already-matched
+        // list must equal running it over the originals.
+        assertEquals(
+            visibleMapSelectorOptions(sampleOptions, ""),
+            visibleMapSelectorOptions(matched, ""),
+        )
+    }
+
     // ── removeSelectorEntry ──────────────────────────────────────────────────
 
     @Test
@@ -164,6 +250,20 @@ class MapSelectorTest {
     @Test
     fun `keeps a value containing an equals sign intact`() {
         assertEquals("a=x=y", removeSelectorEntry("a=x=y, b=2", "b"))
+    }
+
+    @Test
+    fun `drops an unparseable fragment the user typed`() {
+        // Documented lossiness: removeSelectorEntry round-trips through
+        // parseMapSelector, so a fragment with no "=" cannot survive.
+        assertEquals("a=1", removeSelectorEntry("a=1, garbage, b=2", "b"))
+    }
+
+    @Test
+    fun `collapses a duplicated key to its last value`() {
+        // Documented lossiness: parseMapSelector folds a repeated key into a
+        // single map entry, keeping only the last value seen.
+        assertEquals("a=2", removeSelectorEntry("a=1, a=2, b=3", "b"))
     }
 
     @Test

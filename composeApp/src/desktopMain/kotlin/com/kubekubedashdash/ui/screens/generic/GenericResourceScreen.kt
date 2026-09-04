@@ -230,8 +230,6 @@ fun GenericResourceScreen(
             val availableStatuses = remember(s.data) {
                 s.data.mapNotNull { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
-            val labelOpts = remember(s.data) { mapSelectorOptions(s.data.map { it.labels }) }
-            val annotationOpts = remember(s.data) { mapSelectorOptions(s.data.map { it.annotations }) }
             val activeStatusFilter = statusFilter
             val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
             val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -306,8 +304,8 @@ fun GenericResourceScreen(
                                         compact = compact,
                                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                        labelOptions = labelOpts,
-                                        annotationOptions = annotationOpts,
+                                        labelOptions = { mapSelectorOptions(s.data.map { it.labels }) },
+                                        annotationOptions = { mapSelectorOptions(s.data.map { it.annotations }) },
                                         statusChip = if (availableStatuses.isNotEmpty()) {
                                             {
                                                 StatusFilterMenu(
@@ -315,7 +313,8 @@ fun GenericResourceScreen(
                                                     selected = activeStatusFilter ?: availableStatuses,
                                                     onToggle = { value ->
                                                         val current = activeStatusFilter ?: availableStatuses
-                                                        statusFilter = if (value in current) current - value else current + value
+                                                        val next = if (value in current) current - value else current + value
+                                                        statusFilter = if (next == availableStatuses) null else next
                                                     },
                                                     onSelectAll = { statusFilter = null },
                                                     onSelectNone = { statusFilter = emptySet() },

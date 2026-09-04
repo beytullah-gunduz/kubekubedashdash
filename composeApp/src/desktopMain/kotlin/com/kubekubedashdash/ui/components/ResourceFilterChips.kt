@@ -20,8 +20,8 @@ fun ResourceFilterChips(
     compact: Boolean,
     pulseLabelsOnEntry: Boolean = false,
     pulseAnnotationsOnEntry: Boolean = false,
-    labelOptions: List<MapSelectorOption>? = null,
-    annotationOptions: List<MapSelectorOption>? = null,
+    labelOptions: (() -> List<MapSelectorOption>)? = null,
+    annotationOptions: (() -> List<MapSelectorOption>)? = null,
     statusChip: (@Composable () -> Unit)? = null,
     clearVisible: Boolean = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
     onClear: () -> Unit = {
