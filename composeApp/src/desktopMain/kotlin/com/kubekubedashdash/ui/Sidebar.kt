@@ -48,8 +48,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -107,6 +109,12 @@ fun Sidebar(
     val client = LocalReactiveKubeClient.current
     val crdsState by client.crds.collectAsState()
     val context = remember(client) { client.getCurrentContext() }
+
+    // Trailing signal counts (pods failing / nodes not ready / warning
+    // events) — the same three the cluster health banner surfaces, keyed by
+    // NavKind.key so NavKindItem can look one up per row for free.
+    val counts = remember(clusterHealth) { sidebarCounts(clusterHealth) }
+
     val crdMatchCount = remember(crdsState, context, searchQuery) {
         if (searchQuery.isBlank()) {
             0
@@ -141,7 +149,7 @@ fun Sidebar(
                     section.kinds.filter { kind -> matchesNavSearch(kind, section.title, searchQuery) }
                 }
                 builtInMatches.forEach { kind ->
-                    NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                    NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, onNavigate)
                 }
                 CrdSection(currentScreen, onNavigate, collapsed, searchQuery)
                 if (builtInMatches.isEmpty() && crdMatchCount == 0) {
@@ -154,13 +162,13 @@ fun Sidebar(
                 }
             } else {
                 NavSections.first().kinds.forEach { kind ->
-                    NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                    NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, onNavigate)
                 }
 
                 NavSections.drop(1).filter { it.tier == NavTier.PRIMARY }.forEach { section ->
                     SidebarSection(section.title, collapsed) {
                         section.kinds.forEach { kind ->
-                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, onNavigate)
                         }
                     }
                 }
@@ -171,7 +179,7 @@ fun Sidebar(
                             MoreGroupLabel(section.title)
                         }
                         section.kinds.forEach { kind ->
-                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, onNavigate)
                         }
                     }
                 }
@@ -191,6 +199,7 @@ private fun NavKindItem(
     currentScreen: Screen,
     collapsed: Boolean,
     clusterHealth: ClusterHealthSummary?,
+    counts: Map<String, SidebarCount>,
     onNavigate: (Screen) -> Unit,
 ) {
     val isCluster = kind.key == "ClusterOverview"
@@ -201,6 +210,8 @@ private fun NavKindItem(
         collapsed = collapsed,
         badge = if (isCluster) healthBadgeColor(clusterHealth) else null,
         badgeContentDescription = if (isCluster) healthBadgeDescription(clusterHealth) else null,
+        count = counts[kind.key],
+        onCountClick = onNavigate,
         onClick = { onNavigate(kind.screen()) },
     )
 }
@@ -334,6 +345,13 @@ fun SidebarItem(
     // item's label so e.g. "Cluster" becomes "Cluster, cluster health
     // critical" when there's a non-null badge. Required if badge is set.
     badgeContentDescription: String? = null,
+    // Trailing signal count (e.g. "3 pods failing"). A second, independent
+    // click target inside the row — clicking it opens count.target instead
+    // of the row's own onClick. Takes priority over [badge] when both are
+    // supplied; in practice only the Cluster item ever passes badge, and it
+    // never carries a count.
+    count: SidebarCount? = null,
+    onCountClick: ((Screen.Main) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     var hovered by remember { mutableStateOf(false) }
@@ -345,6 +363,7 @@ fun SidebarItem(
         hovered -> KdHover
         else -> Color.Transparent
     }
+    val hasTrailingSlot = badge != null || count != null
 
     val row: @Composable () -> Unit = {
         Box(
@@ -390,7 +409,16 @@ fun SidebarItem(
             Row(
                 modifier = Modifier
                     .matchParentSize()
-                    .padding(horizontal = if (collapsed) 0.dp else 10.dp),
+                    .padding(horizontal = if (collapsed) 0.dp else 10.dp)
+                    .then(
+                        if (!collapsed && hasTrailingSlot) {
+                            // Reserve room for the trailing badge/count so a
+                            // long label ellipsises before reaching it.
+                            Modifier.padding(end = 26.dp)
+                        } else {
+                            Modifier
+                        },
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
             ) {
@@ -411,22 +439,70 @@ fun SidebarItem(
                     )
                 }
             }
-            if (badge != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = if (collapsed) 4.dp else 10.dp)
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(badge)
-                        .then(
-                            if (badgeContentDescription != null) {
-                                Modifier.semantics { contentDescription = badgeContentDescription }
-                            } else {
-                                Modifier
-                            },
-                        ),
-                )
+            when {
+                // A digit doesn't fit the 56 dp icon rail — collapsed mode
+                // reuses the same dot the health badge uses, just in the
+                // count's severity colour.
+                count != null && collapsed -> {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 4.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(countDotColor(count.severity))
+                            .semantics { contentDescription = count.description },
+                    )
+                }
+
+                count != null -> {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 10.dp),
+                    ) {
+                        TooltipArea(
+                            tooltip = { SidebarItemTooltip(count.description) },
+                            tooltipPlacement = TooltipPlacement.ComponentRect(
+                                anchor = Alignment.CenterEnd,
+                                alignment = Alignment.CenterEnd,
+                                offset = DpOffset(8.dp, 0.dp),
+                            ),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clickable(enabled = onCountClick != null) { onCountClick?.invoke(count.target) }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                                    .semantics { contentDescription = count.description },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = count.value.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = countDotColor(count.severity),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                badge != null -> {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = if (collapsed) 4.dp else 10.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(badge)
+                            .then(
+                                if (badgeContentDescription != null) {
+                                    Modifier.semantics { contentDescription = badgeContentDescription }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                }
             }
         }
     }
@@ -521,4 +597,11 @@ private fun healthBadgeDescription(health: ClusterHealthSummary?): String? = whe
     HealthLevel.CRITICAL -> "cluster health critical"
     HealthLevel.WARNING -> "cluster health warning"
     HealthLevel.HEALTHY, null -> null
+}
+
+// Colour for a SidebarCount's dot/digit — ERROR and WARNING mirror the same
+// two tiers the health badge above uses.
+private fun countDotColor(severity: CountSeverity): Color = when (severity) {
+    CountSeverity.ERROR -> KdError
+    CountSeverity.WARNING -> KdWarning
 }
