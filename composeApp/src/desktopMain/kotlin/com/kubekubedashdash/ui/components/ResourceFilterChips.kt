@@ -20,6 +20,8 @@ fun ResourceFilterChips(
     compact: Boolean,
     pulseLabelsOnEntry: Boolean = false,
     pulseAnnotationsOnEntry: Boolean = false,
+    labelOptions: List<MapSelectorOption>? = null,
+    annotationOptions: List<MapSelectorOption>? = null,
     statusChip: (@Composable () -> Unit)? = null,
     clearVisible: Boolean = labelQuery.isNotBlank() || annotationQuery.isNotBlank(),
     onClear: () -> Unit = {
@@ -33,6 +35,7 @@ fun ResourceFilterChips(
         modifier = Modifier.padding(end = 8.dp),
         pulseOnEntry = pulseLabelsOnEntry,
         compact = compact,
+        options = labelOptions,
     )
     AnnotationSelectorChip(
         query = annotationQuery,
@@ -40,6 +43,7 @@ fun ResourceFilterChips(
         modifier = Modifier.padding(end = 8.dp),
         pulseOnEntry = pulseAnnotationsOnEntry,
         compact = compact,
+        options = annotationOptions,
     )
     statusChip?.invoke()
     AnimatedVisibility(

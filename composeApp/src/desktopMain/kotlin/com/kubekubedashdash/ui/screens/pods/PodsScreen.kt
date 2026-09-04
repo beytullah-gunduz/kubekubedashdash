@@ -34,6 +34,7 @@ import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ActiveFilterPills
 import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
@@ -50,6 +51,7 @@ import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.activeKpiId
+import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.podKpiStatuses
@@ -139,6 +141,8 @@ fun PodsScreen(
                 val availableStatuses = remember(allPods) {
                     allPods.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
                 }
+                val labelOpts = remember(allPods) { mapSelectorOptions(allPods.map { it.labels }) }
+                val annotationOpts = remember(allPods) { mapSelectorOptions(allPods.map { it.annotations }) }
                 val activeStatusFilter = statusFilter
                 val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
                 val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -199,6 +203,8 @@ fun PodsScreen(
                                 compact = compact,
                                 pulseLabelsOnEntry = pulseLabelsOnEntry,
                                 pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                labelOptions = labelOpts,
+                                annotationOptions = annotationOpts,
                                 statusChip = {
                                     StatusFilterMenu(
                                         available = availableStatuses,
@@ -222,6 +228,15 @@ fun PodsScreen(
                                 },
                             )
                         },
+                    )
+                    ActiveFilterPills(
+                        labelQuery = labelQuery,
+                        onLabelQueryChange = onLabelQueryChange,
+                        annotationQuery = annotationQuery,
+                        onAnnotationQueryChange = onAnnotationQueryChange,
+                        statusFilter = activeStatusFilter,
+                        onClearStatus = { viewModel.setStatusFilter(null) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
                     // Exit-animation latch: the bar stays composed while it
                     // shrinks away, so without holding the last non-zero

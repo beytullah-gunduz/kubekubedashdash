@@ -19,10 +19,12 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ActiveFilterPills
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.ResourceListScaffold
+import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberResourceFilter
@@ -51,6 +53,8 @@ fun ServicesScreen(
     var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
 
     ResourceListScaffold(state) { data ->
+        val labelOpts = remember(data) { mapSelectorOptions(data.map { it.labels }) }
+        val annotationOpts = remember(data) { mapSelectorOptions(data.map { it.annotations }) }
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
         val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
         val filtered = rememberResourceFilter(data, searchQuery, labelSelector, annotationSelector) { svc, q, labels, anns ->
@@ -79,8 +83,17 @@ fun ServicesScreen(
                         compact = compact,
                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                        labelOptions = labelOpts,
+                        annotationOptions = annotationOpts,
                     )
                 },
+            )
+            ActiveFilterPills(
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
             ServiceTable(
                 services = filtered,
