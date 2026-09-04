@@ -88,6 +88,8 @@ import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
+import com.kubekubedashdash.ui.screens.relatedScreen
+import com.kubekubedashdash.ui.screens.rememberRelated
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
@@ -380,6 +382,17 @@ fun GenericResourceScreen(
                     },
                     detail = {
                         selected?.let { res ->
+                            // D4: computed once here, from the flows this screen
+                            // already collects — feeds both the overview
+                            // section below and the header's owner breadcrumb.
+                            val related = rememberRelated(
+                                client = client,
+                                kind = kind,
+                                uid = res.uid,
+                                namespace = res.namespace,
+                                labels = res.labels,
+                                owners = res.owners,
+                            )
                             val fields = buildList {
                                 if (namespacedKind && res.namespace != null) {
                                     add(DetailField("Namespace", res.namespace))
@@ -536,7 +549,7 @@ fun GenericResourceScreen(
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.fillMaxSize(),
                                 extraTabs = kindExtraTabs(kind, res, client, onNavigate),
-                                overviewSections = kindOverviewSections(kind, res, client, onNavigate),
+                                overviewSections = kindOverviewSections(kind, res, client, related, onNavigate),
                                 labelQuery = labelQuery,
                                 onToggleLabel = { k, v ->
                                     onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))
@@ -553,6 +566,8 @@ fun GenericResourceScreen(
                                     delete.clearError()
                                 },
                                 actions = csrActions + scaleActions + restartActions + cronJobActions + jobLogActions,
+                                ownerChain = related.owners,
+                                onOwnerClick = { ref -> relatedScreen(ref)?.let(onNavigate) },
                             )
                         }
                     },

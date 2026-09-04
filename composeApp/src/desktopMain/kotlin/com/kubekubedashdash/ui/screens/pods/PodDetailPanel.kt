@@ -51,6 +51,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
@@ -78,6 +79,11 @@ import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailActionMenuItem
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
 import com.kubekubedashdash.ui.screens.GenericYamlTab
+import com.kubekubedashdash.ui.screens.RelatedSection
+import com.kubekubedashdash.ui.screens.relatedScreen
+import com.kubekubedashdash.ui.screens.rememberRelated
+import com.kubekubedashdash.util.RelatedRef
+import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +105,7 @@ fun PodDetailPanel(
     pod: PodInfo,
     onClose: () -> Unit,
     onNavigateToNode: ((nodeName: String) -> Unit)? = null,
+    onNavigate: (Screen) -> Unit = {},
     onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (podName: String, namespace: String, container: String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
@@ -112,6 +119,17 @@ fun PodDetailPanel(
     var activeTab by remember { mutableStateOf(DetailTab.Overview) }
     var metricsHistory by remember(pod.uid) { mutableStateOf(listOf<PodMetricsSnapshot>()) }
     val scope = rememberCoroutineScope()
+
+    // D4: the one kind that needs every flow to walk past its immediate
+    // owner — see rememberRelated's "Pod" branch.
+    val related = rememberRelated(
+        client = kubeClient,
+        kind = "Pod",
+        uid = pod.uid,
+        namespace = pod.namespace,
+        labels = pod.labels,
+        owners = pod.owners,
+    )
 
     // ── Evict dialog state ─────────────────────────────────────────────────────
     var showEvictDialog by remember(pod.uid) { mutableStateOf(false) }
@@ -164,6 +182,8 @@ fun PodDetailPanel(
                     },
                     onOpenLogs = onOpenLogs,
                     onOpenTerminal = onOpenTerminal,
+                    ownerChain = related.owners,
+                    onOwnerClick = { ref -> relatedScreen(ref)?.let(onNavigate) },
                 )
                 PanelTabs(activeTab, tabs) { newTab ->
                     activeTab = newTab
@@ -180,6 +200,8 @@ fun PodDetailPanel(
                             pod = pod,
                             metricsHistory = metricsHistory,
                             onNavigateToNode = onNavigateToNode,
+                            related = related,
+                            onNavigate = onNavigate,
                             labelQuery = labelQuery,
                             onToggleLabel = onToggleLabel,
                             annotationQuery = annotationQuery,
@@ -265,6 +287,8 @@ private fun PanelHeader(
     onForceDeleteClick: () -> Unit,
     onOpenLogs: (podName: String, namespace: String, container: String?) -> Unit,
     onOpenTerminal: (podName: String, namespace: String, container: String) -> Unit,
+    ownerChain: List<RelatedRef>,
+    onOwnerClick: (RelatedRef) -> Unit,
 ) {
     val containers = pod.containers
     val terminalAction = DetailAction(
@@ -316,6 +340,8 @@ private fun PanelHeader(
         status = pod.status,
         actions = listOf(terminalAction, logsAction, evictAction, forceDeleteAction),
         onClose = onClose,
+        ownerChain = ownerChain,
+        onOwnerClick = onOwnerClick,
     )
 }
 
@@ -356,6 +382,8 @@ private fun OverviewTab(
     pod: PodInfo,
     metricsHistory: List<PodMetricsSnapshot>,
     onNavigateToNode: ((String) -> Unit)? = null,
+    related: RelatedResources,
+    onNavigate: (Screen) -> Unit,
     labelQuery: String,
     onToggleLabel: (String, String) -> Unit,
     annotationQuery: String,
@@ -408,6 +436,8 @@ private fun OverviewTab(
                 onToggle = onToggleAnnotation,
             )
         }
+
+        RelatedSection(related, onNavigate)
     }
 }
 

@@ -27,6 +27,9 @@ import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
+import com.kubekubedashdash.ui.screens.relatedOverviewSection
+import com.kubekubedashdash.ui.screens.relatedScreen
+import com.kubekubedashdash.ui.screens.rememberRelated
 
 @Composable
 fun DeploymentDetailScreen(
@@ -40,6 +43,18 @@ fun DeploymentDetailScreen(
 ) {
     val client = LocalReactiveKubeClient.current
     val feedback = LocalActionFeedback.current
+
+    // D4/D1: a Deployment has no owners of its own — only children (its
+    // ReplicaSets and their pods) — so this feeds the Related section but
+    // never the header breadcrumb.
+    val related = rememberRelated(
+        client = client,
+        kind = "Deployment",
+        uid = deployment.uid,
+        namespace = deployment.namespace,
+        labels = deployment.labels,
+        owners = emptyList(),
+    )
 
     var showScaleDialog by remember(deployment.uid) { mutableStateOf(false) }
     val scale = rememberConfirmableAction()
@@ -105,11 +120,14 @@ fun DeploymentDetailScreen(
                 )
             },
         ),
+        overviewSections = listOf(relatedOverviewSection(related, onNavigate)),
         labelQuery = labelQuery,
         onToggleLabel = onToggleLabel,
         annotationQuery = annotationQuery,
         onToggleAnnotation = onToggleAnnotation,
         actions = deploymentActions,
+        ownerChain = related.owners,
+        onOwnerClick = { ref -> relatedScreen(ref)?.let(onNavigate) },
     )
 
     if (showScaleDialog) {
