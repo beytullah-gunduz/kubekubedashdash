@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
 import com.kubekubedashdash.resources.arrow_upward_filled
@@ -158,6 +160,8 @@ fun ResourceTable(
     emptyMessage: String = "No resources found",
     defaultSortColumn: Int = -1,
     defaultSortAscending: Boolean = true,
+    /** Index into [columns] that never hides and breaks primary-sort ties (D6/D7). */
+    identityColumn: Int = 0,
     scrollToTopOnChange: Boolean = false,
     pinnable: Boolean = false,
     pinnedIds: Set<String> = emptySet(),
@@ -169,20 +173,26 @@ fun ResourceTable(
     /** Notified whenever the checked-row set changes. Only fires when [selectable] is true. */
     onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
-    var sortColumn by remember { mutableStateOf(defaultSortColumn) }
+    // Resolved once, on first composition, per D5 — a positional index would
+    // silently re-target when the responsive `columns` subset changes width.
+    var sortHeader by remember { mutableStateOf(columns.getOrNull(defaultSortColumn)?.header) }
     var sortAscending by remember { mutableStateOf(defaultSortAscending) }
     val copyToClipboard = rememberCopyToClipboard()
 
-    val sortedRows = remember(rows, sortColumn, sortAscending) {
-        if (sortColumn < 0 || sortColumn >= columns.size) {
-            rows
-        } else {
-            val sorted = rows.sortedBy { row ->
-                val cell = row.cells.getOrNull(sortColumn)
-                cell?.sortValue ?: cell?.text ?: ""
-            }
-            if (sortAscending) sorted else sorted.reversed()
-        }
+    // Collected once here, not inside TableRowItem, so a 1000-row list isn't
+    // subscribed per row and non-skippable.
+    val density by PreferenceRepository.tableDensity.collectAsState()
+    val rowPadding = density.rowPadding
+
+    val sortedRows = remember(rows, columns, sortHeader, sortAscending, identityColumn, pinnedIds) {
+        sortTableRows(
+            rows = rows,
+            columns = columns,
+            sortHeader = sortHeader,
+            ascending = sortAscending,
+            identityColumn = identityColumn,
+            pinnedIds = pinnedIds,
+        )
     }
 
     val selectableRows = remember(sortedRows) { sortedRows.filter { it.selectable } }
@@ -253,15 +263,15 @@ fun ResourceTable(
                 }
             }
             if (pinnable) Spacer(Modifier.width(30.dp))
-            columns.forEachIndexed { index, col ->
+            columns.forEach { col ->
                 Row(
                     modifier = Modifier
                         .then(if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f))
                         .clickable {
-                            if (sortColumn == index) {
+                            if (sortHeader == col.header) {
                                 sortAscending = !sortAscending
                             } else {
-                                sortColumn = index
+                                sortHeader = col.header
                                 sortAscending = true
                             }
                         },
@@ -273,7 +283,7 @@ fun ResourceTable(
                         color = KdTextSecondary,
                         maxLines = 1,
                     )
-                    if (sortColumn == index) {
+                    if (sortHeader == col.header) {
                         Icon(
                             painterResource(if (sortAscending) Res.drawable.arrow_upward_filled else Res.drawable.arrow_downward_filled),
                             contentDescription = if (sortAscending) "Sorted ascending" else "Sorted descending",
@@ -474,6 +484,7 @@ fun ResourceTable(
                             TableRowItem(
                                 row = row,
                                 columns = columns,
+                                rowPadding = rowPadding,
                                 isEven = index % 2 == 0,
                                 isSelected = row.id == selectedRowId,
                                 isCursor = index == keyboardIndex,
@@ -537,6 +548,7 @@ fun ResourceTable(
 private fun TableRowItem(
     row: TableRow,
     columns: List<ColumnDef>,
+    rowPadding: Dp,
     @Suppress("UNUSED_PARAMETER") isEven: Boolean,
     isSelected: Boolean = false,
     isCursor: Boolean = false,
@@ -597,7 +609,7 @@ private fun TableRowItem(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .onPointerEvent(PointerEventType.Enter) { hovered = true }
             .onPointerEvent(PointerEventType.Exit) { hovered = false }
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+            .padding(horizontal = 16.dp, vertical = rowPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selectable) {
