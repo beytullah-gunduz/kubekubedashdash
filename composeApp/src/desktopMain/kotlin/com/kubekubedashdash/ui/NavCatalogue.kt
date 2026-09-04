@@ -180,3 +180,45 @@ internal fun matchesCrdSearch(crd: CrdInfo, query: String): Boolean {
     if (crd.group.lowercase().contains(q)) return true
     return crd.shortNames.any { it.lowercase().contains(q) }
 }
+
+/** One resolved Favourites/Recent row — either a built-in kind or a CRD. */
+sealed interface NavShortcut {
+    data class BuiltIn(val kind: NavKind) : NavShortcut
+    data class Crd(val crd: CrdInfo) : NavShortcut
+}
+
+/** The resolved rows for the Favourites and Recent sections, in display order. */
+data class NavShortcuts(val favourites: List<NavShortcut>, val recents: List<NavShortcut>)
+
+/**
+ * Resolves stored favourite/recent keys against what exists right now.
+ * [crds] is the CRD list once loaded (`ResourceState.Success`), or null while
+ * still `Loading` — a favourited CRD must not vanish from the rail just
+ * because `ReactiveKubeClient.crds` re-emits `Loading` on every reconnect, so
+ * a CRD key is omitted (not dropped) while [crds] is null, and dropped only
+ * once a non-null list confirms it's gone. A built-in key that no longer
+ * names a catalogue kind is always dropped. Neither list is ever pruned by
+ * this function — it only decides what to render, never what's stored.
+ * Recents that are also favourites are excluded, so the two sections never
+ * duplicate each other. Both input orders are preserved.
+ */
+fun resolveNavShortcuts(
+    favourites: List<String>,
+    recents: List<String>,
+    kinds: List<NavKind>,
+    crds: List<CrdInfo>?,
+): NavShortcuts {
+    val kindsByKey = kinds.associateBy { it.key }
+    val crdsByKey = crds?.associateBy { it.key }
+
+    fun resolve(key: String): NavShortcut? {
+        kindsByKey[key]?.let { return NavShortcut.BuiltIn(it) }
+        val crd = crdsByKey?.get(key) ?: return null
+        return NavShortcut.Crd(crd)
+    }
+
+    val favouriteKeys = favourites.toSet()
+    val resolvedFavourites = favourites.mapNotNull(::resolve)
+    val resolvedRecents = recents.filterNot { it in favouriteKeys }.mapNotNull(::resolve)
+    return NavShortcuts(resolvedFavourites, resolvedRecents)
+}

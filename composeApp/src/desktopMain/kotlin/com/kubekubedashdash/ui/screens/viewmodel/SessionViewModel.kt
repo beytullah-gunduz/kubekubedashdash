@@ -1,7 +1,9 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.NavPreferenceRepository
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.navKind
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.clusterHealthFlow
 import com.kubekubedashdash.util.DemoContext
@@ -62,6 +64,19 @@ private fun NavEntry.forHistory(): NavEntry = when (val s = screen) {
  *  always stripped of "jump to this resource" parameters by [forHistory],
  *  so the live screen must be stripped the same way before comparing. */
 private fun Screen.filterScope(): Screen = NavEntry(this, null).forHistory().screen
+
+/**
+ * The Favourites/Recent key for [screen], or null when it isn't a kind either
+ * section can point at (a connection screen, a detail pane, …). A built-in
+ * kind uses [screenKeyOf]'s value, matching `NavKind.key`; a custom resource
+ * uses `"group/kind"`, matching `CrdInfo.key` — the two namespaces never
+ * collide because a simple class name never contains "/".
+ */
+private fun recentKeyFor(screen: Screen): String? = when {
+    screen is Screen.Main.CustomResource -> "${screen.group}/${screen.kind}"
+    screen is Screen.Main && navKind(screenKeyOf(screen)) != null -> screenKeyOf(screen)
+    else -> null
+}
 
 /**
  * Per-cluster-session UI state. One instance per [com.kubekubedashdash.model.ClusterSession]
@@ -449,7 +464,15 @@ class SessionViewModel(
         // The filter box is stored per session but means "filter THIS list";
         // a main-screen change must not carry "nginx" from Pods into Deployments.
         // Opening or closing a detail pane keeps the main screen and the filter.
-        if (target.screen != _currentScreen.value) _searchQuery.value = ""
+        if (target.screen != _currentScreen.value) {
+            _searchQuery.value = ""
+            // A genuine visit to a catalogue kind or CRD — not a detail pane
+            // opening/closing (target.screen == _currentScreen.value there)
+            // and not Back/Forward (they never call navigate()).
+            recentKeyFor(target.screen)?.let {
+                NavPreferenceRepository.recordRecent(reactiveClient.getCurrentContext(), it)
+            }
+        }
         recordCurrent()
         // Close the pane before switching the main screen (order preserved
         // from the original navigate) so a stale pane is never composed

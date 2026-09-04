@@ -43,7 +43,9 @@ import com.kubekubedashdash.resources.extension_filled
  * case-insensitive), flat and without the section wrapper, so they read as
  * one list with the built-in matches Sidebar renders above them.
  *
- * Right-click on any item opens a context menu with Pin/Hide toggles.
+ * Right-click on any item opens a context menu with a favourite toggle above
+ * the Pin/Hide toggles — [favourites] and [onToggleFavourite] are owned by
+ * Sidebar (per-cluster-context, like pin/hide) and threaded straight through.
  */
 @Composable
 fun CustomResourcesSection(
@@ -58,6 +60,8 @@ fun CustomResourcesSection(
     // Shared rail-wide search query, owned by Sidebar. Blank means "show the
     // normal Pinned + per-group view"; non-blank flattens to search matches.
     searchQuery: String = "",
+    favourites: Set<String> = emptySet(),
+    onToggleFavourite: (CrdInfo) -> Unit = {},
 ) {
     if (crds.isEmpty()) return
 
@@ -77,7 +81,7 @@ fun CustomResourcesSection(
         visible.filter { matchesCrdSearch(it, searchQuery) }
             .sortedBy { it.kind.lowercase() }
             .forEach { crd ->
-                CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = false)
+                CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
             }
         return
     }
@@ -88,13 +92,13 @@ fun CustomResourcesSection(
             // Pinned first, then alphabetical by kind.
             val flatList = pinnedCrds + unpinned.sortedBy { it.kind.lowercase() }
             flatList.forEach { crd ->
-                CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = true)
+                CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = true)
             }
         } else {
             if (pinnedCrds.isNotEmpty()) {
                 MiniHeader("Pinned")
                 pinnedCrds.forEach { crd ->
-                    CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = false)
+                    CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
                 }
             }
             val grouped = unpinned.groupBy { it.group.ifBlank { "(core)" } }
@@ -105,9 +109,11 @@ fun CustomResourcesSection(
                     items = items.sortedBy { it.kind.lowercase() },
                     currentScreen = currentScreen,
                     pinned = pinned,
+                    favourites = favourites,
                     onNavigate = onNavigate,
                     onTogglePin = onTogglePin,
                     onToggleHide = onToggleHide,
+                    onToggleFavourite = onToggleFavourite,
                 )
             }
         }
@@ -138,9 +144,11 @@ private fun GroupBlock(
     items: List<CrdInfo>,
     currentScreen: Screen,
     pinned: Set<String>,
+    favourites: Set<String>,
     onNavigate: (Screen) -> Unit,
     onTogglePin: (CrdInfo) -> Unit,
     onToggleHide: (CrdInfo) -> Unit,
+    onToggleFavourite: (CrdInfo) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -159,7 +167,7 @@ private fun GroupBlock(
         )
     }
     items.forEach { crd ->
-        CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = false)
+        CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
     }
     Spacer(Modifier.height(4.dp))
 }
@@ -169,9 +177,11 @@ private fun CrdRow(
     crd: CrdInfo,
     currentScreen: Screen,
     pinned: Set<String>,
+    favourites: Set<String>,
     onNavigate: (Screen) -> Unit,
     onTogglePin: (CrdInfo) -> Unit,
     onToggleHide: (CrdInfo) -> Unit,
+    onToggleFavourite: (CrdInfo) -> Unit,
     collapsed: Boolean,
 ) {
     val isSelected = currentScreen is Screen.Main.CustomResource &&
@@ -193,6 +203,13 @@ private fun CrdRow(
             )
         },
         contextMenu = { dismiss ->
+            DropdownMenuItem(
+                text = { Text(if (crd.key in favourites) "Remove from favourites" else "Add to favourites") },
+                onClick = {
+                    onToggleFavourite(crd)
+                    dismiss()
+                },
+            )
             DropdownMenuItem(
                 text = { Text(if (crd.key in pinned) "Unpin" else "Pin to top") },
                 onClick = {

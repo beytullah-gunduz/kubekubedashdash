@@ -137,4 +137,77 @@ class NavCatalogueTest {
         assertTrue(matchesCrdSearch(crd(kind = "SparkApplication"), "SPARK"))
         assertFalse(matchesCrdSearch(crd(kind = "SparkApplication"), "nonexistent"))
     }
+
+    // ── resolveNavShortcuts ──────────────────────────────────────────────
+
+    private val kinds = listOf(navKind("Pods")!!, navKind("Nodes")!!)
+    private val spark = crd(kind = "SparkApplication", group = "spark.example.com")
+
+    @Test
+    fun `resolves a built-in key to its NavKind`() {
+        val result = resolveNavShortcuts(favourites = listOf("Pods"), recents = emptyList(), kinds = kinds, crds = null)
+        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Pods")!!)), result.favourites)
+    }
+
+    @Test
+    fun `drops an unknown built-in key`() {
+        val result = resolveNavShortcuts(favourites = listOf("NoSuchKind"), recents = emptyList(), kinds = kinds, crds = null)
+        assertTrue(result.favourites.isEmpty())
+    }
+
+    @Test
+    fun `omits a CRD key while crds is still loading (null)`() {
+        val result = resolveNavShortcuts(
+            favourites = listOf(spark.key),
+            recents = emptyList(),
+            kinds = kinds,
+            crds = null,
+        )
+        assertTrue(result.favourites.isEmpty(), "a null crds list means Loading — the key must be omitted, not dropped")
+    }
+
+    @Test
+    fun `resolves a CRD key once crds has loaded`() {
+        val result = resolveNavShortcuts(
+            favourites = listOf(spark.key),
+            recents = emptyList(),
+            kinds = kinds,
+            crds = listOf(spark),
+        )
+        assertEquals(listOf(NavShortcut.Crd(spark)), result.favourites)
+    }
+
+    @Test
+    fun `drops a CRD key absent from a non-null crds list`() {
+        val result = resolveNavShortcuts(
+            favourites = listOf(spark.key),
+            recents = emptyList(),
+            kinds = kinds,
+            crds = emptyList(),
+        )
+        assertTrue(result.favourites.isEmpty())
+    }
+
+    @Test
+    fun `recents exclude favourites`() {
+        val result = resolveNavShortcuts(
+            favourites = listOf("Pods"),
+            recents = listOf("Pods", "Nodes"),
+            kinds = kinds,
+            crds = null,
+        )
+        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!)), result.recents)
+    }
+
+    @Test
+    fun `favourites preserve their input order`() {
+        val result = resolveNavShortcuts(favourites = listOf("Nodes", "Pods"), recents = emptyList(), kinds = kinds, crds = null)
+        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!), NavShortcut.BuiltIn(navKind("Pods")!!)), result.favourites)
+    }
+
+    @Test
+    fun `recents preserve their input order`() {
+        val result = resolveNavShortcuts(favourites = emptyList(), recents = listOf("Nodes", "Pods"), kinds = kinds, crds = null)
+        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!), NavShortcut.BuiltIn(navKind("Pods")!!)), result.recents)
+    }
 }
