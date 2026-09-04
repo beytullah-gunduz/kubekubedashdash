@@ -231,7 +231,6 @@ object PreferenceRepository {
                 _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
                 _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
                 _tableDensity.value = TableDensity.fromKey(p[TABLE_DENSITY])
-                _uiScalePercent.value = clampUiScale(p[UI_SCALE_PERCENT] ?: 100)
                 // Seed ONCE. This collector re-fires on every DataStore commit
                 // (including unrelated keys), and setSidebarSectionExpanded /
                 // setStatsPanelExpanded write the flow synchronously while
@@ -244,6 +243,11 @@ object PreferenceRepository {
                 // that races ahead of this first emission is not thrown away.
                 if (!mapBlobsSeeded) {
                     mapBlobsSeeded = true
+                    // Seeded under the same guard, for the same reason: holding
+                    // Cmd+= repeats the key, and each step persists from an
+                    // unordered ioScope.launch, so re-seeding on a later
+                    // emission could snap the zoom back to a stale value.
+                    _uiScalePercent.value = clampUiScale(p[UI_SCALE_PERCENT] ?: 100)
                     _sidebarSectionsExpanded.value =
                         BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED]) + _sidebarSectionsExpanded.value
                     _statsPanelsExpanded.value =

@@ -68,7 +68,6 @@ import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerCapturePane
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
-import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
 
@@ -191,7 +190,6 @@ fun LogDrawer(
                             },
                         )
                     },
-                    modifier = Modifier.kdFocusRing(),
                 ) {
                     Icon(
                         painter = painterResource(
@@ -208,7 +206,6 @@ fun LogDrawer(
 
                 IconButton(
                     onClick = { onStateChange(LogDrawerState.HIDDEN) },
-                    modifier = Modifier.kdFocusRing(),
                 ) {
                     Icon(
                         painter = painterResource(Res.drawable.close_filled),

@@ -116,14 +116,12 @@ fun DrawerCapturePane(tab: ActiveCaptureTask, modifier: Modifier = Modifier) {
             if (phase is CapturePhase.Running) {
                 OutlinedButton(
                     onClick = { tab.task.cancel() },
-                    modifier = Modifier.kdFocusRing(),
                 ) {
                     Text("Cancel")
                 }
             } else if (phase is CapturePhase.Completed || phase is CapturePhase.Cancelled || phase is CapturePhase.Failed) {
                 OutlinedButton(
                     onClick = { revealCaptureFolder(state.outputDir) },
-                    modifier = Modifier.kdFocusRing(),
                 ) {
                     Text(revealButtonLabel())
                 }

@@ -2,8 +2,19 @@ package com.kubekubedashdash.ui.components
 
 import kotlin.math.abs
 
-/** The zoom levels the keyboard and the Settings control both offer. */
-val UiScaleSteps = listOf(80, 100, 125, 150, 200)
+/**
+ * The zoom levels the keyboard and the Settings control both offer.
+ *
+ * Capped at 150 deliberately. The list/detail scaffold picks its pane count
+ * from the window size class, which `currentWindowAdaptiveInfo` derives in dp
+ * through the *current* density — so zoom shrinks the window as far as that
+ * calculation is concerned. On a 1440 dp window, 200 % reports 720 dp, which
+ * falls below the two-partition threshold and unmounts the sidebar with no
+ * way back except undoing the zoom. 150 % reports 960 dp and stays safe.
+ * Going higher needs the directive computed from [LocalSystemDensity]
+ * instead, which is a change to the scaffold, not to this list.
+ */
+val UiScaleSteps = listOf(80, 100, 125, 150)
 
 /**
  * [percent] snapped to the nearest allowed step. A non-positive [percent]

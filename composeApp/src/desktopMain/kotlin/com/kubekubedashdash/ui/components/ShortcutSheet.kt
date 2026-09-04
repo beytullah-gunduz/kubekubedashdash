@@ -203,7 +203,7 @@ fun ShortcutSheet(onDismiss: () -> Unit) {
         Surface(
             modifier = Modifier
                 .widthIn(min = 460.dp, max = 620.dp)
-                .fillMaxWidth(0.5f)
+                .fillMaxWidth(0.8f)
                 .heightIn(max = 640.dp)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },

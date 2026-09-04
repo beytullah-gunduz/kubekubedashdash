@@ -24,7 +24,10 @@ class UiScaleTest {
 
     @Test
     fun `clampUiScale snaps a value above the highest step down to it`() {
-        assertEquals(200, clampUiScale(300))
+        // 200 was a step until it was found to unmount the sidebar; a store
+        // written by that build must land on the new ceiling, not be rejected.
+        assertEquals(150, clampUiScale(300))
+        assertEquals(150, clampUiScale(200))
     }
 
     @Test
@@ -49,12 +52,10 @@ class UiScaleTest {
         assertEquals(100, stepUiScale(80, up = true))
         assertEquals(125, stepUiScale(100, up = true))
         assertEquals(150, stepUiScale(125, up = true))
-        assertEquals(200, stepUiScale(150, up = true))
     }
 
     @Test
     fun `stepUiScale walks down through every step`() {
-        assertEquals(150, stepUiScale(200, up = false))
         assertEquals(125, stepUiScale(150, up = false))
         assertEquals(100, stepUiScale(125, up = false))
         assertEquals(80, stepUiScale(100, up = false))
@@ -62,7 +63,7 @@ class UiScaleTest {
 
     @Test
     fun `stepUiScale is a no-op at each end of the range`() {
-        assertEquals(200, stepUiScale(200, up = true))
+        assertEquals(150, stepUiScale(150, up = true))
         assertEquals(80, stepUiScale(80, up = false))
     }
 }

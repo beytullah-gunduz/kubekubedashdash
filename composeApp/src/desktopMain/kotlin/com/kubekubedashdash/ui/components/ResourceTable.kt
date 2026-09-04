@@ -74,10 +74,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -454,7 +456,7 @@ fun ResourceTable(
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 Key.DirectionDown -> {
-                                    if (event.isMetaPressed) {
+                                    if (event.isMetaPressed || event.isCtrlPressed) {
                                         // Cmd+Down on macOS = jump to end. Instant scroll
                                         // (not animated) so it stays snappy on long lists.
                                         keyboardIndex = sortedRows.lastIndex
@@ -471,7 +473,7 @@ fun ResourceTable(
                                 }
 
                                 Key.DirectionUp -> {
-                                    if (event.isMetaPressed) {
+                                    if (event.isMetaPressed || event.isCtrlPressed) {
                                         // Cmd+Up on macOS = jump to top.
                                         keyboardIndex = 0
                                         coroutineScope.launch { lazyListState.scrollToItem(0) }
@@ -787,7 +789,13 @@ private fun TableRowItem(
         var menuExpanded by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier.width(24.dp)
-                .then(if (hasMenu) Modifier.clickable { menuExpanded = true } else Modifier),
+                .then(
+                    if (hasMenu) {
+                        Modifier.clickable { menuExpanded = true }.pointerHoverIcon(PointerIcon.Hand)
+                    } else {
+                        Modifier
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             if (hasMenu) {

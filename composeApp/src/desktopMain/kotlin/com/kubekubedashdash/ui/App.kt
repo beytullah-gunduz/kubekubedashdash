@@ -352,7 +352,7 @@ fun App(
                         val metaOrCtrl = event.isMetaPressed || event.isCtrlPressed
                         when {
                             // Cmd+K / Ctrl+K: toggle command palette.
-                            event.key == Key.K && metaOrCtrl -> {
+                            event.key == Key.K && metaOrCtrl && !shortcutsOpen -> {
                                 paletteOpen = !paletteOpen
                                 true
                             }
@@ -366,7 +366,7 @@ fun App(
                             }
 
                             // Cmd+, / Ctrl+,: open Settings (macOS standard).
-                            event.key == Key.Comma && metaOrCtrl -> {
+                            event.key == Key.Comma && metaOrCtrl && !shortcutsOpen -> {
                                 workspace.showSettings()
                                 true
                             }
