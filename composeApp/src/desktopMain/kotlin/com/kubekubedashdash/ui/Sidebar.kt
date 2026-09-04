@@ -7,6 +7,7 @@ import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,12 +24,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,11 +40,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -48,6 +54,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -68,36 +75,9 @@ import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.account_tree_filled
-import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.chevron_right_filled
-import com.kubekubedashdash.resources.cloud_filled
-import com.kubekubedashdash.resources.code_filled
-import com.kubekubedashdash.resources.content_copy_filled
-import com.kubekubedashdash.resources.dashboard_filled
-import com.kubekubedashdash.resources.description_filled
-import com.kubekubedashdash.resources.dns_filled
-import com.kubekubedashdash.resources.dynamic_feed_filled
 import com.kubekubedashdash.resources.expand_more_filled
-import com.kubekubedashdash.resources.filter_list_filled
-import com.kubekubedashdash.resources.folder_open_filled
-import com.kubekubedashdash.resources.folder_special_filled
-import com.kubekubedashdash.resources.graph_3_24
-import com.kubekubedashdash.resources.language_filled
-import com.kubekubedashdash.resources.layers_filled
-import com.kubekubedashdash.resources.list_filled
-import com.kubekubedashdash.resources.lock_filled
-import com.kubekubedashdash.resources.monitor_heart_filled
-import com.kubekubedashdash.resources.notifications_filled
-import com.kubekubedashdash.resources.save_filled
-import com.kubekubedashdash.resources.schedule_filled
-import com.kubekubedashdash.resources.security_filled
-import com.kubekubedashdash.resources.sell_filled
-import com.kubekubedashdash.resources.settings_ethernet_filled
-import com.kubekubedashdash.resources.storage_filled
-import com.kubekubedashdash.resources.swap_horiz_filled
-import com.kubekubedashdash.resources.view_in_ar_filled
-import com.kubekubedashdash.resources.work_filled
+import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
 import org.jetbrains.compose.resources.DrawableResource
@@ -114,11 +94,41 @@ fun Sidebar(
     // so the dot doesn't flash during the initial connect.
     clusterHealth: ClusterHealthSummary? = null,
 ) {
+    // Rail-wide search: matches built-in kinds (below) and CRDs (delegated to
+    // CustomResourcesSection, which owns its own CrdInfo state). The 56 dp
+    // icon rail has no room for a text field, so search is inert while
+    // collapsed — same as the CRD search box was before this box replaced it.
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchActive = !collapsed && searchQuery.isNotBlank()
+
+    // Collected here (not just inside CrdSection) so the "No matches" message
+    // can account for CRD hits without CustomResourcesSection reaching back
+    // out to Sidebar. See CrdSection below for the CRD half's own rendering.
+    val client = LocalReactiveKubeClient.current
+    val crdsState by client.crds.collectAsState()
+    val context = remember(client) { client.getCurrentContext() }
+    val crdMatchCount = remember(crdsState, context, searchQuery) {
+        if (searchQuery.isBlank()) {
+            0
+        } else {
+            val crds = (crdsState as? ResourceState.Success)?.data.orEmpty()
+            val hidden = CrdPreferenceRepository.hiddenFor(context)
+            crds.count { it.key !in hidden && matchesCrdSearch(it, searchQuery) }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(KdSidebarBg),
     ) {
+        if (!collapsed) {
+            SidebarSearchBox(
+                query = searchQuery,
+                onChange = { searchQuery = it },
+                placeholder = "Search",
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -126,87 +136,157 @@ fun Sidebar(
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 4.dp),
         ) {
-            SidebarItem(
-                icon = Res.drawable.dashboard_filled,
-                label = "Cluster",
-                selected = currentScreen is Screen.Main.ClusterOverview,
-                collapsed = collapsed,
-                badge = healthBadgeColor(clusterHealth),
-                badgeContentDescription = healthBadgeDescription(clusterHealth),
-                onClick = { onNavigate(Screen.Main.ClusterOverview) },
-            )
-            SidebarItem(Res.drawable.graph_3_24, "Topology", currentScreen is Screen.Main.ClusterTopology, collapsed) {
-                onNavigate(Screen.Main.ClusterTopology)
-            }
-            SidebarItem(Res.drawable.dns_filled, "Nodes", currentScreen is Screen.Main.Nodes, collapsed) {
-                onNavigate(Screen.Main.Nodes())
-            }
-            SidebarItem(Res.drawable.folder_special_filled, "Namespaces", currentScreen is Screen.Main.Namespaces, collapsed) {
-                onNavigate(Screen.Main.Namespaces)
-            }
-            SidebarItem(Res.drawable.notifications_filled, "Events", currentScreen is Screen.Main.Events, collapsed) {
-                onNavigate(Screen.Main.Events())
-            }
+            if (searchActive) {
+                val builtInMatches = NavSections.flatMap { section ->
+                    section.kinds.filter { kind -> matchesNavSearch(kind, section.title, searchQuery) }
+                }
+                builtInMatches.forEach { kind ->
+                    NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                }
+                CrdSection(currentScreen, onNavigate, collapsed, searchQuery)
+                if (builtInMatches.isEmpty() && crdMatchCount == 0) {
+                    Text(
+                        "No matches",
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KdTextSecondary,
+                    )
+                }
+            } else {
+                NavSections.first().kinds.forEach { kind ->
+                    NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                }
 
-            SidebarSection("Workloads", collapsed) {
-                SidebarItem(Res.drawable.view_in_ar_filled, "Pods", currentScreen is Screen.Main.Pods, collapsed) { onNavigate(Screen.Main.Pods()) }
-                SidebarItem(Res.drawable.layers_filled, "Deployments", currentScreen is Screen.Main.Deployments, collapsed) { onNavigate(Screen.Main.Deployments()) }
-                SidebarItem(Res.drawable.storage_filled, "StatefulSets", currentScreen is Screen.Main.StatefulSets, collapsed) { onNavigate(Screen.Main.StatefulSets) }
-                SidebarItem(Res.drawable.dynamic_feed_filled, "DaemonSets", currentScreen is Screen.Main.DaemonSets, collapsed) { onNavigate(Screen.Main.DaemonSets) }
-                SidebarItem(Res.drawable.content_copy_filled, "ReplicaSets", currentScreen is Screen.Main.ReplicaSets, collapsed) { onNavigate(Screen.Main.ReplicaSets) }
-                SidebarItem(Res.drawable.work_filled, "Jobs", currentScreen is Screen.Main.Jobs, collapsed) { onNavigate(Screen.Main.Jobs) }
-                SidebarItem(Res.drawable.schedule_filled, "CronJobs", currentScreen is Screen.Main.CronJobs, collapsed) { onNavigate(Screen.Main.CronJobs) }
-            }
+                NavSections.drop(1).filter { it.tier == NavTier.PRIMARY }.forEach { section ->
+                    SidebarSection(section.title, collapsed) {
+                        section.kinds.forEach { kind ->
+                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                        }
+                    }
+                }
 
-            SidebarSection("Config", collapsed) {
-                SidebarItem(Res.drawable.description_filled, "ConfigMaps", currentScreen is Screen.Main.ConfigMaps, collapsed) { onNavigate(Screen.Main.ConfigMaps) }
-                SidebarItem(Res.drawable.lock_filled, "Secrets", currentScreen is Screen.Main.Secrets, collapsed) { onNavigate(Screen.Main.Secrets) }
-            }
+                SidebarSection("More", collapsed, defaultExpanded = false) {
+                    NavSections.filter { it.tier == NavTier.MORE }.forEach { section ->
+                        if (!collapsed) {
+                            MoreGroupLabel(section.title)
+                        }
+                        section.kinds.forEach { kind ->
+                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, onNavigate)
+                        }
+                    }
+                }
 
-            SidebarSection("Network", collapsed) {
-                SidebarItem(Res.drawable.cloud_filled, "Services", currentScreen is Screen.Main.Services, collapsed) { onNavigate(Screen.Main.Services) }
-                SidebarItem(Res.drawable.language_filled, "Ingresses", currentScreen is Screen.Main.Ingresses, collapsed) { onNavigate(Screen.Main.Ingresses) }
-                SidebarItem(Res.drawable.language_filled, "Ingress Classes", currentScreen is Screen.Main.IngressClasses, collapsed) { onNavigate(Screen.Main.IngressClasses) }
-                SidebarItem(Res.drawable.settings_ethernet_filled, "Endpoints", currentScreen is Screen.Main.Endpoints, collapsed) { onNavigate(Screen.Main.Endpoints) }
-                SidebarItem(Res.drawable.settings_ethernet_filled, "Endpoint Slices", currentScreen is Screen.Main.EndpointSlices, collapsed) { onNavigate(Screen.Main.EndpointSlices) }
-                SidebarItem(Res.drawable.security_filled, "Network Policies", currentScreen is Screen.Main.NetworkPolicies, collapsed) { onNavigate(Screen.Main.NetworkPolicies) }
+                CrdSection(currentScreen, onNavigate, collapsed)
             }
-
-            SidebarSection("Storage", collapsed) {
-                SidebarItem(Res.drawable.save_filled, "Persistent Volumes", currentScreen is Screen.Main.PersistentVolumes, collapsed) { onNavigate(Screen.Main.PersistentVolumes) }
-                SidebarItem(Res.drawable.folder_open_filled, "PV Claims", currentScreen is Screen.Main.PersistentVolumeClaims, collapsed) { onNavigate(Screen.Main.PersistentVolumeClaims) }
-                SidebarItem(Res.drawable.list_filled, "Storage Classes", currentScreen is Screen.Main.StorageClasses, collapsed) { onNavigate(Screen.Main.StorageClasses) }
-                SidebarItem(Res.drawable.storage_filled, "CSI Drivers", currentScreen is Screen.Main.CSIDrivers, collapsed) { onNavigate(Screen.Main.CSIDrivers) }
-            }
-
-            SidebarSection("Access Control", collapsed) {
-                SidebarItem(Res.drawable.account_tree_filled, "Service Accounts", currentScreen is Screen.Main.ServiceAccounts, collapsed) { onNavigate(Screen.Main.ServiceAccounts) }
-                SidebarItem(Res.drawable.security_filled, "Roles", currentScreen is Screen.Main.Roles, collapsed) { onNavigate(Screen.Main.Roles) }
-                SidebarItem(Res.drawable.security_filled, "Cluster Roles", currentScreen is Screen.Main.ClusterRoles, collapsed) { onNavigate(Screen.Main.ClusterRoles) }
-                SidebarItem(Res.drawable.account_tree_filled, "Role Bindings", currentScreen is Screen.Main.RoleBindings, collapsed) { onNavigate(Screen.Main.RoleBindings) }
-                SidebarItem(Res.drawable.account_tree_filled, "Cluster Role Bindings", currentScreen is Screen.Main.ClusterRoleBindings, collapsed) { onNavigate(Screen.Main.ClusterRoleBindings) }
-                SidebarItem(Res.drawable.lock_filled, "Cert Signing Requests", currentScreen is Screen.Main.CertificateSigningRequests, collapsed) { onNavigate(Screen.Main.CertificateSigningRequests) }
-            }
-
-            SidebarSection("Autoscaling & Disruption", collapsed) {
-                SidebarItem(Res.drawable.swap_horiz_filled, "HPA", currentScreen is Screen.Main.HorizontalPodAutoscalers, collapsed) { onNavigate(Screen.Main.HorizontalPodAutoscalers) }
-                SidebarItem(Res.drawable.monitor_heart_filled, "Pod Disruption Budgets", currentScreen is Screen.Main.PodDisruptionBudgets, collapsed) { onNavigate(Screen.Main.PodDisruptionBudgets) }
-            }
-
-            SidebarSection("Governance", collapsed) {
-                SidebarItem(Res.drawable.category_filled, "Resource Quotas", currentScreen is Screen.Main.ResourceQuotas, collapsed) { onNavigate(Screen.Main.ResourceQuotas) }
-                SidebarItem(Res.drawable.filter_list_filled, "Limit Ranges", currentScreen is Screen.Main.LimitRanges, collapsed) { onNavigate(Screen.Main.LimitRanges) }
-                SidebarItem(Res.drawable.sell_filled, "Priority Classes", currentScreen is Screen.Main.PriorityClasses, collapsed) { onNavigate(Screen.Main.PriorityClasses) }
-            }
-
-            SidebarSection("Admission Control", collapsed) {
-                SidebarItem(Res.drawable.code_filled, "Validating Webhooks", currentScreen is Screen.Main.ValidatingWebhookConfigurations, collapsed) { onNavigate(Screen.Main.ValidatingWebhookConfigurations) }
-                SidebarItem(Res.drawable.code_filled, "Mutating Webhooks", currentScreen is Screen.Main.MutatingWebhookConfigurations, collapsed) { onNavigate(Screen.Main.MutatingWebhookConfigurations) }
-            }
-
-            CrdSection(currentScreen, onNavigate, collapsed)
         }
     }
+}
+
+// Renders one catalogue entry. The Cluster item is the only one that ever
+// carries the health dot — special-cased by key, exactly as it was hard-coded
+// before the catalogue existed.
+@Composable
+private fun NavKindItem(
+    kind: NavKind,
+    currentScreen: Screen,
+    collapsed: Boolean,
+    clusterHealth: ClusterHealthSummary?,
+    onNavigate: (Screen) -> Unit,
+) {
+    val isCluster = kind.key == "ClusterOverview"
+    SidebarItem(
+        icon = kind.icon,
+        label = kind.label,
+        selected = kind.isSelected(currentScreen),
+        collapsed = collapsed,
+        badge = if (isCluster) healthBadgeColor(clusterHealth) else null,
+        badgeContentDescription = if (isCluster) healthBadgeDescription(clusterHealth) else null,
+        onClick = { onNavigate(kind.screen()) },
+    )
+}
+
+// Small uppercase sub-group label used inside the More section to separate
+// its three source sections. Mirrors CustomResourcesSection's file-private
+// MiniHeader, which Sidebar.kt cannot call. Rendered only when !collapsed:
+// SidebarSection hides its own header in the 56 dp rail but still renders
+// its content, so a text label here would otherwise be crammed into icons.
+@Composable
+private fun MoreGroupLabel(title: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = KdTextSecondary,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp,
+        )
+    }
+}
+
+// BasicTextField + DecorationBox instead of the high-level OutlinedTextField:
+// M3's OutlinedTextField bakes in ~16dp vertical content padding, which at
+// 32dp height clips both the typed text and the placeholder out of view.
+// Generalised from CustomResourcesSection's former CrdSearchBox so one box
+// can search both built-in kinds and CRDs.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: String) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdBorder,
+        unfocusedBorderColor = KdBorder,
+        focusedContainerColor = KdSurface,
+        unfocusedContainerColor = KdSurface,
+    )
+    BasicTextField(
+        value = query,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
+        cursorBrush = SolidColor(KdTextPrimary),
+        interactionSource = interactionSource,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .height(32.dp),
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = query,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text(placeholder, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                },
+                leadingIcon = {
+                    Icon(
+                        painterResource(Res.drawable.search_filled),
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = KdTextSecondary,
+                    )
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                },
+            )
+        },
+    )
 }
 
 @Composable
@@ -214,6 +294,7 @@ private fun CrdSection(
     currentScreen: Screen,
     onNavigate: (Screen) -> Unit,
     collapsed: Boolean,
+    searchQuery: String = "",
 ) {
     val client = LocalReactiveKubeClient.current
     val crdsState by client.crds.collectAsState()
@@ -233,6 +314,7 @@ private fun CrdSection(
         onTogglePin = { CrdPreferenceRepository.togglePinned(context, it.key) },
         onToggleHide = { CrdPreferenceRepository.toggleHidden(context, it.key) },
         collapsed = collapsed,
+        searchQuery = searchQuery,
     )
 }
 

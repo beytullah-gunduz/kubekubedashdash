@@ -1,46 +1,27 @@
 package com.kubekubedashdash.ui
 
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kubekubedashdash.KdBorder
-import com.kubekubedashdash.KdSurface
-import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.extension_filled
-import com.kubekubedashdash.resources.search_filled
-import org.jetbrains.compose.resources.painterResource
 
 /**
  * Sidebar section listing every CRD discovered on the cluster as its own
@@ -48,16 +29,19 @@ import org.jetbrains.compose.resources.painterResource
  * dozens of CRDs and pushing them all into the user's face would drown out
  * the built-in resource list.
  *
- * Inside, three layers:
- * 1. Search box. Filters by kind/plural/shortNames/group case-insensitive;
- *    when active, the result is flattened (no grouping) so matches across
- *    different API groups stay visible side by side.
- * 2. Pinned subgroup. Shown above all groups when non-empty. Pinning is
+ * Inside, two layers:
+ * 1. Pinned subgroup. Shown above all groups when non-empty. Pinning is
  *    per-cluster-context so a user's "I always look at SparkApplications"
  *    survives session restarts.
- * 3. Per-API-group expand/collapse. Each `spec.group` becomes its own mini
+ * 2. Per-API-group expand/collapse. Each `spec.group` becomes its own mini
  *    section. Hidden CRDs are excluded from these groups; they remain
  *    reachable through the command palette (Cmd-K).
+ *
+ * [searchQuery] is the rail-wide search box's text, owned and rendered by
+ * `Sidebar`. When non-blank (and the rail is expanded), this composable
+ * renders only the matching CRDs (kind/plural/shortNames/group,
+ * case-insensitive), flat and without the section wrapper, so they read as
+ * one list with the built-in matches Sidebar renders above them.
  *
  * Right-click on any item opens a context menu with Pin/Hide toggles.
  */
@@ -71,23 +55,31 @@ fun CustomResourcesSection(
     onTogglePin: (CrdInfo) -> Unit,
     onToggleHide: (CrdInfo) -> Unit,
     collapsed: Boolean,
+    // Shared rail-wide search query, owned by Sidebar. Blank means "show the
+    // normal Pinned + per-group view"; non-blank flattens to search matches.
+    searchQuery: String = "",
 ) {
     if (crds.isEmpty()) return
 
-    var searchQuery by rememberSaveable { mutableStateOf("") }
     val visible = remember(crds, hidden) { crds.filterNot { it.key in hidden } }
     val pinnedCrds = remember(visible, pinned) {
         visible.filter { it.key in pinned }.sortedBy { it.kind.lowercase() }
     }
     val unpinned = remember(visible, pinned) { visible.filter { it.key !in pinned } }
-    val searchActive = searchQuery.isNotBlank()
-    val matched = remember(unpinned, searchQuery) {
-        if (!searchActive) {
-            unpinned
-        } else {
-            unpinned.filter { matchesSearch(it, searchQuery) }
-                .sortedBy { it.kind.lowercase() }
-        }
+
+    if (searchQuery.isNotBlank() && !collapsed) {
+        // Rail-wide search: matches render flat and OUTSIDE the section
+        // wrapper, so they read as one list with Sidebar's built-in matches
+        // and are never hidden behind this section's own default-collapsed
+        // state. Pinned entries are matched like any other — the Pinned
+        // header is section chrome, and search has no sections. Sidebar's
+        // "No matches" count uses the same predicate over the same list.
+        visible.filter { matchesCrdSearch(it, searchQuery) }
+            .sortedBy { it.kind.lowercase() }
+            .forEach { crd ->
+                CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = false)
+            }
+        return
     }
 
     SidebarSection(title = "Custom Resources", collapsed = collapsed, defaultExpanded = false) {
@@ -99,110 +91,27 @@ fun CustomResourcesSection(
                 CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = true)
             }
         } else {
-            CrdSearchBox(searchQuery, onChange = { searchQuery = it })
-            if (pinnedCrds.isNotEmpty() && !searchActive) {
+            if (pinnedCrds.isNotEmpty()) {
                 MiniHeader("Pinned")
                 pinnedCrds.forEach { crd ->
                     CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = false)
                 }
             }
-            if (searchActive) {
-                if (matched.isEmpty()) {
-                    Text(
-                        "No matches",
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary,
-                    )
-                } else {
-                    matched.forEach { crd ->
-                        CrdRow(crd, currentScreen, pinned, onNavigate, onTogglePin, onToggleHide, collapsed = false)
-                    }
-                }
-            } else {
-                val grouped = matched.groupBy { it.group.ifBlank { "(core)" } }
-                    .toSortedMap()
-                grouped.forEach { (group, items) ->
-                    GroupBlock(
-                        groupName = group,
-                        items = items.sortedBy { it.kind.lowercase() },
-                        currentScreen = currentScreen,
-                        pinned = pinned,
-                        onNavigate = onNavigate,
-                        onTogglePin = onTogglePin,
-                        onToggleHide = onToggleHide,
-                    )
-                }
+            val grouped = unpinned.groupBy { it.group.ifBlank { "(core)" } }
+                .toSortedMap()
+            grouped.forEach { (group, items) ->
+                GroupBlock(
+                    groupName = group,
+                    items = items.sortedBy { it.kind.lowercase() },
+                    currentScreen = currentScreen,
+                    pinned = pinned,
+                    onNavigate = onNavigate,
+                    onTogglePin = onTogglePin,
+                    onToggleHide = onToggleHide,
+                )
             }
         }
     }
-}
-
-private fun matchesSearch(crd: CrdInfo, query: String): Boolean {
-    val q = query.lowercase()
-    if (crd.kind.lowercase().contains(q)) return true
-    if (crd.plural.lowercase().contains(q)) return true
-    if (crd.group.lowercase().contains(q)) return true
-    return crd.shortNames.any { it.lowercase().contains(q) }
-}
-
-// BasicTextField + DecorationBox instead of the high-level OutlinedTextField:
-// M3's OutlinedTextField bakes in ~16dp vertical content padding, which at
-// 32dp height clips both the typed text and the placeholder out of view.
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CrdSearchBox(query: String, onChange: (String) -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val colors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = KdBorder,
-        unfocusedBorderColor = KdBorder,
-        focusedContainerColor = KdSurface,
-        unfocusedContainerColor = KdSurface,
-    )
-    BasicTextField(
-        value = query,
-        onValueChange = onChange,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
-        cursorBrush = SolidColor(KdTextPrimary),
-        interactionSource = interactionSource,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .height(32.dp),
-        decorationBox = { innerTextField ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = query,
-                innerTextField = innerTextField,
-                enabled = true,
-                singleLine = true,
-                visualTransformation = VisualTransformation.None,
-                interactionSource = interactionSource,
-                placeholder = {
-                    Text("Search CRDs", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                },
-                leadingIcon = {
-                    Icon(
-                        painterResource(Res.drawable.search_filled),
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = KdTextSecondary,
-                    )
-                },
-                colors = colors,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                container = {
-                    OutlinedTextFieldDefaults.Container(
-                        enabled = true,
-                        isError = false,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        shape = RoundedCornerShape(6.dp),
-                    )
-                },
-            )
-        },
-    )
 }
 
 @Composable
