@@ -21,11 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -37,8 +33,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
@@ -169,153 +163,6 @@ fun CircularUsageIndicator(
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
         )
-    }
-}
-
-data class PodSegment(
-    val count: Int,
-    val label: String,
-    val color: Color,
-)
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-fun HalfCircularPodDistribution(
-    segments: List<PodSegment>,
-    modifier: Modifier = Modifier,
-    showLegend: Boolean = false,
-) {
-    val total = segments.sumOf { it.count }
-    val animatedFractions = segments.map { segment ->
-        val target = if (total > 0) segment.count.toFloat() / total else 0f
-        animateFloatAsState(
-            targetValue = target,
-            animationSpec = tween(durationMillis = 800),
-        ).value
-    }
-    var hoveredIndex by remember { mutableStateOf<Int?>(null) }
-
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            contentAlignment = Alignment.BottomCenter,
-            modifier = Modifier.size(width = 96.dp, height = 56.dp),
-        ) {
-            Canvas(
-                modifier = Modifier
-                    .size(width = 96.dp, height = 56.dp)
-                    .onPointerEvent(PointerEventType.Move) { event ->
-                        val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
-                        val cx = size.width / 2f
-                        val cy = size.width / 2f
-                        val radius = (size.width - 7.dp.toPx()) / 2f
-                        val dx = pos.x - cx
-                        val dy = pos.y - cy
-                        val dist = kotlin.math.sqrt(dx * dx + dy * dy)
-                        val hitMargin = 7.dp.toPx() * 1.5f
-                        if (dist < radius - hitMargin || dist > radius + hitMargin || dy > 0) {
-                            hoveredIndex = null
-                            return@onPointerEvent
-                        }
-                        var angle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
-                        if (angle < 0) angle += 360f
-                        val gapDegrees = if (segments.count { it.count > 0 } > 1) 3f else 0f
-                        val activeCount = segments.count { it.count > 0 }
-                        val totalGap = gapDegrees * (activeCount - 1).coerceAtLeast(0)
-                        val availableSweep = 180f - totalGap
-                        var cumAngle = 180f
-                        var found: Int? = null
-                        for (i in segments.indices) {
-                            val sweep = availableSweep * animatedFractions[i]
-                            if (sweep > 0f) {
-                                val segEnd = cumAngle + sweep.coerceAtLeast(2f)
-                                if (angle in cumAngle..segEnd) {
-                                    found = i
-                                    break
-                                }
-                                cumAngle = segEnd + gapDegrees
-                            }
-                        }
-                        hoveredIndex = found
-                    }
-                    .onPointerEvent(PointerEventType.Exit) {
-                        hoveredIndex = null
-                    },
-            ) {
-                val strokeWidth = 7.dp.toPx()
-                val pad = strokeWidth / 2
-                val arcDiameter = size.width - strokeWidth
-                val arcSize = Size(arcDiameter, arcDiameter)
-                val topLeft = Offset(pad, pad)
-
-                drawArc(
-                    color = KdSurfaceVariant,
-                    startAngle = 180f,
-                    sweepAngle = 180f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
-                )
-
-                if (total > 0) {
-                    var startAngle = 180f
-                    val gapDegrees = if (segments.count { it.count > 0 } > 1) 3f else 0f
-                    val activeCount = segments.count { it.count > 0 }
-                    val totalGap = gapDegrees * (activeCount - 1).coerceAtLeast(0)
-                    val availableSweep = 180f - totalGap
-
-                    for (i in segments.indices) {
-                        val sweep = availableSweep * animatedFractions[i]
-                        if (sweep > 0f) {
-                            drawArc(
-                                color = segments[i].color,
-                                startAngle = startAngle,
-                                sweepAngle = sweep.coerceAtLeast(2f),
-                                useCenter = false,
-                                topLeft = topLeft,
-                                size = arcSize,
-                                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
-                            )
-                            startAngle += sweep + gapDegrees
-                        }
-                    }
-                }
-            }
-            val hovered = hoveredIndex?.let { segments.getOrNull(it) }
-            Text(
-                if (hovered != null) "${hovered.count} ${hovered.label}" else "$total",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (hovered != null) hovered.color else KdTextPrimary,
-                modifier = Modifier.padding(bottom = 2.dp),
-            )
-        }
-        Text("Pods", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
-        if (showLegend) {
-            Spacer(Modifier.height(4.dp))
-            segments.filter { it.count > 0 }.forEach { segment ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 1.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(segment.color),
-                    )
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        "${segment.count} ${segment.label}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary,
-                    )
-                }
-            }
-        }
     }
 }
 

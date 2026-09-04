@@ -5,7 +5,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -43,14 +42,18 @@ import com.kubekubedashdash.ui.components.BulkVerbButton
 import com.kubekubedashdash.ui.components.BulkVerbs
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
+import com.kubekubedashdash.ui.components.KpiStrip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
+import com.kubekubedashdash.ui.components.activeKpiId
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
+import com.kubekubedashdash.ui.components.podKpiStatuses
+import com.kubekubedashdash.ui.components.podKpis
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.resourceRef
@@ -88,8 +91,6 @@ fun PodsScreen(
     val statusFilter by viewModel.statusFilter.collectAsState()
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
-    val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
-    val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_PODS] ?: true
     var selectedPodUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     LaunchedEffect(initialStatusFilter) {
         // Nav-driven seed: a banner click landing on Pods with a typed status
@@ -163,141 +164,146 @@ fun PodsScreen(
                 }
                 LaunchedEffect(visibleSelectableUids) { viewModel.selection.setVisible(visibleSelectableUids) }
 
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val showStats = maxWidth >= 900.dp
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        AnimatedVisibility(
-                            visible = showStats,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut(),
-                        ) {
-                            PodStatsPanel(
-                                pods = allPods,
-                                usage = resourceUsage,
-                                expanded = statsExpanded,
-                                onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_PODS, !statsExpanded) },
+                Column(modifier = Modifier.fillMaxSize()) {
+                    val kpiIds = remember { listOf("total", "failing", "pending", "cpu", "mem") }
+                    val activeId = remember(activeStatusFilter) {
+                        activeKpiId(activeStatusFilter, ::podKpiStatuses, kpiIds)
+                    }
+                    val kpis = remember(allPods, resourceUsage, activeId) { podKpis(allPods, resourceUsage, activeId) }
+                    val kpiClickableIds = remember(activeStatusFilter) {
+                        if (activeStatusFilter != null) setOf("failing", "pending", "total") else setOf("failing", "pending")
+                    }
+                    KpiStrip(
+                        kpis = kpis,
+                        activeId = activeId,
+                        clickableIds = kpiClickableIds,
+                        onClick = { kpi ->
+                            if (kpi.id == "total" || kpi.id == activeId) {
+                                viewModel.setStatusFilter(null)
+                            } else {
+                                viewModel.setStatusFilter(podKpiStatuses(kpi.id))
+                            }
+                        },
+                    )
+                    ResourceCountHeader(
+                        count = filtered.size,
+                        kind = "Pods",
+                        liveDot = {
+                            LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                        },
+                        actions = { compact ->
+                            ResourceFilterChips(
+                                labelQuery = labelQuery,
+                                onLabelQueryChange = onLabelQueryChange,
+                                annotationQuery = annotationQuery,
+                                onAnnotationQueryChange = onAnnotationQueryChange,
+                                compact = compact,
+                                pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                statusChip = {
+                                    StatusFilterMenu(
+                                        available = availableStatuses,
+                                        selected = activeStatusFilter ?: availableStatuses,
+                                        onToggle = { value ->
+                                            val current = activeStatusFilter ?: availableStatuses
+                                            viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                        },
+                                        onSelectAll = { viewModel.setStatusFilter(null) },
+                                        onSelectNone = { viewModel.setStatusFilter(emptySet()) },
+                                        pulseOnEntry = statusFilter != null,
+                                        compact = compact,
+                                        icon = Res.drawable.monitor_heart_filled,
+                                    )
+                                },
+                                clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
+                                onClear = {
+                                    onLabelQueryChange("")
+                                    onAnnotationQueryChange("")
+                                    viewModel.setStatusFilter(null)
+                                },
                             )
-                        }
-                        ResourceCountHeader(
-                            count = filtered.size,
-                            kind = "Pods",
-                            liveDot = {
-                                LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
-                            },
-                            actions = { compact ->
-                                ResourceFilterChips(
-                                    labelQuery = labelQuery,
-                                    onLabelQueryChange = onLabelQueryChange,
-                                    annotationQuery = annotationQuery,
-                                    onAnnotationQueryChange = onAnnotationQueryChange,
-                                    compact = compact,
-                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
-                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                    statusChip = {
-                                        StatusFilterMenu(
-                                            available = availableStatuses,
-                                            selected = activeStatusFilter ?: availableStatuses,
-                                            onToggle = { value ->
-                                                val current = activeStatusFilter ?: availableStatuses
-                                                viewModel.setStatusFilter(if (value in current) current - value else current + value)
-                                            },
-                                            onSelectAll = { viewModel.setStatusFilter(null) },
-                                            onSelectNone = { viewModel.setStatusFilter(emptySet()) },
-                                            pulseOnEntry = statusFilter != null,
-                                            compact = compact,
-                                            icon = Res.drawable.monitor_heart_filled,
-                                        )
-                                    },
-                                    clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
-                                    onClear = {
-                                        onLabelQueryChange("")
-                                        onAnnotationQueryChange("")
-                                        viewModel.setStatusFilter(null)
-                                    },
-                                )
-                            },
-                        )
-                        // Exit-animation latch: the bar stays composed while it
-                        // shrinks away, so without holding the last non-zero
-                        // count it would flash "0 pods selected" on every Clear.
-                        var lastSelectedCount by remember { mutableStateOf(0) }
-                        if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
-                        AnimatedVisibility(selectedUids.isNotEmpty(), enter = enter, exit = exit) {
-                            BulkSelectionBar(
-                                selectedCount = lastSelectedCount,
-                                kind = "pods",
-                                onClear = { viewModel.selection.set(emptySet()) },
+                        },
+                    )
+                    // Exit-animation latch: the bar stays composed while it
+                    // shrinks away, so without holding the last non-zero
+                    // count it would flash "0 pods selected" on every Clear.
+                    var lastSelectedCount by remember { mutableStateOf(0) }
+                    if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
+                    AnimatedVisibility(selectedUids.isNotEmpty(), enter = enter, exit = exit) {
+                        BulkSelectionBar(
+                            selectedCount = lastSelectedCount,
+                            kind = "pods",
+                            onClear = { viewModel.selection.set(emptySet()) },
+                        ) {
+                            BulkVerbButton(
+                                icon = Res.drawable.clear_all_filled,
+                                label = "Evict",
+                                description = "Gracefully remove the selected pods, letting their controllers " +
+                                    "reschedule them — use to move pods off a node. Respects " +
+                                    "PodDisruptionBudgets; requests can be rejected.",
+                                tint = KdTextPrimary,
                             ) {
-                                BulkVerbButton(
-                                    icon = Res.drawable.clear_all_filled,
-                                    label = "Evict",
-                                    description = "Gracefully remove the selected pods, letting their controllers " +
-                                        "reschedule them — use to move pods off a node. Respects " +
-                                        "PodDisruptionBudgets; requests can be rejected.",
-                                    tint = KdTextPrimary,
-                                ) {
-                                    val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                                    viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
-                                        bulkPods = items
-                                        bulkVerb = v
-                                    }
+                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
+                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
+                                    bulkPods = items
+                                    bulkVerb = v
                                 }
-                                BulkVerbButton(
-                                    icon = Res.drawable.delete_filled,
-                                    label = "Delete",
-                                    description = "Delete the selected pods with graceful termination. " +
-                                        "Controller-managed pods are recreated; standalone pods are gone for good.",
-                                    tint = KdError,
-                                ) {
-                                    val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                                    viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
-                                        bulkPods = items
-                                        bulkVerb = v
-                                    }
+                            }
+                            BulkVerbButton(
+                                icon = Res.drawable.delete_filled,
+                                label = "Delete",
+                                description = "Delete the selected pods with graceful termination. " +
+                                    "Controller-managed pods are recreated; standalone pods are gone for good.",
+                                tint = KdError,
+                            ) {
+                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
+                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
+                                    bulkPods = items
+                                    bulkVerb = v
                                 }
                             }
                         }
-                        PodTable(
-                            pods = filtered,
-                            selectedUid = selectedPodUid,
-                            onPodClick = { pod ->
-                                selectedPodUid = pod.uid
-                                onNavigate(Screen.Detail.PodDetail(pod))
-                            },
-                            onViewLogs = { pod ->
-                                when {
-                                    pod.containers.size == 1 ->
-                                        onOpenLogs(pod.name, pod.namespace, pod.containers.first().name)
-
-                                    pod.containers.size > 1 -> logsPickerPod = pod
-
-                                    else -> onOpenLogs(pod.name, pod.namespace, null)
-                                }
-                            },
-                            onOpenTerminal = { pod ->
-                                when {
-                                    pod.containers.size == 1 ->
-                                        onOpenTerminal(pod.name, pod.namespace, pod.containers.first().name)
-
-                                    pod.containers.size > 1 -> terminalPickerPod = pod
-                                    // pod.containers.isEmpty() is unexpected for a running pod
-                                }
-                            },
-                            onDelete = { pod ->
-                                pendingDelete = pod
-                                delete.clearError()
-                            },
-                            pinnedIds = pinnedIds,
-                            onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
-                            staleUids = stalePods.keys,
-                            selectedUids = selectedUids,
-                            onSelectionChange = viewModel.selection::set,
-                            onEvict = { pod ->
-                                evict.clearError()
-                                pendingEvict = pod
-                            },
-                        )
                     }
+                    PodTable(
+                        pods = filtered,
+                        selectedUid = selectedPodUid,
+                        onPodClick = { pod ->
+                            selectedPodUid = pod.uid
+                            onNavigate(Screen.Detail.PodDetail(pod))
+                        },
+                        onViewLogs = { pod ->
+                            when {
+                                pod.containers.size == 1 ->
+                                    onOpenLogs(pod.name, pod.namespace, pod.containers.first().name)
+
+                                pod.containers.size > 1 -> logsPickerPod = pod
+
+                                else -> onOpenLogs(pod.name, pod.namespace, null)
+                            }
+                        },
+                        onOpenTerminal = { pod ->
+                            when {
+                                pod.containers.size == 1 ->
+                                    onOpenTerminal(pod.name, pod.namespace, pod.containers.first().name)
+
+                                pod.containers.size > 1 -> terminalPickerPod = pod
+                                // pod.containers.isEmpty() is unexpected for a running pod
+                            }
+                        },
+                        onDelete = { pod ->
+                            pendingDelete = pod
+                            delete.clearError()
+                        },
+                        pinnedIds = pinnedIds,
+                        onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
+                        staleUids = stalePods.keys,
+                        selectedUids = selectedUids,
+                        onSelectionChange = viewModel.selection::set,
+                        onEvict = { pod ->
+                            evict.clearError()
+                            pendingEvict = pod
+                        },
+                    )
                 }
             }
         }

@@ -31,8 +31,6 @@ object PreferenceRepository {
 
     /** Keys into [statsPanelsExpanded] — one per screen with a collapsible stats panel. */
     const val STATS_PANEL_CLUSTER = "cluster"
-    const val STATS_PANEL_PODS = "pods"
-    const val STATS_PANEL_NODES = "nodes"
     const val STATS_PANEL_ALL_CLUSTERS = "all_clusters"
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
