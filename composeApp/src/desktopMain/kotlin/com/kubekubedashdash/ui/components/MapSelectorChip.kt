@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +43,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.filter_list_filled
@@ -76,6 +80,61 @@ fun toggleSelectorEntry(query: String, key: String, value: String): String {
     return pairs.entries.joinToString(", ") { "${it.key}=${it.value}" }
 }
 
+/** One selectable `key=value` with how many loaded resources carry it. */
+data class MapSelectorOption(val key: String, val value: String, val count: Int)
+
+/**
+ * Every distinct key=value across [entries] with its count, **sorted by key
+ * then value**. [entries] is one map per loaded resource. Keys in
+ * [NoisyAnnotationKeys] are excluded: they are unique per resource and would
+ * fill the list with count-1 rows nobody can filter by.
+ */
+fun mapSelectorOptions(entries: List<Map<String, String>>): List<MapSelectorOption> {
+    val counts = LinkedHashMap<Pair<String, String>, Int>()
+    for (entry in entries) {
+        for ((key, value) in entry) {
+            if (key in NoisyAnnotationKeys) continue
+            val pair = key to value
+            counts[pair] = (counts[pair] ?: 0) + 1
+        }
+    }
+    return counts.entries
+        .map { (pair, count) -> MapSelectorOption(pair.first, pair.second, count) }
+        .sortedWith(compareBy({ it.key }, { it.value }))
+}
+
+/**
+ * [options] narrowed by a case-insensitive substring match over "key=value",
+ * then ordered by count descending, then key, then value, then capped.
+ */
+fun visibleMapSelectorOptions(
+    options: List<MapSelectorOption>,
+    search: String,
+    cap: Int = 200,
+): List<MapSelectorOption> {
+    val needle = search.trim().lowercase()
+    val matched = if (needle.isEmpty()) {
+        options
+    } else {
+        options.filter { "${it.key}=${it.value}".lowercase().contains(needle) }
+    }
+    return matched
+        .sortedWith(compareByDescending<MapSelectorOption> { it.count }.thenBy { it.key }.thenBy { it.value })
+        .take(cap)
+}
+
+/**
+ * [query] without the entry for [key], preserving the order of the rest.
+ * Round-trips through [parseMapSelector], so unparseable fragments the user
+ * typed are dropped and duplicate keys collapse — acceptable, and the reason
+ * this is not a string edit.
+ */
+fun removeSelectorEntry(query: String, key: String): String {
+    val pairs = parseMapSelector(query).toMutableMap()
+    pairs.remove(key)
+    return pairs.entries.joinToString(", ") { "${it.key}=${it.value}" }
+}
+
 @Composable
 fun MapSelectorChip(
     query: String,
@@ -85,11 +144,13 @@ fun MapSelectorChip(
     modifier: Modifier = Modifier,
     pulseOnEntry: Boolean = false,
     compact: Boolean = false,
+    options: List<MapSelectorOption>? = null,
     icon: DrawableResource = Res.drawable.filter_list_filled,
 ) {
     val active = query.isNotBlank()
     val matchCount = remember(query) { parseMapSelector(query).size }
     var expanded by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     // Pulse intensity 0f..1f. Two 300 ms cycles fire once when this chip first
     // enters composition with pulseOnEntry=true (no scale/translation motion).
@@ -174,6 +235,88 @@ fun MapSelectorChip(
                     color = KdTextSecondary,
                 )
                 Spacer(Modifier.height(6.dp))
+                if (options != null) {
+                    if (options.isEmpty()) {
+                        Text(
+                            "No ${title.lowercase()} on the loaded resources",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KdTextSecondary,
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = search,
+                            onValueChange = { search = it },
+                            placeholder = {
+                                Text(
+                                    "Search ${title.lowercase()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        val cap = 200
+                        val selected = remember(query) { parseMapSelector(query) }
+                        val visible = remember(options, search) { visibleMapSelectorOptions(options, search, cap) }
+                        val matchedCount = remember(options, search) {
+                            visibleMapSelectorOptions(options, search, cap = Int.MAX_VALUE).size
+                        }
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            visible.forEach { option ->
+                                val applied = selected[option.key] == option.value
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onQueryChange(toggleSelectorEntry(query, option.key, option.value))
+                                        }
+                                        .pointerHoverIcon(PointerIcon.Hand)
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "${option.key} = ${option.value}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (applied) KdPrimary else Color.Unspecified,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "${option.count}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = KdTextSecondary,
+                                    )
+                                    if (applied) {
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            painterResource(Res.drawable.check_filled),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = KdPrimary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (matchedCount > cap) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "+${matchedCount - cap} more — type to narrow",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KdTextSecondary.copy(alpha = 0.6f),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 OutlinedTextField(
                     value = query,
                     onValueChange = onQueryChange,
@@ -202,6 +345,7 @@ fun LabelSelectorChip(
     modifier: Modifier = Modifier,
     pulseOnEntry: Boolean = false,
     compact: Boolean = false,
+    options: List<MapSelectorOption>? = null,
 ) = MapSelectorChip(
     query = query,
     onQueryChange = onQueryChange,
@@ -210,6 +354,7 @@ fun LabelSelectorChip(
     modifier = modifier,
     pulseOnEntry = pulseOnEntry,
     compact = compact,
+    options = options,
     icon = Res.drawable.sell_filled,
 )
 
@@ -220,6 +365,7 @@ fun AnnotationSelectorChip(
     modifier: Modifier = Modifier,
     pulseOnEntry: Boolean = false,
     compact: Boolean = false,
+    options: List<MapSelectorOption>? = null,
 ) = MapSelectorChip(
     query = query,
     onQueryChange = onQueryChange,
@@ -228,6 +374,7 @@ fun AnnotationSelectorChip(
     modifier = modifier,
     pulseOnEntry = pulseOnEntry,
     compact = compact,
+    options = options,
     icon = Res.drawable.description_filled,
 )
 
