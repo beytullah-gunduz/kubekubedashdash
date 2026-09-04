@@ -45,7 +45,7 @@ fun identityColumnIndex(columns: List<ColumnDef>, identityHeader: String?): Int 
 }
 
 /**
- * Indices into [columns] that render, in order. [identityColumn] is always
+ * Indices into [columns] that render, in order. The identity column is always
  * present regardless of the hidden map; a null [tableKey] returns every
  * index (opted out of column hiding entirely).
  */
@@ -85,7 +85,8 @@ fun isLastVisibleColumn(
 /**
  * Pinned rows first, then the primary key ([sortHeader], resolved against
  * [columns]; unresolved — including a null [sortHeader] — falls back to
- * [identityHeader]), then the identity column as a tiebreaker. Descending is
+ * [identityHeader]), then the identity column as a tiebreaker. A null
+ * [sortHeader] keeps the source order. Descending is
  * the reverse of the ascending order, so tied rows land in reverse-identity
  * order when descending — that is intentional, not a bug to fix.
  */
@@ -104,14 +105,24 @@ fun sortTableRows(
         return cell?.sortValue ?: cell?.text ?: ""
     }
 
-    val primaryIndex = columns.indexOfFirst { it.header == sortHeader }.let { if (it >= 0) it else identity }
+    // A null header means the table has never been sorted — keep the source
+    // order (for a stream like Events that is arrival order, which is the
+    // whole point of it) and only float the pins. A header that is set but
+    // cannot be resolved right now — hidden, or filtered out by width — falls
+    // back to the identity column, which is a defined order rather than an
+    // invisible one.
+    val ordered = if (sortHeader == null) {
+        rows
+    } else {
+        val primaryIndex = columns.indexOfFirst { it.header == sortHeader }.let { if (it >= 0) it else identity }
 
-    fun primaryKey(row: TableRow): String {
-        val cell = row.cells.getOrNull(primaryIndex)
-        return cell?.sortValue ?: cell?.text ?: ""
+        fun primaryKey(row: TableRow): String {
+            val cell = row.cells.getOrNull(primaryIndex)
+            return cell?.sortValue ?: cell?.text ?: ""
+        }
+
+        val sorted = rows.sortedWith(compareBy({ primaryKey(it) }, { identityKey(it) }))
+        if (ascending) sorted else sorted.reversed()
     }
-
-    val sorted = rows.sortedWith(compareBy({ primaryKey(it) }, { identityKey(it) }))
-    val ordered = if (ascending) sorted else sorted.reversed()
     return ordered.sortedByDescending { (it.pinId ?: it.id) in pinnedIds }
 }

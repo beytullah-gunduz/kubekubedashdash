@@ -94,7 +94,6 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
     val allColumns = buildRawColumns()
     val visibleColumns = allColumns.filter { it.minTableWidth == null || tableWidth >= it.minTableWidth }
     val columns = visibleColumns.map { it.def }
-    val defaultSortIndex = visibleColumns.indexOfFirst { it.def.header == "Last Seen" }
 
     val rows = events.map { ev ->
         val rowBg = rowBackground(ev.type)
@@ -114,7 +113,7 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
         onRowClick = null,
         selectedRowId = null,
         emptyMessage = "No events found",
-        defaultSortColumn = defaultSortIndex,
+        defaultSortHeader = "Last Seen",
         defaultSortAscending = false,
         identityHeader = "Object",
         tableKey = "AllClustersEvents",

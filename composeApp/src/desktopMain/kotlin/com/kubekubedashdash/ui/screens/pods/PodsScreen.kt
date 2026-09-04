@@ -142,7 +142,7 @@ fun PodsScreen(
                 val activeStatusFilter = statusFilter
                 val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
                 val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
-                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, annotationSelector, pinnedIds) {
+                val filtered = remember(allPods, searchQuery, activeStatusFilter, labelSelector, annotationSelector) {
                     allPods
                         .filter { pod ->
                             val passesSearch = searchQuery.isBlank() ||

@@ -270,4 +270,41 @@ class TableOptionsTest {
         val visible = visibleColumnIndices(narrow, "Events", "Object", mapOf("Events::Type" to true, "Events::Message" to true))
         assertEquals(listOf(0, 1), visible)
     }
+
+    /**
+     * The point of sorting by header rather than index: the same header sorts
+     * the same column wherever the responsive filter has left it. A positional
+     * implementation passes the single-list case and fails this one.
+     */
+    @Test
+    fun `the same header sorts the same column at any position`() {
+        val rows = listOf(row("1", "b", "Running"), row("2", "a", "Pending"))
+        val wide = listOf(ColumnDef(header = "Type"), ColumnDef(header = "Name"), ColumnDef(header = "Status"))
+        val wideRows = rows.map { r ->
+            TableRow(id = r.id, cells = listOf(CellData("Normal")) + r.cells)
+        }
+
+        val narrow = sortTableRows(rows, nameStatus, "Status", ascending = true, identityHeader = null, pinnedIds = emptySet())
+        val shifted = sortTableRows(wideRows, wide, "Status", ascending = true, identityHeader = "Name", pinnedIds = emptySet())
+
+        assertEquals(listOf("2", "1"), narrow.map { it.id })
+        assertEquals(listOf("2", "1"), shifted.map { it.id })
+    }
+
+    /**
+     * A stream table (Events) passes no sort until the user clicks one. That
+     * must leave arrival order alone — sorting it by the identity column
+     * instead would silently reorder the newest-first list the screen exists
+     * to show. Only pins float.
+     */
+    @Test
+    fun `a null sort header keeps the source order and only floats pins`() {
+        val rows = listOf(row("1", "c", "x"), row("2", "a", "y"), row("3", "b", "z", pinId = "pin:3"))
+
+        val unsorted = sortTableRows(rows, nameStatus, null, ascending = true, identityHeader = null, pinnedIds = emptySet())
+        assertEquals(listOf("1", "2", "3"), unsorted.map { it.id })
+
+        val pinned = sortTableRows(rows, nameStatus, null, ascending = true, identityHeader = null, pinnedIds = setOf("pin:3"))
+        assertEquals(listOf("3", "1", "2"), pinned.map { it.id })
+    }
 }

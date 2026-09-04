@@ -382,12 +382,19 @@ object PreferenceRepository {
      * columns) stores and reads the same disambiguated key.
      */
     fun setTableColumnHidden(entryKey: String, hidden: Boolean) {
-        val key = entryKey
-        _hiddenTableColumns.value = _hiddenTableColumns.value + (key to hidden)
+        // Showing a column drops its entry rather than storing `false`: the
+        // blob is keyed per table per column, and a user who toggles their way
+        // around every generic kind would otherwise grow it forever.
+        _hiddenTableColumns.value = if (hidden) {
+            _hiddenTableColumns.value + (entryKey to true)
+        } else {
+            _hiddenTableColumns.value - entryKey
+        }
         ioScope.launch {
             dataStore.edit { prefs ->
                 val current = BoolMapCodec.decode(prefs[TABLE_COLUMNS_HIDDEN])
-                prefs[TABLE_COLUMNS_HIDDEN] = BoolMapCodec.encode(current + (key to hidden))
+                val next = if (hidden) current + (entryKey to true) else current - entryKey
+                prefs[TABLE_COLUMNS_HIDDEN] = BoolMapCodec.encode(next)
             }
         }
     }

@@ -160,8 +160,13 @@ fun ResourceTable(
     selectedRowId: String? = null,
     emptyMessage: String = "No resources found",
     defaultSortColumn: Int = -1,
+    /**
+     * Initial sort column by NAME. Prefer this over [defaultSortColumn] for a
+     * table whose columns are width-filtered: an index computed over the
+     * filtered list is -1 on a narrow window, which silently means "unsorted".
+     */
+    defaultSortHeader: String? = null,
     defaultSortAscending: Boolean = true,
-    /** Index into [columns] that never hides and breaks primary-sort ties (D6/D7). */
     identityHeader: String? = null,
     /**
      * Identifies this table for the per-table column-visibility preference and
@@ -182,7 +187,7 @@ fun ResourceTable(
 ) {
     // Resolved once, on first composition, per D5 — a positional index would
     // silently re-target when the responsive `columns` subset changes width.
-    var sortHeader by remember { mutableStateOf(columns.getOrNull(defaultSortColumn)?.header) }
+    var sortHeader by remember { mutableStateOf(defaultSortHeader ?: columns.getOrNull(defaultSortColumn)?.header) }
     var sortAscending by remember { mutableStateOf(defaultSortAscending) }
     val copyToClipboard = rememberCopyToClipboard()
 
@@ -200,11 +205,14 @@ fun ResourceTable(
         visibleColumnIndices(columns, tableKey, identityHeader, hiddenColumns)
     }
 
-    val sortedRows = remember(rows, columns, sortHeader, sortAscending, identityHeader, pinnedIds) {
+    // A column you have hidden must not keep sorting the table from behind the
+    // menu — that is the "invisible key" the header-based sort exists to avoid.
+    val effectiveSortHeader = sortHeader?.takeIf { header -> visibleIndices.any { columns[it].header == header } }
+    val sortedRows = remember(rows, columns, effectiveSortHeader, sortAscending, identityHeader, pinnedIds) {
         sortTableRows(
             rows = rows,
             columns = columns,
-            sortHeader = sortHeader,
+            sortHeader = effectiveSortHeader,
             ascending = sortAscending,
             identityHeader = identityHeader,
             pinnedIds = pinnedIds,
@@ -314,14 +322,20 @@ fun ResourceTable(
             // D9: the 24dp trailing slot is unconditional in the header AND
             // every row so the two stay in register; only the options `⋮`
             // inside is gated on tableKey != null.
-            Box(modifier = Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+            var optionsExpanded by remember { mutableStateOf(false) }
+            Box(
+                // The whole slot is the hit target, not just the glyph: this is
+                // the only way into every control in the menu.
+                modifier = Modifier
+                    .width(24.dp)
+                    .then(if (tableKey != null) Modifier.clickable { optionsExpanded = true } else Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
                 if (tableKey != null) {
-                    var optionsExpanded by remember { mutableStateOf(false) }
                     Text(
                         text = "⋮",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodySmall,
                         color = KdTextSecondary,
-                        modifier = Modifier.clickable { optionsExpanded = true },
                     )
                     DropdownMenu(expanded = optionsExpanded, onDismissRequest = { optionsExpanded = false }) {
                         Text(
