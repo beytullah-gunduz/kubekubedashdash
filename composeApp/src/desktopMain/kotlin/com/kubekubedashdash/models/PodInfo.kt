@@ -22,4 +22,5 @@ data class PodInfo(
     // (e.g. "CrashLoopBackOff") composed from phase + container states for
     // display. Tallies in clusterInfo's combine count by raw phase.
     val phase: String = "",
+    val owners: List<OwnerRefInfo> = emptyList(),
 )
