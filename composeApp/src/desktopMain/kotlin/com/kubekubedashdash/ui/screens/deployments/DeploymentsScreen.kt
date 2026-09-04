@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -16,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.delete_filled
@@ -40,6 +42,7 @@ import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun DeploymentsScreen(
@@ -73,6 +76,8 @@ fun DeploymentsScreen(
     val state by viewModel.state.collectAsState()
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
+    val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
+    val scope = rememberCoroutineScope()
     var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var degradedOnly by rememberSaveable { mutableStateOf(initialDegradedOnly) }
     LaunchedEffect(initialDegradedOnly) {
@@ -183,6 +188,8 @@ fun DeploymentsScreen(
                 },
                 selectedUids = selectedUids,
                 onSelectionChange = viewModel.selection::set,
+                pinnedIds = pinnedIds,
+                onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
             )
         }
     }

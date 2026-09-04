@@ -8,12 +8,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -25,6 +27,7 @@ import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberResourceFilter
 import com.kubekubedashdash.ui.screens.services.viewmodel.ServicesScreenViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ServicesScreen(
@@ -43,6 +46,8 @@ fun ServicesScreen(
     val reactiveClient = LocalReactiveKubeClient.current
     val viewModel: ServicesScreenViewModel = viewModel { ServicesScreenViewModel(reactiveClient) }
     val state by viewModel.state.collectAsState()
+    val pinnedIds by PreferenceRepository.pinnedResources.collectAsState()
+    val scope = rememberCoroutineScope()
     var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
 
     ResourceListScaffold(state) { data ->
@@ -84,6 +89,8 @@ fun ServicesScreen(
                     selectedUid = svc.uid
                     onNavigate(Screen.Detail.ServiceDetail(svc))
                 },
+                pinnedIds = pinnedIds,
+                onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
             )
         }
     }

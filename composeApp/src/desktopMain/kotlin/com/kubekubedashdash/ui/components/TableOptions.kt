@@ -32,6 +32,19 @@ fun tableColumnKey(tableKey: String, columns: List<ColumnDef>, index: Int): Stri
 }
 
 /**
+ * The index of the identity column — the one that names the row. Resolved by
+ * HEADER because [columns] is already filtered by window width at every call
+ * site, so a fixed index silently points at a different column once a wider
+ * one drops out. Falls back to the first column when [identityHeader] is null
+ * or currently filtered out: degraded, but never the wrong column.
+ */
+fun identityColumnIndex(columns: List<ColumnDef>, identityHeader: String?): Int {
+    if (identityHeader == null) return 0
+    val index = columns.indexOfFirst { it.header == identityHeader }
+    return if (index >= 0) index else 0
+}
+
+/**
  * Indices into [columns] that render, in order. [identityColumn] is always
  * present regardless of the hidden map; a null [tableKey] returns every
  * index (opted out of column hiding entirely).
@@ -39,12 +52,13 @@ fun tableColumnKey(tableKey: String, columns: List<ColumnDef>, index: Int): Stri
 fun visibleColumnIndices(
     columns: List<ColumnDef>,
     tableKey: String?,
-    identityColumn: Int,
+    identityHeader: String?,
     hidden: Map<String, Boolean>,
 ): List<Int> {
     if (tableKey == null) return columns.indices.toList()
+    val identity = identityColumnIndex(columns, identityHeader)
     return columns.indices.filter { index ->
-        index == identityColumn || hidden[tableColumnKey(tableKey, columns, index)] != true
+        index == identity || hidden[tableColumnKey(tableKey, columns, index)] != true
     }
 }
 
@@ -56,13 +70,14 @@ fun visibleColumnIndices(
 fun isLastVisibleColumn(
     columns: List<ColumnDef>,
     tableKey: String,
-    identityColumn: Int,
+    identityHeader: String?,
     hidden: Map<String, Boolean>,
     index: Int,
 ): Boolean {
-    if (index == identityColumn) return false
+    val identity = identityColumnIndex(columns, identityHeader)
+    if (index == identity) return false
     val visibleHideable = columns.indices.filter { i ->
-        i != identityColumn && hidden[tableColumnKey(tableKey, columns, i)] != true
+        i != identity && hidden[tableColumnKey(tableKey, columns, i)] != true
     }
     return visibleHideable.size == 1 && visibleHideable[0] == index
 }
@@ -70,7 +85,7 @@ fun isLastVisibleColumn(
 /**
  * Pinned rows first, then the primary key ([sortHeader], resolved against
  * [columns]; unresolved — including a null [sortHeader] — falls back to
- * [identityColumn]), then the identity column as a tiebreaker. Descending is
+ * [identityHeader]), then the identity column as a tiebreaker. Descending is
  * the reverse of the ascending order, so tied rows land in reverse-identity
  * order when descending — that is intentional, not a bug to fix.
  */
@@ -79,15 +94,17 @@ fun sortTableRows(
     columns: List<ColumnDef>,
     sortHeader: String?,
     ascending: Boolean,
-    identityColumn: Int,
+    identityHeader: String?,
     pinnedIds: Set<String>,
 ): List<TableRow> {
+    val identity = identityColumnIndex(columns, identityHeader)
+
     fun identityKey(row: TableRow): String {
-        val cell = row.cells.getOrNull(identityColumn)
+        val cell = row.cells.getOrNull(identity)
         return cell?.sortValue ?: cell?.text ?: ""
     }
 
-    val primaryIndex = columns.indexOfFirst { it.header == sortHeader }.let { if (it >= 0) it else identityColumn }
+    val primaryIndex = columns.indexOfFirst { it.header == sortHeader }.let { if (it >= 0) it else identity }
 
     fun primaryKey(row: TableRow): String {
         val cell = row.cells.getOrNull(primaryIndex)

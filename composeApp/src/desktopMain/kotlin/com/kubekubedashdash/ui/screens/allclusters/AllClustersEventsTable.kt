@@ -116,6 +116,8 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
         emptyMessage = "No events found",
         defaultSortColumn = defaultSortIndex,
         defaultSortAscending = false,
+        identityHeader = "Object",
+        tableKey = "AllClustersEvents",
         scrollToTopOnChange = true,
     )
 }

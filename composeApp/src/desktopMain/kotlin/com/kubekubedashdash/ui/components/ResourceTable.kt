@@ -162,7 +162,7 @@ fun ResourceTable(
     defaultSortColumn: Int = -1,
     defaultSortAscending: Boolean = true,
     /** Index into [columns] that never hides and breaks primary-sort ties (D6/D7). */
-    identityColumn: Int = 0,
+    identityHeader: String? = null,
     /**
      * Identifies this table for the per-table column-visibility preference and
      * enables the trailing options menu (column picker + density). Null (the
@@ -196,17 +196,17 @@ fun ResourceTable(
     // and hidden-column keys all speak positions/headers against the full
     // `columns` list, so a filtered `columns` copy would silently re-target
     // every one of them.
-    val visibleIndices = remember(columns, tableKey, identityColumn, hiddenColumns) {
-        visibleColumnIndices(columns, tableKey, identityColumn, hiddenColumns)
+    val visibleIndices = remember(columns, tableKey, identityHeader, hiddenColumns) {
+        visibleColumnIndices(columns, tableKey, identityHeader, hiddenColumns)
     }
 
-    val sortedRows = remember(rows, columns, sortHeader, sortAscending, identityColumn, pinnedIds) {
+    val sortedRows = remember(rows, columns, sortHeader, sortAscending, identityHeader, pinnedIds) {
         sortTableRows(
             rows = rows,
             columns = columns,
             sortHeader = sortHeader,
             ascending = sortAscending,
-            identityColumn = identityColumn,
+            identityHeader = identityHeader,
             pinnedIds = pinnedIds,
         )
     }
@@ -330,11 +330,12 @@ fun ResourceTable(
                             color = KdTextSecondary,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         )
-                        columns.indices.filter { it != identityColumn }.forEach { i ->
+                        val identityIndex = identityColumnIndex(columns, identityHeader)
+                        columns.indices.filter { it != identityIndex }.forEach { i ->
                             val col = columns[i]
                             val entryKey = tableColumnKey(tableKey, columns, i)
                             val hiddenNow = hiddenColumns[entryKey] == true
-                            val locked = isLastVisibleColumn(columns, tableKey, identityColumn, hiddenColumns, i)
+                            val locked = isLastVisibleColumn(columns, tableKey, identityHeader, hiddenColumns, i)
                             DropdownMenuItem(
                                 enabled = !locked,
                                 text = {

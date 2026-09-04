@@ -46,6 +46,8 @@ internal fun DeploymentTable(
     onDelete: ((DeploymentInfo) -> Unit)? = null,
     selectedUids: Set<String> = emptySet(),
     onSelectionChange: ((Set<String>) -> Unit)? = null,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = deployColumns.filter { maxWidth >= it.minTableWidth }
@@ -53,6 +55,7 @@ internal fun DeploymentTable(
         val rows = deployments.map { dep ->
             TableRow(
                 id = dep.uid,
+                pinId = "deployment:${dep.namespace}:${dep.name}",
                 identity = RowIdentity("Deployment", dep.name, dep.namespace),
                 cells = visible.map { it.cell(dep) },
                 actions = if (onDelete != null) listOf(RowAction("Delete") { onDelete(dep) }) else emptyList(),
@@ -65,6 +68,10 @@ internal fun DeploymentTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> deployments.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No deployments found",
+            tableKey = "Deployments",
+            pinnable = onTogglePin != null,
+            pinnedIds = pinnedIds,
+            onTogglePin = onTogglePin,
             selectable = onSelectionChange != null,
             selectedIds = selectedUids,
             onSelectionChange = onSelectionChange,

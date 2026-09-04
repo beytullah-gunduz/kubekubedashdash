@@ -48,6 +48,8 @@ internal fun NodeTable(
     staleUids: Set<String> = emptySet(),
     selectedUids: Set<String> = emptySet(),
     onSelectionChange: ((Set<String>) -> Unit)? = null,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nodeColumns.filter { maxWidth >= it.minTableWidth }
@@ -56,6 +58,7 @@ internal fun NodeTable(
             val isStale = node.uid in staleUids
             TableRow(
                 id = node.uid,
+                pinId = "node:${node.name}",
                 selectable = !isStale,
                 identity = RowIdentity("Node", node.name),
                 cells = visible.map { col ->
@@ -79,6 +82,10 @@ internal fun NodeTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> nodes.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No nodes found",
+            tableKey = "Nodes",
+            pinnable = onTogglePin != null,
+            pinnedIds = pinnedIds,
+            onTogglePin = onTogglePin,
             selectable = onSelectionChange != null,
             selectedIds = selectedUids,
             onSelectionChange = onSelectionChange,

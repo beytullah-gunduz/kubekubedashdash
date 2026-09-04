@@ -156,7 +156,6 @@ fun PodsScreen(
                                 matchesMapSelector(pod.annotations, annotationSelector)
                             passesSearch && passesStatus && passesLabels && passesAnnotations
                         }
-                        .sortedByDescending { pod -> "pod:${pod.namespace}:${pod.name}" in pinnedIds }
                 }
 
                 val visibleSelectableUids = remember(filtered, stalePods) {

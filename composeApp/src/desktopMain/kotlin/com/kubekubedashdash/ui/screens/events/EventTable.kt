@@ -135,6 +135,8 @@ internal fun EventTable(
             emptyMessage = "No events found",
             defaultSortColumn = defaultSortIndex,
             defaultSortAscending = false,
+            identityHeader = "Object",
+            tableKey = "Events",
             scrollToTopOnChange = true,
         )
     }

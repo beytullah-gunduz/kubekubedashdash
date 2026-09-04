@@ -46,6 +46,8 @@ internal fun ServiceTable(
     services: List<ServiceInfo>,
     selectedUid: String? = null,
     onClick: (ServiceInfo) -> Unit,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = svcColumns.filter { maxWidth >= it.minTableWidth }
@@ -53,6 +55,7 @@ internal fun ServiceTable(
         val rows = services.map { svc ->
             TableRow(
                 id = svc.uid,
+                pinId = "service:${svc.namespace}:${svc.name}",
                 identity = RowIdentity("Service", svc.name, svc.namespace),
                 cells = visible.map { it.cell(svc) },
             )
@@ -64,6 +67,10 @@ internal fun ServiceTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> services.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No services found",
+            tableKey = "Services",
+            pinnable = onTogglePin != null,
+            pinnedIds = pinnedIds,
+            onTogglePin = onTogglePin,
         )
     }
 }

@@ -40,6 +40,8 @@ internal fun NamespaceTable(
     onDelete: ((GenericResourceInfo) -> Unit)? = null,
     onCaptureLogs: ((GenericResourceInfo) -> Unit)? = null,
     onTailLogs: ((GenericResourceInfo) -> Unit)? = null,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = nsColumns.filter { maxWidth >= it.minTableWidth }
@@ -47,6 +49,7 @@ internal fun NamespaceTable(
         val rows = namespaces.map { ns ->
             TableRow(
                 id = ns.uid,
+                pinId = "namespace:${ns.name}",
                 identity = RowIdentity("Namespace", ns.name),
                 cells = visible.map { it.cell(ns) },
                 actions = buildList {
@@ -63,6 +66,10 @@ internal fun NamespaceTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> namespaces.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No namespaces found",
+            tableKey = "Namespaces",
+            pinnable = onTogglePin != null,
+            pinnedIds = pinnedIds,
+            onTogglePin = onTogglePin,
         )
     }
 }
