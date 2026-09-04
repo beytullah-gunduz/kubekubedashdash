@@ -6,9 +6,11 @@ import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.CrdScope
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.models.PodInfo
 import io.fabric8.kubernetes.api.model.Event
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
+import io.fabric8.kubernetes.api.model.OwnerReference
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 
@@ -30,6 +32,19 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
  * needs separate sign-off. Deferred deliberately, not overlooked.
  */
 object ResourceMappers {
+
+    /**
+     * Trims a fabric8 `metadata.ownerReferences` list to the three fields a
+     * relation chain needs. An entry missing a kind, a name or a uid is
+     * dropped rather than carried through partially populated — a chain hop
+     * with a blank field is worse than no hop at all.
+     */
+    fun mapOwnerRefs(refs: List<OwnerReference>?): List<OwnerRefInfo> = refs?.mapNotNull { ref ->
+        val kind = ref.kind?.ifBlank { null } ?: return@mapNotNull null
+        val name = ref.name?.ifBlank { null } ?: return@mapNotNull null
+        val uid = ref.uid?.ifBlank { null } ?: return@mapNotNull null
+        OwnerRefInfo(kind = kind, name = name, uid = uid, controller = ref.controller == true)
+    } ?: emptyList()
 
     fun mapPod(pod: Pod): PodInfo {
         val containers = pod.spec?.containers?.map { c ->
@@ -62,6 +77,7 @@ object ResourceMappers {
             annotations = pod.metadata.annotations ?: emptyMap(),
             containers = containers,
             phase = pod.status?.phase ?: "",
+            owners = mapOwnerRefs(pod.metadata.ownerReferences),
         )
     }
 
@@ -155,6 +171,7 @@ object ResourceMappers {
             labels = gkr.metadata?.labels ?: emptyMap(),
             annotations = gkr.metadata?.annotations ?: emptyMap(),
             extraColumns = extras,
+            owners = mapOwnerRefs(gkr.metadata?.ownerReferences),
         )
     }
 }

@@ -99,6 +99,7 @@ import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.SecretYamlMasking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -185,6 +186,8 @@ fun ResourceDetailPanel(
     plural: String? = null,
     onDelete: (() -> Unit)? = null,
     actions: List<DetailAction> = emptyList(),
+    ownerChain: List<RelatedRef> = emptyList(),
+    onOwnerClick: ((RelatedRef) -> Unit)? = null,
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -235,6 +238,8 @@ fun ResourceDetailPanel(
                 actions = actions,
                 onDelete = onDelete,
                 onClose = onClose,
+                ownerChain = ownerChain,
+                onOwnerClick = onOwnerClick,
             )
 
             // Tabs

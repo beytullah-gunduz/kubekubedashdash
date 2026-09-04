@@ -53,10 +53,12 @@ import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.OverviewSection
+import com.kubekubedashdash.ui.screens.relatedOverviewSection
 import com.kubekubedashdash.util.EndpointSliceDetail
 import com.kubekubedashdash.util.PolicyRuleRow
 import com.kubekubedashdash.util.QuotaUsageRow
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.RoleBindingDetail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -85,12 +87,19 @@ fun kindExtraTabs(
  * Returns kind-specific sections appended to the Overview tab of
  * [ResourceDetailPanel] — the Node panel's inline-pod-list shape, for kinds
  * whose pods are the first thing worth seeing. Same extension point contract
- * as [kindExtraTabs].
+ * as [kindExtraTabs]. [related] is the already-resolved D4 data for the
+ * selected resource — this function only decides where it is added, never
+ * computes it, and appending it never drops a branch's own section(s). A
+ * default lets kinds outside D1's scope (and existing callers with nothing
+ * to relate) omit it; an empty [RelatedResources] contributes no section,
+ * matching [RelatedSection]'s own "nothing when empty" rule (D6) instead of
+ * wiring a section that would render nothing.
  */
 fun kindOverviewSections(
     kind: String,
     res: GenericResourceInfo,
     client: ReactiveKubeClient,
+    related: RelatedResources = RelatedResources(),
     onNavigate: (Screen) -> Unit = {},
 ): List<OverviewSection> = when (kind) {
     "SparkApplication" ->
@@ -98,15 +107,17 @@ fun kindOverviewSections(
             listOf(podsOverviewSection(res, onNavigate) { client.listSparkApplicationPods(ns, res.uid, res.name) })
         } ?: emptyList()
 
-    "Job" ->
-        res.namespace?.let { ns ->
-            listOf(podsOverviewSection(res, onNavigate) { client.listJobPods(ns, res.uid) })
-        } ?: emptyList()
+    "Job" -> buildList {
+        res.namespace?.let { ns -> add(podsOverviewSection(res, onNavigate) { client.listJobPods(ns, res.uid) }) }
+        if (!related.isEmpty) add(relatedOverviewSection(related, onNavigate))
+    }
 
-    "CronJob" ->
-        res.namespace?.let { ns ->
-            listOf(podsOverviewSection(res, onNavigate) { client.listCronJobPods(ns, res.uid) })
-        } ?: emptyList()
+    "CronJob" -> buildList {
+        res.namespace?.let { ns -> add(podsOverviewSection(res, onNavigate) { client.listCronJobPods(ns, res.uid) }) }
+        if (!related.isEmpty) add(relatedOverviewSection(related, onNavigate))
+    }
+
+    "ReplicaSet", "StatefulSet", "DaemonSet" -> if (related.isEmpty) emptyList() else listOf(relatedOverviewSection(related, onNavigate))
 
     else -> emptyList()
 }

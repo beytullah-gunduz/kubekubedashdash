@@ -210,6 +210,7 @@ class ReactiveKubeClient(
                 age = formatAge(ns.metadata.creationTimestamp),
                 labels = ns.metadata.labels ?: emptyMap(),
                 annotations = ns.metadata.annotations ?: emptyMap(),
+                owners = ResourceMappers.mapOwnerRefs(ns.metadata.ownerReferences),
             )
         },
     )
@@ -354,6 +355,7 @@ class ReactiveKubeClient(
                 labels = cm.metadata.labels ?: emptyMap(),
                 annotations = cm.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Data" to "${(cm.data?.size ?: 0) + (cm.binaryData?.size ?: 0)}"),
+                owners = ResourceMappers.mapOwnerRefs(cm.metadata.ownerReferences),
             )
         },
     )
@@ -378,6 +380,7 @@ class ReactiveKubeClient(
                 labels = s.metadata.labels ?: emptyMap(),
                 annotations = s.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Type" to (s.type ?: ""), "Data" to "${s.data?.size ?: 0}"),
+                owners = ResourceMappers.mapOwnerRefs(s.metadata.ownerReferences),
             )
         },
     )
@@ -404,6 +407,7 @@ class ReactiveKubeClient(
                 labels = ss.metadata.labels ?: emptyMap(),
                 annotations = ss.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Ready" to "$r/$d"),
+                owners = ResourceMappers.mapOwnerRefs(ss.metadata.ownerReferences),
             )
         },
     )
@@ -430,6 +434,7 @@ class ReactiveKubeClient(
                 labels = ds.metadata.labels ?: emptyMap(),
                 annotations = ds.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Desired" to "$desired", "Ready" to "$ready"),
+                owners = ResourceMappers.mapOwnerRefs(ds.metadata.ownerReferences),
             )
         },
     )
@@ -456,6 +461,7 @@ class ReactiveKubeClient(
                 labels = rs.metadata.labels ?: emptyMap(),
                 annotations = rs.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Ready" to "$r/$d"),
+                owners = ResourceMappers.mapOwnerRefs(rs.metadata.ownerReferences),
             )
         },
     )
@@ -488,6 +494,7 @@ class ReactiveKubeClient(
                 labels = job.metadata.labels ?: emptyMap(),
                 annotations = job.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Completions" to "$succ/$comp", "Status" to status),
+                owners = ResourceMappers.mapOwnerRefs(job.metadata.ownerReferences),
             )
         },
     )
@@ -515,6 +522,7 @@ class ReactiveKubeClient(
                     "Schedule" to (cj.spec?.schedule ?: ""),
                     "Active" to "${cj.status?.active?.size ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(cj.metadata.ownerReferences),
             )
         },
     )
@@ -540,6 +548,7 @@ class ReactiveKubeClient(
                 labels = ing.metadata.labels ?: emptyMap(),
                 annotations = ing.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Hosts" to hosts),
+                owners = ResourceMappers.mapOwnerRefs(ing.metadata.ownerReferences),
             )
         },
     )
@@ -565,6 +574,7 @@ class ReactiveKubeClient(
                 labels = ep.metadata.labels ?: emptyMap(),
                 annotations = ep.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Endpoints" to "$count"),
+                owners = ResourceMappers.mapOwnerRefs(ep.metadata.ownerReferences),
             )
         },
     )
@@ -589,6 +599,7 @@ class ReactiveKubeClient(
                 labels = np.metadata.labels ?: emptyMap(),
                 annotations = np.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Policy Types" to (np.spec?.policyTypes?.joinToString(", ") ?: "")),
+                owners = ResourceMappers.mapOwnerRefs(np.metadata.ownerReferences),
             )
         },
     )
@@ -612,6 +623,7 @@ class ReactiveKubeClient(
                     "Reclaim" to (pv.spec?.persistentVolumeReclaimPolicy ?: ""),
                     "Claim" to (pv.spec?.claimRef?.let { "${it.namespace}/${it.name}" } ?: ""),
                 ),
+                owners = ResourceMappers.mapOwnerRefs(pv.metadata.ownerReferences),
             )
         },
     )
@@ -641,6 +653,7 @@ class ReactiveKubeClient(
                     "Storage Class" to (pvc.spec?.storageClassName ?: ""),
                     "Volume" to (pvc.spec?.volumeName ?: ""),
                 ),
+                owners = ResourceMappers.mapOwnerRefs(pvc.metadata.ownerReferences),
             )
         },
     )
@@ -665,6 +678,7 @@ class ReactiveKubeClient(
                     "Reclaim Policy" to (sc.reclaimPolicy ?: ""),
                     "Binding Mode" to (sc.volumeBindingMode ?: ""),
                 ),
+                owners = ResourceMappers.mapOwnerRefs(sc.metadata.ownerReferences),
             )
         },
     )
@@ -692,6 +706,7 @@ class ReactiveKubeClient(
                     "Secrets" to "${sa.secrets?.size ?: 0}",
                     "Automount" to (sa.automountServiceAccountToken?.toString() ?: "—"),
                 ),
+                owners = ResourceMappers.mapOwnerRefs(sa.metadata.ownerReferences),
             )
         },
     )
@@ -714,6 +729,7 @@ class ReactiveKubeClient(
                 labels = role.metadata.labels ?: emptyMap(),
                 annotations = role.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Rules" to "${role.rules?.size ?: 0}"),
+                owners = ResourceMappers.mapOwnerRefs(role.metadata.ownerReferences),
             )
         },
     )
@@ -733,6 +749,7 @@ class ReactiveKubeClient(
                     "Rules" to "${cr.rules?.size ?: 0}",
                     "Aggregated" to if (cr.aggregationRule != null) "yes" else "—",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(cr.metadata.ownerReferences),
             )
         },
     )
@@ -758,6 +775,7 @@ class ReactiveKubeClient(
                     "Role" to "${rb.roleRef?.kind ?: ""}/${rb.roleRef?.name ?: ""}",
                     "Subjects" to "${rb.subjects?.size ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(rb.metadata.ownerReferences),
             )
         },
     )
@@ -777,6 +795,7 @@ class ReactiveKubeClient(
                     "Role" to "${crb.roleRef?.kind ?: ""}/${crb.roleRef?.name ?: ""}",
                     "Subjects" to "${crb.subjects?.size ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(crb.metadata.ownerReferences),
             )
         },
     )
@@ -806,6 +825,7 @@ class ReactiveKubeClient(
                     "Max" to "${hpa.spec?.maxReplicas ?: "—"}",
                     "Replicas" to "${hpa.status?.currentReplicas ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(hpa.metadata.ownerReferences),
             )
         },
     )
@@ -833,6 +853,7 @@ class ReactiveKubeClient(
                     "Healthy" to "${pdb.status?.currentHealthy ?: 0}/${pdb.status?.desiredHealthy ?: 0}",
                     "Allowed" to "${pdb.status?.disruptionsAllowed ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(pdb.metadata.ownerReferences),
             )
         },
     )
@@ -860,6 +881,7 @@ class ReactiveKubeClient(
                     "Scopes" to "${rq.spec?.scopes?.size ?: 0}",
                     "Hard" to "${rq.status?.hard?.size ?: rq.spec?.hard?.size ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(rq.metadata.ownerReferences),
             )
         },
     )
@@ -884,6 +906,7 @@ class ReactiveKubeClient(
                 extraColumns = mapOf(
                     "Limits" to "${lr.spec?.limits?.size ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(lr.metadata.ownerReferences),
             )
         },
     )
@@ -903,6 +926,7 @@ class ReactiveKubeClient(
                     "Value" to "${pc.value ?: "—"}",
                     "Global Default" to "${pc.globalDefault ?: false}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(pc.metadata.ownerReferences),
             )
         },
     )
@@ -921,6 +945,7 @@ class ReactiveKubeClient(
                 labels = x.metadata.labels ?: emptyMap(),
                 annotations = x.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Webhooks" to "${x.webhooks?.size ?: 0}"),
+                owners = ResourceMappers.mapOwnerRefs(x.metadata.ownerReferences),
             )
         },
     )
@@ -937,6 +962,7 @@ class ReactiveKubeClient(
                 labels = x.metadata.labels ?: emptyMap(),
                 annotations = x.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Webhooks" to "${x.webhooks?.size ?: 0}"),
+                owners = ResourceMappers.mapOwnerRefs(x.metadata.ownerReferences),
             )
         },
     )
@@ -957,6 +983,7 @@ class ReactiveKubeClient(
                 extraColumns = mapOf(
                     "Controller" to (ic.spec?.controller ?: "—"),
                 ),
+                owners = ResourceMappers.mapOwnerRefs(ic.metadata.ownerReferences),
             )
         },
     )
@@ -983,6 +1010,7 @@ class ReactiveKubeClient(
                     "Endpoints" to "${es.endpoints?.size ?: 0}",
                     "Ports" to "${es.ports?.size ?: 0}",
                 ),
+                owners = ResourceMappers.mapOwnerRefs(es.metadata.ownerReferences),
             )
         },
     )
@@ -1002,6 +1030,7 @@ class ReactiveKubeClient(
                     "Attach Required" to (d.spec?.attachRequired?.toString() ?: "—"),
                     "Modes" to (d.spec?.volumeLifecycleModes?.joinToString(", ") ?: "—"),
                 ),
+                owners = ResourceMappers.mapOwnerRefs(d.metadata.ownerReferences),
             )
         },
     )
@@ -1028,6 +1057,7 @@ class ReactiveKubeClient(
                     "Requestor" to (csr.spec?.username ?: "—"),
                     "Condition" to cond,
                 ),
+                owners = ResourceMappers.mapOwnerRefs(csr.metadata.ownerReferences),
             )
         },
     )

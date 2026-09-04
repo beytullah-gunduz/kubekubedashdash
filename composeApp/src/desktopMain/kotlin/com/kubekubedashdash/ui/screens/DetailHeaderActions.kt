@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -48,6 +51,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
@@ -71,6 +75,7 @@ import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.DIVIDER_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.H_PADDING_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.ICON_BUTTON_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.TITLE_MIN_DP
+import com.kubekubedashdash.util.RelatedRef
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -131,6 +136,8 @@ fun DetailPanelHeader(
     actions: List<DetailAction> = emptyList(),
     onDelete: (() -> Unit)? = null,
     onClose: () -> Unit,
+    ownerChain: List<RelatedRef> = emptyList(),
+    onOwnerClick: ((RelatedRef) -> Unit)? = null,
 ) {
     val hostControls = LocalDetailHostControls.current
 
@@ -192,6 +199,13 @@ fun DetailPanelHeader(
                     if (status != null) StatusBadge(status)
                     Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                 }
+                // D7: rendered under the subtitle only when there is a chain to
+                // show — outermost first, so D3's nearest-first list is reversed
+                // here at the render site, never in the model.
+                if (ownerChain.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    OwnerBreadcrumb(ownerChain.asReversed(), onOwnerClick)
+                }
             }
 
             // Dp.Unspecified drops the 48 dp touch-target minimum — this is a
@@ -224,6 +238,46 @@ fun DetailPanelHeader(
                 }
                 TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
             }
+        }
+    }
+}
+
+/**
+ * The owner-chain breadcrumb (D7): [hops] is already outermost-first.
+ *
+ * One clickable `Text` per hop rather than a single annotated string with
+ * offset-mapped ranges: a hop is a real hit target that cannot drift, and the
+ * mapping cannot go wrong once the line ellipsises. The row clips rather than
+ * wrapping, and each hop ellipsises on its own, so a long chain degrades from
+ * the right instead of pushing the header to a third line.
+ */
+@Composable
+private fun OwnerBreadcrumb(hops: List<RelatedRef>, onOwnerClick: ((RelatedRef) -> Unit)?) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        hops.forEachIndexed { index, ref ->
+            if (index > 0) {
+                Text(
+                    " › ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary,
+                    maxLines = 1,
+                )
+            }
+            Text(
+                "${ref.kind} ${ref.name}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (onOwnerClick != null) KdPrimary else KdTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (onOwnerClick != null) {
+                    Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { onOwnerClick(ref) }
+                } else {
+                    Modifier
+                },
+            )
         }
     }
 }

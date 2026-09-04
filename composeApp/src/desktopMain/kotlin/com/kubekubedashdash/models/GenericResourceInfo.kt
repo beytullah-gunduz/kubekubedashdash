@@ -12,4 +12,5 @@ data class GenericResourceInfo(
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
     val extraColumns: Map<String, String> = emptyMap(),
+    val owners: List<OwnerRefInfo> = emptyList(),
 ) : Identifiable
