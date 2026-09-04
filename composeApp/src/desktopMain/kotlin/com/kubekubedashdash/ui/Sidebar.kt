@@ -98,7 +98,6 @@ import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
-import com.kubekubedashdash.ui.components.kdFocusRing
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
 import org.jetbrains.compose.resources.DrawableResource
@@ -272,7 +271,6 @@ fun SidebarItem(
                 .height(32.dp)
                 .padding(horizontal = if (collapsed) 4.dp else 8.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .kdFocusRing()
                 .background(bg)
                 .clickable(onClick = onClick)
                 .onPointerEvent(PointerEventType.Enter) { hovered = true }

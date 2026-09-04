@@ -2,11 +2,14 @@ package com.kubekubedashdash
 
 import androidx.compose.foundation.DefaultContextMenuRepresentation
 import androidx.compose.foundation.LocalContextMenuRepresentation
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -35,6 +38,7 @@ import com.kubekubedashdash.resources.inter_regular
 import com.kubekubedashdash.resources.inter_semibold
 import com.kubekubedashdash.resources.jetbrains_mono_regular
 import com.kubekubedashdash.ui.components.CopyFeedbackHost
+import com.kubekubedashdash.ui.components.KdFocusIndication
 import com.kubekubedashdash.ui.feedback.ActionFeedbackHost
 import org.jetbrains.compose.resources.Font
 
@@ -338,6 +342,22 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
             LocalScrollbarStyle provides scrollbarStyle,
             LocalDensity provides Density(base.density * scale, base.fontScale),
             LocalSystemDensity provides base,
+            // WS3: a visible keyboard focus ring app-wide. `Modifier.clickable`'s
+            // own implementation wraps whatever IndicationNodeFactory it reads
+            // from LocalIndication in `platformIndication(...)` before creating
+            // a node from it (verified in the pinned foundation-desktop-1.12.0
+            // jar — androidx.compose.foundation.AbstractClickableNode calls
+            // Indication_skikoKt.platformIndication internally); that wrapper
+            // forwards interactions only while the input mode is Keyboard, so a
+            // mouse click never leaves the ring behind. We cannot call
+            // platformIndication ourselves here — despite being public in the
+            // compiled bytecode, it is `internal` by Kotlin visibility
+            // (`internal expect fun platformIndication` in foundation's common
+            // source) and the compiler rejects calling it from this module. The
+            // ripple theme configuration below covers the Material 3
+            // button/Surface family, which does not read LocalIndication at all.
+            LocalIndication provides KdFocusIndication,
+            LocalRippleThemeConfiguration provides RippleDefaults.InsetFocusRingRippleThemeConfiguration,
         ) {
             CopyFeedbackHost { ActionFeedbackHost { content() } }
         }

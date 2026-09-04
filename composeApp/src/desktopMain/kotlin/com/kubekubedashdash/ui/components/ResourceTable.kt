@@ -784,14 +784,17 @@ private fun TableRowItem(
         }
         // D9: the 24dp trailing slot is unconditional so header and body stay
         // in register; a row with no menu renders the empty box.
-        Box(modifier = Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+        var menuExpanded by remember { mutableStateOf(false) }
+        Box(
+            modifier = Modifier.width(24.dp)
+                .then(if (hasMenu) Modifier.clickable { menuExpanded = true } else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
             if (hasMenu) {
-                var menuExpanded by remember { mutableStateOf(false) }
                 Text(
                     text = "⋮",
                     style = MaterialTheme.typography.bodyLarge,
                     color = KdTextSecondary.copy(alpha = if (hovered || menuExpanded) 1f else 0.3f),
-                    modifier = Modifier.clickable { menuExpanded = true },
                 )
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     // Called HERE, never in the row body: DropdownMenu does not
