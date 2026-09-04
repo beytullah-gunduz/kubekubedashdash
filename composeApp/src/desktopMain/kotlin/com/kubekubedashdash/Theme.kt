@@ -13,15 +13,19 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -274,6 +278,15 @@ private fun appTypography(sans: FontFamily): Typography = Typography(
     ),
 )
 
+/**
+ * The system (unscaled) density, unaffected by UI zoom. `ui/App.kt` reads
+ * this — not `LocalDensity.current` — when it converts Compose window
+ * coordinates into AWT screen points for cluster-chip drag-to-merge hit
+ * testing (see `ui/ScreenGeometry.kt`); every other `LocalDensity.current`
+ * read in the app is supposed to see the zoomed value.
+ */
+val LocalSystemDensity = staticCompositionLocalOf<Density> { error("no system density") }
+
 @Composable
 fun KubeDashTheme(content: @Composable () -> Unit) {
     val systemIsDark = isSystemInDarkTheme()
@@ -313,9 +326,18 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
         colorScheme = colorScheme,
         typography = typography,
     ) {
+        // UI zoom: scale density (not fontScale) so dp and sp grow together —
+        // a true zoom that makes the hard-coded sp literals in the log/YAML
+        // panes readable without touching them. LocalSystemDensity carries
+        // the unscaled value on for the one site that must not see it.
+        val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
+        val base = LocalDensity.current
+        val scale = uiScalePercent / 100f
         CompositionLocalProvider(
             LocalContextMenuRepresentation provides contextMenuRepresentation,
             LocalScrollbarStyle provides scrollbarStyle,
+            LocalDensity provides Density(base.density * scale, base.fontScale),
+            LocalSystemDensity provides base,
         ) {
             CopyFeedbackHost { ActionFeedbackHost { content() } }
         }

@@ -43,12 +43,12 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KubeDashTheme
+import com.kubekubedashdash.LocalSystemDensity
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.TabStripVisibility
@@ -68,6 +68,7 @@ import com.kubekubedashdash.services.logtail.NamespaceTailEngine
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.ShortcutSheet
+import com.kubekubedashdash.ui.components.stepUiScale
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
@@ -108,7 +109,10 @@ fun App(
         val showGkeDiscovery by workspace.showGkeDiscovery.collectAsState()
         val dragTarget by WorkspaceManager.dragTarget.collectAsState()
         val isDropTarget = dragTarget == workspace.id
-        val density = LocalDensity.current
+        // Unscaled, system density — NOT the zoomed LocalDensity.current — so
+        // coords.toScreenRect below stays in AWT's coordinate space at any
+        // UI zoom level (see Theme.kt for why).
+        val density = LocalSystemDensity.current
         val awtWindow = windowScope.window
 
         DisposableEffect(workspace, awtWindow) {
@@ -393,6 +397,28 @@ fun App(
                             event.key == Key.RightBracket && metaOrCtrl -> {
                                 sessionForPalette?.viewModel?.goForward()
                                 sessionForPalette != null
+                            }
+
+                            // Cmd+= / Cmd++ / Cmd+NumPad+: zoom in.
+                            (event.key == Key.Equals || event.key == Key.Plus || event.key == Key.NumPadAdd) && metaOrCtrl -> {
+                                PreferenceRepository.setUiScalePercent(
+                                    stepUiScale(PreferenceRepository.uiScalePercent.value, up = true),
+                                )
+                                true
+                            }
+
+                            // Cmd+- / Cmd+NumPad-: zoom out.
+                            (event.key == Key.Minus || event.key == Key.NumPadSubtract) && metaOrCtrl -> {
+                                PreferenceRepository.setUiScalePercent(
+                                    stepUiScale(PreferenceRepository.uiScalePercent.value, up = false),
+                                )
+                                true
+                            }
+
+                            // Cmd+0 / Cmd+NumPad0: reset zoom.
+                            (event.key == Key.Zero || event.key == Key.NumPad0) && metaOrCtrl -> {
+                                PreferenceRepository.setUiScalePercent(100)
+                                true
                             }
 
                             else -> false

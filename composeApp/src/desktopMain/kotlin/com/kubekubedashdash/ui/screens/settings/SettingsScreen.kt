@@ -66,6 +66,7 @@ import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
@@ -77,6 +78,7 @@ import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.components.ShortcutGroups
+import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
@@ -480,6 +482,38 @@ fun SettingsScreen(
                                     secondaryColors = LightPreviewColors,
                                     onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                                 )
+                            }
+
+                            Spacer(Modifier.height(20.dp))
+
+                            val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
+
+                            Text(
+                                "UI zoom",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Scale the whole interface up or down. The window itself does not resize.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+
+                            FullWidthSingleChoiceSegmentedButtonRow {
+                                UiScaleSteps.forEachIndexed { index, step ->
+                                    SegmentedButton(
+                                        selected = uiScalePercent == step,
+                                        onClick = { PreferenceRepository.setUiScalePercent(step) },
+                                        shape = SegmentedButtonDefaults.itemShape(
+                                            index = index,
+                                            count = UiScaleSteps.size,
+                                        ),
+                                    ) {
+                                        Text("$step%", maxLines = 1, softWrap = false)
+                                    }
+                                }
                             }
                         }
 
