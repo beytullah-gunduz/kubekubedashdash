@@ -6,6 +6,7 @@ import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,7 +80,7 @@ fun podKpis(
     val memAvailable = usage != null && usage.metricsAvailable && usage.memoryCapacityBytes > 0
 
     return buildList {
-        add(Kpi("total", "${pods.size} pods"))
+        add(Kpi("total", "${pods.size} ${if (pods.size == 1) "pod" else "pods"}"))
         if (failingCount > 0 || activeId == "failing") {
             add(Kpi("failing", "$failingCount failing", KpiTone.Error))
         }
@@ -106,7 +109,7 @@ fun nodeKpis(
     val memAvailable = usage != null && usage.metricsAvailable && usage.memoryCapacityBytes > 0
 
     return buildList {
-        add(Kpi("total", "${nodes.size} nodes"))
+        add(Kpi("total", "${nodes.size} ${if (nodes.size == 1) "node" else "nodes"}"))
         if (notReadyCount > 0 || activeId == "notReady") {
             add(Kpi("notReady", "$notReadyCount NotReady", KpiTone.Error))
         }
@@ -177,16 +180,30 @@ fun KpiStrip(
     after: @Composable RowScope.(Kpi) -> Unit = {},
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+        // Scrolls rather than squeezing: a Row measures non-weighted children
+        // against the space left over, so on a narrow window (or with the
+        // detail pane dragged out to the list's 320 dp floor) the trailing
+        // chips would be measured at ~0 width and their labels would wrap one
+        // character per line, tripling the strip's height. The old panel dodged
+        // this by hiding itself below 900 dp; the strip stays and scrolls.
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         kpis.forEachIndexed { index, kpi ->
-            KpiChip(
-                kpi = kpi,
-                active = kpi.id == activeId,
-                clickable = kpi.id in clickableIds,
-                onClick = { onClick(kpi) },
-            )
+            // Keyed: a chip's hover state is remembered per slot, and chips
+            // appear and disappear as counts cross zero — without the key the
+            // remembered values shift onto their neighbours.
+            key(kpi.id) {
+                KpiChip(
+                    kpi = kpi,
+                    active = kpi.id == activeId,
+                    clickable = kpi.id in clickableIds,
+                    onClick = { onClick(kpi) },
+                )
+            }
             after(kpi)
             if (index != kpis.lastIndex) {
                 Spacer(Modifier.width(6.dp))
@@ -259,9 +276,17 @@ private fun KpiChip(
     }
 }
 
-/** What a clickable chip's tooltip says it will do — see D6/D8. */
-private fun kpiActionLabel(kpi: Kpi, active: Boolean): String = if (active || kpi.id == "total") {
-    "Clear the status filter"
-} else {
-    "Show only ${kpi.label.substringAfter(' ')}"
+/**
+ * What a chip's tooltip says. Clickable chips describe the filter they set;
+ * the usage chips are not clickable but still carry one, because their numbers
+ * are cluster-wide while the list beside them may be scoped to a namespace —
+ * the deleted panel made that legible with absolute totals, and a tooltip is
+ * the cheapest way not to lose it.
+ */
+private fun kpiActionLabel(kpi: Kpi, active: Boolean): String = when {
+    kpi.id == "cpu" -> "CPU used across the whole cluster"
+    kpi.id == "mem" -> "Memory used across the whole cluster"
+    kpi.id == "pods" -> "Pods running across the cluster, against total capacity"
+    active || kpi.id == "total" -> "Clear the status filter"
+    else -> "Show only ${kpi.label.substringAfter(' ')}"
 }

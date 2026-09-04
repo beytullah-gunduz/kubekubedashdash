@@ -6,8 +6,10 @@ import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.errorPodStatuses
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.pendingPodStatuses
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -146,14 +148,22 @@ class KpiStripTest {
     }
 
     @Test
-    fun `activeKpiId never returns total`() {
-        val ids = listOf("total", "failing", "pending", "cpu", "mem")
+    fun `a zero-count notReady chip stays while it is the active filter`() {
+        val ready = listOf(node("node-1", "Ready"), node("node-2", "Ready"))
+        assertNull(nodeKpis(ready, null, 0, 0).find { it.id == "notReady" })
 
-        // "total" has no vocabulary of its own (podKpiStatuses("total") is
-        // empty), so it can never match a non-null filter — but assert the
-        // contract directly in case that ever changes.
-        assertTrue(activeKpiId(errorPodStatuses(), ::podKpiStatuses, ids) != "total")
-        assertTrue(activeKpiId(pendingPodStatuses(), ::podKpiStatuses, ids) != "total")
+        val active = nodeKpis(ready, null, 0, 0, activeId = "notReady").find { it.id == "notReady" }
+        assertNotNull(active, "the chip that clears the filter must not vanish while the filter is on")
+        assertEquals("0 NotReady", active.label)
+    }
+
+    @Test
+    fun `activeKpiId never returns total, even when total has a vocabulary`() {
+        // The isNotEmpty() guard alone would pass this if "total" had no
+        // statuses — so hand it some. Only the explicit exclusion can keep
+        // "total" out, and it must, because total clears rather than narrows.
+        val statusesFor: (String) -> Set<String> = { id -> if (id == "total") setOf("Running") else emptySet() }
+        assertNull(activeKpiId(setOf("Running"), statusesFor, listOf("total")))
     }
 
     // ── nodeKpis ─────────────────────────────────────────────────────────────
@@ -241,5 +251,22 @@ class KpiStripTest {
         assertEquals(KpiTone.Neutral, cpu.tone)
         assertEquals("Mem 10 %", mem.label)
         assertEquals(KpiTone.Neutral, mem.tone)
+    }
+
+    @Test
+    fun `the percentage truncates rather than rounding, like the gauges it mirrors`() {
+        // 11.9 %: truncation gives 11, rounding would give 12.
+        assertEquals("CPU 11 %", usagePercentLabel("CPU", used = 119, capacity = 1000, available = true))
+    }
+
+    @Test
+    fun `the percentage keeps a dot decimal on a comma-decimal machine`() {
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.GERMANY)
+            assertEquals("CPU 5.4 %", usagePercentLabel("CPU", used = 54, capacity = 1000, available = true))
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 }

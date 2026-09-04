@@ -1,10 +1,6 @@
 package com.kubekubedashdash.ui.screens.nodes
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -185,8 +181,8 @@ fun NodesScreen(
                     },
                     after = { kpi ->
                         when (kpi.id) {
-                            "cpu" -> UsageHistoryBar(history = cpuHistory, modifier = Modifier.width(48.dp).height(16.dp))
-                            "mem" -> UsageHistoryBar(history = memHistory, modifier = Modifier.width(48.dp).height(16.dp))
+                            "cpu" -> UsageHistoryBar(history = cpuHistory, modifier = Modifier.width(76.dp).height(16.dp))
+                            "mem" -> UsageHistoryBar(history = memHistory, modifier = Modifier.width(76.dp).height(16.dp))
                             else -> {}
                         }
                     },
