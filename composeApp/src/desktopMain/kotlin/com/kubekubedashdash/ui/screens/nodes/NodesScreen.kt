@@ -5,10 +5,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -23,7 +24,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -40,13 +40,18 @@ import com.kubekubedashdash.ui.components.BulkSelectionBar
 import com.kubekubedashdash.ui.components.BulkVerb
 import com.kubekubedashdash.ui.components.BulkVerbButton
 import com.kubekubedashdash.ui.components.BulkVerbs
+import com.kubekubedashdash.ui.components.KpiStrip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
+import com.kubekubedashdash.ui.components.UsageHistoryBar
+import com.kubekubedashdash.ui.components.activeKpiId
 import com.kubekubedashdash.ui.components.matchesMapSelector
+import com.kubekubedashdash.ui.components.nodeKpiStatuses
+import com.kubekubedashdash.ui.components.nodeKpis
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.NODE_PRESSURE_THRESHOLD
@@ -86,15 +91,11 @@ fun NodesScreen(
     val memHistory by viewModel.memHistory.collectAsState()
     val podsCount by viewModel.podsCount.collectAsState()
     val podsCapacity by viewModel.podsCapacity.collectAsState()
-    val podsLoaded by viewModel.podsLoaded.collectAsState()
-    val podsHistory by viewModel.podsHistory.collectAsState()
     val staleNodes by viewModel.staleNodes.collectAsState()
     val selectedUids by viewModel.selection.selected.collectAsState()
     val bulkState by viewModel.bulkRunner.state.collectAsState()
     val statusFilter by viewModel.statusFilter.collectAsState()
     val pressureOnly by viewModel.pressureOnly.collectAsState()
-    val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
-    val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_NODES] ?: true
     var selectedNodeUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkItems by remember { mutableStateOf<List<NodeInfo>>(emptyList()) }
@@ -160,130 +161,139 @@ fun NodesScreen(
             }
             LaunchedEffect(visibleSelectableUids) { viewModel.selection.setVisible(visibleSelectableUids) }
 
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val showStats = maxWidth >= 900.dp
-                Column(modifier = Modifier.fillMaxSize()) {
-                    AnimatedVisibility(
-                        visible = showStats,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut(),
-                    ) {
-                        NodeStatsPanel(
-                            usage = resourceUsage,
-                            cpuHistory = cpuHistory,
-                            memHistory = memHistory,
-                            podsCount = podsCount,
-                            podsCapacity = podsCapacity,
-                            podsLoaded = podsLoaded,
-                            podsHistory = podsHistory,
-                            expanded = statsExpanded,
-                            onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_NODES, !statsExpanded) },
+            Column(modifier = Modifier.fillMaxSize()) {
+                val kpiIds = remember { listOf("total", "notReady", "pods", "cpu", "mem") }
+                val activeId = remember(activeStatusFilter) {
+                    activeKpiId(activeStatusFilter, ::nodeKpiStatuses, kpiIds)
+                }
+                val kpis = remember(allNodes, resourceUsage, podsCount, podsCapacity, activeId) {
+                    nodeKpis(allNodes, resourceUsage, podsCount, podsCapacity, activeId)
+                }
+                val kpiClickableIds = remember(activeStatusFilter) {
+                    if (activeStatusFilter != null) setOf("notReady", "total") else setOf("notReady")
+                }
+                KpiStrip(
+                    kpis = kpis,
+                    activeId = activeId,
+                    clickableIds = kpiClickableIds,
+                    onClick = { kpi ->
+                        if (kpi.id == "total" || kpi.id == activeId) {
+                            viewModel.setStatusFilter(null)
+                        } else {
+                            viewModel.setStatusFilter(nodeKpiStatuses(kpi.id))
+                        }
+                    },
+                    after = { kpi ->
+                        when (kpi.id) {
+                            "cpu" -> UsageHistoryBar(history = cpuHistory, modifier = Modifier.width(48.dp).height(16.dp))
+                            "mem" -> UsageHistoryBar(history = memHistory, modifier = Modifier.width(48.dp).height(16.dp))
+                            else -> {}
+                        }
+                    },
+                )
+                ResourceCountHeader(
+                    count = filtered.size,
+                    kind = "Nodes",
+                    liveDot = {
+                        LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
+                    },
+                    actions = { compact ->
+                        ResourceFilterChips(
+                            labelQuery = labelQuery,
+                            onLabelQueryChange = onLabelQueryChange,
+                            annotationQuery = annotationQuery,
+                            onAnnotationQueryChange = onAnnotationQueryChange,
+                            compact = compact,
+                            pulseLabelsOnEntry = pulseLabelsOnEntry,
+                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                            statusChip = {
+                                StatusFilterMenu(
+                                    available = availableStatuses,
+                                    selected = activeStatusFilter ?: availableStatuses,
+                                    onToggle = { value ->
+                                        val current = activeStatusFilter ?: availableStatuses
+                                        viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                    },
+                                    onSelectAll = { viewModel.setStatusFilter(null) },
+                                    onSelectNone = { viewModel.setStatusFilter(emptySet()) },
+                                    pulseOnEntry = statusFilter != null,
+                                    compact = compact,
+                                    icon = Res.drawable.monitor_heart_filled,
+                                )
+                            },
+                            clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || pressureOnly || statusFilter != null,
+                            onClear = {
+                                onLabelQueryChange("")
+                                onAnnotationQueryChange("")
+                                viewModel.setPressureOnly(false)
+                                viewModel.setStatusFilter(null)
+                            },
                         )
-                    }
-                    ResourceCountHeader(
-                        count = filtered.size,
-                        kind = "Nodes",
-                        liveDot = {
-                            LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
-                        },
-                        actions = { compact ->
-                            ResourceFilterChips(
-                                labelQuery = labelQuery,
-                                onLabelQueryChange = onLabelQueryChange,
-                                annotationQuery = annotationQuery,
-                                onAnnotationQueryChange = onAnnotationQueryChange,
-                                compact = compact,
-                                pulseLabelsOnEntry = pulseLabelsOnEntry,
-                                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                statusChip = {
-                                    StatusFilterMenu(
-                                        available = availableStatuses,
-                                        selected = activeStatusFilter ?: availableStatuses,
-                                        onToggle = { value ->
-                                            val current = activeStatusFilter ?: availableStatuses
-                                            viewModel.setStatusFilter(if (value in current) current - value else current + value)
-                                        },
-                                        onSelectAll = { viewModel.setStatusFilter(null) },
-                                        onSelectNone = { viewModel.setStatusFilter(emptySet()) },
-                                        pulseOnEntry = statusFilter != null,
-                                        compact = compact,
-                                        icon = Res.drawable.monitor_heart_filled,
-                                    )
-                                },
-                                clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || pressureOnly || statusFilter != null,
-                                onClear = {
-                                    onLabelQueryChange("")
-                                    onAnnotationQueryChange("")
-                                    viewModel.setPressureOnly(false)
-                                    viewModel.setStatusFilter(null)
-                                },
-                            )
-                        },
-                    )
-                    // Exit-animation latch: the bar stays composed while it shrinks
-                    // away, so without holding the last non-zero count it would
-                    // flash "0 nodes selected" on every Clear.
-                    var lastSelectedCount by remember { mutableStateOf(0) }
-                    if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
-                    AnimatedVisibility(selectedUids.isNotEmpty()) {
-                        BulkSelectionBar(
-                            selectedCount = lastSelectedCount,
-                            kind = "nodes",
-                            onClear = { viewModel.selection.set(emptySet()) },
+                    },
+                )
+                // Exit-animation latch: the bar stays composed while it shrinks
+                // away, so without holding the last non-zero count it would
+                // flash "0 nodes selected" on every Clear.
+                var lastSelectedCount by remember { mutableStateOf(0) }
+                if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
+                AnimatedVisibility(selectedUids.isNotEmpty()) {
+                    BulkSelectionBar(
+                        selectedCount = lastSelectedCount,
+                        kind = "nodes",
+                        onClear = { viewModel.selection.set(emptySet()) },
+                    ) {
+                        BulkVerbButton(
+                            icon = Res.drawable.lock_filled,
+                            label = "Cordon",
+                            description = "Stop new pods from scheduling on the selected nodes — " +
+                                "existing pods keep running.",
+                            tint = KdTextPrimary,
                         ) {
-                            BulkVerbButton(
-                                icon = Res.drawable.lock_filled,
-                                label = "Cordon",
-                                description = "Stop new pods from scheduling on the selected nodes — " +
-                                    "existing pods keep running.",
-                                tint = KdTextPrimary,
-                            ) {
-                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Cordon, snapshot) { v, items ->
-                                    bulkItems = items
-                                    bulkVerb = v
-                                }
+                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Cordon, snapshot) { v, items ->
+                                bulkItems = items
+                                bulkVerb = v
                             }
-                            BulkVerbButton(
-                                icon = Res.drawable.check_circle_filled,
-                                label = "Uncordon",
-                                description = "Allow pods to be scheduled on the selected nodes again — " +
-                                    "reverses a cordon.",
-                                tint = KdTextPrimary,
-                            ) {
-                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Uncordon, snapshot) { v, items ->
-                                    bulkItems = items
-                                    bulkVerb = v
-                                }
+                        }
+                        BulkVerbButton(
+                            icon = Res.drawable.check_circle_filled,
+                            label = "Uncordon",
+                            description = "Allow pods to be scheduled on the selected nodes again — " +
+                                "reverses a cordon.",
+                            tint = KdTextPrimary,
+                        ) {
+                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Uncordon, snapshot) { v, items ->
+                                bulkItems = items
+                                bulkVerb = v
                             }
-                            BulkVerbButton(
-                                icon = Res.drawable.clear_all_filled,
-                                label = "Drain",
-                                description = "Cordon the selected nodes and evict their pods — to safely " +
-                                    "empty them before maintenance. Respects PodDisruptionBudgets.",
-                                tint = KdError,
-                            ) {
-                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Drain, snapshot) { v, items ->
-                                    bulkItems = items
-                                    bulkVerb = v
-                                }
+                        }
+                        BulkVerbButton(
+                            icon = Res.drawable.clear_all_filled,
+                            label = "Drain",
+                            description = "Cordon the selected nodes and evict their pods — to safely " +
+                                "empty them before maintenance. Respects PodDisruptionBudgets.",
+                            tint = KdError,
+                        ) {
+                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Drain, snapshot) { v, items ->
+                                bulkItems = items
+                                bulkVerb = v
                             }
                         }
                     }
-                    NodeTable(
-                        nodes = filtered,
-                        selectedUid = selectedNodeUid,
-                        onClick = { node ->
-                            selectedNodeUid = node.uid
-                            onNavigate(Screen.Detail.NodeDetail(node))
-                        },
-                        staleUids = staleNodes.keys,
-                        selectedUids = selectedUids,
-                        onSelectionChange = viewModel.selection::set,
-                    )
                 }
+                NodeTable(
+                    nodes = filtered,
+                    selectedUid = selectedNodeUid,
+                    onClick = { node ->
+                        selectedNodeUid = node.uid
+                        onNavigate(Screen.Detail.NodeDetail(node))
+                    },
+                    staleUids = staleNodes.keys,
+                    selectedUids = selectedUids,
+                    onSelectionChange = viewModel.selection::set,
+                )
             }
         }
     }
