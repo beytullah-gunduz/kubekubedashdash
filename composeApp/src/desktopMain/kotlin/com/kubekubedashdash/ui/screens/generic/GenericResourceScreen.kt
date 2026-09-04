@@ -56,6 +56,7 @@ import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ActiveFilterPills
 import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
@@ -75,6 +76,7 @@ import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.ScaleDialog
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
+import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
@@ -302,6 +304,8 @@ fun GenericResourceScreen(
                                         compact = compact,
                                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                        labelOptions = { mapSelectorOptions(s.data.map { it.labels }) },
+                                        annotationOptions = { mapSelectorOptions(s.data.map { it.annotations }) },
                                         statusChip = if (availableStatuses.isNotEmpty()) {
                                             {
                                                 StatusFilterMenu(
@@ -309,7 +313,8 @@ fun GenericResourceScreen(
                                                     selected = activeStatusFilter ?: availableStatuses,
                                                     onToggle = { value ->
                                                         val current = activeStatusFilter ?: availableStatuses
-                                                        statusFilter = if (value in current) current - value else current + value
+                                                        val next = if (value in current) current - value else current + value
+                                                        statusFilter = if (next == availableStatuses) null else next
                                                     },
                                                     onSelectAll = { statusFilter = null },
                                                     onSelectNone = { statusFilter = emptySet() },
@@ -320,8 +325,23 @@ fun GenericResourceScreen(
                                         } else {
                                             null
                                         },
+                                        clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || statusFilter != null,
+                                        onClear = {
+                                            onLabelQueryChange("")
+                                            onAnnotationQueryChange("")
+                                            statusFilter = null
+                                        },
                                     )
                                 },
+                            )
+                            ActiveFilterPills(
+                                labelQuery = labelQuery,
+                                onLabelQueryChange = onLabelQueryChange,
+                                annotationQuery = annotationQuery,
+                                onAnnotationQueryChange = onAnnotationQueryChange,
+                                statusFilter = activeStatusFilter,
+                                onClearStatus = { statusFilter = null },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                             if (bulkEnabled) {
                                 // Exit-animation latch: the bar stays composed while it shrinks

@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.deployments
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -13,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
@@ -23,6 +25,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.rotate_right_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ActiveFilterPills
 import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
@@ -34,6 +37,7 @@ import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.ResourceListScaffold
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
@@ -127,6 +131,8 @@ fun DeploymentsScreen(
                         compact = compact,
                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                        labelOptions = { mapSelectorOptions(data.map { it.labels }) },
+                        annotationOptions = { mapSelectorOptions(data.map { it.annotations }) },
                         clearVisible = labelQuery.isNotBlank() || annotationQuery.isNotBlank() || degradedOnly,
                         onClear = {
                             onLabelQueryChange("")
@@ -135,6 +141,18 @@ fun DeploymentsScreen(
                         },
                     )
                 },
+            )
+            ActiveFilterPills(
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                extraPills = if (degradedOnly) {
+                    listOf("Degraded only" to { degradedOnly = false })
+                } else {
+                    emptyList()
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
             // Exit-animation latch: the bar stays composed while it shrinks
             // away, so without holding the last non-zero count it would

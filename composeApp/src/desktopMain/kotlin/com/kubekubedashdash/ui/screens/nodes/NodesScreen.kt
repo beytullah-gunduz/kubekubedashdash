@@ -32,6 +32,7 @@ import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ActiveFilterPills
 import com.kubekubedashdash.ui.components.BulkActionDialog
 import com.kubekubedashdash.ui.components.BulkRunState
 import com.kubekubedashdash.ui.components.BulkSelectionBar
@@ -47,6 +48,7 @@ import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.UsageHistoryBar
 import com.kubekubedashdash.ui.components.activeKpiId
+import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.nodeKpiStatuses
 import com.kubekubedashdash.ui.components.nodeKpis
@@ -121,7 +123,7 @@ fun NodesScreen(
         is ResourceState.Error -> ResourceErrorMessage(s.message)
 
         is ResourceState.Success -> {
-            val allNodes = s.data + staleNodes.values.toList()
+            val allNodes = remember(s.data, staleNodes) { s.data + staleNodes.values.toList() }
             val availableStatuses = remember(allNodes) {
                 allNodes.map { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
@@ -207,13 +209,16 @@ fun NodesScreen(
                             compact = compact,
                             pulseLabelsOnEntry = pulseLabelsOnEntry,
                             pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                            labelOptions = { mapSelectorOptions(allNodes.map { it.labels }) },
+                            annotationOptions = { mapSelectorOptions(allNodes.map { it.annotations }) },
                             statusChip = {
                                 StatusFilterMenu(
                                     available = availableStatuses,
                                     selected = activeStatusFilter ?: availableStatuses,
                                     onToggle = { value ->
                                         val current = activeStatusFilter ?: availableStatuses
-                                        viewModel.setStatusFilter(if (value in current) current - value else current + value)
+                                        val next = if (value in current) current - value else current + value
+                                        viewModel.setStatusFilter(if (next == availableStatuses) null else next)
                                     },
                                     onSelectAll = { viewModel.setStatusFilter(null) },
                                     onSelectNone = { viewModel.setStatusFilter(emptySet()) },
@@ -231,6 +236,20 @@ fun NodesScreen(
                             },
                         )
                     },
+                )
+                ActiveFilterPills(
+                    labelQuery = labelQuery,
+                    onLabelQueryChange = onLabelQueryChange,
+                    annotationQuery = annotationQuery,
+                    onAnnotationQueryChange = onAnnotationQueryChange,
+                    statusFilter = activeStatusFilter,
+                    onClearStatus = { viewModel.setStatusFilter(null) },
+                    extraPills = if (pressureOnly) {
+                        listOf("Under pressure" to { viewModel.setPressureOnly(false) })
+                    } else {
+                        emptyList()
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
                 // Exit-animation latch: the bar stays composed while it shrinks
                 // away, so without holding the last non-zero count it would

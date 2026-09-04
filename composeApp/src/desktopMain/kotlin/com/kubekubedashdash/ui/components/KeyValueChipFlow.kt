@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextSecondary
 
-private val NoisyAnnotationKeys = setOf(
+internal val NoisyAnnotationKeys = setOf(
     "kubectl.kubernetes.io/last-applied-configuration",
 )
 

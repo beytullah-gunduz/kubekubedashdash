@@ -20,11 +20,13 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.ActiveFilterPills
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.ResourceListScaffold
+import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
@@ -87,8 +89,17 @@ fun NamespacesScreen(
                         compact = compact,
                         pulseLabelsOnEntry = pulseLabelsOnEntry,
                         pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                        labelOptions = { mapSelectorOptions(data.map { it.labels }) },
+                        annotationOptions = { mapSelectorOptions(data.map { it.annotations }) },
                     )
                 },
+            )
+            ActiveFilterPills(
+                labelQuery = labelQuery,
+                onLabelQueryChange = onLabelQueryChange,
+                annotationQuery = annotationQuery,
+                onAnnotationQueryChange = onAnnotationQueryChange,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
             NamespaceTable(
                 namespaces = filtered,
