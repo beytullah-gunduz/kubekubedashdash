@@ -31,6 +31,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -259,6 +260,13 @@ fun Sidebar(
                             }
                         }
                     }
+                    // The Cluster block below has no header — it was the top of
+                    // the rail before Favourites/Recent existed — so with a
+                    // section above it, its first row reads as that section's
+                    // tail. One rule marks "yours" from "the catalogue".
+                    if (shortcuts.favourites.isNotEmpty() || shortcuts.recents.isNotEmpty()) {
+                        SidebarTierDivider(collapsed)
+                    }
                 }
 
                 NavSections.first().kinds.forEach { kind ->
@@ -401,6 +409,31 @@ private fun CrdShortcutRow(
             { dismiss -> FavouriteMenuItem(crd.key, favourites, { toggle(crd) }, dismiss) }
         },
     )
+}
+
+// The one horizontal rule in the rail: between the shortcut tier (Favourites,
+// Recent) and the catalogue. Expanded, it spans the rounded-row width (8 dp
+// outer margin, matching SidebarItem's). Collapsed, headers are gone and the
+// icons run together, so it becomes a short centred stub — the activity-bar
+// separator idiom — rather than vanishing with them.
+@Composable
+private fun SidebarTierDivider(collapsed: Boolean) {
+    if (collapsed) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            HorizontalDivider(modifier = Modifier.width(24.dp), color = KdBorder, thickness = 1.dp)
+        }
+    } else {
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            color = KdBorder,
+            thickness = 1.dp,
+        )
+    }
 }
 
 // Small uppercase sub-group label used inside the More section to separate

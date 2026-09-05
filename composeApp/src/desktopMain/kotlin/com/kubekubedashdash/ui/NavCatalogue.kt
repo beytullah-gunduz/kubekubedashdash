@@ -164,6 +164,18 @@ private val navKindsByKey: Map<String, NavKind> = NavKinds.associateBy { it.key 
 
 fun navKind(key: String): NavKind? = navKindsByKey[key]
 
+/**
+ * The keys of the header-less Cluster block — the rows that are on screen
+ * from every screen. Recent exists to resurface what is buried (More, a
+ * collapsed section, a CRD group); these are never buried, so a Recent entry
+ * for one of them is pure duplication, and in the 56 dp rail it is two
+ * identical icons stacked 32 dp apart.
+ */
+val AlwaysVisibleNavKeys: Set<String> = NavSections.first().kinds.map { it.key }.toSet()
+
+/** Whether a visit to [key] belongs in Recent: anything that is not always on screen. */
+fun isRecentWorthy(key: String): Boolean = key !in AlwaysVisibleNavKeys
+
 /** Case-insensitive substring match over label, aliases and section title. */
 fun matchesNavSearch(kind: NavKind, section: String, query: String): Boolean {
     if (query.isBlank()) return true

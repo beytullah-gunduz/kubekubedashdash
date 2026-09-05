@@ -116,4 +116,30 @@ class NavPreferenceRepositoryTest {
         val decoded = decodeContextLists(encodeContextLists(original))
         assertEquals(original, decoded)
     }
+
+    // ── favourites and Recent slots ──────────────────────────────────────
+
+    @Test
+    fun `recording a favourite is a no-op so it cannot burn a slot`() {
+        val before = mapOf("ctx" to listOf("Nodes"))
+        val after = computeRecordRecent(before, "ctx", "Pods", favourites = listOf("Pods"))
+        assertSame(before, after)
+    }
+
+    @Test
+    fun `removing a recent drops it and keeps the rest in order`() {
+        val before = mapOf("ctx" to listOf("A", "B", "C"))
+        assertEquals(mapOf("ctx" to listOf("A", "C")), computeRemoveRecent(before, "ctx", "B"))
+    }
+
+    @Test
+    fun `removing the last recent drops the context entry`() {
+        assertEquals(emptyMap<String, List<String>>(), computeRemoveRecent(mapOf("ctx" to listOf("A")), "ctx", "A"))
+    }
+
+    @Test
+    fun `removing an absent recent is a no-op`() {
+        val before = mapOf("ctx" to listOf("A"))
+        assertSame(before, computeRemoveRecent(before, "ctx", "Z"))
+    }
 }

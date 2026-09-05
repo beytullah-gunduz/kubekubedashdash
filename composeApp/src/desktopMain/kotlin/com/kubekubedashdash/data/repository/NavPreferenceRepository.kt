@@ -38,18 +38,33 @@ internal fun computeToggleFavourite(
 /**
  * Moves [key] to the front of its context's list, dedupes, and caps at [cap]
  * (dropping the oldest). A no-op — returns [map] unchanged — when [key] is
- * already first, so callers don't need their own "already there" guard.
+ * already first, or when it is one of [favourites]: a favourite is excluded
+ * from the Recent section at render time, so storing the visit would only
+ * burn one of the five slots on a row that is never shown.
  */
 internal fun computeRecordRecent(
     map: Map<String, List<String>>,
     context: String,
     key: String,
     cap: Int = RECENT_CAP,
+    favourites: Collection<String> = emptyList(),
 ): Map<String, List<String>> {
+    if (key in favourites) return map
     val current = map[context].orEmpty()
     if (current.firstOrNull() == key) return map
     val next = (listOf(key) + current.filterNot { it == key }).take(cap)
     return updateContextList(map, context, next)
+}
+
+/** [map] without [key] in [context]'s list; the context entry goes when it empties. */
+internal fun computeRemoveRecent(
+    map: Map<String, List<String>>,
+    context: String,
+    key: String,
+): Map<String, List<String>> {
+    val current = map[context].orEmpty()
+    if (key !in current) return map
+    return updateContextList(map, context, current - key)
 }
 
 private fun updateContextList(
@@ -118,7 +133,14 @@ object NavPreferenceRepository {
         writes.trySend {
             dataStore.edit { prefs ->
                 val favourites = decodeContextLists(prefs[NAV_FAVOURITES])
-                prefs[NAV_FAVOURITES] = encodeContextLists(computeToggleFavourite(favourites, context, key))
+                val next = computeToggleFavourite(favourites, context, key)
+                prefs[NAV_FAVOURITES] = encodeContextLists(next)
+                // Becoming a favourite frees the Recent slot it was holding —
+                // in the same transaction, so the two can never disagree.
+                if (key in next[context].orEmpty()) {
+                    val recents = decodeContextLists(prefs[NAV_RECENTS])
+                    prefs[NAV_RECENTS] = encodeContextLists(computeRemoveRecent(recents, context, key))
+                }
             }
         }
     }
@@ -129,10 +151,12 @@ object NavPreferenceRepository {
         // own "target != current" guard doesn't stop e.g. Pods(statusFilter=…)
         // → Pods() from being two distinct navigations with the same key.
         if (_recentsByContext.value[context]?.firstOrNull() == key) return
+        if (key in _favouritesByContext.value[context].orEmpty()) return
         writes.trySend {
             dataStore.edit { prefs ->
                 val recents = decodeContextLists(prefs[NAV_RECENTS])
-                prefs[NAV_RECENTS] = encodeContextLists(computeRecordRecent(recents, context, key))
+                val favourites = decodeContextLists(prefs[NAV_FAVOURITES])[context].orEmpty()
+                prefs[NAV_RECENTS] = encodeContextLists(computeRecordRecent(recents, context, key, favourites = favourites))
             }
         }
     }

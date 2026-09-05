@@ -247,4 +247,22 @@ class NavCatalogueTest {
         val favouritedCurrent = resolveNavShortcuts(listOf("Pods"), emptyList(), kinds, null, currentKey = "Pods")
         assertEquals(1, favouritedCurrent.favourites.size)
     }
+
+    // ── the always-visible rule ──────────────────────────────────────────
+
+    @Test
+    fun `the always-visible keys are exactly the header-less Cluster block`() {
+        assertEquals(
+            setOf("ClusterOverview", "ClusterTopology", "Nodes", "Namespaces", "Events"),
+            AlwaysVisibleNavKeys,
+        )
+        assertEquals(NavSections.first().kinds.map { it.key }.toSet(), AlwaysVisibleNavKeys)
+    }
+
+    @Test
+    fun `a visit to an always-visible kind is not recent-worthy, anything else is`() {
+        AlwaysVisibleNavKeys.forEach { assertFalse(isRecentWorthy(it), it) }
+        assertTrue(isRecentWorthy("Pods"))
+        assertTrue(isRecentWorthy("example.io/Widget"))
+    }
 }
