@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.selection.selectableGroup
@@ -64,6 +65,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -76,6 +79,8 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -227,7 +232,7 @@ private fun SettingsSection(
  * by [SettingsRowTitle] to draw the search-target highlight; cleared on the
  * next user-initiated scroll alongside `activeSection`.
  */
-val LocalHighlightedSettingsRow = compositionLocalOf<String?> { null }
+private val LocalHighlightedSettingsRow = compositionLocalOf<String?> { null }
 
 /**
  * A Settings row's title. Draws the search-target highlight while it is the
@@ -448,6 +453,12 @@ fun SettingsScreen(
     val gcloudCliAvailable = remember { GkeClusterDiscoverer.isGcloudAvailable() }
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isReady = true }
+    // The dialog's scrim requests focus on open so its Escape handler works;
+    // once the content is composed, move focus into the search field so the
+    // dialog can be used the way it was named — type, don't scroll. The
+    // scrim's Escape preview still fires: it is an ancestor of the field.
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(isReady) { if (isReady) searchFocus.requestFocus() }
     val mockRunning by viewModel.mockIsRunning.collectAsState()
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -456,20 +467,9 @@ fun SettingsScreen(
     // Each SettingsSection registers its absolute layout y-offset here as
     // it's measured. The nav rail uses these to scroll on click.
     val sectionOffsets = remember { mutableStateMapOf<String, Int>() }
-    val sectionTitles = buildList {
-        add("Appearance")
-        add("Cluster colors")
-        add("Default namespace")
-        add("Tab behavior")
-        add("Live data")
-        add("Keyboard shortcuts")
-        add("Privacy")
-        add("Integrations")
-        add("Cluster discovery")
-        add("Demo cluster simulator")
-        add("Diagnostics")
-        add("About")
-    }
+    // Shared with the registry (SettingsIndex.kt) so a test can hold the
+    // registry to it; the Column below must render sections in this order.
+    val sectionTitles = SettingsSectionOrder
 
     // V1: highlight only follows the click. We deliberately don't track
     // "currently visible" while scrolling because syncing scroll-to-highlight
@@ -545,7 +545,10 @@ fun SettingsScreen(
 
                     Box(
                         modifier = Modifier
-                            .width(280.dp)
+                            // Shrinks before the title does at high zoom in a
+                            // narrow window; "Settings" is one unbreakable word.
+                            .weight(1f, fill = false)
+                            .widthIn(max = 280.dp)
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown &&
                                     event.key == Key.Enter &&
@@ -562,11 +565,19 @@ fun SettingsScreen(
                             query = searchQuery,
                             onChange = onSearchQueryChange,
                             placeholder = "Search settings",
+                            modifier = Modifier.focusRequester(searchFocus),
                         )
+                        // Non-focusable, so the field keeps focus and keeps
+                        // receiving keys; and no dismiss-on-outside-click, which
+                        // a non-focusable popup still gets by default — it would
+                        // erase the query on a click back INTO the field to fix
+                        // a typo, and on a scrim click it would clear and close in
+                        // one gesture, defeating the two-step Escape. The menu
+                        // already closes whenever the query goes blank.
                         DropdownMenu(
                             expanded = searchQuery.isNotBlank(),
                             onDismissRequest = { onSearchQueryChange("") },
-                            properties = PopupProperties(focusable = false),
+                            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
                         ) {
                             if (searchResults.isEmpty()) {
                                 DropdownMenuItem(
@@ -714,7 +725,7 @@ fun SettingsScreen(
                                             ),
                                         ) {
                                             Text(
-                                                if (option == TableDensity.Comfortable) "Comfortable" else "Compact",
+                                                option.label,
                                                 maxLines = 1,
                                                 softWrap = false,
                                             )
@@ -1411,17 +1422,19 @@ private fun DefaultNamespaceSection(
             )
             if (stored != null) {
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    "×",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = KdPrimary,
+                Box(
                     modifier = Modifier
+                        .size(24.dp)
                         .clickable {
                             drafts.remove(ctx)
                             onClearDefault(ctx)
                         }
-                        .pointerHoverIcon(PointerIcon.Hand),
-                )
+                        .pointerHoverIcon(PointerIcon.Hand)
+                        .semantics { contentDescription = "Clear default namespace for $ctx" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("×", style = MaterialTheme.typography.labelSmall, color = KdPrimary)
+                }
             }
         }
     }

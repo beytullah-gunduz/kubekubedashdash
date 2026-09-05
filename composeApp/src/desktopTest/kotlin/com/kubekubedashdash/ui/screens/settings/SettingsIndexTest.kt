@@ -6,22 +6,17 @@ import kotlin.test.assertTrue
 
 class SettingsIndexTest {
 
-    // Tripwire: the twelve rail titles that exist today (WS2 added Live data
-    // and Default namespace to WS1's original ten).
-    private val knownSections = setOf(
-        "Appearance",
-        "Cluster colors",
-        "Default namespace",
-        "Tab behavior",
-        "Live data",
-        "Keyboard shortcuts",
-        "Privacy",
-        "Integrations",
-        "Cluster discovery",
-        "Demo cluster simulator",
-        "Diagnostics",
-        "About",
-    )
+    // The rail order is data (SettingsSectionOrder) shared with the screen, so
+    // this holds the registry to the real rail rather than to a copy. What it
+    // cannot see is the Column's SettingsSection sequence — that agreement is
+    // checked by eye (plan §5, rail order).
+    private val knownSections = SettingsSectionOrder.toSet()
+
+    @Test
+    fun `the rail order has twelve distinct sections`() {
+        assertEquals(12, SettingsSectionOrder.size)
+        assertEquals(SettingsSectionOrder.size, SettingsSectionOrder.toSet().size)
+    }
 
     @Test
     fun `no blank title, section or keyword`() {

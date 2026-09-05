@@ -1,6 +1,28 @@
 package com.kubekubedashdash.ui.screens.settings
 
 /**
+ * The rail, top to bottom. This MUST match the order of the `SettingsSection`
+ * calls in `SettingsScreen`'s scrolling Column: the rail jumps by each
+ * section's measured offset, so a reorder on one side and not the other
+ * lands every click on the wrong header. The rail reads this list; the
+ * registry test checks every entry's section against it.
+ */
+val SettingsSectionOrder: List<String> = listOf(
+    "Appearance",
+    "Cluster colors",
+    "Default namespace",
+    "Tab behavior",
+    "Live data",
+    "Keyboard shortcuts",
+    "Privacy",
+    "Integrations",
+    "Cluster discovery",
+    "Demo cluster simulator",
+    "Diagnostics",
+    "About",
+)
+
+/**
  * One searchable row of the Settings dialog. [section] is the rail title it lives under.
  */
 data class SettingsEntry(val section: String, val title: String, val keywords: List<String> = emptyList())
@@ -29,7 +51,6 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Cluster discovery", "Google Cloud GKE", listOf("discover", "gcp")),
     SettingsEntry("Demo cluster simulator", "Node range", listOf("demo", "mock", "simulator")),
     SettingsEntry("Demo cluster simulator", "Pod range", listOf("demo", "mock", "simulator")),
-    SettingsEntry("Demo cluster simulator", "Chaos", listOf("demo", "mock", "simulator")),
     SettingsEntry("Diagnostics", "Application logs", listOf("diagnostics", "debug")),
     SettingsEntry("About", "Application info", listOf("about", "version", "info")),
 )
