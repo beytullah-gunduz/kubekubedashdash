@@ -45,12 +45,35 @@ internal class ReactiveInformerFactory(
     private val connectedTrigger: Flow<Long> =
         connectionManager.connectionVersion.filter { it > 0L }
 
+    /**
+     * Parks the calling inner flow for good when the manager has no live
+     * client. `connectionVersion` also bumps on a FAILED connect that tore a
+     * previous connection down (KubeConnectionManager.tearDownAfterFailure),
+     * and flatMapLatest then restarts every gated flow; without this check the
+     * restart would hit the `client` getter's "Not connected" exception in
+     * ~25 flows at once and trip the shared failure counter. Parking without
+     * emitting keeps each StateFlow's last value, which is what the reconnect
+     * overlay shows under its scrim. Called as the FIRST statement of every
+     * gated builder, before any Loading emission.
+     *
+     * Residual window (accepted, not closed here): the check samples
+     * `isConnected` once and each builder reads `k8s` a few lines later, so a
+     * connect failing in that gap can still reach the getter. The failure path
+     * nulls `_client` BEFORE the bump, so a flow restarted *by that bump*
+     * always parks; only a restart from another source (a namespace change)
+     * can race it.
+     */
+    internal suspend fun parkUnlessConnected() {
+        if (!connectionManager.isConnected) awaitCancellation()
+    }
+
     fun <R : HasMetadata, T> informer(
         inform: (KubernetesClient, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T,
     ): StateFlow<ResourceState<List<T>>> = connectedTrigger
         .flatMapLatest {
             channelFlow {
+                parkUnlessConnected()
                 send(ResourceState.Loading)
                 try {
                     val emitSignal = Channel<Unit>(Channel.CONFLATED)
@@ -134,6 +157,7 @@ internal class ReactiveInformerFactory(
     ): StateFlow<ResourceState<List<T>>> = combine(selectedNamespace, connectedTrigger) { ns, _ -> ns }
         .flatMapLatest { ns ->
             channelFlow {
+                parkUnlessConnected()
                 send(ResourceState.Loading)
                 try {
                     val emitSignal = Channel<Unit>(Channel.CONFLATED)
@@ -205,6 +229,7 @@ internal class ReactiveInformerFactory(
     ): StateFlow<ResourceState<T>> = combine(selectedNamespace, connectedTrigger) { ns, _ -> ns }
         .flatMapLatest { ns ->
             flow {
+                parkUnlessConnected()
                 emit(ResourceState.Loading)
                 var loaded = false
                 while (true) {
@@ -239,6 +264,7 @@ internal class ReactiveInformerFactory(
     ): StateFlow<T> = connectedTrigger
         .flatMapLatest {
             flow {
+                parkUnlessConnected()
                 emit(initial)
                 while (true) {
                     try {
