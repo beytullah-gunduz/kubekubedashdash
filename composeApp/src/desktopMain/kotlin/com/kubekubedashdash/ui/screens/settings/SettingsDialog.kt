@@ -15,7 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -39,6 +42,7 @@ fun SettingsDialog(
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    var searchQuery by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -47,7 +51,11 @@ fun SettingsDialog(
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.key == Key.Escape && event.type == KeyEventType.KeyDown) {
-                    onDismiss()
+                    if (searchQuery.isNotBlank()) {
+                        searchQuery = ""
+                    } else {
+                        onDismiss()
+                    }
                     true
                 } else {
                     false
@@ -82,6 +90,8 @@ fun SettingsDialog(
                 onDiscoverGke = onDiscoverGke,
                 onShowAppLogs = onShowAppLogs,
                 onClose = onDismiss,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
             )
         }
     }
