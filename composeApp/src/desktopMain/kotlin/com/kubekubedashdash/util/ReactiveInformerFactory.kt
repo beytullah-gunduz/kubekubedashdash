@@ -95,42 +95,52 @@ internal class ReactiveInformerFactory(
                             }
                         },
                     )
-                    launch {
-                        // Debounce, not periodic emit. fabric8 fires onAdd for
-                        // every item during initial list-and-watch — without
-                        // debounce a CONFLATED channel + delay(100) becomes a
-                        // fixed 10 Hz cadence of full-store re-emits. debounce
-                        // collapses the burst into one emission once events
-                        // settle.
-                        emitSignal.consumeAsFlow()
-                            .debounce(100)
-                            .collect {
-                                // Pre-sync emissions are dropped — the post-sync
-                                // send below covers the first paint.
-                                if (!informer.hasSynced()) return@collect
-                                try {
-                                    val items = informer.store.list()
-                                    log.trace("Informer emitting {} items from store", items.size)
-                                    send(ResourceState.Success(items.map(mapper)))
-                                    reportSuccess()
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    log.warn("Informer failed to map store contents: {}", e.message)
-                                    reportError(e.message ?: "Unknown error")
-                                }
-                            }
-                    }
-                    awaitInformerSync(informer, "Cluster-scoped informer")
-                    val items = informer.store.list()
-                    log.info("Cluster-scoped informer synced with {} items", items.size)
-                    send(ResourceState.Success(items.map(mapper)))
-                    reportSuccess()
+                    // Every exit from here on — a cancellation while still
+                    // waiting for sync, a sync failure, a mapping failure, or
+                    // the steady-state awaitCancellation() — must close the
+                    // informer, or its watch, store and processor outlive the
+                    // flow. Only the steady-state exit used to be covered.
                     try {
+                        launch {
+                            // Debounce, not periodic emit. fabric8 fires onAdd for
+                            // every item during initial list-and-watch — without
+                            // debounce a CONFLATED channel + delay(100) becomes a
+                            // fixed 10 Hz cadence of full-store re-emits. debounce
+                            // collapses the burst into one emission once events
+                            // settle.
+                            emitSignal.consumeAsFlow()
+                                .debounce(100)
+                                .collect {
+                                    // Pre-sync emissions are dropped — the post-sync
+                                    // send below covers the first paint.
+                                    if (!informer.hasSynced()) return@collect
+                                    try {
+                                        val items = informer.store.list()
+                                        log.trace("Informer emitting {} items from store", items.size)
+                                        send(ResourceState.Success(items.map(mapper)))
+                                        reportSuccess()
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        log.warn("Informer failed to map store contents: {}", e.message)
+                                        reportError(e.message ?: "Unknown error")
+                                    }
+                                }
+                        }
+                        awaitInformerSync(informer, "Cluster-scoped informer")
+                        val items = informer.store.list()
+                        log.info("Cluster-scoped informer synced with {} items", items.size)
+                        send(ResourceState.Success(items.map(mapper)))
+                        reportSuccess()
                         awaitCancellation()
                     } finally {
                         log.debug("Closing cluster-scoped informer")
-                        informer.close()
+                        // A close() failure must never replace the exception
+                        // already propagating: a CancellationException swapped
+                        // for a plain one would miss the catch below and be
+                        // reported as a connection failure.
+                        runCatching { informer.close() }
+                            .onFailure { log.warn("Failed to close cluster-scoped informer: {}", it.message) }
                     }
                 } catch (e: CancellationException) {
                     // flatMapLatest cancels the previous inner flow on every
@@ -181,34 +191,39 @@ internal class ReactiveInformerFactory(
                             }
                         },
                     )
-                    launch {
-                        emitSignal.consumeAsFlow()
-                            .debounce(100)
-                            .collect {
-                                if (!informer.hasSynced()) return@collect
-                                try {
-                                    val items = informer.store.list()
-                                    log.trace("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
-                                    send(ResourceState.Success(items.mapNotNull(mapper)))
-                                    reportSuccess()
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
-                                    reportError(e.message ?: "Unknown error")
-                                }
-                            }
-                    }
-                    awaitInformerSync(informer, "Namespaced informer for namespace=$nsLabel")
-                    val items = informer.store.list()
-                    log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
-                    send(ResourceState.Success(items.mapNotNull(mapper)))
-                    reportSuccess()
+                    // Same contract as the cluster-scoped builder: every exit
+                    // after inform() returned closes the informer.
                     try {
+                        launch {
+                            emitSignal.consumeAsFlow()
+                                .debounce(100)
+                                .collect {
+                                    if (!informer.hasSynced()) return@collect
+                                    try {
+                                        val items = informer.store.list()
+                                        log.trace("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
+                                        send(ResourceState.Success(items.mapNotNull(mapper)))
+                                        reportSuccess()
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
+                                        reportError(e.message ?: "Unknown error")
+                                    }
+                                }
+                        }
+                        awaitInformerSync(informer, "Namespaced informer for namespace=$nsLabel")
+                        val items = informer.store.list()
+                        log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
+                        send(ResourceState.Success(items.mapNotNull(mapper)))
+                        reportSuccess()
                         awaitCancellation()
                     } finally {
                         log.debug("Closing namespaced informer for namespace={}", nsLabel)
-                        informer.close()
+                        // Same guard as the cluster-scoped builder: never let a
+                        // close() failure replace the propagating exception.
+                        runCatching { informer.close() }
+                            .onFailure { log.warn("Failed to close namespaced informer for namespace={}: {}", nsLabel, it.message) }
                     }
                 } catch (e: CancellationException) {
                     throw e
