@@ -392,7 +392,7 @@ fun ResourceTable(
                                         }
                                         Spacer(Modifier.width(8.dp))
                                         Text(
-                                            if (option == TableDensity.Comfortable) "Comfortable" else "Compact",
+                                            option.label,
                                             style = MaterialTheme.typography.bodySmall,
                                         )
                                     }

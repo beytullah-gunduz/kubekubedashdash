@@ -5,10 +5,12 @@ import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -19,19 +21,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -42,8 +51,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,19 +65,40 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kubekubedashdash.AppVersion
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
+import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
+import com.kubekubedashdash.data.repository.formatTopologyRefresh
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
@@ -74,10 +106,13 @@ import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
+import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
+import com.kubekubedashdash.ui.SidebarSearchBox
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.components.ShortcutGroups
+import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
@@ -106,7 +141,9 @@ private fun SettingsNavRail(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.padding(vertical = 16.dp, horizontal = 12.dp),
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 16.dp, horizontal = 12.dp),
     ) {
         sections.forEach { title ->
             val isActive = title == activeSection
@@ -190,148 +227,215 @@ private fun SettingsSection(
     }
 }
 
+/**
+ * The title of the row a search pick most recently jumped to, or null. Read
+ * by [SettingsRowTitle] to draw the search-target highlight; cleared on the
+ * next user-initiated scroll alongside `activeSection`.
+ */
+private val LocalHighlightedSettingsRow = compositionLocalOf<String?> { null }
+
+/**
+ * A Settings row's title. Draws the search-target highlight while it is the
+ * highlighted row. The padding is always present — not only while
+ * highlighted — so the text never shifts when the highlight appears.
+ */
 @Composable
-private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel) {
+private fun SettingsRowTitle(title: String) {
+    val highlighted = LocalHighlightedSettingsRow.current == title
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (highlighted) KdSelected else Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = if (highlighted) KdPrimary else Color.Transparent,
+                shape = RoundedCornerShape(4.dp),
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+    }
+}
+
+@Composable
+private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mockRunning: Boolean) {
     val connectedTabs by viewModel.mockConnectedTabs.collectAsState()
     val targets by viewModel.mockTargets.collectAsState()
     val paused by viewModel.mockPaused.collectAsState()
     var showStopAllDialog by remember { mutableStateOf(false) }
     var showKillServerDialog by remember { mutableStateOf(false) }
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("●", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+    // Node range and Pod range persist (PreferenceRepository.setDemoTargets is
+    // unconditional) and stay editable whether or not the simulator is
+    // running — factored out so the running/not-running branches below can
+    // both call it, keeping the running check to one branch.
+    @Composable
+    fun RangeControls() {
+        SettingsRowTitle("Node range")
+        Spacer(Modifier.height(4.dp))
         Text(
-            "Running — $connectedTabs ${if (connectedTabs == 1) "tab" else "tabs"} connected",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
+            "Min ${targets.nodesMin}  ·  Max ${targets.nodesMax}",
+            style = MaterialTheme.typography.bodySmall,
+            color = KdTextSecondary,
+        )
+        Spacer(Modifier.height(4.dp))
+        RangeSlider(
+            value = targets.nodesMin.toFloat()..targets.nodesMax.toFloat(),
+            onValueChange = { range ->
+                val lo = range.start.toInt().coerceIn(1, 100)
+                val hi = range.endInclusive.toInt().coerceIn(lo, 100)
+                viewModel.setMockTargets(targets.copy(nodesMin = lo, nodesMax = hi))
+            },
+            valueRange = 1f..100f,
+            steps = 98,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        SettingsRowTitle("Pod range")
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Min ${targets.podsMin}  ·  Max ${targets.podsMax}",
+            style = MaterialTheme.typography.bodySmall,
+            color = KdTextSecondary,
+        )
+        Spacer(Modifier.height(4.dp))
+        RangeSlider(
+            value = targets.podsMin.toFloat()..targets.podsMax.toFloat(),
+            onValueChange = { range ->
+                val lo = range.start.toInt().coerceIn(10, 1000)
+                val hi = range.endInclusive.toInt().coerceIn(lo, 1000)
+                viewModel.setMockTargets(targets.copy(podsMin = lo, podsMax = hi))
+            },
+            valueRange = 10f..1000f,
+            steps = 989,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 
-    Spacer(Modifier.height(12.dp))
+    if (mockRunning) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("●", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Running — $connectedTabs ${if (connectedTabs == 1) "tab" else "tabs"} connected",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Switch(checked = paused, onCheckedChange = { viewModel.setMockPaused(it) })
+        Spacer(Modifier.height(12.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Switch(checked = paused, onCheckedChange = { viewModel.setMockPaused(it) })
+            Text(
+                if (paused) "Simulation paused" else "Simulation running",
+                style = MaterialTheme.typography.bodyMedium,
+                color = KdTextSecondary,
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        RangeControls()
+
+        Spacer(Modifier.height(20.dp))
+
+        SettingsRowTitle("Chaos")
+        Spacer(Modifier.height(8.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { showStopAllDialog = true },
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, KdBorder),
+            ) {
+                Text("Reset to baseline", color = MaterialTheme.colorScheme.error)
+            }
+            OutlinedButton(
+                onClick = { showKillServerDialog = true },
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, KdBorder),
+            ) {
+                Text("Kill mock server", color = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        if (showStopAllDialog) {
+            AlertDialog(
+                onDismissRequest = { showStopAllDialog = false },
+                title = { Text("Reset the demo cluster to its baseline?") },
+                text = {
+                    Text(
+                        "Delete the simulator's churn — the generated pods, jobs and extra nodes — " +
+                            "while keeping the baseline (mock-node-1 and the seeded core workloads, services " +
+                            "and storage). The simulator refills toward the target counts immediately.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.stopAllMockResources()
+                            showStopAllDialog = false
+                        },
+                    ) {
+                        Text("Reset", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showStopAllDialog = false }) { Text("Cancel") }
+                },
+            )
+        }
+
+        if (showKillServerDialog) {
+            AlertDialog(
+                onDismissRequest = { showKillServerDialog = false },
+                title = { Text("Kill mock server?") },
+                text = {
+                    Text("Shut down the mock Kubernetes server. Open demo tabs will show a connection error until you reconnect.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.killMockServer()
+                            showKillServerDialog = false
+                        },
+                    ) {
+                        Text("Kill server", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showKillServerDialog = false }) { Text("Cancel") }
+                },
+            )
+        }
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("●", color = KdTextSecondary, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Not running",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
         Text(
-            if (paused) "Simulation paused" else "Simulation running",
+            "Open the demo cluster from the cluster picker (⌘K → Demo cluster) to start it. " +
+                "These ranges apply when it does.",
             style = MaterialTheme.typography.bodyMedium,
             color = KdTextSecondary,
         )
-    }
 
-    Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp))
 
-    Text("Node range", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-    Spacer(Modifier.height(4.dp))
-    Text(
-        "Min ${targets.nodesMin}  ·  Max ${targets.nodesMax}",
-        style = MaterialTheme.typography.bodySmall,
-        color = KdTextSecondary,
-    )
-    Spacer(Modifier.height(4.dp))
-    RangeSlider(
-        value = targets.nodesMin.toFloat()..targets.nodesMax.toFloat(),
-        onValueChange = { range ->
-            val lo = range.start.toInt().coerceIn(1, 100)
-            val hi = range.endInclusive.toInt().coerceIn(lo, 100)
-            viewModel.setMockTargets(targets.copy(nodesMin = lo, nodesMax = hi))
-        },
-        valueRange = 1f..100f,
-        steps = 98,
-        modifier = Modifier.fillMaxWidth(),
-    )
-
-    Spacer(Modifier.height(20.dp))
-
-    Text("Pod range", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-    Spacer(Modifier.height(4.dp))
-    Text(
-        "Min ${targets.podsMin}  ·  Max ${targets.podsMax}",
-        style = MaterialTheme.typography.bodySmall,
-        color = KdTextSecondary,
-    )
-    Spacer(Modifier.height(4.dp))
-    RangeSlider(
-        value = targets.podsMin.toFloat()..targets.podsMax.toFloat(),
-        onValueChange = { range ->
-            val lo = range.start.toInt().coerceIn(10, 1000)
-            val hi = range.endInclusive.toInt().coerceIn(lo, 1000)
-            viewModel.setMockTargets(targets.copy(podsMin = lo, podsMax = hi))
-        },
-        valueRange = 10f..1000f,
-        steps = 989,
-        modifier = Modifier.fillMaxWidth(),
-    )
-
-    Spacer(Modifier.height(20.dp))
-
-    Text("Chaos", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-    Spacer(Modifier.height(8.dp))
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(
-            onClick = { showStopAllDialog = true },
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, KdBorder),
-        ) {
-            Text("Reset to baseline", color = MaterialTheme.colorScheme.error)
-        }
-        OutlinedButton(
-            onClick = { showKillServerDialog = true },
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, KdBorder),
-        ) {
-            Text("Kill mock server", color = MaterialTheme.colorScheme.error)
-        }
-    }
-
-    if (showStopAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showStopAllDialog = false },
-            title = { Text("Reset the demo cluster to its baseline?") },
-            text = {
-                Text(
-                    "Delete the simulator's churn — the generated pods, jobs and extra nodes — " +
-                        "while keeping the baseline (mock-node-1 and the seeded core workloads, services " +
-                        "and storage). The simulator refills toward the target counts immediately.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.stopAllMockResources()
-                        showStopAllDialog = false
-                    },
-                ) {
-                    Text("Reset", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStopAllDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    if (showKillServerDialog) {
-        AlertDialog(
-            onDismissRequest = { showKillServerDialog = false },
-            title = { Text("Kill mock server?") },
-            text = {
-                Text("Shut down the mock Kubernetes server. Open demo tabs will show a connection error until you reconnect.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.killMockServer()
-                        showKillServerDialog = false
-                    },
-                ) {
-                    Text("Kill server", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showKillServerDialog = false }) { Text("Cancel") }
-            },
-        )
+        RangeControls()
     }
 }
 
@@ -341,13 +445,20 @@ fun SettingsScreen(
     onDiscoverGke: () -> Unit = {},
     onShowAppLogs: () -> Unit = {},
     onClose: () -> Unit = {},
+    searchQuery: String = "",
+    onSearchQueryChange: (String) -> Unit = {},
     viewModel: SettingsScreenViewModel = viewModel { SettingsScreenViewModel() },
 ) {
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
     val gcloudCliAvailable = remember { GkeClusterDiscoverer.isGcloudAvailable() }
-    var showAboutModal by remember { mutableStateOf(false) }
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isReady = true }
+    // The dialog's scrim requests focus on open so its Escape handler works;
+    // once the content is composed, move focus into the search field so the
+    // dialog can be used the way it was named — type, don't scroll. The
+    // scrim's Escape preview still fires: it is an ancestor of the field.
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(isReady) { if (isReady) searchFocus.requestFocus() }
     val mockRunning by viewModel.mockIsRunning.collectAsState()
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -356,35 +467,34 @@ fun SettingsScreen(
     // Each SettingsSection registers its absolute layout y-offset here as
     // it's measured. The nav rail uses these to scroll on click.
     val sectionOffsets = remember { mutableStateMapOf<String, Int>() }
-    val sectionTitles = buildList {
-        add("Appearance")
-        add("Cluster colors")
-        add("Tab behavior")
-        add("Keyboard shortcuts")
-        add("Privacy")
-        add("Integrations")
-        add("Cluster discovery")
-        if (mockRunning) add("Demo cluster simulator")
-        add("Diagnostics")
-        add("About")
-    }
+    // Shared with the registry (SettingsIndex.kt) so a test can hold the
+    // registry to it; the Column below must render sections in this order.
+    val sectionTitles = SettingsSectionOrder
 
     // V1: highlight only follows the click. We deliberately don't track
     // "currently visible" while scrolling because syncing scroll-to-highlight
-    // is fiddly across re-layout (Demo cluster simulator appearing/dis-
-    // appearing, modal resize) and added little value. Instead, the highlight
-    // sticks after a click, and any *user-initiated* scroll afterward clears
-    // it. The `ignoreScrollUpdates` flag is true while the click's own
-    // animateScrollTo is running, so the animation's own scroll changes
-    // don't immediately wipe the highlight we just set.
+    // is fiddly across re-layout (e.g. modal resize) and added little value.
+    // Instead, the highlight sticks after a click, and any *user-initiated*
+    // scroll afterward clears it. The `ignoreScrollUpdates` flag is true
+    // while the click's own animateScrollTo is running, so the animation's
+    // own scroll changes don't immediately wipe the highlight we just set.
     var activeSection by remember { mutableStateOf<String?>(null) }
     var ignoreScrollUpdates by remember { mutableStateOf(false) }
+
+    // Set by a search pick (SettingsDialog/SettingsScreen search box) to draw
+    // the highlight in SettingsRowTitle. Cleared by the same user-scroll
+    // collector that clears activeSection, guarded the same way, so a pick's
+    // own animateScrollTo does not immediately wipe the highlight it just set.
+    var highlightedRow by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(scrollState) {
         snapshotFlow { scrollState.value }
             .drop(1)
             .collect {
-                if (!ignoreScrollUpdates) activeSection = null
+                if (!ignoreScrollUpdates) {
+                    activeSection = null
+                    highlightedRow = null
+                }
             }
     }
 
@@ -401,618 +511,757 @@ fun SettingsScreen(
         }
     }
 
+    // A search result pick: jump to its section, highlight its row (a no-op
+    // for the section-titled entries, which have no SettingsRowTitle to
+    // highlight), then clear the query so the results menu closes.
+    fun pickSearchResult(entry: SettingsEntry) {
+        jumpTo(entry.section)
+        highlightedRow = entry.title
+        onSearchQueryChange("")
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (!isReady) return@Box
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Sticky header — title + close button stay anchored above the
-            // scrollable content so users on a long modal don't have to scroll
-            // back up to find them.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 32.dp, end = 16.dp, top = 24.dp, bottom = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Settings",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onClose) {
-                    Icon(
-                        painterResource(Res.drawable.close),
-                        contentDescription = "Close settings",
-                        modifier = Modifier.size(20.dp),
-                        tint = KdTextSecondary,
+        CompositionLocalProvider(LocalHighlightedSettingsRow provides highlightedRow) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Sticky header — title + close button stay anchored above the
+                // scrollable content so users on a long modal don't have to scroll
+                // back up to find them.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 32.dp, end = 16.dp, top = 24.dp, bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Settings",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
                     )
-                }
-            }
-            HorizontalDivider(color = KdBorder)
 
-            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                SettingsNavRail(
-                    sections = sectionTitles,
-                    activeSection = activeSection,
-                    onSelect = ::jumpTo,
-                    modifier = Modifier.width(160.dp),
-                )
-                VerticalDivider(color = KdBorder)
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    Column(
+                    val searchResults = settingsSearchResults(searchQuery).take(8)
+
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(horizontal = 32.dp, vertical = 24.dp),
+                            // Shrinks before the title does at high zoom in a
+                            // narrow window; "Settings" is one unbreakable word.
+                            .weight(1f, fill = false)
+                            .widthIn(max = 280.dp)
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown &&
+                                    event.key == Key.Enter &&
+                                    searchQuery.isNotBlank()
+                                ) {
+                                    searchResults.firstOrNull()?.let { pickSearchResult(it) }
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                     ) {
-                        SettingsSection(
-                            title = "Appearance",
-                            onLayoutTop = { y -> sectionOffsets["Appearance"] = y },
+                        SidebarSearchBox(
+                            query = searchQuery,
+                            onChange = onSearchQueryChange,
+                            placeholder = "Search settings",
+                            modifier = Modifier.focusRequester(searchFocus),
+                        )
+                        // Non-focusable, so the field keeps focus and keeps
+                        // receiving keys; and no dismiss-on-outside-click, which
+                        // a non-focusable popup still gets by default — it would
+                        // erase the query on a click back INTO the field to fix
+                        // a typo, and on a scrim click it would clear and close in
+                        // one gesture, defeating the two-step Escape. The menu
+                        // already closes whenever the query goes blank.
+                        DropdownMenu(
+                            expanded = searchQuery.isNotBlank(),
+                            onDismissRequest = { onSearchQueryChange("") },
+                            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
                         ) {
-                            Text(
-                                "Theme",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Choose dark, light, or follow your system appearance",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.CenterHorizontally)) {
-                                ThemePreviewCard(
-                                    label = "Dark",
-                                    selected = viewModel.themeMode == ThemeMode.DARK,
-                                    primaryColors = DarkPreviewColors,
-                                    onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
-                                )
-                                ThemePreviewCard(
-                                    label = "Light",
-                                    selected = viewModel.themeMode == ThemeMode.LIGHT,
-                                    primaryColors = LightPreviewColors,
-                                    onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                                )
-                                ThemePreviewCard(
-                                    label = "System",
-                                    selected = viewModel.themeMode == ThemeMode.SYSTEM,
-                                    primaryColors = DarkPreviewColors,
-                                    secondaryColors = LightPreviewColors,
-                                    onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
-                                )
-                            }
-
-                            Spacer(Modifier.height(20.dp))
-
-                            val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
-
-                            Text(
-                                "UI zoom",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Scale the whole interface up or down. The window itself does not resize.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-
-                            FullWidthSingleChoiceSegmentedButtonRow {
-                                UiScaleSteps.forEachIndexed { index, step ->
-                                    SegmentedButton(
-                                        selected = uiScalePercent == step,
-                                        onClick = { PreferenceRepository.setUiScalePercent(step) },
-                                        shape = SegmentedButtonDefaults.itemShape(
-                                            index = index,
-                                            count = UiScaleSteps.size,
-                                        ),
-                                    ) {
-                                        Text("$step%", maxLines = 1, softWrap = false)
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        val clusterColorOverrides by viewModel.clusterColorOverrides.collectAsState()
-                        val knownContexts by AppViewModel.instance.contexts.collectAsState()
-
-                        SettingsSection(
-                            title = "Cluster colors",
-                            onLayoutTop = { y -> sectionOffsets["Cluster colors"] = y },
-                        ) {
-                            ClusterColorsSection(
-                                contexts = knownContexts,
-                                overrides = clusterColorOverrides,
-                                onSetColor = { ctx, hex -> viewModel.setClusterColor(ctx, hex) },
-                                onClearColor = { ctx -> viewModel.clearClusterColor(ctx) },
-                            )
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        val closeTabFocus by viewModel.closeTabFocus.collectAsState()
-
-                        SettingsSection(
-                            title = "Tab behavior",
-                            onLayoutTop = { y -> sectionOffsets["Tab behavior"] = y },
-                        ) {
-                            Text(
-                                "When closing the active tab, focus:",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(12.dp))
-
-                            val tabFocusOptions = listOf(
-                                CloseTabFocus.FIRST to "First tab",
-                                CloseTabFocus.LEFT_NEIGHBOR to "Left neighbor",
-                                CloseTabFocus.PREVIOUS_ACTIVE to "Last used",
-                            )
-
-                            FullWidthSingleChoiceSegmentedButtonRow {
-                                tabFocusOptions.forEachIndexed { index, (value, label) ->
-                                    SegmentedButton(
-                                        selected = closeTabFocus == value,
-                                        onClick = { viewModel.setCloseTabFocus(value) },
-                                        shape = SegmentedButtonDefaults.itemShape(
-                                            index = index,
-                                            count = tabFocusOptions.size,
-                                        ),
-                                    ) {
-                                        Text(label, maxLines = 1, softWrap = false)
-                                    }
-                                }
-                            }
-
-                            Spacer(Modifier.height(20.dp))
-
-                            val tabStripVisibility by viewModel.tabStripVisibility.collectAsState()
-
-                            Text(
-                                "Tab strip",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Whether to show the tab strip when only one cluster is open.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-
-                            val tabStripOptions = listOf(
-                                TabStripVisibility.AUTO to "Compact (only with multiple tabs)",
-                                TabStripVisibility.ALWAYS to "Always show",
-                            )
-
-                            FullWidthSingleChoiceSegmentedButtonRow {
-                                tabStripOptions.forEachIndexed { index, (value, label) ->
-                                    SegmentedButton(
-                                        selected = tabStripVisibility == value,
-                                        onClick = { viewModel.setTabStripVisibility(value) },
-                                        shape = SegmentedButtonDefaults.itemShape(
-                                            index = index,
-                                            count = tabStripOptions.size,
-                                        ),
-                                    ) {
-                                        Text(label, maxLines = 1, softWrap = false)
-                                    }
-                                }
-                            }
-
-                            Spacer(Modifier.height(16.dp))
-
-                            val restoreSession by viewModel.restoreSessionOnLaunch.collectAsState()
-                            Text(
-                                "Restore last session",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Reopen the windows, clusters, namespaces and screens you had when you last quit. Off: start with the cluster picker.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Switch(
-                                    checked = restoreSession,
-                                    onCheckedChange = { viewModel.setRestoreSessionOnLaunch(it) },
-                                )
-                                Text(
-                                    if (restoreSession) "Restored at launch" else "Start with the picker",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (restoreSession) MaterialTheme.colorScheme.primary else KdTextSecondary,
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        SettingsSection(
-                            title = "Keyboard shortcuts",
-                            onLayoutTop = { y -> sectionOffsets["Keyboard shortcuts"] = y },
-                        ) {
-                            ShortcutGroups(groups = remember { appShortcuts(NativeWindowDrag.isMacOS) })
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        SettingsSection(
-                            title = "Privacy",
-                            onLayoutTop = { y -> sectionOffsets["Privacy"] = y },
-                        ) {
-                            val maskSecrets by viewModel.maskSecretValues.collectAsState()
-                            Text(
-                                "Secret values",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Hide Secret data in the YAML viewer. Reveal it per-resource when you need it.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Switch(
-                                    checked = maskSecrets,
-                                    onCheckedChange = { viewModel.setMaskSecretValues(it) },
-                                )
-                                Text(
-                                    if (maskSecrets) "Masked" else "Shown in clear",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (maskSecrets) MaterialTheme.colorScheme.primary else KdTextSecondary,
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        SettingsSection(
-                            title = "Integrations",
-                            onLayoutTop = { y -> sectionOffsets["Integrations"] = y },
-                        ) {
-                            // Audit A5: observe PreferenceRepository-backed flows
-                            // (single source of truth) instead of VM Compose state.
-                            val mcpEnabled by viewModel.isMcpServerEnabled.collectAsState()
-                            val mcpPort by viewModel.mcpServerPort.collectAsState()
-                            val mcpLocalhostOnly by viewModel.mcpLocalhostOnly.collectAsState()
-                            val mcpRequireAuth by viewModel.mcpRequireAuth.collectAsState()
-                            val mcpBearerToken by viewModel.mcpBearerToken.collectAsState()
-                            Text(
-                                "MCP Server",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Expose all Kubernetes resources via the Model Context Protocol (MCP) for AI tools",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Switch(
-                                    checked = mcpEnabled,
-                                    onCheckedChange = { viewModel.toggleMcpServer(it) },
-                                )
-                                Text(
-                                    if (mcpEnabled) {
-                                        "Running on http://127.0.0.1:$mcpPort"
-                                    } else {
-                                        "Disabled"
+                            if (searchResults.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "No matching setting",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = KdTextSecondary,
+                                        )
                                     },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (mcpEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    onClick = {},
+                                    enabled = false,
                                 )
+                            } else {
+                                searchResults.forEach { entry ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(entry.title, style = MaterialTheme.typography.bodyMedium)
+                                                Text(
+                                                    entry.section,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = KdTextSecondary,
+                                                )
+                                            }
+                                        },
+                                        onClick = { pickSearchResult(entry) },
+                                    )
+                                }
                             }
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            painterResource(Res.drawable.close),
+                            contentDescription = "Close settings",
+                            modifier = Modifier.size(20.dp),
+                            tint = KdTextSecondary,
+                        )
+                    }
+                }
+                HorizontalDivider(color = KdBorder)
+
+                Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    SettingsNavRail(
+                        sections = sectionTitles,
+                        activeSection = activeSection,
+                        onSelect = ::jumpTo,
+                        modifier = Modifier.width(160.dp),
+                    )
+                    VerticalDivider(color = KdBorder)
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(horizontal = 32.dp, vertical = 24.dp),
+                        ) {
+                            SettingsSection(
+                                title = "Appearance",
+                                onLayoutTop = { y -> sectionOffsets["Appearance"] = y },
                             ) {
+                                SettingsRowTitle("Theme")
+                                Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Port",
+                                    "Choose dark, light, or follow your system appearance",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = KdTextSecondary,
                                 )
-                                var portText by remember(mcpPort) { mutableStateOf(mcpPort.toString()) }
-                                val portValid = portText.toIntOrNull()?.let { it in 1..65535 } ?: false
-                                OutlinedTextField(
-                                    value = portText,
-                                    onValueChange = { text ->
-                                        // Allow transient empty / partial input so the user can
-                                        // clear and retype; apply to the VM only when valid.
-                                        if (text.isEmpty() || (text.length <= 5 && text.all(Char::isDigit))) {
-                                            portText = text
-                                            text.toIntOrNull()?.takeIf { it in 1..65535 }
-                                                ?.let { viewModel.updateMcpServerPort(it) }
-                                        }
-                                    },
-                                    modifier = Modifier.width(120.dp),
-                                    singleLine = true,
-                                    isError = portText.isNotEmpty() && !portValid,
-                                    supportingText = if (portText.isNotEmpty() && !portValid) {
-                                        { Text("Enter a port 1–65535", style = MaterialTheme.typography.labelSmall) }
-                                    } else {
-                                        null
-                                    },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    textStyle = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Switch(
-                                    checked = mcpLocalhostOnly,
-                                    onCheckedChange = { viewModel.updateMcpLocalhostOnly(it) },
-                                    enabled = !mcpEnabled,
-                                )
-                                Column {
-                                    Text("Localhost only", style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        if (mcpEnabled) "Stop MCP server to change." else "Bind to 127.0.0.1. Recommended for local-only workflows.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = KdTextSecondary,
+                                Spacer(Modifier.height(16.dp))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.CenterHorizontally)) {
+                                    ThemePreviewCard(
+                                        label = "Dark",
+                                        selected = viewModel.themeMode == ThemeMode.DARK,
+                                        primaryColors = DarkPreviewColors,
+                                        onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
+                                    )
+                                    ThemePreviewCard(
+                                        label = "Light",
+                                        selected = viewModel.themeMode == ThemeMode.LIGHT,
+                                        primaryColors = LightPreviewColors,
+                                        onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
+                                    )
+                                    ThemePreviewCard(
+                                        label = "System",
+                                        selected = viewModel.themeMode == ThemeMode.SYSTEM,
+                                        primaryColors = DarkPreviewColors,
+                                        secondaryColors = LightPreviewColors,
+                                        onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                                     )
                                 }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Switch(
-                                    checked = mcpRequireAuth,
-                                    onCheckedChange = { viewModel.updateMcpRequireAuth(it) },
-                                    enabled = !mcpEnabled,
-                                )
-                                Column {
-                                    Text("Require authentication", style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        if (mcpEnabled) "Stop MCP server to change." else "Generate a bearer token each time the server starts.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = KdTextSecondary,
-                                    )
-                                }
-                            }
-                            if (!mcpLocalhostOnly && !mcpRequireAuth) {
-                                Spacer(Modifier.height(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        "MCP server is exposed on the network with no authentication. Anyone on your LAN can read cluster data. Enable at least one defense.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.padding(12.dp),
-                                    )
-                                }
-                            }
-                            if (mcpEnabled && mcpBearerToken != null) {
-                                Spacer(Modifier.height(12.dp))
+
+                                Spacer(Modifier.height(20.dp))
+
+                                val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
+
+                                SettingsRowTitle("UI zoom")
+                                Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Bearer token (regenerated each start)",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    "Scale the whole interface up or down. The window itself does not resize.",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = KdTextSecondary,
                                 )
+                                Spacer(Modifier.height(12.dp))
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    UiScaleSteps.forEachIndexed { index, step ->
+                                        SegmentedButton(
+                                            selected = uiScalePercent == step,
+                                            onClick = { PreferenceRepository.setUiScalePercent(step) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = UiScaleSteps.size,
+                                            ),
+                                        ) {
+                                            Text("$step%", maxLines = 1, softWrap = false)
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                val tableDensity by viewModel.tableDensity.collectAsState()
+
+                                SettingsRowTitle("Table density")
                                 Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Row height in every resource list. Also in each table's options menu.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    TableDensity.entries.forEachIndexed { index, option ->
+                                        SegmentedButton(
+                                            selected = tableDensity == option,
+                                            onClick = { viewModel.setTableDensity(option) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = TableDensity.entries.size,
+                                            ),
+                                        ) {
+                                            Text(
+                                                option.label,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val clusterColorOverrides by viewModel.clusterColorOverrides.collectAsState()
+                            val knownContexts by AppViewModel.instance.contexts.collectAsState()
+
+                            SettingsSection(
+                                title = "Cluster colors",
+                                onLayoutTop = { y -> sectionOffsets["Cluster colors"] = y },
+                            ) {
+                                ClusterColorsSection(
+                                    contexts = knownContexts,
+                                    overrides = clusterColorOverrides,
+                                    onSetColor = { ctx, hex -> viewModel.setClusterColor(ctx, hex) },
+                                    onClearColor = { ctx -> viewModel.clearClusterColor(ctx) },
+                                )
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val defaultNamespaceByContext by viewModel.defaultNamespaceByContext.collectAsState()
+
+                            SettingsSection(
+                                title = "Default namespace",
+                                onLayoutTop = { y -> sectionOffsets["Default namespace"] = y },
+                            ) {
+                                DefaultNamespaceSection(
+                                    contexts = knownContexts,
+                                    defaults = defaultNamespaceByContext,
+                                    onSetDefault = { ctx, ns -> viewModel.setDefaultNamespace(ctx, ns) },
+                                    onClearDefault = { ctx -> viewModel.clearDefaultNamespace(ctx) },
+                                )
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val closeTabFocus by viewModel.closeTabFocus.collectAsState()
+
+                            SettingsSection(
+                                title = "Tab behavior",
+                                onLayoutTop = { y -> sectionOffsets["Tab behavior"] = y },
+                            ) {
+                                SettingsRowTitle("When closing the active tab, focus:")
+                                Spacer(Modifier.height(12.dp))
+
+                                val tabFocusOptions = listOf(
+                                    CloseTabFocus.FIRST to "First tab",
+                                    CloseTabFocus.LEFT_NEIGHBOR to "Left neighbor",
+                                    CloseTabFocus.PREVIOUS_ACTIVE to "Last used",
+                                )
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    tabFocusOptions.forEachIndexed { index, (value, label) ->
+                                        SegmentedButton(
+                                            selected = closeTabFocus == value,
+                                            onClick = { viewModel.setCloseTabFocus(value) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = tabFocusOptions.size,
+                                            ),
+                                        ) {
+                                            Text(label, maxLines = 1, softWrap = false)
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                val tabStripVisibility by viewModel.tabStripVisibility.collectAsState()
+
+                                SettingsRowTitle("Tab strip")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Whether to show the tab strip when only one cluster is open.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+
+                                val tabStripOptions = listOf(
+                                    TabStripVisibility.AUTO to "Compact (only with multiple tabs)",
+                                    TabStripVisibility.ALWAYS to "Always show",
+                                )
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    tabStripOptions.forEachIndexed { index, (value, label) ->
+                                        SegmentedButton(
+                                            selected = tabStripVisibility == value,
+                                            onClick = { viewModel.setTabStripVisibility(value) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = tabStripOptions.size,
+                                            ),
+                                        ) {
+                                            Text(label, maxLines = 1, softWrap = false)
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(16.dp))
+
+                                val restoreSession by viewModel.restoreSessionOnLaunch.collectAsState()
+                                SettingsRowTitle("Restore last session")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Reopen the windows, clusters, namespaces and screens you had when you last quit. Off: start with the cluster picker.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    OutlinedTextField(
-                                        value = mcpBearerToken.orEmpty(),
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.weight(1f),
+                                    Switch(
+                                        checked = restoreSession,
+                                        onCheckedChange = { viewModel.setRestoreSessionOnLaunch(it) },
                                     )
-                                    IconButton(
-                                        onClick = { copyToClipboard(mcpBearerToken.orEmpty(), "Copied token") },
+                                    Text(
+                                        if (restoreSession) "Restored at launch" else "Start with the picker",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (restoreSession) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val topologyRefreshSec by viewModel.topologyRefreshIntervalSec.collectAsState()
+
+                            SettingsSection(
+                                title = "Live data",
+                                onLayoutTop = { y -> sectionOffsets["Live data"] = y },
+                            ) {
+                                SettingsRowTitle("Topology auto-refresh")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Lists and detail panels update live from the cluster and have no interval. Only the topology graph re-fetches on a timer.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    TopologyRefreshOptionsSec.forEachIndexed { index, sec ->
+                                        SegmentedButton(
+                                            selected = topologyRefreshSec == sec,
+                                            onClick = { viewModel.setTopologyRefreshIntervalSec(sec) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = TopologyRefreshOptionsSec.size,
+                                            ),
+                                        ) {
+                                            Text(formatTopologyRefresh(sec), maxLines = 1, softWrap = false)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            SettingsSection(
+                                title = "Keyboard shortcuts",
+                                onLayoutTop = { y -> sectionOffsets["Keyboard shortcuts"] = y },
+                            ) {
+                                ShortcutGroups(groups = remember { appShortcuts(NativeWindowDrag.isMacOS) })
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            SettingsSection(
+                                title = "Privacy",
+                                onLayoutTop = { y -> sectionOffsets["Privacy"] = y },
+                            ) {
+                                val maskSecrets by viewModel.maskSecretValues.collectAsState()
+                                SettingsRowTitle("Secret values")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Hide Secret data in the YAML viewer. Reveal it per-resource when you need it.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = maskSecrets,
+                                        onCheckedChange = { viewModel.setMaskSecretValues(it) },
+                                    )
+                                    Text(
+                                        if (maskSecrets) "Masked" else "Shown in clear",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (maskSecrets) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            SettingsSection(
+                                title = "Integrations",
+                                onLayoutTop = { y -> sectionOffsets["Integrations"] = y },
+                            ) {
+                                // Audit A5: observe PreferenceRepository-backed flows
+                                // (single source of truth) instead of VM Compose state.
+                                val mcpEnabled by viewModel.isMcpServerEnabled.collectAsState()
+                                val mcpPort by viewModel.mcpServerPort.collectAsState()
+                                val mcpLocalhostOnly by viewModel.mcpLocalhostOnly.collectAsState()
+                                val mcpRequireAuth by viewModel.mcpRequireAuth.collectAsState()
+                                val mcpBearerToken by viewModel.mcpBearerToken.collectAsState()
+                                SettingsRowTitle("MCP Server")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Expose all Kubernetes resources via the Model Context Protocol (MCP) for AI tools",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = mcpEnabled,
+                                        onCheckedChange = { viewModel.toggleMcpServer(it) },
+                                    )
+                                    Text(
+                                        if (mcpEnabled) {
+                                            "Running on http://127.0.0.1:$mcpPort"
+                                        } else {
+                                            "Disabled"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (mcpEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Text(
+                                        "Port",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = KdTextSecondary,
+                                    )
+                                    var portText by remember(mcpPort) { mutableStateOf(mcpPort.toString()) }
+                                    val portValid = portText.toIntOrNull()?.let { it in 1..65535 } ?: false
+                                    OutlinedTextField(
+                                        value = portText,
+                                        onValueChange = { text ->
+                                            // Allow transient empty / partial input so the user can
+                                            // clear and retype; apply to the VM only when valid.
+                                            if (text.isEmpty() || (text.length <= 5 && text.all(Char::isDigit))) {
+                                                portText = text
+                                                text.toIntOrNull()?.takeIf { it in 1..65535 }
+                                                    ?.let { viewModel.updateMcpServerPort(it) }
+                                            }
+                                        },
+                                        modifier = Modifier.width(120.dp),
+                                        singleLine = true,
+                                        isError = portText.isNotEmpty() && !portValid,
+                                        supportingText = if (portText.isNotEmpty() && !portValid) {
+                                            { Text("Enter a port 1–65535", style = MaterialTheme.typography.labelSmall) }
+                                        } else {
+                                            null
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        textStyle = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = mcpLocalhostOnly,
+                                        onCheckedChange = { viewModel.updateMcpLocalhostOnly(it) },
+                                        enabled = !mcpEnabled,
+                                    )
+                                    Column {
+                                        Text("Localhost only", style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            if (mcpEnabled) "Stop MCP server to change." else "Bind to 127.0.0.1. Recommended for local-only workflows.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = KdTextSecondary,
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = mcpRequireAuth,
+                                        onCheckedChange = { viewModel.updateMcpRequireAuth(it) },
+                                        enabled = !mcpEnabled,
+                                    )
+                                    Column {
+                                        Text("Require authentication", style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            if (mcpEnabled) "Stop MCP server to change." else "Generate a bearer token each time the server starts.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = KdTextSecondary,
+                                        )
+                                    }
+                                }
+                                if (!mcpLocalhostOnly && !mcpRequireAuth) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text(
+                                            "MCP server is exposed on the network with no authentication. Anyone on your LAN can read cluster data. Enable at least one defense.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            modifier = Modifier.padding(12.dp),
+                                        )
+                                    }
+                                }
+                                if (mcpEnabled && mcpBearerToken != null) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "Bearer token (regenerated each start)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KdTextSecondary,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        OutlinedTextField(
+                                            value = mcpBearerToken.orEmpty(),
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            singleLine = true,
+                                            textStyle = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        IconButton(
+                                            onClick = { copyToClipboard(mcpBearerToken.orEmpty(), "Copied token") },
+                                        ) {
+                                            Icon(
+                                                painterResource(Res.drawable.content_copy_filled),
+                                                contentDescription = "Copy bearer token",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = KdTextSecondary,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            SettingsSection(
+                                title = "Cluster discovery",
+                                onLayoutTop = { y -> sectionOffsets["Cluster discovery"] = y },
+                            ) {
+                                SettingsRowTitle("AWS EKS")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Find EKS clusters in your AWS account and add them to your kubeconfig.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedButton(
+                                        onClick = onDiscoverEks,
+                                        enabled = awsCliAvailable,
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, KdBorder),
                                     ) {
                                         Icon(
-                                            painterResource(Res.drawable.content_copy_filled),
-                                            contentDescription = "Copy bearer token",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = KdTextSecondary,
+                                            painterResource(Res.drawable.cloud_filled),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (awsCliAvailable) KdPrimary else KdTextSecondary,
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Discover EKS Clusters", color = KdTextPrimary)
+                                    }
+                                    if (!awsCliAvailable) {
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            "Requires AWS CLI on PATH",
+                                            color = KdTextSecondary,
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                SettingsRowTitle("Google Cloud GKE")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Find GKE clusters in your Google Cloud projects and add them to your kubeconfig.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedButton(
+                                        onClick = onDiscoverGke,
+                                        enabled = gcloudCliAvailable,
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, KdBorder),
+                                    ) {
+                                        Icon(
+                                            painterResource(Res.drawable.cloud_filled),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (gcloudCliAvailable) KdPrimary else KdTextSecondary,
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Discover GKE Clusters", color = KdTextPrimary)
+                                    }
+                                    if (!gcloudCliAvailable) {
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            "Requires Google Cloud SDK on PATH",
+                                            color = KdTextSecondary,
+                                            style = MaterialTheme.typography.labelSmall,
                                         )
                                     }
                                 }
                             }
-                        }
 
-                        Spacer(Modifier.height(16.dp))
-
-                        SettingsSection(
-                            title = "Cluster discovery",
-                            onLayoutTop = { y -> sectionOffsets["Cluster discovery"] = y },
-                        ) {
-                            Text(
-                                "AWS EKS",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Find EKS clusters in your AWS account and add them to your kubeconfig.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedButton(
-                                    onClick = onDiscoverEks,
-                                    enabled = awsCliAvailable,
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, KdBorder),
-                                ) {
-                                    Icon(
-                                        painterResource(Res.drawable.cloud_filled),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = if (awsCliAvailable) KdPrimary else KdTextSecondary,
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Discover EKS Clusters", color = KdTextPrimary)
-                                }
-                                if (!awsCliAvailable) {
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        "Requires AWS CLI on PATH",
-                                        color = KdTextSecondary,
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(20.dp))
-
-                            Text(
-                                "Google Cloud GKE",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Find GKE clusters in your Google Cloud projects and add them to your kubeconfig.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedButton(
-                                    onClick = onDiscoverGke,
-                                    enabled = gcloudCliAvailable,
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, KdBorder),
-                                ) {
-                                    Icon(
-                                        painterResource(Res.drawable.cloud_filled),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = if (gcloudCliAvailable) KdPrimary else KdTextSecondary,
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Discover GKE Clusters", color = KdTextPrimary)
-                                }
-                                if (!gcloudCliAvailable) {
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        "Requires Google Cloud SDK on PATH",
-                                        color = KdTextSecondary,
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            }
-                        }
-
-                        if (mockRunning) {
                             Spacer(Modifier.height(16.dp))
                             SettingsSection(
                                 title = "Demo cluster simulator",
                                 onLayoutTop = { y -> sectionOffsets["Demo cluster simulator"] = y },
                             ) {
-                                DemoClusterSimulatorSection(viewModel)
+                                DemoClusterSimulatorSection(viewModel, mockRunning)
                             }
-                        }
 
-                        Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(16.dp))
 
-                        SettingsSection(
-                            title = "Diagnostics",
-                            onLayoutTop = { y -> sectionOffsets["Diagnostics"] = y },
-                        ) {
-                            Text(
-                                "Application logs",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Open the in-app log viewer in the bottom log panel to inspect application events.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = onShowAppLogs,
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, KdBorder),
+                            SettingsSection(
+                                title = "Diagnostics",
+                                onLayoutTop = { y -> sectionOffsets["Diagnostics"] = y },
                             ) {
-                                Icon(
-                                    painterResource(Res.drawable.description_filled),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = KdPrimary,
+                                SettingsRowTitle("Application logs")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Open the in-app log viewer in the bottom log panel to inspect application events.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
                                 )
-                                Spacer(Modifier.width(6.dp))
-                                Text("Open application logs", color = KdTextPrimary)
+                                Spacer(Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = onShowAppLogs,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, KdBorder),
+                                ) {
+                                    Icon(
+                                        painterResource(Res.drawable.description_filled),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = KdPrimary,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Open application logs", color = KdTextPrimary)
+                                }
                             }
-                        }
 
-                        Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(16.dp))
 
-                        SettingsSection(
-                            title = "About",
-                            onLayoutTop = { y -> sectionOffsets["About"] = y },
-                        ) {
-                            Text(
-                                "Application info",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "View version and application details",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KdTextSecondary,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = { showAboutModal = true },
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, KdBorder),
+                            SettingsSection(
+                                title = "About",
+                                onLayoutTop = { y -> sectionOffsets["About"] = y },
                             ) {
-                                Text("About KubeKubeDashDash", color = KdTextPrimary)
+                                SettingsRowTitle("Application info")
+                                Spacer(Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(KdPrimary.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            painterResource(Res.drawable.info_filled),
+                                            contentDescription = null,
+                                            tint = KdPrimary,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            "KubeKubeDashDash",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = KdTextPrimary,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Version ${AppVersion.version}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = KdTextSecondary,
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            "A modern Kubernetes dashboard",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = KdTextSecondary,
+                                        )
+                                    }
+                                }
                             }
                         }
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(scrollState),
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        )
                     }
-                    VerticalScrollbar(
-                        adapter = rememberScrollbarAdapter(scrollState),
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    )
                 }
             }
-        }
-
-        if (showAboutModal) {
-            AboutModal(onDismiss = { showAboutModal = false })
         }
     }
 }
@@ -1108,4 +1357,146 @@ private fun ClusterColorsSection(
             }
         }
     }
+}
+
+/**
+ * One row per known cluster context: its name, a draft-and-commit namespace
+ * field, and a clear `×` when a default is stored. The field never binds
+ * directly to [defaults] — [PreferenceRepository.setDefaultNamespace] is
+ * DataStore-only and does not update the in-memory flow synchronously, so a
+ * bound field would drop keystrokes as the flow re-seeds underneath it.
+ */
+@Composable
+private fun DefaultNamespaceSection(
+    contexts: List<String>,
+    defaults: Map<String, String>,
+    onSetDefault: (String, String) -> Unit,
+    onClearDefault: (String) -> Unit,
+) {
+    if (contexts.isEmpty()) {
+        Text(
+            "No cluster contexts found. Add a kubeconfig context to set a default namespace.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = KdTextSecondary,
+        )
+        return
+    }
+    Text(
+        "Namespace to open when a cluster connects fresh. With \"Restore last session\" on, a restored tab keeps its last namespace instead.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = KdTextSecondary,
+    )
+    Spacer(Modifier.height(12.dp))
+    val drafts = remember { mutableStateMapOf<String, String>() }
+    contexts.forEach { ctx ->
+        val stored = defaults[ctx]
+        val draft = drafts[ctx] ?: stored ?: ""
+
+        fun commit() {
+            val trimmed = draft.trim()
+            // Only write on a real change: an untouched field blurs on every
+            // Tab, and each commit is a DataStore transaction.
+            if (trimmed == stored.orEmpty()) return
+            if (trimmed.isBlank()) onClearDefault(ctx) else onSetDefault(ctx, trimmed)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                ctx,
+                style = MaterialTheme.typography.bodySmall,
+                color = KdTextPrimary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(8.dp))
+            SettingsTextField(
+                value = draft,
+                onValueChange = { drafts[ctx] = it },
+                onCommit = ::commit,
+                placeholder = "All Namespaces",
+                modifier = Modifier.width(220.dp),
+            )
+            if (stored != null) {
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable {
+                            drafts.remove(ctx)
+                            onClearDefault(ctx)
+                        }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                        .semantics { contentDescription = "Clear default namespace for $ctx" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("×", style = MaterialTheme.typography.labelSmall, color = KdPrimary)
+                }
+            }
+        }
+    }
+}
+
+// A compact single-line field for the Default namespace rows, copied from
+// SidebarSearchBox minus the leading icon: M3's OutlinedTextField bakes in
+// ~16dp vertical content padding that clips both text and placeholder at
+// this field's 32dp height. Draft-and-commit, never bound straight to the
+// persisted flow (see DefaultNamespaceSection's kdoc) — onCommit fires on
+// focus loss and on Enter.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onCommit: () -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdBorder,
+        unfocusedBorderColor = KdBorder,
+        focusedContainerColor = KdSurface,
+        unfocusedContainerColor = KdSurface,
+    )
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
+        cursorBrush = SolidColor(KdTextPrimary),
+        interactionSource = interactionSource,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onCommit() }),
+        modifier = modifier
+            .height(32.dp)
+            .onFocusChanged { if (!it.isFocused) onCommit() },
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = value,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text(placeholder, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                },
+            )
+        },
+    )
 }

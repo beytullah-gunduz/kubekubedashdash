@@ -74,6 +74,8 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
+import com.kubekubedashdash.data.repository.formatTopologyRefresh
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
@@ -181,7 +183,7 @@ fun ClusterTopologyGraph(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Auto: " + formatRefreshInterval(refreshIntervalSec),
+                        "Auto: " + formatTopologyRefresh(refreshIntervalSec),
                         style = MaterialTheme.typography.labelSmall,
                         color = KdTextSecondary,
                     )
@@ -191,17 +193,9 @@ fun ClusterTopologyGraph(
                     expanded = refreshMenuOpen,
                     onDismissRequest = { refreshMenuOpen = false },
                 ) {
-                    listOf(
-                        0 to "Off",
-                        5 to "5s",
-                        15 to "15s",
-                        30 to "30s",
-                        60 to "60s",
-                        120 to "2m",
-                        300 to "5m",
-                    ).forEach { (sec, label) ->
+                    TopologyRefreshOptionsSec.forEach { sec ->
                         DropdownMenuItem(
-                            text = { Text(label) },
+                            text = { Text(formatTopologyRefresh(sec)) },
                             onClick = {
                                 PreferenceRepository.setTopologyRefreshIntervalSec(sec)
                                 refreshMenuOpen = false
@@ -899,11 +893,4 @@ private fun LaneNodes(
             }
         }
     }
-}
-
-private fun formatRefreshInterval(sec: Int): String = when {
-    sec <= 0 -> "Off"
-    sec < 60 -> "${sec}s"
-    sec % 60 == 0 -> "${sec / 60}m"
-    else -> "${sec}s"
 }

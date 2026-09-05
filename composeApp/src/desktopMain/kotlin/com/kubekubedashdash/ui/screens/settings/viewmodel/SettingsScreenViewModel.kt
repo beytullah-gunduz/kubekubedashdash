@@ -8,6 +8,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
+import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +106,18 @@ class SettingsScreenViewModel : ViewModel() {
         PreferenceRepository.setRestoreSessionOnLaunch(value)
     }
 
+    val tableDensity: StateFlow<TableDensity> = PreferenceRepository.tableDensity
+
+    fun setTableDensity(value: TableDensity) {
+        PreferenceRepository.setTableDensity(value)
+    }
+
+    val topologyRefreshIntervalSec: StateFlow<Int> = PreferenceRepository.topologyRefreshIntervalSec
+
+    fun setTopologyRefreshIntervalSec(value: Int) {
+        PreferenceRepository.setTopologyRefreshIntervalSec(value)
+    }
+
     // ── Demo cluster simulator ─────────────────────────────────────────────────
     //
     // With per-tab mock instances, controls in this panel apply *globally* to every
@@ -155,6 +168,18 @@ class SettingsScreenViewModel : ViewModel() {
 
     fun clearClusterColor(context: String) {
         viewModelScope.launch { PreferenceRepository.clearClusterColor(context) }
+    }
+
+    // ── Default namespace per cluster ──────────────────────────────────────────
+
+    val defaultNamespaceByContext: StateFlow<Map<String, String>> = PreferenceRepository.defaultNamespaceByContext
+
+    fun setDefaultNamespace(context: String, namespace: String) {
+        viewModelScope.launch { PreferenceRepository.setDefaultNamespace(context, namespace) }
+    }
+
+    fun clearDefaultNamespace(context: String) {
+        viewModelScope.launch { PreferenceRepository.clearDefaultNamespace(context) }
     }
 
     init {

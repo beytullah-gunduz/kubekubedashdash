@@ -8,9 +8,9 @@ import androidx.compose.ui.unit.dp
  * the historical fixed padding; `Compact` tightens it. Nothing else about a
  * table changes with density — same type scale, same horizontal padding.
  */
-enum class TableDensity(val key: String, val rowPadding: Dp) {
-    Comfortable("comfortable", 7.dp),
-    Compact("compact", 3.dp),
+enum class TableDensity(val key: String, val rowPadding: Dp, val label: String) {
+    Comfortable("comfortable", 7.dp, "Comfortable"),
+    Compact("compact", 3.dp, "Compact"),
     ;
 
     companion object {

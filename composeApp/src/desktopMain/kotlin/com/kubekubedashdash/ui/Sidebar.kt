@@ -466,7 +466,7 @@ private fun MoreGroupLabel(title: String) {
 // can search both built-in kinds and CRDs.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: String) {
+fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
     val interactionSource = remember { MutableInteractionSource() }
     val colors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = KdBorder,
@@ -481,7 +481,7 @@ fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: Str
         textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
         cursorBrush = SolidColor(KdTextPrimary),
         interactionSource = interactionSource,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .height(32.dp),
