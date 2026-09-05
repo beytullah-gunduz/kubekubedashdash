@@ -18,7 +18,12 @@ data class ContextBinding(
     val awsProfile: String?,
 )
 
-class KubeConnectionManager : Closeable {
+class KubeConnectionManager(
+    /** Test seam: how a kube context name becomes a fabric8 [Config]. Production = `Config.autoConfigure`. */
+    private val loadConfig: (context: String?) -> Config = { Config.autoConfigure(it) },
+    /** Test seam: how a [Config] becomes a client. Production = `KubernetesClientBuilder`. */
+    private val buildClient: (Config) -> KubernetesClient = { KubernetesClientBuilder().withConfig(it).build() },
+) : Closeable {
 
     private val log = LoggerFactory.getLogger(KubeConnectionManager::class.java)
 
@@ -52,7 +57,13 @@ class KubeConnectionManager : Closeable {
     // (which is the same for every session in the process).
     @Volatile private var _connectedContext: String? = null
 
-    // ── Connection version (incremented on each connect, used by reactive flows) ─
+    // ── Connection version ──────────────────────────────────────────────────────
+    // Bumped on every transition that replaces or tears down a live connection:
+    // a successful connect (the reactive flows restart against the new client)
+    // and a failed connect that had a previous live connection (the flows
+    // restart, observe isConnected == false, and park — see
+    // ReactiveInformerFactory.parkUnlessConnected). A failed connect with no
+    // previous connection bumps nothing: there is nothing to tear down.
     private val _connectionVersion = MutableStateFlow(0L)
     val connectionVersion: StateFlow<Long> = _connectionVersion.asStateFlow()
 
@@ -85,6 +96,11 @@ class KubeConnectionManager : Closeable {
 
     private val connectLock = Any()
 
+    // Set by close() under connectLock. A connect* that starts afterwards must
+    // fail without building or keeping anything — the session that owned this
+    // manager is gone, so a client published now would never be closed.
+    private var closed = false
+
     /**
      * Retire the connection a `connect*` call is replacing — WITHOUT closing
      * the old client synchronously (audit C1).
@@ -108,6 +124,11 @@ class KubeConnectionManager : Closeable {
      * The `Closeable.close()` path (session/window teardown) is deliberately
      * left synchronous: there the session scope is cancelled around it, and
      * making teardown async has far wider blast radius.
+     *
+     * The failure path uses the same order (see [tearDownAfterFailure]): fields
+     * nulled, version bumped so the old informers cancel and park, previous
+     * connection retired after the grace period. Before that, a failed switch
+     * left the old informers running against a client closed 1 s later.
      */
     private fun retirePrevious(prevClient: KubernetesClient?, prevMock: MockClusterHandle?) {
         if (prevClient == null && prevMock == null) return
@@ -133,23 +154,30 @@ class KubeConnectionManager : Closeable {
     }
 
     fun connect(context: String? = null): Result<String> = synchronized(connectLock) {
+        if (closed) return closedFailure()
         val prevClient = _client
         val prevMock = _mockHandle
+        // The client under construction. Nothing is published until the
+        // version probe succeeds, and on any failure the client is closed —
+        // otherwise a 10 s retry loop leaks one client (and, with the Vert.x
+        // HTTP client, one event loop) per attempt.
+        var built: KubernetesClient? = null
         try {
             log.info("Connecting to cluster context={}", context ?: "<default>")
-            log.debug("connect step 1/4: Config.autoConfigure")
-            val config = Config.autoConfigure(context)
-            log.debug("connect step 2/4: KubernetesClientBuilder.build (masterUrl={})", redactUrl(config.masterUrl))
-            val c = KubernetesClientBuilder().withConfig(config).build()
+            log.debug("connect step 1/4: load config")
+            val config = loadConfig(context)
+            log.debug("connect step 2/4: build client (masterUrl={})", redactUrl(config.masterUrl))
+            val c = buildClient(config)
+            built = c
+            log.debug("connect step 3/4: fetch /version")
+            val v = c.kubernetesVersion ?: throw IllegalStateException("Cluster did not answer /version")
+            log.debug("connect step 4/4: publish")
             _client = c
             _mockHandle = null
             _connectedContext = context ?: config.currentContext?.name
-            log.debug("connect step 3/4: clearConnectionError")
             clearConnectionError()
-            log.debug("connect step 4/4: fetch /version")
-            val v = c.kubernetesVersion
-            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, redactUrl(config.masterUrl))
             _cachedFallbackContext = null
+            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, redactUrl(config.masterUrl))
             // Bump version FIRST so the old informers cancel, THEN retire the
             // previous client off-thread after a grace period (audit C1).
             _connectionVersion.update { it + 1 }
@@ -160,15 +188,42 @@ class KubeConnectionManager : Closeable {
             // LinkageError / OutOfMemoryError surface in the log + UI instead of
             // disappearing into the void and leaving the app stuck on the spinner.
             log.error("Failed to connect to cluster context={}", context, t)
-            _client = null
-            _mockHandle = null
-            _connectedContext = null
-            retirePrevious(prevClient, prevMock)
+            runCatching { built?.close() }
+                .onFailure { log.warn("Error closing the client of a failed connect: {}", it.message) }
+            tearDownAfterFailure(prevClient, prevMock)
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
 
+    private fun closedFailure(): Result<String> = Result.failure(IllegalStateException("Connection manager is closed"))
+
+    /**
+     * Failure path shared by every `connect*`. A failed connect means
+     * "disconnected", not "still on the old cluster": the fields are nulled
+     * first, then — only if there WAS a previous live connection — the version
+     * is bumped so that connection's flows restart, observe `isConnected ==
+     * false` and park (ReactiveInformerFactory.parkUnlessConnected), and only
+     * then is the previous connection retired after the grace period. With no
+     * previous connection nothing is bumped: the flows are dormant already.
+     */
+    private fun tearDownAfterFailure(prevClient: KubernetesClient?, prevMock: MockClusterHandle?) {
+        _client = null
+        _mockHandle = null
+        _connectedContext = null
+        if (prevClient != null || prevMock != null) {
+            _connectionVersion.update { it + 1 }
+        }
+        retirePrevious(prevClient, prevMock)
+    }
+
     fun connectWithClient(client: KubernetesClient, label: String): Result<String> = synchronized(connectLock) {
+        if (closed) {
+            // Ownership of [client] was handed to us; a closed manager can only
+            // release it, never publish it.
+            runCatching { client.close() }
+                .onFailure { log.warn("Error closing a client handed to a closed manager: {}", it.message) }
+            return closedFailure()
+        }
         val prevClient = _client
         val prevMock = _mockHandle
         try {
@@ -183,15 +238,22 @@ class KubeConnectionManager : Closeable {
             Result.success("mock")
         } catch (t: Throwable) {
             log.error("Failed to connect with pre-built client label={}", label, t)
-            _client = null
-            _mockHandle = null
-            _connectedContext = null
-            retirePrevious(prevClient, prevMock)
+            tearDownAfterFailure(prevClient, prevMock)
+            // Ownership of [client] was handed to us; it was never published for
+            // good, so release it — the same rule connect() applies to `built`.
+            runCatching { client.close() }
+                .onFailure { log.warn("Error closing the client of a failed pre-built connect: {}", it.message) }
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
 
     fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = synchronized(connectLock) {
+        if (closed) {
+            // Releases the provider ref-count (and the handle's client).
+            runCatching { handle.close() }
+                .onFailure { log.warn("Error releasing a mock handle handed to a closed manager: {}", it.message) }
+            return closedFailure()
+        }
         val prevClient = _client
         val prevMock = _mockHandle
         try {
@@ -205,10 +267,10 @@ class KubeConnectionManager : Closeable {
             Result.success("mock")
         } catch (t: Throwable) {
             log.error("Failed to connect via mock handle", t)
-            _client = null
-            _mockHandle = null
-            _connectedContext = null
-            retirePrevious(prevClient, prevMock)
+            tearDownAfterFailure(prevClient, prevMock)
+            // Same rule as connectWithClient: release the handle we were given.
+            runCatching { handle.close() }
+                .onFailure { log.warn("Error releasing the mock handle of a failed connect: {}", it.message) }
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
@@ -256,8 +318,14 @@ class KubeConnectionManager : Closeable {
      */
     @Volatile private var _cachedFallbackContext: String? = null
 
+    // Its own monitor, NOT connectLock: connect() now holds connectLock for the
+    // whole /version probe (verify-before-publish), and this fallback is read
+    // during composition (palette entries) — sharing the lock would freeze the
+    // UI thread for the length of a failing connect attempt.
+    private val fallbackLock = Any()
+
     fun getCurrentContext(): String = _connectedContext ?: run {
-        _cachedFallbackContext ?: synchronized(connectLock) {
+        _cachedFallbackContext ?: synchronized(fallbackLock) {
             _cachedFallbackContext ?: try {
                 Config.autoConfigure(null).currentContext?.name.orEmpty()
             } catch (e: Exception) {
@@ -271,15 +339,25 @@ class KubeConnectionManager : Closeable {
 
     // ── Closeable ───────────────────────────────────────────────────────────────
 
+    /**
+     * Takes [connectLock]: a `connect()` already in flight finishes and
+     * publishes first, and this then closes what it published; a `connect*`
+     * that starts after this returns fails at once (see [closed]). Before the
+     * lock, a connect that outlived the session's 3 s close-join published a
+     * client nobody ever closed.
+     */
     override fun close() {
-        if (_client != null) {
-            log.info("Closing Kubernetes client connection")
+        synchronized(connectLock) {
+            closed = true
+            if (_client != null) {
+                log.info("Closing Kubernetes client connection")
+            }
+            _mockHandle?.close() // releases ref-count; also closes the client for mock connections
+            _mockHandle = null
+            _client?.close() // no-op for mock (already closed above), real cleanup for non-mock
+            _client = null
+            _connectedContext = null
         }
-        _mockHandle?.close() // releases ref-count; also closes the client for mock connections
-        _mockHandle = null
-        _client?.close() // no-op for mock (already closed above), real cleanup for non-mock
-        _client = null
-        _connectedContext = null
     }
 
     private fun redactUrl(url: String?): String {

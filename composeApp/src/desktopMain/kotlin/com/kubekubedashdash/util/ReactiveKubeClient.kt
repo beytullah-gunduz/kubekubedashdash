@@ -128,12 +128,15 @@ class ReactiveKubeClient(
 
     /**
      * Connection-gated trigger for the reactive flows below. The underlying
-     * version StateFlow starts at 0 and increments on each successful connect,
+     * version StateFlow starts at 0 and bumps on every connection transition
+     * (a successful connect, or a failed one that tore a live connection down),
      * so filtering for `>0` keeps every informer / polling loop dormant until
      * a cluster has actually been wired up. Without this gate, SessionViewModel
      * subscribing in its `init` block immediately starts informers / polling
      * against a null client, producing repeated "Not connected to a cluster"
-     * errors and a noisy log every ~10 seconds.
+     * errors and a noisy log every ~10 seconds. Every flow started from this
+     * trigger calls `informers.parkUnlessConnected()` first: a bump that
+     * arrives while disconnected must park the flow, not error it.
      */
     private val connectedTrigger: Flow<Long> = _connectionVersion.filter { it > 0L }
 
@@ -1074,6 +1077,7 @@ class ReactiveKubeClient(
     val crds: StateFlow<ResourceState<List<CrdInfo>>> = connectedTrigger
         .flatMapLatest {
             channelFlow {
+                informers.parkUnlessConnected()
                 send(ResourceState.Loading)
                 val informer = try {
                     val emitSignal = Channel<Unit>(Channel.CONFLATED)
@@ -1237,6 +1241,7 @@ class ReactiveKubeClient(
     val isReachable: StateFlow<Boolean> = connectedTrigger
         .flatMapLatest {
             flow {
+                informers.parkUnlessConnected()
                 while (true) {
                     val ok = try {
                         // A real round-trip every tick: kubernetesVersion is
