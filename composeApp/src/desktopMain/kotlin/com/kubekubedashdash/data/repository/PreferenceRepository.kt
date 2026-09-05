@@ -57,6 +57,7 @@ object PreferenceRepository {
     private val EVENT_TRIAGE_PRESETS by lazy { stringPreferencesKey("event_triage_presets") }
     private val PINNED_RESOURCES by lazy { stringPreferencesKey("pinned_resources") }
     private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
+    private val DEFAULT_NAMESPACE_BY_CONTEXT by lazy { stringPreferencesKey("default_namespace_by_context") }
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
@@ -115,6 +116,12 @@ object PreferenceRepository {
 
     private val _clusterColorOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
     val clusterColorOverrides: StateFlow<Map<String, String>> = _clusterColorOverrides.asStateFlow()
+
+    // Default namespace to select on a fresh connect, keyed by
+    // DemoContext.preferenceKey(context). Absent key = no default (falls
+    // through to "All Namespaces" unless a session restore wins first).
+    private val _defaultNamespaceByContext = MutableStateFlow<Map<String, String>>(emptyMap())
+    val defaultNamespaceByContext: StateFlow<Map<String, String>> = _defaultNamespaceByContext.asStateFlow()
 
     private val _topologyPacketAnimationEnabled = MutableStateFlow(true)
     val topologyPacketAnimationEnabled: StateFlow<Boolean> = _topologyPacketAnimationEnabled.asStateFlow()
@@ -222,7 +229,8 @@ object PreferenceRepository {
                 _pinnedResources.value = p[PINNED_RESOURCES]
                     ?.split(",")?.filter { it.isNotBlank() }?.toSet()
                     ?: emptySet()
-                _clusterColorOverrides.value = decodeColorOverrides(p[CLUSTER_COLOR_OVERRIDES])
+                _clusterColorOverrides.value = StringMapCodec.decode(p[CLUSTER_COLOR_OVERRIDES])
+                _defaultNamespaceByContext.value = StringMapCodec.decode(p[DEFAULT_NAMESPACE_BY_CONTEXT])
                 _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
                 _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
                 _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
@@ -465,17 +473,33 @@ object PreferenceRepository {
 
     suspend fun setClusterColor(context: String, hex: String) {
         dataStore.edit { prefs ->
-            val current = decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
+            val current = StringMapCodec.decode(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
             current[context] = hex
-            prefs[CLUSTER_COLOR_OVERRIDES] = json.encodeToString(current)
+            prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
         }
     }
 
     suspend fun clearClusterColor(context: String) {
         dataStore.edit { prefs ->
-            val current = decodeColorOverrides(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
+            val current = StringMapCodec.decode(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
             current.remove(context)
-            prefs[CLUSTER_COLOR_OVERRIDES] = json.encodeToString(current)
+            prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
+        }
+    }
+
+    suspend fun setDefaultNamespace(context: String, namespace: String) {
+        dataStore.edit { prefs ->
+            val current = StringMapCodec.decode(prefs[DEFAULT_NAMESPACE_BY_CONTEXT]).toMutableMap()
+            current[context] = namespace
+            prefs[DEFAULT_NAMESPACE_BY_CONTEXT] = StringMapCodec.encode(current)
+        }
+    }
+
+    suspend fun clearDefaultNamespace(context: String) {
+        dataStore.edit { prefs ->
+            val current = StringMapCodec.decode(prefs[DEFAULT_NAMESPACE_BY_CONTEXT]).toMutableMap()
+            current.remove(context)
+            prefs[DEFAULT_NAMESPACE_BY_CONTEXT] = StringMapCodec.encode(current)
         }
     }
 
@@ -492,15 +516,6 @@ object PreferenceRepository {
             emptyList()
         } catch (_: IllegalArgumentException) {
             emptyList()
-        }
-    }
-
-    private fun decodeColorOverrides(raw: String?): Map<String, String> {
-        if (raw.isNullOrBlank()) return emptyMap()
-        return try {
-            json.decodeFromString<Map<String, String>>(raw)
-        } catch (_: Exception) {
-            emptyMap()
         }
     }
 

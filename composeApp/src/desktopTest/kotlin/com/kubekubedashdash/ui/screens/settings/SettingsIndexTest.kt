@@ -6,12 +6,14 @@ import kotlin.test.assertTrue
 
 class SettingsIndexTest {
 
-    // Tripwire: the ten rail titles that exist today. WS2 extends this to
-    // twelve (Live data, Default namespace) — update there, not here.
+    // Tripwire: the twelve rail titles that exist today (WS2 added Live data
+    // and Default namespace to WS1's original ten).
     private val knownSections = setOf(
         "Appearance",
         "Cluster colors",
+        "Default namespace",
         "Tab behavior",
+        "Live data",
         "Keyboard shortcuts",
         "Privacy",
         "Integrations",
@@ -73,6 +75,24 @@ class SettingsIndexTest {
     fun `colour finds Cluster colors`() {
         val results = settingsSearchResults("colour")
         assertTrue(results.any { it.title == "Cluster colors" })
+    }
+
+    @Test
+    fun `density finds Table density`() {
+        val results = settingsSearchResults("density")
+        assertTrue(results.any { it.title == "Table density" })
+    }
+
+    @Test
+    fun `refresh finds Topology auto-refresh`() {
+        val results = settingsSearchResults("refresh")
+        assertTrue(results.any { it.title == "Topology auto-refresh" })
+    }
+
+    @Test
+    fun `namespace finds Default namespace`() {
+        val results = settingsSearchResults("namespace")
+        assertTrue(results.any { it.title == "Default namespace" })
     }
 
     @Test

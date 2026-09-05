@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.NavPreferenceRepository
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.isRecentWorthy
 import com.kubekubedashdash.ui.navShortcutKey
@@ -591,7 +592,10 @@ class SessionViewModel(
                         // namespace and pane stay as they are, and its restore target
                         // (if any) was consumed by the first connect.
                         val restore = pendingRestore
-                        val namespace = restore?.namespace ?: "All Namespaces"
+                        val namespace = initialNamespace(
+                            restore?.namespace,
+                            PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
+                        )
                         _selectedNamespace.value = namespace
                         reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
                         restore?.paneWidthDp?.let { setExtraPaneWidth(it) }

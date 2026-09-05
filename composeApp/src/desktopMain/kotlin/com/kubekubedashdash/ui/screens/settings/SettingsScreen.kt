@@ -5,10 +5,12 @@ import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -23,17 +25,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -58,16 +64,22 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -75,10 +87,13 @@ import com.kubekubedashdash.AppVersion
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
+import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
+import com.kubekubedashdash.data.repository.formatTopologyRefresh
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
@@ -92,6 +107,7 @@ import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.SidebarSearchBox
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.components.ShortcutGroups
+import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
@@ -443,7 +459,9 @@ fun SettingsScreen(
     val sectionTitles = buildList {
         add("Appearance")
         add("Cluster colors")
+        add("Default namespace")
         add("Tab behavior")
+        add("Live data")
         add("Keyboard shortcuts")
         add("Privacy")
         add("Integrations")
@@ -671,6 +689,38 @@ fun SettingsScreen(
                                         }
                                     }
                                 }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                val tableDensity by viewModel.tableDensity.collectAsState()
+
+                                SettingsRowTitle("Table density")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Row height in every resource list. Also in each table's options menu.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    TableDensity.entries.forEachIndexed { index, option ->
+                                        SegmentedButton(
+                                            selected = tableDensity == option,
+                                            onClick = { viewModel.setTableDensity(option) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = TableDensity.entries.size,
+                                            ),
+                                        ) {
+                                            Text(
+                                                if (option == TableDensity.Comfortable) "Comfortable" else "Compact",
+                                                maxLines = 1,
+                                                softWrap = false,
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
                             Spacer(Modifier.height(16.dp))
@@ -687,6 +737,22 @@ fun SettingsScreen(
                                     overrides = clusterColorOverrides,
                                     onSetColor = { ctx, hex -> viewModel.setClusterColor(ctx, hex) },
                                     onClearColor = { ctx -> viewModel.clearClusterColor(ctx) },
+                                )
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val defaultNamespaceByContext by viewModel.defaultNamespaceByContext.collectAsState()
+
+                            SettingsSection(
+                                title = "Default namespace",
+                                onLayoutTop = { y -> sectionOffsets["Default namespace"] = y },
+                            ) {
+                                DefaultNamespaceSection(
+                                    contexts = knownContexts,
+                                    defaults = defaultNamespaceByContext,
+                                    onSetDefault = { ctx, ns -> viewModel.setDefaultNamespace(ctx, ns) },
+                                    onClearDefault = { ctx -> viewModel.clearDefaultNamespace(ctx) },
                                 )
                             }
 
@@ -779,6 +845,39 @@ fun SettingsScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (restoreSession) MaterialTheme.colorScheme.primary else KdTextSecondary,
                                     )
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            val topologyRefreshSec by viewModel.topologyRefreshIntervalSec.collectAsState()
+
+                            SettingsSection(
+                                title = "Live data",
+                                onLayoutTop = { y -> sectionOffsets["Live data"] = y },
+                            ) {
+                                SettingsRowTitle("Topology auto-refresh")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Lists and detail panels update live from the cluster and have no interval. Only the topology graph re-fetches on a timer.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+
+                                FullWidthSingleChoiceSegmentedButtonRow {
+                                    TopologyRefreshOptionsSec.forEachIndexed { index, sec ->
+                                        SegmentedButton(
+                                            selected = topologyRefreshSec == sec,
+                                            onClick = { viewModel.setTopologyRefreshIntervalSec(sec) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index = index,
+                                                count = TopologyRefreshOptionsSec.size,
+                                            ),
+                                        ) {
+                                            Text(formatTopologyRefresh(sec), maxLines = 1, softWrap = false)
+                                        }
+                                    }
                                 }
                             }
 
@@ -1247,4 +1346,144 @@ private fun ClusterColorsSection(
             }
         }
     }
+}
+
+/**
+ * One row per known cluster context: its name, a draft-and-commit namespace
+ * field, and a clear `×` when a default is stored. The field never binds
+ * directly to [defaults] — [PreferenceRepository.setDefaultNamespace] is
+ * DataStore-only and does not update the in-memory flow synchronously, so a
+ * bound field would drop keystrokes as the flow re-seeds underneath it.
+ */
+@Composable
+private fun DefaultNamespaceSection(
+    contexts: List<String>,
+    defaults: Map<String, String>,
+    onSetDefault: (String, String) -> Unit,
+    onClearDefault: (String) -> Unit,
+) {
+    if (contexts.isEmpty()) {
+        Text(
+            "No cluster contexts found. Add a kubeconfig context to set a default namespace.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = KdTextSecondary,
+        )
+        return
+    }
+    Text(
+        "Namespace to open when a cluster connects fresh. With \"Restore last session\" on, a restored tab keeps its last namespace instead.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = KdTextSecondary,
+    )
+    Spacer(Modifier.height(12.dp))
+    val drafts = remember { mutableStateMapOf<String, String>() }
+    contexts.forEach { ctx ->
+        val stored = defaults[ctx]
+        val draft = drafts[ctx] ?: stored ?: ""
+
+        fun commit() {
+            val trimmed = draft.trim()
+            // Only write on a real change: an untouched field blurs on every
+            // Tab, and each commit is a DataStore transaction.
+            if (trimmed == stored.orEmpty()) return
+            if (trimmed.isBlank()) onClearDefault(ctx) else onSetDefault(ctx, trimmed)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                ctx,
+                style = MaterialTheme.typography.bodySmall,
+                color = KdTextPrimary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(8.dp))
+            SettingsTextField(
+                value = draft,
+                onValueChange = { drafts[ctx] = it },
+                onCommit = ::commit,
+                placeholder = "All Namespaces",
+                modifier = Modifier.width(220.dp),
+            )
+            if (stored != null) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "×",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdPrimary,
+                    modifier = Modifier
+                        .clickable {
+                            drafts.remove(ctx)
+                            onClearDefault(ctx)
+                        }
+                        .pointerHoverIcon(PointerIcon.Hand),
+                )
+            }
+        }
+    }
+}
+
+// A compact single-line field for the Default namespace rows, copied from
+// SidebarSearchBox minus the leading icon: M3's OutlinedTextField bakes in
+// ~16dp vertical content padding that clips both text and placeholder at
+// this field's 32dp height. Draft-and-commit, never bound straight to the
+// persisted flow (see DefaultNamespaceSection's kdoc) — onCommit fires on
+// focus loss and on Enter.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onCommit: () -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = KdBorder,
+        unfocusedBorderColor = KdBorder,
+        focusedContainerColor = KdSurface,
+        unfocusedContainerColor = KdSurface,
+    )
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
+        cursorBrush = SolidColor(KdTextPrimary),
+        interactionSource = interactionSource,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onCommit() }),
+        modifier = modifier
+            .height(32.dp)
+            .onFocusChanged { if (!it.isFocused) onCommit() },
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = value,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text(placeholder, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                },
+                colors = colors,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                },
+            )
+        },
+    )
 }

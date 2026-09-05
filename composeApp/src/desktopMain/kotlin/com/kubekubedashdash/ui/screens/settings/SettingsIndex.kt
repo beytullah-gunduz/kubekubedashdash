@@ -6,19 +6,22 @@ package com.kubekubedashdash.ui.screens.settings
 data class SettingsEntry(val section: String, val title: String, val keywords: List<String> = emptyList())
 
 /**
- * Every row, in document order. Two entries — Cluster colors and Keyboard
- * shortcuts — have no row of their own inside their section; their title
- * equals the section title, so a search hit jumps to the section without a
- * row highlight (see [SettingsRowTitle] in SettingsScreen.kt, which is never
- * rendered for these two).
+ * Every row, in document order. Three entries — Cluster colors, Keyboard
+ * shortcuts and Default namespace — have no row of their own inside their
+ * section; their title equals the section title, so a search hit jumps to
+ * the section without a row highlight (see [SettingsRowTitle] in
+ * SettingsScreen.kt, which is never rendered for these three).
  */
 val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Appearance", "Theme", listOf("dark", "light", "system")),
     SettingsEntry("Appearance", "UI zoom", listOf("font", "size", "scale", "bigger")),
+    SettingsEntry("Appearance", "Table density", listOf("rows", "compact", "comfortable", "spacing")),
     SettingsEntry("Cluster colors", "Cluster colors", listOf("color", "colour", "identify", "tab")),
+    SettingsEntry("Default namespace", "Default namespace", listOf("namespace", "cluster", "startup", "connect")),
     SettingsEntry("Tab behavior", "When closing the active tab, focus:", listOf("close", "tab")),
     SettingsEntry("Tab behavior", "Tab strip", listOf("tabs", "hide")),
     SettingsEntry("Tab behavior", "Restore last session", listOf("launch", "startup", "open")),
+    SettingsEntry("Live data", "Topology auto-refresh", listOf("refresh", "interval", "poll", "update", "topology")),
     SettingsEntry("Keyboard shortcuts", "Keyboard shortcuts", listOf("hotkey", "cheat sheet", "cmd")),
     SettingsEntry("Privacy", "Secret values", listOf("mask", "reveal", "hide")),
     SettingsEntry("Integrations", "MCP Server", listOf("port", "token", "integration")),
