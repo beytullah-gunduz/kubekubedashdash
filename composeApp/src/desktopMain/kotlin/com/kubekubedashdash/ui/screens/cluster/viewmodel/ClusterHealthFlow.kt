@@ -14,7 +14,7 @@ import java.time.format.DateTimeParseException
 // Window over which Warning/Error events count toward cluster health.
 // Older events stay visible in the Recent Events card but stop driving the
 // banner/badge so a single past blip doesn't pin the indicator amber forever.
-private const val HEALTH_WARNING_WINDOW_SECONDS = 15L * 60L
+internal const val HEALTH_WARNING_WINDOW_SECONDS = 15L * 60L
 
 // Per-node CPU-or-memory utilisation that flips it into "under pressure".
 // 0.90 is intentionally past the comfortable-burst zone — at 0.85 many bursty
