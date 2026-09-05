@@ -8,6 +8,7 @@ import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -97,6 +98,11 @@ object NavPreferenceRepository {
     private val _recentsByContext = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     val recentsByContext: StateFlow<Map<String, List<String>>> = _recentsByContext.asStateFlow()
 
+    // Writes go through one consumer in arrival order. Launching each edit
+    // as its own coroutine would let two quick navigations reach DataStore's
+    // transaction lock in either order and persist A-then-B as B-then-A.
+    private val writes = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+
     init {
         ioScope.launch {
             dataStore.data.collect { p ->
@@ -104,11 +110,12 @@ object NavPreferenceRepository {
                 _recentsByContext.value = decodeContextLists(p[NAV_RECENTS])
             }
         }
+        ioScope.launch { for (write in writes) write() }
     }
 
     fun toggleFavourite(context: String, key: String) {
         if (context.isBlank()) return
-        ioScope.launch {
+        writes.trySend {
             dataStore.edit { prefs ->
                 val favourites = decodeContextLists(prefs[NAV_FAVOURITES])
                 prefs[NAV_FAVOURITES] = encodeContextLists(computeToggleFavourite(favourites, context, key))
@@ -122,7 +129,7 @@ object NavPreferenceRepository {
         // own "target != current" guard doesn't stop e.g. Pods(statusFilter=…)
         // → Pods() from being two distinct navigations with the same key.
         if (_recentsByContext.value[context]?.firstOrNull() == key) return
-        ioScope.launch {
+        writes.trySend {
             dataStore.edit { prefs ->
                 val recents = decodeContextLists(prefs[NAV_RECENTS])
                 prefs[NAV_RECENTS] = encodeContextLists(computeRecordRecent(recents, context, key))

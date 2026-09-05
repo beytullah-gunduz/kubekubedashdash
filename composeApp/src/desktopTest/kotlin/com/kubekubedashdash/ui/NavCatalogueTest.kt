@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui
 
+import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.CrdScope
 import com.kubekubedashdash.services.session.SavedScreen
@@ -42,11 +43,13 @@ class NavCatalogueTest {
     fun `every NavKind's key decodes through ScreenCodec to the class it navigates to`() {
         NavKinds.forEach { kind ->
             val decoded = ScreenCodec.decode(SavedScreen(key = kind.key))
+            // Value equality, not class equality: every kind is a data object
+            // or a data class, and this is what catches a catalogue entry that
+            // navigates to Pods(statusFilter = …) instead of the plain Pods().
             assertEquals(
-                kind.screen()::class,
-                decoded::class,
-                "key \"${kind.key}\" decoded to ${decoded::class.simpleName}, " +
-                    "expected ${kind.screen()::class.simpleName}",
+                kind.screen(),
+                decoded,
+                "key \"${kind.key}\" decoded to $decoded, expected ${kind.screen()}",
             )
         }
     }
@@ -209,5 +212,39 @@ class NavCatalogueTest {
     fun `recents preserve their input order`() {
         val result = resolveNavShortcuts(favourites = emptyList(), recents = listOf("Nodes", "Pods"), kinds = kinds, crds = null)
         assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!), NavShortcut.BuiltIn(navKind("Pods")!!)), result.recents)
+    }
+
+    // ── navShortcutKey / currentKey ─────────────────────────────────────
+
+    @Test
+    fun `navShortcutKey uses the simple name for a built-in and group-slash-kind for a CRD`() {
+        assertEquals("Pods", navShortcutKey(Screen.Main.Pods()))
+        assertEquals("Pods", navShortcutKey(Screen.Main.Pods(statusFilter = setOf("Failed"))))
+        assertEquals(
+            "example.io/Widget",
+            navShortcutKey(Screen.Main.CustomResource("example.io", "v1", "Widget", "widgets", true)),
+        )
+    }
+
+    @Test
+    fun `navShortcutKey is null for screens neither section can point at`() {
+        assertEquals(null, navShortcutKey(Screen.Main.Connecting))
+        assertEquals(null, navShortcutKey(Screen.Main.ConnectionError(null, 0)))
+    }
+
+    @Test
+    fun `resolveNavShortcuts drops the current screen from recents but not from favourites`() {
+        val kinds = NavKinds
+        val result = resolveNavShortcuts(
+            favourites = listOf("Pods"),
+            recents = listOf("Nodes", "Events"),
+            kinds = kinds,
+            crds = null,
+            currentKey = "Nodes",
+        )
+        assertEquals(listOf("Pods"), result.favourites.map { (it as NavShortcut.BuiltIn).kind.key })
+        assertEquals(listOf("Events"), result.recents.map { (it as NavShortcut.BuiltIn).kind.key })
+        val favouritedCurrent = resolveNavShortcuts(listOf("Pods"), emptyList(), kinds, null, currentKey = "Pods")
+        assertEquals(1, favouritedCurrent.favourites.size)
     }
 }

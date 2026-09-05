@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +38,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +88,7 @@ import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
+import kotlinx.coroutines.flow.mapNotNull
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -106,50 +109,70 @@ fun Sidebar(
     // collapsed — same as the CRD search box was before this box replaced it.
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val searchActive = !collapsed && searchQuery.isNotBlank()
+    // The 56 dp rail has no box to show a query in; clear it on collapse so
+    // re-expanding does not come back silently filtered.
+    LaunchedEffect(collapsed) { if (collapsed) searchQuery = "" }
 
     // Collected here (not just inside CrdSection) so the "No matches" message
     // can account for CRD hits without CustomResourcesSection reaching back
     // out to Sidebar. See CrdSection below for the CRD half's own rendering.
     val client = LocalReactiveKubeClient.current
     val crdsState by client.crds.collectAsState()
-    val context = remember(client) { client.getCurrentContext() }
 
     // Trailing signal counts (pods failing / nodes not ready / warning
     // events) — the same three the cluster health banner surfaces, keyed by
     // NavKind.key so NavKindItem can look one up per row for free.
     val counts = remember(clusterHealth) { sidebarCounts(clusterHealth) }
 
-    // Favourites/Recent context. Deliberately NOT remembered (unlike `context`
-    // above): before connect, getCurrentContext() returns the kubeconfig's
-    // current-context, but the demo cluster rewrites its context to a minted
-    // "… (mock)#N" label only after connect — a remembered value here would
-    // freeze favourites under the wrong key. Neither section renders while
-    // this is blank.
+    // The cluster context, read live and only once connected — deliberately
+    // NOT remembered. Before connect, getCurrentContext() returns the
+    // kubeconfig's current-context and caches it, while the demo cluster
+    // mints its real "… (mock)#N" label only after connect; a remembered
+    // value here would write favourites under one key and read them under
+    // another. Blank while disconnected, and nothing below renders then.
     val connected = LocalIsConnected.current
     val favouritesContext = if (connected) client.getCurrentContext() else ""
     val favouritesByContext by NavPreferenceRepository.favouritesByContext.collectAsState()
     val recentsByContext by NavPreferenceRepository.recentsByContext.collectAsState()
+    val hiddenByContext by CrdPreferenceRepository.hiddenByContext.collectAsState()
     val favouriteKeys = favouritesByContext[favouritesContext].orEmpty()
     val recentKeys = recentsByContext[favouritesContext].orEmpty()
+    val hiddenCrdKeys = hiddenByContext[favouritesContext].orEmpty()
     val favouriteKeySet = remember(favouriteKeys) { favouriteKeys.toSet() }
-    val crdsForShortcuts = (crdsState as? ResourceState.Success)?.data
-    val shortcuts = remember(favouriteKeys, recentKeys, crdsForShortcuts) {
-        resolveNavShortcuts(favouriteKeys, recentKeys, NavKinds, crdsForShortcuts)
+
+    // Last-known CRD list, held across Loading and Error: the CRD informer is
+    // rebuilt on every connection version and re-emits Loading each time, so
+    // reading the instantaneous state would blink every CRD favourite out of
+    // the rail on each reconnect. A genuine deletion still drops the row on
+    // the next Success. Hidden CRDs are excluded here as on every other CRD
+    // surface — a hidden kind must not live on at the top of the rail.
+    val knownCrds by remember(client) {
+        client.crds.mapNotNull { (it as? ResourceState.Success)?.data }
+    }.collectAsState(null)
+    val crdsForShortcuts = knownCrds?.filterNot { it.key in hiddenCrdKeys }
+    val currentKey = navShortcutKey(currentScreen)
+    val shortcuts = remember(favouriteKeys, recentKeys, crdsForShortcuts, currentKey) {
+        resolveNavShortcuts(favouriteKeys, recentKeys, NavKinds, crdsForShortcuts, currentKey)
     }
-    val onToggleKindFavourite: (String) -> Unit = { key ->
-        NavPreferenceRepository.toggleFavourite(favouritesContext, key)
+    // Null while disconnected: no context to write under, so no menu item
+    // that would silently do nothing.
+    val onToggleKindFavourite: ((String) -> Unit)? = if (favouritesContext.isBlank()) {
+        null
+    } else {
+        { key -> NavPreferenceRepository.toggleFavourite(favouritesContext, key) }
     }
-    val onToggleCrdFavourite: (CrdInfo) -> Unit = { crd ->
-        NavPreferenceRepository.toggleFavourite(favouritesContext, crd.key)
+    val onToggleCrdFavourite: ((CrdInfo) -> Unit)? = if (favouritesContext.isBlank()) {
+        null
+    } else {
+        { crd -> NavPreferenceRepository.toggleFavourite(favouritesContext, crd.key) }
     }
 
-    val crdMatchCount = remember(crdsState, context, searchQuery) {
+    val crdMatchCount = remember(crdsState, hiddenCrdKeys, searchQuery) {
         if (searchQuery.isBlank()) {
             0
         } else {
             val crds = (crdsState as? ResourceState.Success)?.data.orEmpty()
-            val hidden = CrdPreferenceRepository.hiddenFor(context)
-            crds.count { it.key !in hidden && matchesCrdSearch(it, searchQuery) }
+            crds.count { it.key !in hiddenCrdKeys && matchesCrdSearch(it, searchQuery) }
         }
     }
 
@@ -185,7 +208,7 @@ fun Sidebar(
                     collapsed,
                     searchQuery,
                     favourites = favouriteKeySet,
-                    onToggleFavourite = onToggleCrdFavourite,
+                    onToggleFavourite = onToggleCrdFavourite ?: {},
                 )
                 if (builtInMatches.isEmpty() && crdMatchCount == 0) {
                     Text(
@@ -266,7 +289,7 @@ fun Sidebar(
                     onNavigate,
                     collapsed,
                     favourites = favouriteKeySet,
-                    onToggleFavourite = onToggleCrdFavourite,
+                    onToggleFavourite = onToggleCrdFavourite ?: {},
                 )
             }
         }
@@ -284,7 +307,7 @@ private fun NavKindItem(
     clusterHealth: ClusterHealthSummary?,
     counts: Map<String, SidebarCount>,
     favourites: Set<String>,
-    onToggleFavourite: (String) -> Unit,
+    onToggleFavourite: ((String) -> Unit)?,
     onNavigate: (Screen) -> Unit,
 ) {
     val isCluster = kind.key == "ClusterOverview"
@@ -297,7 +320,9 @@ private fun NavKindItem(
         badgeContentDescription = if (isCluster) healthBadgeDescription(clusterHealth) else null,
         count = counts[kind.key],
         onCountClick = onNavigate,
-        contextMenu = { dismiss -> FavouriteMenuItem(kind.key, favourites, { onToggleFavourite(kind.key) }, dismiss) },
+        contextMenu = onToggleFavourite?.let { toggle ->
+            { dismiss -> FavouriteMenuItem(kind.key, favourites, { toggle(kind.key) }, dismiss) }
+        },
         onClick = { onNavigate(kind.screen()) },
     )
 }
@@ -328,8 +353,8 @@ private fun NavShortcutRow(
     clusterHealth: ClusterHealthSummary?,
     counts: Map<String, SidebarCount>,
     favourites: Set<String>,
-    onToggleKindFavourite: (String) -> Unit,
-    onToggleCrdFavourite: (CrdInfo) -> Unit,
+    onToggleKindFavourite: ((String) -> Unit)?,
+    onToggleCrdFavourite: ((CrdInfo) -> Unit)?,
     onNavigate: (Screen) -> Unit,
 ) {
     when (shortcut) {
@@ -351,7 +376,7 @@ private fun CrdShortcutRow(
     currentScreen: Screen,
     collapsed: Boolean,
     favourites: Set<String>,
-    onToggleFavourite: (CrdInfo) -> Unit,
+    onToggleFavourite: ((CrdInfo) -> Unit)?,
     onNavigate: (Screen) -> Unit,
 ) {
     val isSelected = currentScreen is Screen.Main.CustomResource &&
@@ -372,7 +397,9 @@ private fun CrdShortcutRow(
                 ),
             )
         },
-        contextMenu = { dismiss -> FavouriteMenuItem(crd.key, favourites, { onToggleFavourite(crd) }, dismiss) },
+        contextMenu = onToggleFavourite?.let { toggle ->
+            { dismiss -> FavouriteMenuItem(crd.key, favourites, { toggle(crd) }, dismiss) }
+        },
     )
 }
 
@@ -577,8 +604,10 @@ fun SidebarItem(
                     .then(
                         if (!collapsed && hasTrailingSlot) {
                             // Reserve room for the trailing badge/count so a
-                            // long label ellipsises before reaching it.
-                            Modifier.padding(end = 26.dp)
+                            // long label ellipsises before reaching it — sized
+                            // for a three-digit count, which a broken cluster
+                            // reaches easily.
+                            Modifier.padding(end = 34.dp)
                         } else {
                             Modifier
                         },
@@ -635,6 +664,9 @@ fun SidebarItem(
                         ) {
                             Box(
                                 modifier = Modifier
+                                    // The target is the box, not the digit's glyph
+                                    // bounds — the same widening the table's ⋮ slot has.
+                                    .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
                                     .clickable(enabled = onCountClick != null) { onCountClick?.invoke(count.target) }
                                     .pointerHoverIcon(PointerIcon.Hand)
                                     .semantics { contentDescription = count.description },

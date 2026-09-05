@@ -31,6 +31,7 @@ import com.kubekubedashdash.resources.storage_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.resources.work_filled
+import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 import org.jetbrains.compose.resources.DrawableResource
 
 /** Which tier of the rail a [NavSection] renders in — the always-visible list, or tucked inside "More". */
@@ -181,6 +182,21 @@ internal fun matchesCrdSearch(crd: CrdInfo, query: String): Boolean {
     return crd.shortNames.any { it.lowercase().contains(q) }
 }
 
+/**
+ * The Favourites/Recent key for [screen], or null when it isn't a kind either
+ * section can point at (a connection screen, a detail pane, …). A built-in
+ * kind uses [screenKeyOf]'s value, matching [NavKind.key]; a custom resource
+ * uses `"group/kind"`, matching `CrdInfo.key` — the two namespaces never
+ * collide because a simple class name never contains "/". One definition,
+ * used both where a visit is recorded and where the rail decides what the
+ * current screen is.
+ */
+fun navShortcutKey(screen: Screen): String? = when {
+    screen is Screen.Main.CustomResource -> "${screen.group}/${screen.kind}"
+    screen is Screen.Main && navKind(screenKeyOf(screen)) != null -> screenKeyOf(screen)
+    else -> null
+}
+
 /** One resolved Favourites/Recent row — either a built-in kind or a CRD. */
 sealed interface NavShortcut {
     data class BuiltIn(val kind: NavKind) : NavShortcut
@@ -200,13 +216,16 @@ data class NavShortcuts(val favourites: List<NavShortcut>, val recents: List<Nav
  * names a catalogue kind is always dropped. Neither list is ever pruned by
  * this function — it only decides what to render, never what's stored.
  * Recents that are also favourites are excluded, so the two sections never
- * duplicate each other. Both input orders are preserved.
+ * duplicate each other, and so is [currentKey] — a visit is recorded as it
+ * happens, so without this the first Recent row would always be the screen
+ * already selected six rows below it. Both input orders are preserved.
  */
 fun resolveNavShortcuts(
     favourites: List<String>,
     recents: List<String>,
     kinds: List<NavKind>,
     crds: List<CrdInfo>?,
+    currentKey: String? = null,
 ): NavShortcuts {
     val kindsByKey = kinds.associateBy { it.key }
     val crdsByKey = crds?.associateBy { it.key }
@@ -219,6 +238,6 @@ fun resolveNavShortcuts(
 
     val favouriteKeys = favourites.toSet()
     val resolvedFavourites = favourites.mapNotNull(::resolve)
-    val resolvedRecents = recents.filterNot { it in favouriteKeys }.mapNotNull(::resolve)
+    val resolvedRecents = recents.filterNot { it in favouriteKeys || it == currentKey }.mapNotNull(::resolve)
     return NavShortcuts(resolvedFavourites, resolvedRecents)
 }
