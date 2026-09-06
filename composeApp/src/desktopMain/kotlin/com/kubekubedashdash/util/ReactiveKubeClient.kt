@@ -82,6 +82,8 @@ import java.util.concurrent.ConcurrentHashMap
 class ReactiveKubeClient(
     private val scope: CoroutineScope,
     private val connectionManager: KubeConnectionManager,
+    /** Test seam: liveness-probe cadence. Production keeps the 4 s default; tests shorten it. */
+    private val probeIntervalMs: Long = 4_000L,
 ) : Closeable {
 
     private val log = LoggerFactory.getLogger(ReactiveKubeClient::class.java)
@@ -1229,7 +1231,9 @@ class ReactiveKubeClient(
      * already does for an explicit connect failure — NO new connection-state
      * writer is introduced; the fix feeds the existing pipeline.
      * `reportError`'s ≥3-consecutive threshold debounces transient blips, so
-     * worst-case detection is ~3× the interval.
+     * worst-case detection is ~3× (interval + probe timeout) — about 24 s at
+     * the 4 s default, since a failed probe burns its whole timeout before
+     * the next interval even starts.
      *
      * `Eagerly` (not `WhileSubscribed`): liveness must run whenever the
      * session is connected, independent of which screen is visible.
@@ -1244,22 +1248,32 @@ class ReactiveKubeClient(
                 informers.parkUnlessConnected()
                 while (true) {
                     val ok = try {
-                        // A real round-trip every tick: kubernetesVersion is
-                        // cached by fabric8 after the first call (useless as a
-                        // liveness signal); namespaces are few and always
-                        // re-listed. MUST be time-bounded: fabric8 retries a
-                        // failed request with its own backoff, so a call to a
-                        // dead cluster can block far longer than the probe
-                        // interval — without this timeout the probe never
-                        // even reports the first failure.
+                        // A real round-trip every tick, and deliberately
+                        // raw(): it neither caches nor deserialises, so a
+                        // server answering /version with a body that is not a
+                        // VersionInfo still counts as reached.
+                        // /version — NOT a namespace list: the default
+                        // system:public-info-viewer binding grants GET
+                        // /version to system:authenticated cluster-wide, so
+                        // namespace-scoped RBAC alone won't 403 it, whereas a
+                        // namespace-scoped credential gets 403 on `namespaces`
+                        // and was reported as a dead cluster every third tick.
+                        // A 404 returns null (BaseClient.raw) and still means
+                        // the server answered. MUST be time-bounded: fabric8
+                        // retries a failed request with its own backoff (10
+                        // attempts, ~19 s by default), so a call to a dead
+                        // cluster can block far longer than the probe interval
+                        // — without this timeout the probe never even reports
+                        // the first failure.
                         val reached = withTimeoutOrNull(4_000) {
-                            // runInterruptible: list() is a blocking JVM call
+                            // runInterruptible: raw() is a blocking JVM call
                             // with no suspension point, so withTimeoutOrNull
                             // alone can't preempt it (it would wait for
                             // fabric8's retry budget to exhaust). This makes
-                            // the timeout interrupt the worker thread, which
-                            // OkHttp honors by throwing.
-                            runInterruptible(Dispatchers.IO) { k8s.namespaces().list() }
+                            // the timeout interrupt the worker thread;
+                            // OperationSupport.waitForResult turns that
+                            // interrupt into an InterruptedIOException.
+                            runInterruptible(Dispatchers.IO) { k8s.raw("/version") }
                             true
                         } ?: false
                         if (reached) reportSuccess() else reportError("Cluster liveness probe timed out")
@@ -1271,7 +1285,7 @@ class ReactiveKubeClient(
                         false
                     }
                     emit(ok)
-                    delay(4_000)
+                    delay(probeIntervalMs)
                 }
             }
         }
