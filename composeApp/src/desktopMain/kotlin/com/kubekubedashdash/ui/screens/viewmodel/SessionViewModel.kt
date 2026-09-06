@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 
@@ -240,6 +241,14 @@ class SessionViewModel(
     // scheduleRetry's coroutine and from session restore; the check runs on IO.
     private val connectAttempt = AtomicLong(0)
 
+    // True from a fresh (non-reconnect) connectToCluster until that attempt
+    // settles, guarded by this instance's monitor. A reconnect arriving in
+    // between is ignored: it would queue behind the fresh attempt on the
+    // manager's lock anyway, and only the fresh attempt's tail lands the
+    // session (screen, namespace scope, restore target) — a reconnect taking
+    // over would leave the Connecting page in place with the old scope.
+    private var freshConnectInFlight = false
+
     // Audit A6 (final step): every connection transition is funneled through
     // this channel and applied by ONE consumer coroutine, so the reducer is
     // now truly single-threaded — the read-modify-write in
@@ -455,7 +464,14 @@ class SessionViewModel(
                 delay(1_000)
             }
             _retryCountdown.value = 0
-            connectToCluster(ctx, isReconnect)
+            // Under the monitor: a pick that took it first has cancelled this
+            // job (connectToCluster cancels retryJob under the same monitor),
+            // so the retry is skipped instead of overriding the pick. If the
+            // countdown gets the monitor first the retry still runs and the
+            // pick supersedes it: the pick's generation wins either way.
+            synchronized(this@SessionViewModel) {
+                if (isActive) connectToCluster(ctx, isReconnect)
+            }
         }
     }
 
@@ -576,7 +592,8 @@ class SessionViewModel(
     /**
      * @param isReconnect a live session lost its cluster and is getting it back
      *  in place: no Connecting screen, and on success no navigation, no
-     *  namespace reset, no restore target. Everything else is a normal connect.
+     *  namespace reset, no restore target. Ignored while a fresh connect is in
+     *  flight (see [freshConnectInFlight]). Everything else is a normal connect.
      */
     // @Synchronized: the generation bump and the context/flag writes below must
     // not interleave between the UI thread (picker, Retry now) and
@@ -584,9 +601,11 @@ class SessionViewModel(
     // whose context _selectedContext holds. Nothing under the monitor blocks.
     @Synchronized
     fun connectToCluster(ctx: String, isReconnect: Boolean = false) {
+        if (isReconnect && freshConnectInFlight) return
         retryJob?.cancel()
         connectJob?.cancel()
         val attempt = connectAttempt.incrementAndGet()
+        freshConnectInFlight = !isReconnect
         _selectedContext.value = ctx
         _isConnecting.value = true
         emitConnEvent(ConnEvent.ConnectStarted(isReconnect))
@@ -600,46 +619,57 @@ class SessionViewModel(
             } else {
                 reactiveClient.connect(ctx)
             }
-            // Superseded while blocked in connect(): the newer attempt owns the
-            // reducer, the flags and any pending restore target. A check, not a
-            // lock: an attempt superseded after passing it still runs the tail
-            // (microseconds, against the whole of connect() before); closing
-            // that window would put the tail under the monitor.
-            if (attempt != connectAttempt.get()) return@launch
-            result.fold(
-                onSuccess = {
-                    if (isMock) {
-                        // Replace the picker's bare "demo-cluster (mock)" intent
-                        // with the unique "...#N" the provider actually minted, so
-                        // the chip text, color, and All Clusters aggregation key
-                        // off the live label.
-                        _selectedContext.value = reactiveClient.getCurrentContext()
+            try {
+                // Superseded while blocked in connect(): the newer attempt owns the
+                // reducer, the flags and any pending restore target. A check, not a
+                // lock: an attempt superseded after passing it still runs the tail
+                // (microseconds, against the whole of connect() before); closing
+                // that window would put the tail under the monitor.
+                if (attempt != connectAttempt.get()) return@launch
+                result.fold(
+                    onSuccess = {
+                        if (isMock) {
+                            // Replace the picker's bare "demo-cluster (mock)" intent
+                            // with the unique "...#N" the provider actually minted, so
+                            // the chip text, color, and All Clusters aggregation key
+                            // off the live label.
+                            _selectedContext.value = reactiveClient.getCurrentContext()
+                        }
+                        if (!isReconnect) {
+                            // Apply the restore target BEFORE emitting. The reducer consumes
+                            // pendingRestore on its own coroutine one dispatch later, so
+                            // anything written after the emit could be observed — by the UI
+                            // and by tests — while still holding its default. Emitting last
+                            // makes the screen change the final step, so awaiting it proves
+                            // the rest already landed. A reconnect skips all of it: its
+                            // namespace and pane stay as they are, and its restore target
+                            // (if any) was consumed by the first connect.
+                            val restore = pendingRestore
+                            val namespace = initialNamespace(
+                                restore?.namespace,
+                                PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
+                            )
+                            _selectedNamespace.value = namespace
+                            reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
+                            restore?.paneWidthDp?.let { setExtraPaneWidth(it) }
+                        }
+                        emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
+                    },
+                    onFailure = { e ->
+                        emitConnEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock, isReconnect = isReconnect))
+                    },
+                )
+            } finally {
+                // Only the newest attempt settles the flags, and under the
+                // monitor, so the reset cannot straddle a newer prologue's
+                // `_isConnecting = true`. A superseded attempt leaves both alone.
+                synchronized(this@SessionViewModel) {
+                    if (attempt == connectAttempt.get()) {
+                        freshConnectInFlight = false
+                        _isConnecting.value = false
                     }
-                    if (!isReconnect) {
-                        // Apply the restore target BEFORE emitting. The reducer consumes
-                        // pendingRestore on its own coroutine one dispatch later, so
-                        // anything written after the emit could be observed — by the UI
-                        // and by tests — while still holding its default. Emitting last
-                        // makes the screen change the final step, so awaiting it proves
-                        // the rest already landed. A reconnect skips all of it: its
-                        // namespace and pane stay as they are, and its restore target
-                        // (if any) was consumed by the first connect.
-                        val restore = pendingRestore
-                        val namespace = initialNamespace(
-                            restore?.namespace,
-                            PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
-                        )
-                        _selectedNamespace.value = namespace
-                        reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
-                        restore?.paneWidthDp?.let { setExtraPaneWidth(it) }
-                    }
-                    emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
-                },
-                onFailure = { e ->
-                    emitConnEvent(ConnEvent.ConnectFailed(e.message, retry = !isMock, isReconnect = isReconnect))
-                },
-            )
-            _isConnecting.value = false
+                }
+            }
         }
     }
 
