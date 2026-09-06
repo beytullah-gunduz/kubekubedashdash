@@ -14,6 +14,8 @@ import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.TextResourceContents
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -28,6 +30,16 @@ object McpServerManager {
     private val json = Json { prettyPrint = true }
 
     const val DEFAULT_PORT = 3001
+
+    /**
+     * `get_pod_logs` bounds. Without a cap, `tailLines: 2147483647` reaches
+     * the API server as-is and a chatty pod's whole log lands in one String.
+     */
+    internal const val DEFAULT_TAIL_LINES = 100
+    internal const val MAX_TAIL_LINES = 5_000
+
+    /** Upper bound on concurrent blocking fabric8 calls made for MCP clients; see [blockingCall]. */
+    internal const val MCP_WORKERS = 8
 
     private const val CONTEXT_ARG_DESC =
         "Target cluster kube-context. Optional when exactly one cluster is open; " +
@@ -44,6 +56,32 @@ object McpServerManager {
     )
 
     private fun isYamlAllowed(kind: String): Boolean = kind.lowercase() in MCP_YAML_ALLOWLIST
+
+    /** Missing, non-numeric, overflowing, zero or negative → the default; larger than [MAX_TAIL_LINES] → the cap. */
+    internal fun clampTailLines(raw: String?): Int = raw?.toIntOrNull()?.takeIf { it > 0 }?.coerceAtMost(MAX_TAIL_LINES) ?: DEFAULT_TAIL_LINES
+
+    // Ktor CIO runs the application pipeline — and so every tool and resource
+    // handler — on Dispatchers.IO already. A blocking fabric8 call here never
+    // stalled an event loop; it held one of IO's 64 permits for as long as
+    // fabric8 kept retrying (10 s request timeout × 11 attempts by default),
+    // and enough of them starved the app's own informers and polls, which
+    // share those permits. Two guards. The calls run on a limitedParallelism
+    // view of IO: such a view delegates to the UNLIMITED scheduler, so its
+    // MCP_WORKERS permits are granted in addition to IO's cap and MCP load can
+    // no longer take the informers' permits at all; beyond MCP_WORKERS, calls
+    // queue (suspended, holding no thread) until a permit frees — the cost is
+    // latency on a burst against a dead cluster, whose real cure is fabric8's
+    // retry budget (review follow-up F10). And runInterruptible rather than
+    // withContext, so when the call is cancelled — Ktor cancels a connection's
+    // calls on an abrupt client disconnect, and stop()'s EmbeddedServer.stop
+    // cancels every call once its 1 s grace expires, on an enable/disable
+    // toggle or the shutdown hook — the worker is freed at once instead of
+    // parking for the fabric8 timeout. (The HTTP request itself is not
+    // aborted: fabric8's OperationSupport.waitForResult never cancels the
+    // future; the response arrives and is discarded.)
+    private val mcpWorkers = Dispatchers.IO.limitedParallelism(MCP_WORKERS, "mcp-workers")
+
+    internal suspend fun <T> blockingCall(block: () -> T): T = runInterruptible(mcpWorkers, block)
 
     // @Volatile + @Synchronized start/stop: these are mutated from start/stop
     // (invoked on Dispatchers.IO from SettingsScreenViewModel and from the JVM
@@ -186,7 +224,7 @@ object McpServerManager {
                 is McpClusterResolver.ClusterResolution.Resolved -> r.client
                 else -> return@registerResource resolutionErrorJson(r)
             }
-            json.encodeToString(kubeClient.getClusterInfo(namespace = null))
+            blockingCall { json.encodeToString(kubeClient.getClusterInfo(namespace = null)) }
         }
 
         registerResource(mcpServer, "kubedash://resource-usage", "Resource Usage", "Cluster CPU and memory usage summary") {
@@ -194,7 +232,7 @@ object McpServerManager {
                 is McpClusterResolver.ClusterResolution.Resolved -> r.client
                 else -> return@registerResource resolutionErrorJson(r)
             }
-            json.encodeToString(kubeClient.getResourceUsage(namespace = null))
+            blockingCall { json.encodeToString(kubeClient.getResourceUsage(namespace = null)) }
         }
 
         // ── Tools ───────────────────────────────────────────────────────────────
@@ -250,7 +288,7 @@ object McpServerManager {
             }
             val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
             val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content
-            val yaml = kubeClient.getResourceYaml(kind, name, namespace)
+            val yaml = blockingCall { kubeClient.getResourceYaml(kind, name, namespace) }
             CallToolResult(content = listOf(TextContent(text = yaml)))
         }
 
@@ -284,7 +322,7 @@ object McpServerManager {
                         "tailLines",
                         buildJsonObject {
                             put("type", "integer")
-                            put("description", "Number of lines to fetch from the end (default: 100)")
+                            put("description", "Number of lines to fetch from the end (default $DEFAULT_TAIL_LINES, at most $MAX_TAIL_LINES)")
                         },
                     )
                     put(
@@ -306,8 +344,8 @@ object McpServerManager {
             val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
             val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content ?: ""
             val container = request.arguments?.get("container")?.jsonPrimitive?.content
-            val tailLines = request.arguments?.get("tailLines")?.jsonPrimitive?.content?.toIntOrNull() ?: 100
-            val logs = kubeClient.getPodLogs(name, namespace, container, tailLines)
+            val tailLines = clampTailLines(request.arguments?.get("tailLines")?.jsonPrimitive?.content)
+            val logs = blockingCall { kubeClient.getPodLogs(name, namespace, container, tailLines) }
             CallToolResult(content = listOf(TextContent(text = logs)))
         }
 
@@ -353,24 +391,26 @@ object McpServerManager {
             }
             val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
             val ns = request.arguments?.get("namespace")?.jsonPrimitive?.content
-            val result = when (kind.lowercase()) {
-                "pod" -> json.encodeToString(kubeClient.getPods(ns))
-                "deployment" -> json.encodeToString(kubeClient.getDeployments(ns))
-                "service" -> json.encodeToString(kubeClient.getServices(ns))
-                "event" -> json.encodeToString(kubeClient.getEvents(ns))
-                "namespace" -> json.encodeToString(kubeClient.getNamespacesGeneric())
-                "statefulset" -> json.encodeToString(kubeClient.getStatefulSets(ns))
-                "daemonset" -> json.encodeToString(kubeClient.getDaemonSets(ns))
-                "replicaset" -> json.encodeToString(kubeClient.getReplicaSets(ns))
-                "job" -> json.encodeToString(kubeClient.getJobs(ns))
-                "cronjob" -> json.encodeToString(kubeClient.getCronJobs(ns))
-                "ingress" -> json.encodeToString(kubeClient.getIngresses(ns))
-                "endpoint" -> json.encodeToString(kubeClient.getEndpoints(ns))
-                "networkpolicy" -> json.encodeToString(kubeClient.getNetworkPolicies(ns))
-                "persistentvolume" -> json.encodeToString(kubeClient.getPersistentVolumes())
-                "persistentvolumeclaim" -> json.encodeToString(kubeClient.getPersistentVolumeClaims(ns))
-                "storageclass" -> json.encodeToString(kubeClient.getStorageClasses())
-                else -> """{ "error": "Unknown resource kind: $kind" }"""
+            val result = blockingCall {
+                when (kind.lowercase()) {
+                    "pod" -> json.encodeToString(kubeClient.getPods(ns))
+                    "deployment" -> json.encodeToString(kubeClient.getDeployments(ns))
+                    "service" -> json.encodeToString(kubeClient.getServices(ns))
+                    "event" -> json.encodeToString(kubeClient.getEvents(ns))
+                    "namespace" -> json.encodeToString(kubeClient.getNamespacesGeneric())
+                    "statefulset" -> json.encodeToString(kubeClient.getStatefulSets(ns))
+                    "daemonset" -> json.encodeToString(kubeClient.getDaemonSets(ns))
+                    "replicaset" -> json.encodeToString(kubeClient.getReplicaSets(ns))
+                    "job" -> json.encodeToString(kubeClient.getJobs(ns))
+                    "cronjob" -> json.encodeToString(kubeClient.getCronJobs(ns))
+                    "ingress" -> json.encodeToString(kubeClient.getIngresses(ns))
+                    "endpoint" -> json.encodeToString(kubeClient.getEndpoints(ns))
+                    "networkpolicy" -> json.encodeToString(kubeClient.getNetworkPolicies(ns))
+                    "persistentvolume" -> json.encodeToString(kubeClient.getPersistentVolumes())
+                    "persistentvolumeclaim" -> json.encodeToString(kubeClient.getPersistentVolumeClaims(ns))
+                    "storageclass" -> json.encodeToString(kubeClient.getStorageClasses())
+                    else -> """{ "error": "Unknown resource kind: $kind" }"""
+                }
             }
             CallToolResult(content = listOf(TextContent(text = result)))
         }
@@ -398,7 +438,7 @@ object McpServerManager {
         uri: String,
         name: String,
         description: String,
-        fetchContent: () -> String,
+        fetchContent: suspend () -> String,
     ) {
         mcpServer.addResource(
             uri = uri,
