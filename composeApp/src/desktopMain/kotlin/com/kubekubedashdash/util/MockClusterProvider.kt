@@ -31,10 +31,13 @@ import io.fabric8.kubernetes.api.model.metrics.v1beta1.NodeMetricsBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
+import io.fabric8.kubernetes.client.VersionInfo
+import io.fabric8.kubernetes.client.server.mock.KubernetesMixedDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.Context
 import io.fabric8.mockwebserver.MockWebServer
+import io.fabric8.mockwebserver.ServerRequest
+import io.fabric8.mockwebserver.ServerResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +46,7 @@ import java.io.Closeable
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Queue
 import java.util.concurrent.atomic.AtomicBoolean
 import io.fabric8.kubernetes.api.model.Duration as FabricDuration
 
@@ -151,12 +155,21 @@ object MockClusterProvider {
 
     private fun bootInstance(label: String): MockInstance {
         log.info("Starting mock Kubernetes server '{}'", label)
+        // Mixed, not pure-CRUD. The CRUD dispatcher has no route table: a
+        // non-resource path like /version produces an EMPTY attribute query,
+        // which matches every stored object, so it answered 200 with the whole
+        // in-memory db (hundreds of pods). The liveness probe hits /version
+        // every 4 s, so it must land on KubernetesMockServer.onStart()'s
+        // expectation instead — and report a version that matches the
+        // kubelets buildNode() seeds.
+        val responses = HashMap<ServerRequest, Queue<ServerResponse>>()
         val server = KubernetesMockServer(
             Context(),
             MockWebServer(),
-            HashMap(),
-            KubernetesCrudDispatcher(),
+            responses,
+            KubernetesMixedDispatcher(responses),
             false,
+            VersionInfo.Builder().withMajor("1").withMinor("30").withGitVersion("v1.30.2").build(),
         )
         server.init()
         val seedClient = server.createClient()

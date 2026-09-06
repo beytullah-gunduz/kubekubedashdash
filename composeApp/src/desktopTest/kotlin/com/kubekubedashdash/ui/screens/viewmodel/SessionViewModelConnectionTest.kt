@@ -38,8 +38,9 @@ import kotlin.test.assertTrue
  * connection loss (so `clusterInfo` never errored and parked informers
  * never `reportError`'d). That exposed a latent silent-disconnect bug
  * (.docs/a6-connection-state-finding-2026-05-16.md). The fix added
- * `ReactiveKubeClient.isReachable` — a `/version` liveness probe that keeps
- * `reportError`/`reportSuccess` honest while connected, so the existing
+ * `ReactiveKubeClient.isReachable` — a `/version` liveness probe (a raw,
+ * uncached GET every 4 s) that keeps `reportError`/`reportSuccess` honest
+ * while connected, so the existing
  * `observeConnectionHealth` path detects a dead cluster. The disconnect
  * test below now passes and guards that fix.
  */
@@ -109,8 +110,9 @@ class SessionViewModelConnectionTest {
         // Cluster silently goes away — informers just park with stale data.
         // The isReachable /version probe must keep reporting errors so the
         // ≥3-failure threshold trips connectionError and observeConnection-
-        // Health drops isConnected. Probe interval 5s, threshold 3 ⇒ ~15s
-        // worst case; allow generous margin.
+        // Health drops isConnected. Probe interval 4 s, threshold 3, and each
+        // failed probe may spend up to its 4 s timeout inside fabric8's retry
+        // budget ⇒ ~25 s worst case; allow generous margin.
         server.destroy()
         withTimeout(45_000) { viewModel.isConnected.first { !it } }
         assertFalse(viewModel.isConnected.value)
