@@ -17,7 +17,16 @@ object SystemDirectories {
         resolveLogsDir().also { ensureDir(it) }
     }
 
+    /**
+     * Test seam: the Gradle test task points this at a build directory so the
+     * suite never opens the developer's real preferences store or session
+     * file. Blank or unset in production.
+     */
+    private const val DATA_DIR_OVERRIDE_PROPERTY = "kkdd.dataDir"
+
     private fun resolveDataDir(): String = when {
+        dataDirOverride() != null -> dataDirOverride()!!
+
         isWindows -> {
             val appData = envOrNull("APPDATA") ?: "$home\\AppData\\Roaming"
             validateUnderHome("$appData\\KubeKubeDashDash", "$home\\AppData\\Roaming\\KubeKubeDashDash")
@@ -46,6 +55,8 @@ object SystemDirectories {
     }
 
     private fun envOrNull(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+
+    private fun dataDirOverride(): String? = System.getProperty(DATA_DIR_OVERRIDE_PROPERTY)?.takeIf { it.isNotBlank() }
 
     private fun validateUnderHome(candidate: String, fallback: String): String = try {
         val homePath = File(home).toPath().toRealPath()
