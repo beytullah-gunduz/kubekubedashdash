@@ -3,13 +3,8 @@ package com.kubekubedashdash.ui.modals.viewmodel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.AwsProfile
 import com.kubekubedashdash.util.EksCluster
-import com.kubekubedashdash.util.KubeConnectionManager
-import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
@@ -47,30 +42,24 @@ class EksDiscoveryViewModelTest {
     private val clusterB = EksCluster("cluster-b", "us-east-1", "example-profile")
     private val clusterC = EksCluster("cluster-c", "us-east-1", "example-profile")
 
-    private lateinit var scope: CoroutineScope
-    private lateinit var manager: KubeConnectionManager
-    private lateinit var reactiveClient: ReactiveKubeClient
     private lateinit var kubeconfigFile: File
     private lateinit var fake: FakeEksDiscoveryGateway
     private lateinit var vm: EksDiscoveryViewModel
 
     @BeforeTest
     fun setUp() {
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        manager = KubeConnectionManager()
-        reactiveClient = ReactiveKubeClient(scope, manager)
         kubeconfigFile = File.createTempFile("eks-discovery-test-kubeconfig", ".yaml").apply {
             writeText("apiVersion: v1\nkind: Config\n")
             deleteOnExit()
         }
         fake = FakeEksDiscoveryGateway(kubeconfigFile)
         fake.clusters = mapOf(("example-profile" to "us-east-1") to listOf(clusterA, clusterB, clusterC))
-        vm = EksDiscoveryViewModel(reactiveClient, fake)
+        vm = EksDiscoveryViewModel(fake)
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(scope, vm.viewModelScope, label = "EksDiscoveryViewModelTest", manager = manager)
+        shutdownCleanly(vm.viewModelScope, label = "EksDiscoveryViewModelTest")
         kubeconfigFile.delete()
     }
 

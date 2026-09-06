@@ -3,20 +3,13 @@ package com.kubekubedashdash.util
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
-import io.fabric8.kubernetes.client.internal.KubeConfigUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.slf4j.LoggerFactory
 import java.io.Closeable
-import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
-
-data class ContextBinding(
-    val name: String,
-    val awsProfile: String?,
-)
 
 class KubeConnectionManager(
     /** Test seam: how a kube context name becomes a fabric8 [Config]. Production = `Config.autoConfigure`. */
@@ -275,44 +268,11 @@ class KubeConnectionManager(
         }
     }
 
-    fun getContexts(): List<String> = try {
-        val ctxs = Config.autoConfigure(null).contexts?.map { it.name } ?: emptyList()
-        log.debug("Loaded {} kube contexts", ctxs.size)
-        ctxs
-    } catch (e: Exception) {
-        log.warn("Failed to load kube contexts: {}", e.message)
-        emptyList()
-    }
-
-    fun getContextBindings(): List<ContextBinding> {
-        return try {
-            val path = KubeconfigLocator.activePath()
-            val file = File(path)
-            if (!file.exists() || !file.canRead()) {
-                return emptyList()
-            }
-            val raw = KubeConfigUtils.parseConfig(file)
-            val users = raw.users.orEmpty().associateBy { it.name }
-            raw.contexts.orEmpty().map { namedCtx ->
-                val userName = namedCtx.context?.user
-                val authInfo = users[userName]?.user
-                val awsProfile = authInfo?.exec?.env.orEmpty()
-                    .firstOrNull { it.name == "AWS_PROFILE" }?.value
-                ContextBinding(
-                    name = namedCtx.name.stripControlChars(),
-                    awsProfile = awsProfile?.stripControlChars(),
-                )
-            }
-        } catch (e: Exception) {
-            log.warn("Failed to read context bindings: {}", e.message)
-            emptyList()
-        }
-    }
-
     /**
      * The context THIS session is connected to. Returns the session's connected
-     * context if any, falling back to the kubeconfig file's `current-context`
-     * (the legacy behavior, used before any session has connected). This is what
+     * context if any, falling back to the kubeconfig's `current-context` read
+     * through [KubeconfigReader] (no exec plugin, every `$KUBECONFIG` entry;
+     * used before any session has connected). This is what
      * the cluster overview header / breadcrumbs read — different sessions must
      * see different values, otherwise multi-window all looks like one cluster.
      */
@@ -326,12 +286,8 @@ class KubeConnectionManager(
 
     fun getCurrentContext(): String = _connectedContext ?: run {
         _cachedFallbackContext ?: synchronized(fallbackLock) {
-            _cachedFallbackContext ?: try {
-                Config.autoConfigure(null).currentContext?.name.orEmpty()
-            } catch (e: Exception) {
-                log.warn("Failed to get current context: {}", e.message)
-                ""
-            }.also { _cachedFallbackContext = it }
+            _cachedFallbackContext ?: KubeconfigReader.Default.currentContext()
+                .also { _cachedFallbackContext = it }
         }
     }
 
@@ -369,6 +325,4 @@ class KubeConnectionManager(
             "<unparseable>"
         }
     }
-
-    private fun String.stripControlChars(): String = filter { it >= ' ' && it.code != 127 }
 }

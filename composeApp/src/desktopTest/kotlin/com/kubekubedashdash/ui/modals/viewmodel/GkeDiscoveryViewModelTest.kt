@@ -3,13 +3,8 @@ package com.kubekubedashdash.ui.modals.viewmodel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
-import com.kubekubedashdash.util.KubeConnectionManager
-import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
@@ -47,30 +42,24 @@ class GkeDiscoveryViewModelTest {
     private val clusterB = GkeCluster("cluster-b", "us-central1", "example-project", "RUNNING")
     private val clusterC = GkeCluster("cluster-c", "us-central1", "example-project", "RUNNING")
 
-    private lateinit var scope: CoroutineScope
-    private lateinit var manager: KubeConnectionManager
-    private lateinit var reactiveClient: ReactiveKubeClient
     private lateinit var kubeconfigFile: File
     private lateinit var fake: FakeGkeDiscoveryGateway
     private lateinit var vm: GkeDiscoveryViewModel
 
     @BeforeTest
     fun setUp() {
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        manager = KubeConnectionManager()
-        reactiveClient = ReactiveKubeClient(scope, manager)
         kubeconfigFile = File.createTempFile("gke-discovery-test-kubeconfig", ".yaml").apply {
             writeText("apiVersion: v1\nkind: Config\n")
             deleteOnExit()
         }
         fake = FakeGkeDiscoveryGateway(kubeconfigFile)
         fake.clusters = mapOf("example-project" to listOf(clusterA, clusterB, clusterC))
-        vm = GkeDiscoveryViewModel(reactiveClient, fake)
+        vm = GkeDiscoveryViewModel(fake)
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(scope, vm.viewModelScope, label = "GkeDiscoveryViewModelTest", manager = manager)
+        shutdownCleanly(vm.viewModelScope, label = "GkeDiscoveryViewModelTest")
         kubeconfigFile.delete()
     }
 

@@ -6,7 +6,7 @@ import com.kubekubedashdash.util.AwsProfileReader
 import com.kubekubedashdash.util.EksCluster
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.KubeconfigLocator
-import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.KubeconfigReader
 import java.io.File
 
 /**
@@ -50,9 +50,7 @@ interface EksDiscoveryGateway {
 }
 
 /** Delegates every member to the pre-existing singletons — no behavior change. */
-class DefaultEksDiscoveryGateway(
-    private val client: ReactiveKubeClient,
-) : EksDiscoveryGateway {
+class DefaultEksDiscoveryGateway : EksDiscoveryGateway {
     override val awsCliAvailable: Boolean
         get() = EksClusterDiscoverer.isAwsCliAvailable()
 
@@ -79,7 +77,7 @@ class DefaultEksDiscoveryGateway(
 
     override fun backupKubeconfig(kubeconfigPath: String): File? = EksClusterDiscoverer.backupKubeconfig(kubeconfigPath)
 
-    override fun existingContexts(): List<String> = client.getContexts()
+    override fun existingContexts(): List<String> = KubeconfigReader.Default.contextNames()
 
     override fun recallProfileSelection(): List<String> = PreferenceRepository.lastAwsProfiles.value
 

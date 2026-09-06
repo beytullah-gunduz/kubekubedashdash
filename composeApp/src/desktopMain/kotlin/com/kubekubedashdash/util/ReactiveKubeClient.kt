@@ -157,8 +157,6 @@ class ReactiveKubeClient(
         Result.failure(e)
     }
 
-    fun getContexts(): List<String> = connectionManager.getContexts()
-    fun getContextBindings(): List<ContextBinding> = connectionManager.getContextBindings()
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
     fun getClusterServer(): String = connectionManager.getClusterServer()
 
@@ -175,27 +173,6 @@ class ReactiveKubeClient(
     // ── Mapping: Events ─────────────────────────────────────────────────────────
 
     private fun mapEvent(ev: io.fabric8.kubernetes.api.model.Event): EventInfo? = ResourceMappers.mapEvent(ev)
-
-    // ── Contexts (on-demand) ────────────────────────────────────────────────────
-
-    private val _contexts = MutableStateFlow<ResourceState<List<String>>>(ResourceState.Loading)
-    val contexts: StateFlow<ResourceState<List<String>>> = _contexts.asStateFlow()
-
-    private val _currentContext = MutableStateFlow<ResourceState<String>>(ResourceState.Loading)
-    val currentContext: StateFlow<ResourceState<String>> = _currentContext.asStateFlow()
-
-    fun refreshContexts() {
-        log.debug("Refreshing kube contexts")
-        try {
-            _contexts.value = ResourceState.Success(getContexts())
-            _currentContext.value = ResourceState.Success(getCurrentContext())
-            log.debug("Contexts refreshed successfully")
-        } catch (e: Exception) {
-            log.error("Failed to refresh contexts: {}", e.message)
-            _contexts.value = ResourceState.Error(e.message ?: "Unknown error")
-            _currentContext.value = ResourceState.Error(e.message ?: "Unknown error")
-        }
-    }
 
     // ── Namespaces ──────────────────────────────────────────────────────────────
 

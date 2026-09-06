@@ -93,20 +93,6 @@ object WorkspaceManager {
         return workspace
     }
 
-    /**
-     * The active session of the *first* workspace — a process-global pointer
-     * that ignores every other window. The MCP server no longer uses this
-     * (audit A3: it now resolves clusters explicitly by context via
-     * [com.kubekubedashdash.mcp.McpClusterResolver]). The only remaining caller
-     * is `AppViewModel.getContexts()` (kube-context discovery, not cluster-
-     * scoped data). New code should reach the active session via
-     * `LocalViewModelStoreOwner` and the per-screen ViewModel, which is
-     * correctly scoped to the user's focused window/tab.
-     */
-    val activeSession: ClusterSession
-        get() = _workspaces.value.firstOrNull()?.activeSession
-            ?: error("No active session — bootstrap should always create one")
-
     fun workspaceById(id: WorkspaceId): Workspace? = _workspaces.value.firstOrNull { it.id == id }
 
     /**

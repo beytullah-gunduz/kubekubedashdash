@@ -6,7 +6,7 @@ import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
 import com.kubekubedashdash.util.GkeClusterDiscoverer
 import com.kubekubedashdash.util.KubeconfigLocator
-import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.KubeconfigReader
 import com.kubekubedashdash.util.ShellEnvironment
 import java.io.File
 
@@ -49,9 +49,7 @@ interface GkeDiscoveryGateway {
 }
 
 /** Delegates every member to the pre-existing singletons — no behavior change. */
-class DefaultGkeDiscoveryGateway(
-    private val client: ReactiveKubeClient,
-) : GkeDiscoveryGateway {
+class DefaultGkeDiscoveryGateway : GkeDiscoveryGateway {
     override val gcloudAvailable: Boolean
         get() = GkeClusterDiscoverer.isGcloudAvailable()
 
@@ -77,7 +75,7 @@ class DefaultGkeDiscoveryGateway(
 
     override fun backupKubeconfig(kubeconfigPath: String): File? = EksClusterDiscoverer.backupKubeconfig(kubeconfigPath)
 
-    override fun existingContexts(): List<String> = client.getContexts()
+    override fun existingContexts(): List<String> = KubeconfigReader.Default.contextNames()
 
     override fun recallProjectSelection(): List<String> = PreferenceRepository.lastGcpProjects.value
 

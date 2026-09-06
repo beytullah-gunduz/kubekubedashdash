@@ -96,8 +96,7 @@ fun EksDiscoveryModal(
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
 ) {
-    val reactiveClient = com.kubekubedashdash.ui.LocalReactiveKubeClient.current
-    val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel(reactiveClient) }
+    val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel() }
     LaunchedEffect(Unit) { viewModel.reset() }
     val step by viewModel.step.collectAsState()
     val busy by viewModel.busy.collectAsState()
