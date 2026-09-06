@@ -64,17 +64,26 @@ class PaletteVerbsTest {
     }
 
     /**
-     * `ClusterActions.deleteResource` dispatches by kind name and has no branch
-     * for Node, StatefulSet, DaemonSet or ReplicaSet — those reach its generic
-     * branch, which needs a group/version a `PendingVerb` never carries. The
-     * catalog must not offer a verb that is guaranteed to fail.
+     * `ClusterActions.deleteResource` dispatches by kind name. Every workload
+     * target now has a typed delete case there (ClusterActionsDeleteKindsTest
+     * pins that); Node is the one target without one, and the catalog must not
+     * offer a verb that is guaranteed to fail.
      */
     @Test
-    fun `delete targets only the kinds the action layer can actually delete`() {
+    fun `delete targets every kind the action layer can actually delete, and not Node`() {
         val delete = PALETTE_VERBS.first { it.id == "delete" }
-        assertEquals(setOf(VerbTarget.POD, VerbTarget.DEPLOYMENT, VerbTarget.CRONJOB), delete.targets)
+        assertEquals(
+            setOf(
+                VerbTarget.POD,
+                VerbTarget.DEPLOYMENT,
+                VerbTarget.STATEFULSET,
+                VerbTarget.DAEMONSET,
+                VerbTarget.REPLICASET,
+                VerbTarget.CRONJOB,
+            ),
+            delete.targets,
+        )
         assertFalse(VerbTarget.NODE in delete.targets)
-        assertFalse(VerbTarget.STATEFULSET in delete.targets)
     }
 
     @Test

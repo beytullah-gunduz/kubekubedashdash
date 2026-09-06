@@ -48,7 +48,13 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
         propagationPolicy: DeletionPropagation? = null,
     ): Result<Unit> = try {
         log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
-        when (kind.lowercase()) {
+        // A CRD may reuse a built-in kind name inside its own API group, and the
+        // sidebar lists those through the same screen — which forwards the CRD's
+        // group/version/plural. Dispatch to a typed case only when the caller
+        // carries no group, so a group-qualified kind always reaches the generic
+        // branch below instead of deleting the same-named built-in object.
+        val builtInKind = if (group.isNullOrBlank()) kind.lowercase() else ""
+        when (builtInKind) {
             "pod" -> {
                 val ns = requireNamespace("Pod", namespace)
                 k8s.pods().inNamespace(ns).withName(name).delete()
@@ -148,6 +154,53 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
             "csidriver" -> k8s.storage().v1().csiDrivers().withName(name).delete()
 
             "certificatesigningrequest" -> k8s.certificates().v1().certificateSigningRequests().withName(name).delete()
+
+            // The kinds the sidebar lists through GenericResourceScreen without an
+            // API group. They used to fall through to the generic branch below,
+            // which needs group/version, so "Delete" on these rows always failed.
+            "statefulset" -> {
+                val ns = requireNamespace("StatefulSet", namespace)
+                // Foreground, like Deployment: the pods go with it.
+                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
+                k8s.apps().statefulSets().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
+            }
+
+            "daemonset" -> {
+                val ns = requireNamespace("DaemonSet", namespace)
+                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
+                k8s.apps().daemonSets().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
+            }
+
+            "replicaset" -> {
+                val ns = requireNamespace("ReplicaSet", namespace)
+                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
+                k8s.apps().replicaSets().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
+            }
+
+            "ingress" -> {
+                val ns = requireNamespace("Ingress", namespace)
+                k8s.network().v1().ingresses().inNamespace(ns).withName(name).delete()
+            }
+
+            // The router labels the screen "Endpoint"; the API kind is "Endpoints".
+            "endpoint", "endpoints" -> {
+                val ns = requireNamespace("Endpoints", namespace)
+                k8s.endpoints().inNamespace(ns).withName(name).delete()
+            }
+
+            "networkpolicy" -> {
+                val ns = requireNamespace("NetworkPolicy", namespace)
+                k8s.network().v1().networkPolicies().inNamespace(ns).withName(name).delete()
+            }
+
+            "persistentvolume" -> k8s.persistentVolumes().withName(name).delete()
+
+            "persistentvolumeclaim" -> {
+                val ns = requireNamespace("PersistentVolumeClaim", namespace)
+                k8s.persistentVolumeClaims().inNamespace(ns).withName(name).delete()
+            }
+
+            "storageclass" -> k8s.storage().v1().storageClasses().withName(name).delete()
 
             else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
                 val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)

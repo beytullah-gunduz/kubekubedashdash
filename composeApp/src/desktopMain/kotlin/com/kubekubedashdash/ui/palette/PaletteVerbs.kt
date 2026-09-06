@@ -58,14 +58,21 @@ val PALETTE_VERBS: List<PaletteVerb> = listOf(
     PaletteVerb(id = "forceDelete", label = "Force delete pod", targets = setOf(VerbTarget.POD)),
     PaletteVerb(id = "trigger", label = "Trigger now", targets = setOf(VerbTarget.CRONJOB)),
     PaletteVerb(id = "suspend", label = "Suspend / Resume", targets = setOf(VerbTarget.CRONJOB)),
-    // Only the kinds ClusterActions.deleteResource actually handles by name.
-    // Node, StatefulSet, DaemonSet and ReplicaSet fall through to its generic
-    // branch, which needs a group/version a PendingVerb does not carry — so
-    // offering them here would be offering a verb that always fails.
+    // Only the kinds ClusterActions.deleteResource handles by name. Node is
+    // the one target without a delete case there — and nothing in the UI
+    // deletes nodes — so it stays out; offering a verb that always fails is
+    // worse than not offering it.
     PaletteVerb(
         id = "delete",
         label = "Delete…",
-        targets = setOf(VerbTarget.POD, VerbTarget.DEPLOYMENT, VerbTarget.CRONJOB),
+        targets = setOf(
+            VerbTarget.POD,
+            VerbTarget.DEPLOYMENT,
+            VerbTarget.STATEFULSET,
+            VerbTarget.DAEMONSET,
+            VerbTarget.REPLICASET,
+            VerbTarget.CRONJOB,
+        ),
     ),
 )
 
