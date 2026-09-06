@@ -89,6 +89,7 @@ import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
+import com.kubekubedashdash.util.DemoContext
 import kotlinx.coroutines.flow.mapNotNull
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -132,7 +133,7 @@ fun Sidebar(
     // value here would write favourites under one key and read them under
     // another. Blank while disconnected, and nothing below renders then.
     val connected = LocalIsConnected.current
-    val favouritesContext = if (connected) client.getCurrentContext() else ""
+    val favouritesContext = if (connected) DemoContext.preferenceKey(client.getCurrentContext()) else ""
     val favouritesByContext by NavPreferenceRepository.favouritesByContext.collectAsState()
     val recentsByContext by NavPreferenceRepository.recentsByContext.collectAsState()
     val hiddenByContext by CrdPreferenceRepository.hiddenByContext.collectAsState()
@@ -533,7 +534,7 @@ private fun CrdSection(
     val crdsState by client.crds.collectAsState()
     val crds = (crdsState as? ResourceState.Success)?.data.orEmpty()
     if (crds.isEmpty()) return
-    val context = remember(client) { client.getCurrentContext() }
+    val context = remember(client) { DemoContext.preferenceKey(client.getCurrentContext()) }
     val pinnedByContext by CrdPreferenceRepository.pinnedByContext.collectAsState()
     val hiddenByContext by CrdPreferenceRepository.hiddenByContext.collectAsState()
     val pinned = pinnedByContext[context].orEmpty()
