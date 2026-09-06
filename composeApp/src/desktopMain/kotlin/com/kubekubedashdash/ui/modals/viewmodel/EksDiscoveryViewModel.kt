@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.AwsProfile
 import com.kubekubedashdash.util.EksCluster
-import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -60,8 +59,7 @@ sealed class ImportRowState {
 data class ImportRow(val cluster: EksCluster, val state: ImportRowState)
 
 class EksDiscoveryViewModel(
-    private val reactiveClient: ReactiveKubeClient,
-    private val gateway: EksDiscoveryGateway = DefaultEksDiscoveryGateway(reactiveClient),
+    private val gateway: EksDiscoveryGateway = DefaultEksDiscoveryGateway(),
 ) : ViewModel() {
 
     private val log = LoggerFactory.getLogger(EksDiscoveryViewModel::class.java)

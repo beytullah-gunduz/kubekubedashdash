@@ -159,16 +159,19 @@ compose.desktop {
 
 // Keep the test suite off the developer's real kubeconfig.
 //
-// `KubeConnectionManager.getCurrentContext()` falls through to
-// `Config.autoConfigure(null)` whenever no mock connection is established, and
-// fabric8 then reads ~/.kube/config. That is real user state — a unit suite must
-// never touch it (the repo's own note at PrerequisiteChecker.kt:47 says
-// autoConfigure can invoke a kubeconfig `exec`). Measured before this override:
-// 12 reads per `desktopTest` run, all from SessionViewModelHistoryTest, which
-// builds a SessionViewModel against a never-connected manager.
+// `KubeConnectionManager.getCurrentContext()` falls through to the kubeconfig's
+// `current-context` (read by KubeconfigReader: a plain parse, no exec plugin)
+// whenever no mock connection is established, and a real connect goes through
+// `Config.autoConfigure`, which reads ~/.kube/config and can invoke a kubeconfig
+// `exec` plugin. That is real user state — a unit suite must never touch it.
+// Measured before this override: 12 reads per `desktopTest` run, all from
+// SessionViewModelHistoryTest, which builds a SessionViewModel against a
+// never-connected manager.
 //
-// fabric8 honours $KUBECONFIG, so pointing it at a generated empty file makes
-// the fallback resolve to nothing instead of to the developer's clusters.
+// The app's KubeconfigLocator and fabric8 both honour $KUBECONFIG (after the
+// `kubeconfig` system property, which the tests that need their own file set
+// and restore), so pointing it at a generated empty file makes the fallback
+// resolve to nothing instead of to the developer's clusters.
 val emptyKubeconfig = layout.buildDirectory.file("test-kubeconfig/empty.yaml")
 
 val generateEmptyKubeconfig by tasks.registering {

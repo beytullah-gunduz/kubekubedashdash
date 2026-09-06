@@ -10,6 +10,7 @@ import com.kubekubedashdash.services.session.SessionPersistence
 import com.kubekubedashdash.services.session.SessionRestorer
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.DemoContext
+import com.kubekubedashdash.util.KubeconfigReader
 import com.kubekubedashdash.util.PrerequisiteCheck
 import com.kubekubedashdash.util.PrerequisiteChecker
 import com.kubekubedashdash.util.PrerequisiteResult
@@ -70,9 +71,11 @@ class AppViewModel private constructor() : ViewModel() {
         runPrerequisiteChecks()
     }
 
+    // Context discovery needs no session: a plain kubeconfig parse, no exec
+    // plugin, and nothing that can throw when the first window's active tab
+    // is not a cluster tab.
     private suspend fun loadContextsSync(): List<String> = withContext(Dispatchers.IO) {
-        listOf(DemoContext.MOCK_CONTEXT_NAME) +
-            WorkspaceManager.activeSession.connectionManager.getContexts()
+        listOf(DemoContext.MOCK_CONTEXT_NAME) + KubeconfigReader.Default.contextNames()
     }
 
     /**

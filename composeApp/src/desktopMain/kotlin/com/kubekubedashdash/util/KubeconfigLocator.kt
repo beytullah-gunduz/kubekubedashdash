@@ -10,11 +10,27 @@ object KubeconfigLocator {
 
     private val log = LoggerFactory.getLogger(KubeconfigLocator::class.java)
 
-    fun activePath(): String {
-        val home = System.getProperty("user.home")
-        return System.getenv("KUBECONFIG")?.split(File.pathSeparator)?.firstOrNull()?.takeIf { it.isNotBlank() }
-            ?: "$home/.kube/config"
-    }
+    /**
+     * Every kubeconfig path in precedence order: the `kubeconfig` system
+     * property, else `$KUBECONFIG` (a blank value counts as unset, for both),
+     * split on the platform path separator with blank entries dropped;
+     * `~/.kube/config` under the JVM's `user.home` when neither yields an
+     * entry. fabric8's `Config.getKubeconfigFilenames()` rule — except that
+     * fabric8 keeps blank entries and resolves the home directory itself — so
+     * the contexts this app lists are the contexts it connects with.
+     */
+    fun allPaths(): List<String> = splitSpec(
+        System.getProperty("kubeconfig")?.takeIf { it.isNotBlank() } ?: System.getenv("KUBECONFIG"),
+        System.getProperty("user.home"),
+    )
+
+    /** The file imports write to and backups copy: the first entry, kubectl's rule as well. */
+    fun activePath(): String = allPaths().first()
+
+    internal fun splitSpec(spec: String?, home: String): List<String> = spec?.split(File.pathSeparator)
+        ?.filter { it.isNotBlank() }
+        ?.takeIf { it.isNotEmpty() }
+        ?: listOf("$home/.kube/config")
 
     fun ensureParentDirectory(path: String) {
         val parent = File(path).parentFile ?: return

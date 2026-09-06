@@ -74,11 +74,11 @@ import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
-import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.util.ContextBinding
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.GkeClusterDiscoverer
+import com.kubekubedashdash.util.KubeconfigReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
@@ -159,13 +159,10 @@ fun ClusterSelectorModal(
     canAddTab: Boolean = false,
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
 ) {
-    val reactiveClient = LocalReactiveKubeClient.current
     var bindings by remember { mutableStateOf(emptyMap<String, ContextBinding>()) }
-    LaunchedEffect(contexts, reactiveClient) {
+    LaunchedEffect(contexts) {
         bindings = withContext(Dispatchers.IO) {
-            runCatching { reactiveClient.getContextBindings() }
-                .getOrElse { emptyList() }
-                .associateBy { it.name }
+            KubeconfigReader.Default.contextBindings().associateBy { it.name }
         }
     }
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }

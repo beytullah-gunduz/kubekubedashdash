@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
-import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -68,8 +67,7 @@ sealed class GkeImportRowState {
 data class GkeImportRow(val cluster: GkeCluster, val state: GkeImportRowState)
 
 class GkeDiscoveryViewModel(
-    private val reactiveClient: ReactiveKubeClient,
-    private val gateway: GkeDiscoveryGateway = DefaultGkeDiscoveryGateway(reactiveClient),
+    private val gateway: GkeDiscoveryGateway = DefaultGkeDiscoveryGateway(),
 ) : ViewModel() {
 
     private val log = LoggerFactory.getLogger(GkeDiscoveryViewModel::class.java)

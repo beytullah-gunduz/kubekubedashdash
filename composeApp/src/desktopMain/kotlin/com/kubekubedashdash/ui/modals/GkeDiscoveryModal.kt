@@ -101,8 +101,7 @@ fun GkeDiscoveryModal(
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
 ) {
-    val reactiveClient = com.kubekubedashdash.ui.LocalReactiveKubeClient.current
-    val viewModel: GkeDiscoveryViewModel = viewModel { GkeDiscoveryViewModel(reactiveClient) }
+    val viewModel: GkeDiscoveryViewModel = viewModel { GkeDiscoveryViewModel() }
     LaunchedEffect(Unit) { viewModel.reset() }
     val step by viewModel.step.collectAsState()
     val busy by viewModel.busy.collectAsState()

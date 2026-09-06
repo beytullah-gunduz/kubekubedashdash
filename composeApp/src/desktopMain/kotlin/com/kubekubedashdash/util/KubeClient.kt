@@ -39,7 +39,6 @@ class KubeClient(
         get() = client
 
     fun connect(context: String? = null): Result<String> = connectionManager.connect(context)
-    fun getContexts(): List<String> = connectionManager.getContexts()
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
     fun getClusterServer(): String = connectionManager.getClusterServer()
 
