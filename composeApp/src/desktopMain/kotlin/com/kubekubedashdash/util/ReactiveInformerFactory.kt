@@ -67,6 +67,16 @@ internal class ReactiveInformerFactory(
         if (!connectionManager.isConnected) awaitCancellation()
     }
 
+    /**
+     * [inform] returns an informer that has NOT been run (build it with
+     * `runnableInformer(0L).addEventHandler(h)`, never `inform(h)`): the factory
+     * runs it inside the same try/finally that closes it, so an informer whose
+     * initial list-and-watch fails is stopped like any other exit. Handed back
+     * already running, a start failure threw out of the lambda with no handle:
+     * fabric8 registers an informer with the client for closing only once it
+     * has started, and its reflector's "will stop" branch cancels neither the
+     * repeating watch-timeout task nor the processor's executor (F2).
+     */
     fun <R : HasMetadata, T> informer(
         inform: (KubernetesClient, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T,
@@ -95,12 +105,14 @@ internal class ReactiveInformerFactory(
                             }
                         },
                     )
-                    // Every exit from here on — a cancellation while still
-                    // waiting for sync, a sync failure, a mapping failure, or
-                    // the steady-state awaitCancellation() — must close the
-                    // informer, or its watch, store and processor outlive the
-                    // flow. Only the steady-state exit used to be covered.
+                    // Every exit from here on — a start failure, a cancellation
+                    // while still waiting for sync, a sync failure, a mapping
+                    // failure, or the steady-state awaitCancellation() — must
+                    // close the informer, or its watch, store and processor
+                    // outlive the flow. Only the steady-state exit used to be
+                    // covered; the start moved in here with F2.
                     try {
+                        informer.run()
                         launch {
                             // Debounce, not periodic emit. fabric8 fires onAdd for
                             // every item during initial list-and-watch — without
@@ -192,8 +204,10 @@ internal class ReactiveInformerFactory(
                         },
                     )
                     // Same contract as the cluster-scoped builder: every exit
-                    // after inform() returned closes the informer.
+                    // after the lambda returned, the start included, closes the
+                    // informer.
                     try {
+                        informer.run()
                         launch {
                             emitSignal.consumeAsFlow()
                                 .debounce(100)
