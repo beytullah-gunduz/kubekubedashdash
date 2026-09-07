@@ -2,12 +2,15 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.data.datastore.PreferenceStorageHealth
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.services.session.RestoreDecision
 import com.kubekubedashdash.services.session.RestorePlanner
 import com.kubekubedashdash.services.session.SessionPersistence
 import com.kubekubedashdash.services.session.SessionRestorer
+import com.kubekubedashdash.services.session.decideRestore
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.KubeconfigReader
@@ -117,16 +120,36 @@ class AppViewModel private constructor() : ViewModel() {
         restoreAttempted = true
         // The preference flows are seeded asynchronously from DataStore; wait
         // for that first emission so a user who turned restore OFF is not
-        // overridden by the compile-time default.
-        withTimeoutOrNull(2_000) { PreferenceRepository.preferencesLoaded.first { it } }
-        if (PreferenceRepository.restoreSessionOnLaunch.value) {
-            val plan = RestorePlanner.plan(
-                SessionPersistence.initialSnapshot,
-                availableContexts,
-                ScreenBoundsProvider.current(),
-            )
-            runCatching { SessionRestorer.apply(plan) }
-                .onFailure { log.warn("Session restore failed: {}", it::class.simpleName) }
+        // overridden by the compile-time default — and if the store was not
+        // read in time, or could not be read at all (it then seeds on the
+        // defaults), do not restore on that default either (F12). The wait
+        // ends on the first emission or on the store's give-up (1.75 s of
+        // retry delay plus the reads), so the ceiling only bounds a read that
+        // hangs; a healthy store never pays it.
+        val loaded = withTimeoutOrNull(5_000) { PreferenceRepository.preferencesLoaded.first { it } } == true
+        val decision = decideRestore(
+            preferencesLoaded = loaded,
+            storage = PreferenceStorageHealth.Default.state.value,
+            restoreOnLaunch = PreferenceRepository.restoreSessionOnLaunch.value,
+        )
+        when (decision) {
+            RestoreDecision.Restore -> {
+                val plan = RestorePlanner.plan(
+                    SessionPersistence.initialSnapshot,
+                    availableContexts,
+                    ScreenBoundsProvider.current(),
+                )
+                runCatching { SessionRestorer.apply(plan) }
+                    .onFailure { log.warn("Session restore failed: {}", it::class.simpleName) }
+            }
+
+            RestoreDecision.TurnedOff -> Unit
+
+            RestoreDecision.PreferencesNotRead ->
+                log.warn("Session not restored: the preference store was not read within the launch wait")
+
+            is RestoreDecision.PreferencesFaulted ->
+                log.warn("Session not restored: the preference store could not be read ({})", decision.exceptionClass)
         }
         SessionPersistence.start()
     }

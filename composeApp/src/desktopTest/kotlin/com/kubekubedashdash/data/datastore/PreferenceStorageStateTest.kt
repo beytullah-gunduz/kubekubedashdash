@@ -33,6 +33,18 @@ class PreferenceStorageStateTest {
     }
 
     @Test
+    fun `a load fault says the last session was not restored, a save fault does not`() {
+        val replaced = PreferenceStorageState(load = LoadFault("CorruptionException", "settings.corrupt-1")).summary()
+        val unreadable = PreferenceStorageState(load = LoadFault("IOException")).summary()
+        val saveOnly = PreferenceStorageState(save = SaveFault("IOException")).summary()
+
+        assertTrue(replaced.contains("The last session was not restored."), replaced)
+        assertTrue(unreadable.contains("The last session was not restored."), unreadable)
+        assertFalse(saveOnly.contains("not restored"), saveOnly)
+        assertTrue(unreadable.indexOf("defaults are in use") < unreadable.indexOf("not restored"), "the reason comes first: $unreadable")
+    }
+
+    @Test
     fun `a load fault naming a backup copy replaces one that does not, never the reverse`() {
         val health = PreferenceStorageHealth()
         health.reportLoadFault(LoadFault("IOException"))
