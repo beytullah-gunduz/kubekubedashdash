@@ -131,7 +131,13 @@ fun PodsScreen(
     }
 
     AnimatedVisibility(state is ResourceState.Error, enter = enter, exit = exit) {
-        ResourceErrorMessage((state as ResourceState.Error).message, onRetry = { restartListFlow(reactiveClient.pods) })
+        // Composed for the whole exit transition too, like the Success block
+        // below: the restart's first emission is Loading, so the cast must be
+        // a check, not an assumption.
+        val s = state
+        if (s is ResourceState.Error) {
+            ResourceErrorMessage(s.message, onRetry = { restartListFlow(reactiveClient.pods) })
+        }
     }
 
     AnimatedVisibility(state is ResourceState.Success, enter = enter, exit = exit) {
