@@ -1,5 +1,6 @@
 package com.kubekubedashdash.data.datastore
 
+import androidx.datastore.core.CorruptionException
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.util.SystemDirectories
@@ -7,14 +8,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.nio.file.NoSuchFileException
 import java.util.UUID
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -67,6 +72,31 @@ class CorruptPreferencesFileTest {
         val key = stringPreferencesKey("probe")
         store.edit { it[key] = "after" }
         assertEquals("after", withTimeout(10_000) { store.data.first()[key] })
+    }
+
+    @Test
+    fun `once a copy is recorded the handler returns defaults without copying again`() {
+        health.reportLoadFault(LoadFault("CorruptionException", "already.corrupt-1"))
+        val missing = File(dir, FILE_NAME).toPath()
+
+        val replacement = replaceCorruptPreferences(missing, CorruptionException("again"), health)
+
+        assertTrue(replacement.asMap().isEmpty())
+        assertEquals(emptyList(), dir.list().orEmpty().toList(), "no copy attempted: the file was never read")
+        assertEquals(LoadFault("CorruptionException", "already.corrupt-1"), health.state.value.load)
+    }
+
+    @Test
+    fun `when no copy can be made the handler rethrows the corruption and reports nothing`() {
+        val missing = File(dir, FILE_NAME).toPath()
+        val corruption = CorruptionException("unparseable")
+
+        val thrown = assertFailsWith<CorruptionException> { replaceCorruptPreferences(missing, corruption, health) }
+
+        assertSame(corruption, thrown, "the original exception, so the collectors see a CorruptionException")
+        assertTrue(thrown.suppressed.single() is NoSuchFileException, "the copy failure rides along: ${thrown.suppressed.toList()}")
+        assertNull(health.state.value.load, "no copy, no fault from the handler; the collectors report the read failure")
+        assertEquals(emptyList(), dir.list().orEmpty().toList())
     }
 
     private companion object {

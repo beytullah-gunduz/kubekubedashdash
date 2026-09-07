@@ -11,13 +11,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.retryWhen
 import org.slf4j.LoggerFactory
+import java.io.IOException
 
 private val log = LoggerFactory.getLogger("PreferenceStorage")
 
 /**
  * Back-off before each re-read; the list's size is the retry budget. The
- * total (1.75 s) stays under the 2 s that AppViewModel's launch-time reader
- * waits for `preferencesLoaded`, so a read that recovers still seeds restore.
+ * delays total 1.75 s, under the 2 s that AppViewModel's launch-time reader
+ * waits for `preferencesLoaded`, so a read that recovers quickly still seeds
+ * restore; the failed reads themselves add to that.
  */
 internal val PREFERENCE_READ_RETRY_DELAYS_MS: List<Long> = listOf(250L, 500L, 1_000L)
 
@@ -47,7 +49,7 @@ internal fun <T> Flow<T>.recoveringPreferenceReads(
     }
     retry
 }.catch { cause ->
-    log.warn("{}: preferences could not be read ({}); defaults are in use for this session", owner, cause::class.simpleName)
+    warn(cause, "{}: preferences could not be read ({}); defaults are in use", owner, cause::class.simpleName)
     health.reportLoadFault(LoadFault(exceptionClass = cause::class.simpleName ?: "Exception"))
 }
 
@@ -80,6 +82,16 @@ internal suspend fun runPreferenceWrite(
 }
 
 private fun reportWriteFailure(owner: String, health: PreferenceStorageHealth, cause: Throwable) {
-    log.warn("{}: saving preferences failed ({}); the change may be lost", owner, cause::class.simpleName)
+    warn(cause, "{}: saving preferences failed ({}); the change may be lost", owner, cause::class.simpleName)
     health.reportSaveFault(SaveFault(exceptionClass = cause::class.simpleName ?: "Exception"))
+}
+
+/**
+ * A storage failure (an IOException, which a CorruptionException is) is
+ * logged by class only: its message usually repeats the file's path.
+ * Anything else is a bug and keeps the stack trace the JVM uncaught
+ * handler used to print for it.
+ */
+private fun warn(cause: Throwable, message: String, vararg args: Any?) {
+    if (cause is IOException) log.warn(message, *args) else log.warn(message, *args, cause)
 }

@@ -43,7 +43,7 @@ fun PreferenceStorageState.summary(): String {
                     "A copy was kept next to it as ${fault.backupFileName}."
             } else {
                 "The saved settings could not be read (${fault.exceptionClass}), " +
-                    "so defaults are in use for this session."
+                    "so defaults are in use."
             }
         },
         save?.let { fault ->
@@ -57,15 +57,28 @@ fun PreferenceStorageState.summary(): String {
  * Record of preference-storage faults, written by the DataStore corruption
  * handler, the repositories' read recovery and their write scopes; read by
  * Settings. The first load fault of a run wins — the three repositories share
- * one store and report the same failure — and the latest save fault wins.
- * The process instance is [Default]; tests build their own.
+ * one store and report the same failure — except that a fault naming a backup
+ * copy replaces one that does not; the latest save fault wins. The process
+ * instance is [Default]; tests build their own.
  */
 class PreferenceStorageHealth {
     private val _state = MutableStateFlow(PreferenceStorageState())
     val state: StateFlow<PreferenceStorageState> = _state.asStateFlow()
 
     fun reportLoadFault(fault: LoadFault) {
-        _state.update { current -> if (current.load == null) current.copy(load = fault) else current }
+        _state.update { current ->
+            val kept = current.load
+            when {
+                kept == null -> current.copy(load = fault)
+
+                // A corruption found after an earlier unreadable read still
+                // tells the user where the copy is, and lets the store's
+                // handler see that a copy exists.
+                kept.backupFileName == null && fault.backupFileName != null -> current.copy(load = fault)
+
+                else -> current
+            }
+        }
     }
 
     fun reportSaveFault(fault: SaveFault) {

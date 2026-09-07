@@ -33,6 +33,19 @@ class PreferenceStorageStateTest {
     }
 
     @Test
+    fun `a load fault naming a backup copy replaces one that does not, never the reverse`() {
+        val health = PreferenceStorageHealth()
+        health.reportLoadFault(LoadFault("IOException"))
+        health.reportLoadFault(LoadFault("CorruptionException", "settings.corrupt-1"))
+        assertEquals(LoadFault("CorruptionException", "settings.corrupt-1"), health.state.value.load, "upgraded")
+
+        health.reportLoadFault(LoadFault("CorruptionException", "settings.corrupt-2"))
+        assertEquals(LoadFault("CorruptionException", "settings.corrupt-1"), health.state.value.load, "the first copy is kept")
+        health.reportLoadFault(LoadFault("IOException"))
+        assertEquals(LoadFault("CorruptionException", "settings.corrupt-1"), health.state.value.load, "never downgraded")
+    }
+
+    @Test
     fun `a failed save is its own sentence, alone or after a load fault`() {
         val saveOnly = PreferenceStorageState(save = SaveFault("IOException")).summary()
         assertTrue(saveOnly.contains("IOException"), saveOnly)
