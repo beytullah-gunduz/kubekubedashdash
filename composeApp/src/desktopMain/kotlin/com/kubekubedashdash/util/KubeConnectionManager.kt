@@ -11,6 +11,13 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicInteger
 
+/**
+ * A sequenced connect arrived after a newer attempt had already claimed the
+ * manager (see [KubeConnectionManager.connect]). Nothing was built, published
+ * or torn down; the caller's newer attempt owns the connection.
+ */
+class ConnectSupersededException(val attempt: Long, val newest: Long) : IllegalStateException("Connect attempt $attempt was superseded by attempt $newest")
+
 class KubeConnectionManager(
     /** Test seam: how a kube context name becomes a fabric8 [Config]. Production = `Config.autoConfigure`. */
     private val loadConfig: (context: String?) -> Config = { Config.autoConfigure(it) },
@@ -30,6 +37,9 @@ class KubeConnectionManager(
          * cluster switch.
          */
         private const val RETIRE_GRACE_MS = 1_000L
+
+        /** The `attempt` of a connect that takes no part in attempt ordering: never refused, never the watermark. */
+        const val UNSEQUENCED = 0L
     }
 
     // @Volatile: written under `connectLock` but read unsynchronized from every
@@ -94,6 +104,36 @@ class KubeConnectionManager(
     // manager is gone, so a client published now would never be closed.
     private var closed = false
 
+    // The highest sequenced attempt that has claimed this manager (F7). The
+    // session numbers its attempts and drops a superseded outcome, but a
+    // blocking connect cannot be interrupted: an older attempt descheduled
+    // between its launch and connectLock could enter after the newer one had
+    // published, publish its own cluster and retire the newer client — the UI
+    // then showed the newer context over the older cluster's informers. So an
+    // attempt below the watermark is refused at entry, before anything is
+    // built. Written under connectLock; volatile for the test-only getter.
+    @Volatile private var _newestAttempt = UNSEQUENCED
+
+    /** Test seam: the watermark, so a test can prove an attempt number reached the manager. */
+    internal val newestAttempt: Long get() = _newestAttempt
+
+    /**
+     * Under connectLock. True when [attempt] may proceed: unsequenced, or not
+     * below the watermark (which it then becomes). False means superseded —
+     * the caller returns [supersededFailure] without touching any state.
+     */
+    private fun claimAttempt(attempt: Long): Boolean {
+        if (attempt == UNSEQUENCED) return true
+        if (attempt < _newestAttempt) return false
+        _newestAttempt = attempt
+        return true
+    }
+
+    private fun supersededFailure(attempt: Long): Result<String> {
+        log.debug("Connect attempt {} superseded by attempt {}; not published", attempt, _newestAttempt)
+        return Result.failure(ConnectSupersededException(attempt, _newestAttempt))
+    }
+
     /**
      * Retire the connection a `connect*` call is replacing — WITHOUT closing
      * the old client synchronously (audit C1).
@@ -146,8 +186,14 @@ class KubeConnectionManager(
         }
     }
 
-    fun connect(context: String? = null): Result<String> = synchronized(connectLock) {
+    /**
+     * @param attempt the caller's attempt number, monotonic per manager; an
+     *  attempt below the watermark is refused before anything is built (see
+     *  [claimAttempt]). [UNSEQUENCED] takes no part in the ordering.
+     */
+    fun connect(context: String? = null, attempt: Long = UNSEQUENCED): Result<String> = synchronized(connectLock) {
         if (closed) return closedFailure()
+        if (!claimAttempt(attempt)) return supersededFailure(attempt)
         val prevClient = _client
         val prevMock = _mockHandle
         // The client under construction. Nothing is published until the
@@ -209,13 +255,19 @@ class KubeConnectionManager(
         retirePrevious(prevClient, prevMock)
     }
 
-    fun connectWithClient(client: KubernetesClient, label: String): Result<String> = synchronized(connectLock) {
+    fun connectWithClient(client: KubernetesClient, label: String, attempt: Long = UNSEQUENCED): Result<String> = synchronized(connectLock) {
         if (closed) {
             // Ownership of [client] was handed to us; a closed manager can only
             // release it, never publish it.
             runCatching { client.close() }
                 .onFailure { log.warn("Error closing a client handed to a closed manager: {}", it.message) }
             return closedFailure()
+        }
+        if (!claimAttempt(attempt)) {
+            // Same ownership rule: a refused connect can only release what it was handed.
+            runCatching { client.close() }
+                .onFailure { log.warn("Error closing a client handed to a superseded connect: {}", it.message) }
+            return supersededFailure(attempt)
         }
         val prevClient = _client
         val prevMock = _mockHandle
@@ -240,12 +292,17 @@ class KubeConnectionManager(
         }
     }
 
-    fun connectWithMockHandle(handle: MockClusterHandle): Result<String> = synchronized(connectLock) {
+    fun connectWithMockHandle(handle: MockClusterHandle, attempt: Long = UNSEQUENCED): Result<String> = synchronized(connectLock) {
         if (closed) {
             // Releases the provider ref-count (and the handle's client).
             runCatching { handle.close() }
                 .onFailure { log.warn("Error releasing a mock handle handed to a closed manager: {}", it.message) }
             return closedFailure()
+        }
+        if (!claimAttempt(attempt)) {
+            runCatching { handle.close() }
+                .onFailure { log.warn("Error releasing a mock handle handed to a superseded connect: {}", it.message) }
+            return supersededFailure(attempt)
         }
         val prevClient = _client
         val prevMock = _mockHandle
