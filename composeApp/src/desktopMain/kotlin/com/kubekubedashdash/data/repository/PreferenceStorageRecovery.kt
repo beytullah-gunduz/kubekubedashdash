@@ -17,9 +17,9 @@ private val log = LoggerFactory.getLogger("PreferenceStorage")
 
 /**
  * Back-off before each re-read; the list's size is the retry budget. The
- * delays total 1.75 s, under the 2 s that AppViewModel's launch-time reader
- * waits for `preferencesLoaded`, so a read that recovers quickly still seeds
- * restore; the failed reads themselves add to that.
+ * delays total 1.75 s, well under the 5 s that AppViewModel's launch-time
+ * reader waits for `preferencesLoaded`, so a read that recovers, or is given
+ * up on, still lands inside that wait; the failed reads themselves add to that.
  */
 internal val PREFERENCE_READ_RETRY_DELAYS_MS: List<Long> = listOf(250L, 500L, 1_000L)
 

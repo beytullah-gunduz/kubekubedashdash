@@ -33,17 +33,21 @@ data class SaveFault(val exceptionClass: String)
 
 internal const val HEALTHY_SUMMARY = "Settings are read from and saved to the application data folder normally."
 
-/** The Settings row text: one sentence per fault, load first. File names and class names only. */
+/**
+ * The Settings row text: one sentence per fault, load first. File names and
+ * class names only. A load fault also means launch did not restore the last
+ * session (see services.session.decideRestore), so the row says that too.
+ */
 fun PreferenceStorageState.summary(): String {
     if (healthy) return HEALTHY_SUMMARY
     return listOfNotNull(
         load?.let { fault ->
             if (fault.backupFileName != null) {
                 "The saved settings file could not be parsed, so defaults are in use. " +
-                    "A copy was kept next to it as ${fault.backupFileName}."
+                    "A copy was kept next to it as ${fault.backupFileName}. The last session was not restored."
             } else {
                 "The saved settings could not be read (${fault.exceptionClass}), " +
-                    "so defaults are in use."
+                    "so defaults are in use. The last session was not restored."
             }
         },
         save?.let { fault ->
