@@ -615,16 +615,19 @@ class SessionViewModel(
                 // Bare prefix means "mint a new mock" (picker path); a `#N` label
                 // means reattach (e.g. retry of an existing session).
                 val mockLabel = if (ctx == DemoContext.MOCK_CONTEXT_NAME) null else ctx
-                reactiveClient.connectMock(mockLabel)
+                reactiveClient.connectMock(mockLabel, attempt)
             } else {
-                reactiveClient.connect(ctx)
+                reactiveClient.connect(ctx, attempt)
             }
             try {
                 // Superseded while blocked in connect(): the newer attempt owns the
                 // reducer, the flags and any pending restore target. A check, not a
                 // lock: an attempt superseded after passing it still runs the tail
                 // (microseconds, against the whole of connect() before); closing
-                // that window would put the tail under the monitor.
+                // that window would put the tail under the monitor. The manager
+                // refuses to publish a superseded attempt on its side (the attempt
+                // number travels with the connect), so the cluster it holds is
+                // never an older attempt's.
                 if (attempt != connectAttempt.get()) return@launch
                 result.fold(
                     onSuccess = {

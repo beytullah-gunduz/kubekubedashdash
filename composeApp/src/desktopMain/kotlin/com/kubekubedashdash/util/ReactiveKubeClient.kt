@@ -142,7 +142,8 @@ class ReactiveKubeClient(
      */
     private val connectedTrigger: Flow<Long> = _connectionVersion.filter { it > 0L }
 
-    fun connect(context: String? = null): Result<String> = connectionManager.connect(context)
+    /** @param attempt the session's attempt number; see [KubeConnectionManager.connect]. */
+    fun connect(context: String? = null, attempt: Long = KubeConnectionManager.UNSEQUENCED): Result<String> = connectionManager.connect(context, attempt)
 
     /**
      * Connect to a mock cluster instance. `label = null` mints a fresh instance
@@ -150,9 +151,9 @@ class ReactiveKubeClient(
      * A non-null label reattaches to an existing instance, or recreates one with
      * that label if the previous server has already been torn down.
      */
-    fun connectMock(label: String? = null): Result<String> = try {
+    fun connectMock(label: String? = null, attempt: Long = KubeConnectionManager.UNSEQUENCED): Result<String> = try {
         val handle = if (label == null) MockClusterProvider.acquireNewInstance() else MockClusterProvider.acquire(label)
-        connectionManager.connectWithMockHandle(handle)
+        connectionManager.connectWithMockHandle(handle, attempt)
     } catch (e: Exception) {
         Result.failure(e)
     }
