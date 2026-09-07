@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class ConnectSupersededException(val attempt: Long, val newest: Long) : IllegalStateException("Connect attempt $attempt was superseded by attempt $newest")
 
 class KubeConnectionManager(
-    /** Test seam: how a kube context name becomes a fabric8 [Config]. Production = `Config.autoConfigure`. */
-    private val loadConfig: (context: String?) -> Config = { Config.autoConfigure(it) },
+    /** Test seam: how a kube context name becomes a fabric8 [Config]. Production = `Config.autoConfigure` under the app's retry cap. */
+    private val loadConfig: (context: String?) -> Config = { Config.autoConfigure(it).withBoundedRetries() },
     /** Test seam: how a [Config] becomes a client. Production = `KubernetesClientBuilder`. */
     private val buildClient: (Config) -> KubernetesClient = { KubernetesClientBuilder().withConfig(it).build() },
 ) : Closeable {
