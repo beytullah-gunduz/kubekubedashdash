@@ -67,6 +67,11 @@ class ReactiveInformerFactoryLeakTest {
 
         val proxy: SharedIndexInformer<Pod> = newProxy(SharedIndexInformer::class.java) { method, _ ->
             when (method.name) {
+                // The factory runs the informer it is handed (F2); these fakes
+                // model an informer whose start already returned, so run() is
+                // a no-op that hands back the same handle.
+                "run" -> proxy
+
                 "hasSynced" -> syncedFlag.get()
 
                 "isRunning" -> runningFlag.get()
