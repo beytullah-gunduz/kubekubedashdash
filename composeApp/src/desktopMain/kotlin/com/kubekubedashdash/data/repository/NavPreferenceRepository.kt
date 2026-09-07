@@ -108,7 +108,7 @@ internal fun encodeContextLists(map: Map<String, List<String>>): String = navPre
 object NavPreferenceRepository {
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + preferenceWriteFailureHandler("NavPreferenceRepository"))
 
     private val NAV_FAVOURITES by lazy { stringPreferencesKey("nav_favourites_per_context") }
     private val NAV_RECENTS by lazy { stringPreferencesKey("nav_recents_per_context") }
@@ -126,12 +126,14 @@ object NavPreferenceRepository {
 
     init {
         ioScope.launch {
-            dataStore.data.collect { p ->
+            dataStore.data.recoveringPreferenceReads("NavPreferenceRepository").collect { p ->
                 _favouritesByContext.value = decodeContextLists(p[NAV_FAVOURITES])
                 _recentsByContext.value = decodeContextLists(p[NAV_RECENTS])
             }
         }
-        ioScope.launch { for (write in writes) write() }
+        // One failed edit must not end the consumer: every later toggle would
+        // be queued for nobody and dropped without a trace.
+        ioScope.launch { for (write in writes) runPreferenceWrite("NavPreferenceRepository") { write() } }
     }
 
     fun toggleFavourite(context: String, key: String) {

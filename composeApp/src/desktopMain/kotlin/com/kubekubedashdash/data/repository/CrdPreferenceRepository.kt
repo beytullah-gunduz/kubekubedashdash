@@ -29,7 +29,7 @@ import kotlinx.serialization.json.Json
 object CrdPreferenceRepository {
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + preferenceWriteFailureHandler("CrdPreferenceRepository"))
     private val json = Json { ignoreUnknownKeys = true }
 
     private val CRD_PINNED by lazy { stringPreferencesKey("crd_pinned_per_context") }
@@ -43,7 +43,7 @@ object CrdPreferenceRepository {
 
     init {
         ioScope.launch {
-            dataStore.data.collect { p ->
+            dataStore.data.recoveringPreferenceReads("CrdPreferenceRepository").collect { p ->
                 _pinnedByContext.value = decode(p[CRD_PINNED])
                 _hiddenByContext.value = decode(p[CRD_HIDDEN])
             }

@@ -20,7 +20,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -38,7 +37,7 @@ object PreferenceRepository {
     const val STATS_PANEL_ALL_CLUSTERS = "all_clusters"
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + preferenceWriteFailureHandler("PreferenceRepository"))
     private val json = Json { ignoreUnknownKeys = true }
 
     // ── Preference keys ───────────────────────────────────────────────────────
@@ -200,10 +199,12 @@ object PreferenceRepository {
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
         ioScope.launch {
-            // A DataStore read failure would otherwise end this collector with
-            // preferencesLoaded still false, and launch-time readers would wait
-            // out their timeout on every start; flag "loaded" with the defaults.
-            dataStore.data.catch { _preferencesLoaded.value = true }.collect { p ->
+            // A read that fails on the way in is retried (under 2 s in all),
+            // then given up on: logged, and shown in Settings › Diagnostics.
+            // Either way this collector must not end with preferencesLoaded
+            // still false, or launch-time readers would wait out their timeout
+            // on every start.
+            dataStore.data.recoveringPreferenceReads("PreferenceRepository").collect { p ->
                 // Seed ONCE. This collector re-fires on every DataStore commit
                 // (including unrelated keys, and other repositories' keys), and
                 // the memory-first setters write their flow synchronously while
@@ -272,6 +273,10 @@ object PreferenceRepository {
                 }
                 _preferencesLoaded.value = true
             }
+            // Reached only when the read was given up on: the recovered flow
+            // then completes without an emission, so flag "loaded" on the
+            // defaults here.
+            _preferencesLoaded.value = true
         }
     }
 
