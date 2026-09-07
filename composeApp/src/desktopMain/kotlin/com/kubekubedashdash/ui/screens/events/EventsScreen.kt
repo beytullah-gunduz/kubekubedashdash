@@ -36,6 +36,7 @@ import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.screens.events.viewmodel.EventsScreenViewModel
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.flow.first
 
 @Composable
@@ -77,7 +78,7 @@ fun EventsScreen(
     when (val s = state) {
         is ResourceState.Loading -> ResourceLoadingIndicator()
 
-        is ResourceState.Error -> ResourceErrorMessage(s.message)
+        is ResourceState.Error -> ResourceErrorMessage(s.message, onRetry = { restartListFlow(reactiveClient.events) })
 
         is ResourceState.Success -> {
             val availableTypes = remember(s.data) { s.data.map { it.type }.toSet() }

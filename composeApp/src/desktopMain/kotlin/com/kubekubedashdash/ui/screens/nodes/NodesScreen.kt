@@ -56,6 +56,7 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.NODE_PRESSURE_THRESHOLD
 import com.kubekubedashdash.ui.screens.nodes.viewmodel.NodesScreenViewModel
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -120,7 +121,7 @@ fun NodesScreen(
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
 
-        is ResourceState.Error -> ResourceErrorMessage(s.message)
+        is ResourceState.Error -> ResourceErrorMessage(s.message, onRetry = { restartListFlow(reactiveClient.nodes) })
 
         is ResourceState.Success -> {
             val allNodes = remember(s.data, staleNodes) { s.data + staleNodes.values.toList() }

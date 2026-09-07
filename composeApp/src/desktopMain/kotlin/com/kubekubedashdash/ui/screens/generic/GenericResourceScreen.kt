@@ -93,6 +93,7 @@ import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenVi
 import com.kubekubedashdash.ui.screens.relatedScreen
 import com.kubekubedashdash.ui.screens.rememberRelated
 import com.kubekubedashdash.util.builtInKindOrNull
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
@@ -225,7 +226,15 @@ fun GenericResourceScreen(
     when (val s = state) {
         is ResourceState.Loading -> SkeletonRows()
 
-        is ResourceState.Error -> ResourceErrorMessage(s.message, onRetry = { retryKey++ })
+        is ResourceState.Error -> ResourceErrorMessage(
+            s.message,
+            onRetry = {
+                // Restart the list itself (F3) — rebuilding the view model
+                // alone re-subscribes to the same parked flow.
+                restartListFlow(sourceFlow)
+                retryKey++
+            },
+        )
 
         is ResourceState.Success -> {
             val availableStatuses = remember(s.data) {
