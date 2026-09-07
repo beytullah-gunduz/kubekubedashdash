@@ -1379,7 +1379,10 @@ class ReactiveKubeClient(
         plural: String? = null,
     ): String = try {
         log.debug("Fetching YAML kind={} name={} namespace={} group={} version={}", kind, name, namespace, group, version)
-        val res: Any? = when (kind.lowercase()) {
+        // A group-qualified kind never reaches a typed case (see builtInKindOrNull):
+        // the pane would show the same-named built-in object's YAML next to a
+        // Delete that removes the custom one.
+        val res: Any? = when (builtInKindOrNull(kind, group)) {
             "pod" -> namespace?.let { k8s.pods().inNamespace(it).withName(name).get() }
 
             "deployment" -> namespace?.let { k8s.apps().deployments().inNamespace(it).withName(name).get() }

@@ -92,6 +92,7 @@ import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
 import com.kubekubedashdash.ui.screens.relatedScreen
 import com.kubekubedashdash.ui.screens.rememberRelated
+import com.kubekubedashdash.util.builtInKindOrNull
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
@@ -437,7 +438,7 @@ fun GenericResourceScreen(
                                 add(DetailField("Age", res.age))
                             }
                             val csrActions = if (
-                                kind.equals("CertificateSigningRequest", ignoreCase = true) &&
+                                builtInKindOrNull(kind, apiGroup) == "certificatesigningrequest" &&
                                 res.extraColumns["Condition"] == "Pending"
                             ) {
                                 listOf(
@@ -468,7 +469,10 @@ fun GenericResourceScreen(
                             } else {
                                 emptyList()
                             }
-                            val scaleActions = when (kind.lowercase()) {
+                            // A custom kind that reuses a built-in name must not offer
+                            // Scale or Rollout restart: scaleWorkload/restartWorkload
+                            // would edit the same-named built-in workload.
+                            val scaleActions = when (builtInKindOrNull(kind, apiGroup)) {
                                 "statefulset", "replicaset" -> listOf(
                                     DetailAction(
                                         label = "Scale",
@@ -485,7 +489,7 @@ fun GenericResourceScreen(
 
                                 else -> emptyList()
                             }
-                            val restartActions = when (kind.lowercase()) {
+                            val restartActions = when (builtInKindOrNull(kind, apiGroup)) {
                                 "statefulset", "daemonset" -> listOf(
                                     DetailAction(
                                         label = "Rollout restart",
@@ -502,7 +506,7 @@ fun GenericResourceScreen(
 
                                 else -> emptyList()
                             }
-                            val cronJobActions = if (kind.equals("CronJob", ignoreCase = true)) {
+                            val cronJobActions = if (builtInKindOrNull(kind, apiGroup) == "cronjob") {
                                 val isSuspended = res.status == "Suspended"
                                 listOf(
                                     DetailAction(
