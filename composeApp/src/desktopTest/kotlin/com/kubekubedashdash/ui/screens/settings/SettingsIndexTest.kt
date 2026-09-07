@@ -106,6 +106,18 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `storage finds Preferences storage under Diagnostics`() {
+        val results = settingsSearchResults("storage")
+        assertEquals("Preferences storage", results.first().title)
+        assertEquals("Diagnostics", results.first().section)
+    }
+
+    @Test
+    fun `corrupt finds Preferences storage by keyword`() {
+        assertTrue(settingsSearchResults("corrupt").any { it.title == "Preferences storage" })
+    }
+
+    @Test
     fun `search is case insensitive`() {
         assertEquals(settingsSearchResults("zoom"), settingsSearchResults("ZOOM"))
     }
