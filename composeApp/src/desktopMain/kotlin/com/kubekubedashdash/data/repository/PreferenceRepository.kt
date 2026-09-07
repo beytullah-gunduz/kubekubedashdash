@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -191,10 +193,9 @@ object PreferenceRepository {
     private val _uiScalePercent = MutableStateFlow(100)
     val uiScalePercent: StateFlow<Int> = _uiScalePercent.asStateFlow()
 
-    // Guards the one-shot seed of the five blobs above (three Boolean maps, one
-    // Float map, one String list). Only ever touched from the single init
-    // collector coroutine.
-    private var mapBlobsSeeded = false
+    // Guards the one-shot seed of EVERY flow (N6). Only ever touched from the
+    // single init collector coroutine.
+    private var seeded = false
 
     // ── Seed all flows from DataStore on startup ──────────────────────────────
     init {
@@ -203,58 +204,60 @@ object PreferenceRepository {
             // preferencesLoaded still false, and launch-time readers would wait
             // out their timeout on every start; flag "loaded" with the defaults.
             dataStore.data.catch { _preferencesLoaded.value = true }.collect { p ->
-                _themeMode.value = p[THEME_MODE]
-                    ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
-                    ?: ThemeMode.SYSTEM
-                _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
-                _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
-                _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
-                _mcpRequireAuth.value = p[MCP_REQUIRE_AUTH] ?: true
-                _lastAwsProfiles.value = p[LAST_AWS_PROFILES]
-                    ?.split(",")?.filter { it.isNotBlank() }
-                    ?: emptyList()
-                _lastGcpProjects.value = p[LAST_GCP_PROJECTS]
-                    ?.split(",")?.filter { it.isNotBlank() }
-                    ?: emptyList()
-                _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
-                _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
-                _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
-                _demoTargets.value = DemoClusterSimulator.Targets(
-                    nodesMin = p[DEMO_NODES_MIN] ?: 30,
-                    nodesMax = p[DEMO_NODES_MAX] ?: 100,
-                    podsMin = p[DEMO_PODS_MIN] ?: 300,
-                    podsMax = p[DEMO_PODS_MAX] ?: 1000,
-                )
-                _customPresets.value = decodePresets(p[EVENT_TRIAGE_PRESETS])
-                _pinnedResources.value = p[PINNED_RESOURCES]
-                    ?.split(",")?.filter { it.isNotBlank() }?.toSet()
-                    ?: emptySet()
-                _clusterColorOverrides.value = StringMapCodec.decode(p[CLUSTER_COLOR_OVERRIDES])
-                _defaultNamespaceByContext.value = StringMapCodec.decode(p[DEFAULT_NAMESPACE_BY_CONTEXT])
-                _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
-                _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
-                _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
-                    .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
-                _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
-                _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
-                _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
-                _tableDensity.value = TableDensity.fromKey(p[TABLE_DENSITY])
                 // Seed ONCE. This collector re-fires on every DataStore commit
-                // (including unrelated keys), and setSidebarSectionExpanded /
-                // setStatsPanelExpanded write the flow synchronously while
-                // persisting from an unordered ioScope.launch — re-seeding on
-                // later emissions would overwrite a just-toggled value with the
-                // stale persisted one (visible flip-back). After the first
-                // emission the in-memory flow is authoritative; the process has
-                // exactly one DataStore, so nothing else can change it. The
-                // in-memory map is merged on top of the persisted one so a toggle
-                // that races ahead of this first emission is not thrown away.
-                if (!mapBlobsSeeded) {
-                    mapBlobsSeeded = true
-                    // Seeded under the same guard, for the same reason: holding
-                    // Cmd+= repeats the key, and each step persists from an
-                    // unordered ioScope.launch, so re-seeding on a later
-                    // emission could snap the zoom back to a stale value.
+                // (including unrelated keys, and other repositories' keys), and
+                // the memory-first setters write their flow synchronously while
+                // persisting from an unordered ioScope.launch — re-seeding on a later
+                // emission would overwrite a just-set value with the stale
+                // persisted one (a visible flip-back on rapid toggles: A then B,
+                // A's commit re-seeds B). After the first emission the in-memory
+                // flow is authoritative; the process has exactly one DataStore,
+                // and the mutators that persist first (togglePinned, the
+                // cluster-colour and default-namespace pairs) update their flow
+                // from the committed value themselves. The map blobs are merged
+                // on top of the persisted ones so a toggle that races ahead of
+                // this first emission is not thrown away; the palette list is
+                // concatenated in-memory-first for the same reason. (A scalar
+                // setter that fires before this first emission is still
+                // clobbered by it — a pre-existing, launch-time-only window.)
+                if (!seeded) {
+                    seeded = true
+                    _themeMode.value = p[THEME_MODE]
+                        ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
+                        ?: ThemeMode.SYSTEM
+                    _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
+                    _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
+                    _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
+                    _mcpRequireAuth.value = p[MCP_REQUIRE_AUTH] ?: true
+                    _lastAwsProfiles.value = p[LAST_AWS_PROFILES]
+                        ?.split(",")?.filter { it.isNotBlank() }
+                        ?: emptyList()
+                    _lastGcpProjects.value = p[LAST_GCP_PROJECTS]
+                        ?.split(",")?.filter { it.isNotBlank() }
+                        ?: emptyList()
+                    _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
+                    _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
+                    _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
+                    _demoTargets.value = DemoClusterSimulator.Targets(
+                        nodesMin = p[DEMO_NODES_MIN] ?: 30,
+                        nodesMax = p[DEMO_NODES_MAX] ?: 100,
+                        podsMin = p[DEMO_PODS_MIN] ?: 300,
+                        podsMax = p[DEMO_PODS_MAX] ?: 1000,
+                    )
+                    _customPresets.value = decodePresets(p[EVENT_TRIAGE_PRESETS])
+                    _pinnedResources.value = decodePinnedResources(p[PINNED_RESOURCES])
+                    _clusterColorOverrides.value = StringMapCodec.decode(p[CLUSTER_COLOR_OVERRIDES])
+                    _defaultNamespaceByContext.value = StringMapCodec.decode(p[DEFAULT_NAMESPACE_BY_CONTEXT])
+                    _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
+                    _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
+                    _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
+                        .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
+                    _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
+                    _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
+                    _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
+                    _tableDensity.value = TableDensity.fromKey(p[TABLE_DENSITY])
+                    // Zoom: holding Cmd+= repeats the key and each step persists
+                    // from an unordered launch, so a re-seed could snap it back.
                     _uiScalePercent.value = clampUiScale(p[UI_SCALE_PERCENT] ?: 100)
                     _sidebarSectionsExpanded.value =
                         BoolMapCodec.decode(p[SIDEBAR_SECTIONS_EXPANDED]) + _sidebarSectionsExpanded.value
@@ -264,9 +267,6 @@ object PreferenceRepository {
                         BoolMapCodec.decode(p[TABLE_COLUMNS_HIDDEN]) + _hiddenTableColumns.value
                     _detailPaneWidths.value =
                         FloatMapCodec.decode(p[DETAIL_PANE_WIDTHS]) + _detailPaneWidths.value
-                    // Concatenation, not a map merge: the in-memory list (a
-                    // race-ahead recordPaletteUse) goes first so it keeps
-                    // recency priority over the persisted list.
                     val decoded = StringListCodec.decode(p[PALETTE_RECENTS])
                     _paletteRecents.value = (_paletteRecents.value + decoded).distinct().take(8)
                 }
@@ -461,49 +461,63 @@ object PreferenceRepository {
         ioScope.launch { dataStore.edit { it[EVENT_TRIAGE_PRESETS] = json.encodeToString(value) } }
     }
 
-    suspend fun togglePinned(id: String) {
-        dataStore.edit { prefs ->
+    // The five mutators below persist first and then set their flow from the
+    // committed Preferences: the collector seeds once (see init), so nothing
+    // else would ever bring these flows up to date. Under one mutex, so the
+    // flow assignments land in commit order whatever dispatcher the callers
+    // resume on (DataStore serialises the transactions, not the code after).
+    private val persistFirst = Mutex()
+
+    suspend fun togglePinned(id: String) = persistFirst.withLock {
+        val committed = dataStore.edit { prefs ->
             val current = prefs[PINNED_RESOURCES]
                 ?.split(",")?.filter { it.isNotBlank() }?.toMutableSet()
                 ?: mutableSetOf()
             if (id in current) current.remove(id) else current.add(id)
             prefs[PINNED_RESOURCES] = current.joinToString(",")
         }
+        _pinnedResources.value = decodePinnedResources(committed[PINNED_RESOURCES])
     }
 
-    suspend fun setClusterColor(context: String, hex: String) {
-        dataStore.edit { prefs ->
+    suspend fun setClusterColor(context: String, hex: String) = persistFirst.withLock {
+        val committed = dataStore.edit { prefs ->
             val current = StringMapCodec.decode(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
             current[context] = hex
             prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
         }
+        _clusterColorOverrides.value = StringMapCodec.decode(committed[CLUSTER_COLOR_OVERRIDES])
     }
 
-    suspend fun clearClusterColor(context: String) {
-        dataStore.edit { prefs ->
+    suspend fun clearClusterColor(context: String) = persistFirst.withLock {
+        val committed = dataStore.edit { prefs ->
             val current = StringMapCodec.decode(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
             current.remove(context)
             prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
         }
+        _clusterColorOverrides.value = StringMapCodec.decode(committed[CLUSTER_COLOR_OVERRIDES])
     }
 
-    suspend fun setDefaultNamespace(context: String, namespace: String) {
-        dataStore.edit { prefs ->
+    suspend fun setDefaultNamespace(context: String, namespace: String) = persistFirst.withLock {
+        val committed = dataStore.edit { prefs ->
             val current = StringMapCodec.decode(prefs[DEFAULT_NAMESPACE_BY_CONTEXT]).toMutableMap()
             current[context] = namespace
             prefs[DEFAULT_NAMESPACE_BY_CONTEXT] = StringMapCodec.encode(current)
         }
+        _defaultNamespaceByContext.value = StringMapCodec.decode(committed[DEFAULT_NAMESPACE_BY_CONTEXT])
     }
 
-    suspend fun clearDefaultNamespace(context: String) {
-        dataStore.edit { prefs ->
+    suspend fun clearDefaultNamespace(context: String) = persistFirst.withLock {
+        val committed = dataStore.edit { prefs ->
             val current = StringMapCodec.decode(prefs[DEFAULT_NAMESPACE_BY_CONTEXT]).toMutableMap()
             current.remove(context)
             prefs[DEFAULT_NAMESPACE_BY_CONTEXT] = StringMapCodec.encode(current)
         }
+        _defaultNamespaceByContext.value = StringMapCodec.decode(committed[DEFAULT_NAMESPACE_BY_CONTEXT])
     }
 
     // ── Decoders ──────────────────────────────────────────────────────────────
+    private fun decodePinnedResources(raw: String?): Set<String> = raw?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+
     private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() } ?: CloseTabFocus.LEFT_NEIGHBOR
 
     private fun decodeTabStripVisibility(raw: String?): TabStripVisibility = raw?.let { runCatching { TabStripVisibility.valueOf(it) }.getOrNull() } ?: TabStripVisibility.AUTO

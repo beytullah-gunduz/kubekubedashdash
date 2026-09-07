@@ -45,6 +45,7 @@ import com.kubekubedashdash.ui.palette.PaletteVerb
 import com.kubekubedashdash.ui.palette.PendingVerb
 import com.kubekubedashdash.ui.palette.VerbTarget
 import com.kubekubedashdash.ui.palette.paletteVerbIcon
+import com.kubekubedashdash.util.DemoContext
 import org.jetbrains.compose.resources.DrawableResource
 
 /**
@@ -198,7 +199,7 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    val activeContext = activeSession?.connectionManager?.getCurrentContext().orEmpty()
+    val activeContext = DemoContext.preferenceKey(activeSession?.connectionManager?.getCurrentContext().orEmpty())
     val hiddenForActive = hiddenByContext.value[activeContext].orEmpty()
     val crdEntries = remember(crdsState?.value, hiddenForActive, onNavigate) {
         val crds = (crdsState?.value as? ResourceState.Success)?.data.orEmpty()

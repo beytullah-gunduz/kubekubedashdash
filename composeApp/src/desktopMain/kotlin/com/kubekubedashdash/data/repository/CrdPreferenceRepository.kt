@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
+import com.kubekubedashdash.util.DemoContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +18,8 @@ import kotlinx.serialization.json.Json
 
 /**
  * Per-cluster pin/hide preferences for custom resource entries in the
- * sidebar. Stored as a single JSON `Map<context, List<crdKey>>` blob in the
+ * sidebar, keyed by [DemoContext.preferenceKey] of the context (every minted
+ * demo label shares one row). Stored as a single JSON `Map<context, List<crdKey>>` blob in the
  * shared DataStore. Each `crdKey` is `"${group}/${kind}"` so version bumps
  * (v1beta1 → v1) don't drop the user's preference.
  *
@@ -48,8 +50,8 @@ object CrdPreferenceRepository {
         }
     }
 
-    fun pinnedFor(context: String): Set<String> = _pinnedByContext.value[context].orEmpty()
-    fun hiddenFor(context: String): Set<String> = _hiddenByContext.value[context].orEmpty()
+    fun pinnedFor(context: String): Set<String> = _pinnedByContext.value[DemoContext.preferenceKey(context)].orEmpty()
+    fun hiddenFor(context: String): Set<String> = _hiddenByContext.value[DemoContext.preferenceKey(context)].orEmpty()
 
     fun togglePinned(context: String, crdKey: String) {
         ioScope.launch {
@@ -86,13 +88,14 @@ object CrdPreferenceRepository {
         context: String,
         crdKey: String,
     ): Pair<Map<String, Set<String>>, Map<String, Set<String>>> {
-        val pinnedHere = pinned[context].orEmpty()
-        val hiddenHere = hidden[context].orEmpty()
+        val ctx = DemoContext.preferenceKey(context)
+        val pinnedHere = pinned[ctx].orEmpty()
+        val hiddenHere = hidden[ctx].orEmpty()
         return if (crdKey in pinnedHere) {
-            updateContext(pinned, context, pinnedHere - crdKey) to hidden
+            updateContext(pinned, ctx, pinnedHere - crdKey) to hidden
         } else {
-            updateContext(pinned, context, pinnedHere + crdKey) to
-                updateContext(hidden, context, hiddenHere - crdKey)
+            updateContext(pinned, ctx, pinnedHere + crdKey) to
+                updateContext(hidden, ctx, hiddenHere - crdKey)
         }
     }
 
@@ -105,13 +108,14 @@ object CrdPreferenceRepository {
         context: String,
         crdKey: String,
     ): Pair<Map<String, Set<String>>, Map<String, Set<String>>> {
-        val pinnedHere = pinned[context].orEmpty()
-        val hiddenHere = hidden[context].orEmpty()
+        val ctx = DemoContext.preferenceKey(context)
+        val pinnedHere = pinned[ctx].orEmpty()
+        val hiddenHere = hidden[ctx].orEmpty()
         return if (crdKey in hiddenHere) {
-            pinned to updateContext(hidden, context, hiddenHere - crdKey)
+            pinned to updateContext(hidden, ctx, hiddenHere - crdKey)
         } else {
-            updateContext(pinned, context, pinnedHere - crdKey) to
-                updateContext(hidden, context, hiddenHere + crdKey)
+            updateContext(pinned, ctx, pinnedHere - crdKey) to
+                updateContext(hidden, ctx, hiddenHere + crdKey)
         }
     }
 

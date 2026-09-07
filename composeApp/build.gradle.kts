@@ -184,7 +184,18 @@ val generateEmptyKubeconfig by tasks.registering {
     }
 }
 
+// Likewise keep it off the developer's real preferences store and session
+// file: SystemDirectories honours this property, so every DataStore-backed
+// repository object and SessionStore.default() land in a build directory that
+// is wiped before each run.
+val testDataDir = layout.buildDirectory.dir("test-data").get().asFile
+
 tasks.withType<Test>().configureEach {
     dependsOn(generateEmptyKubeconfig)
     environment("KUBECONFIG", emptyKubeconfig.get().asFile.absolutePath)
+    // A local, so the doFirst lambda captures a plain File rather than the
+    // build script (the configuration cache cannot serialise script objects).
+    val dataDir = testDataDir
+    systemProperty("kkdd.dataDir", dataDir.absolutePath)
+    doFirst { dataDir.deleteRecursively() }
 }

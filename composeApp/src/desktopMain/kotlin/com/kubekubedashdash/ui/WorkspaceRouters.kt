@@ -13,6 +13,9 @@ import androidx.compose.ui.Modifier
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.extension_filled
+import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
 import com.kubekubedashdash.ui.screens.LiveDetailPane
@@ -260,28 +263,34 @@ fun ContentRouter(
 
             is Screen.Main.CustomResource -> {
                 val crdState by reactiveClient.crds.collectAsState()
-                val crd = (crdState as? ResourceState.Success)?.data?.firstOrNull {
-                    it.group == target.group && it.kind == target.kind
-                }
-                if (crd != null) {
-                    genericKind(
-                        kind = crd.kind,
-                        sourceFlow = reactiveClient.customResourceInstances(crd),
-                        namespacedKind = crd.namespaced,
-                        searchQuery = searchQuery,
-                        labelQuery = labelQuery,
-                        onLabelQueryChange = onLabelQueryChange,
-                        annotationQuery = annotationQuery,
-                        onAnnotationQueryChange = onAnnotationQueryChange,
-                        pulseLabelsOnEntry = pulseLabelsOnEntry,
-                        pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                        apiGroup = crd.group,
-                        apiVersion = crd.version,
-                        plural = crd.plural,
-                        onNavigate = onNavigate,
+                when (val route = crdRoute(crdState, target)) {
+                    CrdRoute.Loading -> ConnectingScreen()
+
+                    is CrdRoute.Missing -> EmptyState(
+                        icon = Res.drawable.extension_filled,
+                        kind = "${target.kind} not available",
+                        subtitle = route.reason,
                     )
-                } else {
-                    ConnectingScreen()
+
+                    is CrdRoute.Found -> {
+                        val crd = route.crd
+                        genericKind(
+                            kind = crd.kind,
+                            sourceFlow = reactiveClient.customResourceInstances(crd),
+                            namespacedKind = crd.namespaced,
+                            searchQuery = searchQuery,
+                            labelQuery = labelQuery,
+                            onLabelQueryChange = onLabelQueryChange,
+                            annotationQuery = annotationQuery,
+                            onAnnotationQueryChange = onAnnotationQueryChange,
+                            pulseLabelsOnEntry = pulseLabelsOnEntry,
+                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                            apiGroup = crd.group,
+                            apiVersion = crd.version,
+                            plural = crd.plural,
+                            onNavigate = onNavigate,
+                        )
+                    }
                 }
             }
 

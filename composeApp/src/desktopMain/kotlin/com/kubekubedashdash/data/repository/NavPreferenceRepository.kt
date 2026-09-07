@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
+import com.kubekubedashdash.util.DemoContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,9 +31,10 @@ internal fun computeToggleFavourite(
     context: String,
     key: String,
 ): Map<String, List<String>> {
-    val current = map[context].orEmpty()
+    val ctx = DemoContext.preferenceKey(context)
+    val current = map[ctx].orEmpty()
     val next = if (key in current) current - key else current + key
-    return updateContextList(map, context, next)
+    return updateContextList(map, ctx, next)
 }
 
 /**
@@ -50,10 +52,11 @@ internal fun computeRecordRecent(
     favourites: Collection<String> = emptyList(),
 ): Map<String, List<String>> {
     if (key in favourites) return map
-    val current = map[context].orEmpty()
+    val ctx = DemoContext.preferenceKey(context)
+    val current = map[ctx].orEmpty()
     if (current.firstOrNull() == key) return map
     val next = (listOf(key) + current.filterNot { it == key }).take(cap)
-    return updateContextList(map, context, next)
+    return updateContextList(map, ctx, next)
 }
 
 /** [map] without [key] in [context]'s list; the context entry goes when it empties. */
@@ -62,9 +65,10 @@ internal fun computeRemoveRecent(
     context: String,
     key: String,
 ): Map<String, List<String>> {
-    val current = map[context].orEmpty()
+    val ctx = DemoContext.preferenceKey(context)
+    val current = map[ctx].orEmpty()
     if (key !in current) return map
-    return updateContextList(map, context, current - key)
+    return updateContextList(map, ctx, current - key)
 }
 
 private fun updateContextList(
@@ -93,7 +97,9 @@ internal fun encodeContextLists(map: Map<String, List<String>>): String = navPre
 
 /**
  * Per-cluster Favourites and Recent for the sidebar's built-in kinds and
- * CRDs, keyed by the same context string [CrdPreferenceRepository] uses.
+ * CRDs, keyed by the same context string [CrdPreferenceRepository] uses —
+ * folded through [DemoContext.preferenceKey], so every minted demo label
+ * shares one row and a re-mint never loses them.
  * Stored as two JSON `Map<context, List<key>>` blobs in the shared DataStore.
  * A built-in key is `screenKeyOf`'s value for the kind; a CRD key is
  * `"${group}/${kind}"` (`CrdInfo.key`) — the two namespaces never collide
@@ -130,16 +136,17 @@ object NavPreferenceRepository {
 
     fun toggleFavourite(context: String, key: String) {
         if (context.isBlank()) return
+        val ctx = DemoContext.preferenceKey(context)
         writes.trySend {
             dataStore.edit { prefs ->
                 val favourites = decodeContextLists(prefs[NAV_FAVOURITES])
-                val next = computeToggleFavourite(favourites, context, key)
+                val next = computeToggleFavourite(favourites, ctx, key)
                 prefs[NAV_FAVOURITES] = encodeContextLists(next)
                 // Becoming a favourite frees the Recent slot it was holding —
                 // in the same transaction, so the two can never disagree.
-                if (key in next[context].orEmpty()) {
+                if (key in next[ctx].orEmpty()) {
                     val recents = decodeContextLists(prefs[NAV_RECENTS])
-                    prefs[NAV_RECENTS] = encodeContextLists(computeRemoveRecent(recents, context, key))
+                    prefs[NAV_RECENTS] = encodeContextLists(computeRemoveRecent(recents, ctx, key))
                 }
             }
         }
@@ -150,13 +157,14 @@ object NavPreferenceRepository {
         // Avoid the edit entirely when nothing would change — navigate()'s
         // own "target != current" guard doesn't stop e.g. Pods(statusFilter=…)
         // → Pods() from being two distinct navigations with the same key.
-        if (_recentsByContext.value[context]?.firstOrNull() == key) return
-        if (key in _favouritesByContext.value[context].orEmpty()) return
+        val ctx = DemoContext.preferenceKey(context)
+        if (_recentsByContext.value[ctx]?.firstOrNull() == key) return
+        if (key in _favouritesByContext.value[ctx].orEmpty()) return
         writes.trySend {
             dataStore.edit { prefs ->
                 val recents = decodeContextLists(prefs[NAV_RECENTS])
-                val favourites = decodeContextLists(prefs[NAV_FAVOURITES])[context].orEmpty()
-                prefs[NAV_RECENTS] = encodeContextLists(computeRecordRecent(recents, context, key, favourites = favourites))
+                val favourites = decodeContextLists(prefs[NAV_FAVOURITES])[ctx].orEmpty()
+                prefs[NAV_RECENTS] = encodeContextLists(computeRecordRecent(recents, ctx, key, favourites = favourites))
             }
         }
     }
