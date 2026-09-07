@@ -530,7 +530,8 @@ class KubeClient(
         plural: String? = null,
     ): String = try {
         log.debug("Fetching YAML kind={} name={} namespace={} group={} version={}", kind, name, namespace, group, version)
-        val res: Any? = when (kind.lowercase()) {
+        // A group-qualified kind never reaches a typed case (see builtInKindOrNull).
+        val res: Any? = when (builtInKindOrNull(kind, group)) {
             "pod" -> namespace?.let { client.pods().inNamespace(it).withName(name).get() }
 
             "deployment" -> namespace?.let { client.apps().deployments().inNamespace(it).withName(name).get() }

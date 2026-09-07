@@ -13,6 +13,17 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import org.slf4j.LoggerFactory
 
+/**
+ * The one rule every kind-name dispatch shares: a kind reaches a typed
+ * built-in case only when the caller carries no API group. A CRD may reuse a
+ * built-in kind name inside its own group, and the sidebar lists it through
+ * the same screen with the CRD's group/version/plural, so a group-qualified
+ * kind must always take the generic branch — for YAML, Delete, Scale and
+ * Rollout restart alike. Blank counts as no group. Returns the lower-cased
+ * kind to `when` on, or null, which matches no literal and falls to `else`.
+ */
+internal fun builtInKindOrNull(kind: String, group: String?): String? = if (group.isNullOrBlank()) kind.lowercase() else null
+
 /** Pure Kind -> lowercase plural fallback. Shared by ReactiveKubeClient (CRD list/yaml
  *  path) and ClusterActions (deleteResource). Top-level so both can call it. */
 internal fun defaultPluralForKind(kind: String): String {
@@ -48,13 +59,9 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
         propagationPolicy: DeletionPropagation? = null,
     ): Result<Unit> = try {
         log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
-        // A CRD may reuse a built-in kind name inside its own API group, and the
-        // sidebar lists those through the same screen — which forwards the CRD's
-        // group/version/plural. Dispatch to a typed case only when the caller
-        // carries no group, so a group-qualified kind always reaches the generic
-        // branch below instead of deleting the same-named built-in object.
-        val builtInKind = if (group.isNullOrBlank()) kind.lowercase() else ""
-        when (builtInKind) {
+        // A group-qualified kind never reaches a typed case (see builtInKindOrNull):
+        // it would delete the same-named built-in object instead of the custom one.
+        when (builtInKindOrNull(kind, group)) {
             "pod" -> {
                 val ns = requireNamespace("Pod", namespace)
                 k8s.pods().inNamespace(ns).withName(name).delete()
