@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.data.datastore.PreferenceStorageHealth
+import com.kubekubedashdash.data.datastore.PreferenceStorageState
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
@@ -36,6 +38,9 @@ class SettingsScreenViewModel : ViewModel() {
     val mcpServerPort: StateFlow<Int> = PreferenceRepository.mcpServerPort
     val mcpLocalhostOnly: StateFlow<Boolean> = PreferenceRepository.mcpLocalhostOnly
     val mcpRequireAuth: StateFlow<Boolean> = PreferenceRepository.mcpRequireAuth
+
+    /** Settings › Diagnostics › Preferences storage: the store's recorded faults, if any. */
+    val preferenceStorage: StateFlow<PreferenceStorageState> = PreferenceStorageHealth.Default.state
 
     // Runtime-only: McpServerManager regenerates the token on every start and
     // exposes no flow, so this is genuine VM-owned state — a StateFlow for

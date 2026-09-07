@@ -52,6 +52,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Demo cluster simulator", "Node range", listOf("demo", "mock", "simulator")),
     SettingsEntry("Demo cluster simulator", "Pod range", listOf("demo", "mock", "simulator")),
     SettingsEntry("Diagnostics", "Application logs", listOf("diagnostics", "debug")),
+    SettingsEntry("Diagnostics", "Preferences storage", listOf("settings file", "saved", "corrupt", "data folder", "diagnostics")),
     SettingsEntry("About", "Application info", listOf("about", "version", "info")),
 )
 

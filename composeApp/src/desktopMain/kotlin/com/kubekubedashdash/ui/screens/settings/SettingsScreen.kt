@@ -95,7 +95,9 @@ import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.data.datastore.summary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
 import com.kubekubedashdash.data.repository.formatTopologyRefresh
@@ -460,6 +462,7 @@ fun SettingsScreen(
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(isReady) { if (isReady) searchFocus.requestFocus() }
     val mockRunning by viewModel.mockIsRunning.collectAsState()
+    val preferenceStorage by viewModel.preferenceStorage.collectAsState()
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val copyToClipboard = rememberCopyToClipboard()
@@ -1206,6 +1209,16 @@ fun SettingsScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text("Open application logs", color = KdTextPrimary)
                                 }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                SettingsRowTitle("Preferences storage")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    preferenceStorage.summary(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (preferenceStorage.healthy) KdTextSecondary else KdWarning,
+                                )
                             }
 
                             Spacer(Modifier.height(16.dp))
