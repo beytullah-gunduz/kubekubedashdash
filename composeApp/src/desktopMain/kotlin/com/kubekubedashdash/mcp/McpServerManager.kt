@@ -63,15 +63,16 @@ object McpServerManager {
     // Ktor CIO runs the application pipeline — and so every tool and resource
     // handler — on Dispatchers.IO already. A blocking fabric8 call here never
     // stalled an event loop; it held one of IO's 64 permits for as long as
-    // fabric8 kept retrying (10 s request timeout × 11 attempts by default),
+    // fabric8 kept retrying (10 s request timeout × 11 attempts on its default
+    // budget; the app now caps it at 5 retries, see withBoundedRetries),
     // and enough of them starved the app's own informers and polls, which
     // share those permits. Two guards. The calls run on a limitedParallelism
     // view of IO: such a view delegates to the UNLIMITED scheduler, so its
     // MCP_WORKERS permits are granted in addition to IO's cap and MCP load can
     // no longer take the informers' permits at all; beyond MCP_WORKERS, calls
     // queue (suspended, holding no thread) until a permit frees — the cost is
-    // latency on a burst against a dead cluster, whose real cure is fabric8's
-    // retry budget (review follow-up F10). And runInterruptible rather than
+    // latency on a burst against a dead cluster, which the cap on fabric8's
+    // retry budget (F10) now bounds at about a minute. And runInterruptible rather than
     // withContext, so when the call is cancelled — Ktor cancels a connection's
     // calls on an abrupt client disconnect, and stop()'s EmbeddedServer.stop
     // cancels every call once its 1 s grace expires, on an enable/disable

@@ -1238,11 +1238,12 @@ class ReactiveKubeClient(
                         // and was reported as a dead cluster every third tick.
                         // A 404 returns null (BaseClient.raw) and still means
                         // the server answered. MUST be time-bounded: fabric8
-                        // retries a failed request with its own backoff (10
-                        // attempts, ~19 s by default), so a call to a dead
-                        // cluster can block far longer than the probe interval
-                        // — without this timeout the probe never even reports
-                        // the first failure.
+                        // retries a failed request with its own backoff (the
+                        // app caps it at 5 retries, see withBoundedRetries, but
+                        // six 10 s timeouts against an address that drops
+                        // packets still dwarf the probe interval) — without
+                        // this timeout the probe never even reports the first
+                        // failure.
                         val reached = withTimeoutOrNull(4_000) {
                             // runInterruptible: raw() is a blocking JVM call
                             // with no suspension point, so withTimeoutOrNull
