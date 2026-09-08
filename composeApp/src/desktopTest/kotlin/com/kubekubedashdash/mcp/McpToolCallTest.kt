@@ -124,8 +124,8 @@ class McpToolCallTest {
         )
 
         val error = errorOf(result)
-        assertTrue(error.contains("forbidden"), "the API server's sentence must reach the client, got: $error")
-        assertTrue(!error.contains("127.0.0.1"), "fabric8's request URL must not be echoed, got: $error")
+        // The Status sentence itself — not fabric8's own message, which wraps it in the request URL.
+        assertEquals("""pods "p" is forbidden: no access to logs""", error)
     }
 
     @Test
@@ -158,6 +158,7 @@ class McpToolCallTest {
         assertEquals(2, blocks.size, "notice + logs, got: $blocks")
         assertEquals(McpServerManager.tailCapNotice("99999999999"), blocks[0])
         assertTrue(blocks[0].contains(McpServerManager.MAX_TAIL_LINES.toString()), "the notice names the cap, got: ${blocks[0]}")
+        assertTrue(blocks[0].contains("99999999999"), "the notice echoes the requested value, got: ${blocks[0]}")
         assertEquals("alpha\nbravo\ncharlie\n", blocks[1])
         val path = assertNotNull(dispatcher.lastLogPath)
         assertTrue(path.contains("tailLines=${McpServerManager.MAX_TAIL_LINES}"), "an overflowing request is capped, not defaulted, got: $path")
@@ -174,6 +175,7 @@ class McpToolCallTest {
             },
         )
 
+        assertNotEquals(true, result.isError)
         assertEquals(1, result.content.size)
         val path = assertNotNull(dispatcher.lastLogPath)
         assertTrue(path.contains("tailLines=50"), "got: $path")

@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 /**
  * [McpServerManager.toolCall] is the one place a tool's outcome is shaped
@@ -90,6 +91,44 @@ class McpToolCallInterruptionTest {
 
         val thrown = withTimeout(2_000) { outcome.await() }
         assertIs<CancellationException>(thrown, "an interrupted call is a cancellation, not an error result and not the laundered exception")
+    }
+
+    @Test
+    fun `a cancellation thrown on a live job is rethrown as is, never turned into an error result`() = runBlocking<Unit> {
+        val boom = CancellationException("inner timeout")
+
+        val thrown = runCatching { McpServerManager.toolCall("t") { throw boom } }.exceptionOrNull()
+
+        assertSame(boom, thrown, "toolCall must rethrow a cancellation untouched")
+    }
+
+    @Test
+    fun `a cancelled job whose call fails for another reason still surfaces as cancellation, not an error result`() = runBlocking<Unit> {
+        // No interruption in the chain and no restored flag: only the cancelled
+        // job itself (ensureActive) can tell this apart from a plain failure.
+        val outcome = CompletableDeferred<Throwable?>()
+        val job = launch {
+            try {
+                McpServerManager.toolCall("t") {
+                    McpServerManager.blockingCall {
+                        try {
+                            Thread.sleep(10_000)
+                        } catch (_: InterruptedException) {
+                            throw IllegalStateException("post-cancel failure")
+                        }
+                    }
+                    ok()
+                }
+                outcome.complete(null)
+            } catch (t: Throwable) {
+                outcome.complete(t)
+            }
+        }
+        delay(200)
+        job.cancel()
+
+        val thrown = withTimeout(2_000) { outcome.await() }
+        assertIs<CancellationException>(thrown, "a dead job must not receive an error result; got ${thrown?.let { it::class.simpleName } ?: "a normal return"}")
     }
 
     @Test
