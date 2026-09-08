@@ -44,7 +44,8 @@ class McpServerManagerDispatchTest {
         assertEquals(50, McpServerManager.clampTailLines("50"))
         assertEquals(max, McpServerManager.clampTailLines(max.toString()))
         assertEquals(max, McpServerManager.clampTailLines("2147483647"))
-        assertEquals(default, McpServerManager.clampTailLines("99999999999"))
+        // F9: an overflowing request is still "too many" — it gets the cap, not the default.
+        assertEquals(max, McpServerManager.clampTailLines("99999999999"))
     }
 
     @Test
