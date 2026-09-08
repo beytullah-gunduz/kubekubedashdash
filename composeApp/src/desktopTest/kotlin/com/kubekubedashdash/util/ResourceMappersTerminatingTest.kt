@@ -1,10 +1,14 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.CrdInfo
+import com.kubekubedashdash.models.CrdScope
+import io.fabric8.kubernetes.api.model.GenericKubernetesResourceBuilder
 import io.fabric8.kubernetes.api.model.PersistentVolumeBuilder
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder
 import io.fabric8.kubernetes.api.model.Quantity
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /**
  * A claim or volume the API has accepted a delete for keeps its phase
@@ -48,5 +52,17 @@ class ResourceMappersTerminatingTest {
 
         assertEquals("Terminating", ResourceMappers.mapPersistentVolume(terminating).status)
         assertEquals("Available", ResourceMappers.mapPersistentVolume(live).status)
+    }
+
+    @Test
+    fun `a custom resource with a deletion timestamp reads Terminating, one without has no status`() {
+        val crd = CrdInfo(group = "widgets.example", version = "v1", kind = "Widget", plural = "widgets", singular = "widget", shortNames = emptyList(), categories = emptyList(), scope = CrdScope.NAMESPACED, columns = emptyList())
+        val terminating = GenericKubernetesResourceBuilder().withApiVersion("widgets.example/v1").withKind("Widget")
+            .withNewMetadata().withName("w").withNamespace("ns").withUid("u1").withDeletionTimestamp("2026-01-01T00:00:00Z").endMetadata().build()
+        val live = GenericKubernetesResourceBuilder().withApiVersion("widgets.example/v1").withKind("Widget")
+            .withNewMetadata().withName("w").withNamespace("ns").withUid("u2").endMetadata().build()
+
+        assertEquals("Terminating", ResourceMappers.mapCrInstance(terminating, crd).status)
+        assertNull(ResourceMappers.mapCrInstance(live, crd).status)
     }
 }
