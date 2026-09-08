@@ -485,8 +485,8 @@ object PreferenceRepository {
         _pinnedResources.value = decodePinnedResources(committed[PINNED_RESOURCES])
     }
 
-    // Keyed by DemoContext.preferenceKey(context), like every other per-cluster
-    // store (N4): a minted demo label writes and clears the one demo row.
+    // Keyed by DemoContext.preferenceKey(context), like the CRD and nav stores
+    // (N4): a minted demo label writes and clears the one demo row.
     suspend fun setClusterColor(context: String, hex: String) = persistFirst.withLock {
         val key = DemoContext.preferenceKey(context)
         val committed = dataStore.edit { prefs ->

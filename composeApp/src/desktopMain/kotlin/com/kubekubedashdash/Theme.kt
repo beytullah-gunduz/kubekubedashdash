@@ -75,8 +75,9 @@ object ThemeManager {
      * choice lands once the read completes (F11). After [setMode] the flow
      * re-emits the same value and this is a no-op — no loop. A choice made before
      * the store's first seed would be clobbered by that seed and synced back
-     * here (PreferenceRepository's documented launch-time window); the splash
-     * keeps Settings unreachable until the seed, so that cannot happen today.
+     * here (PreferenceRepository's documented launch-time window). The splash
+     * keeps Settings, the app's only [setMode] caller, unreachable until the
+     * seed; the screenshot generator, the other caller, awaits the seed itself.
      */
     internal fun syncFromPreferences(persisted: ThemeMode) {
         if (_mode == persisted) return

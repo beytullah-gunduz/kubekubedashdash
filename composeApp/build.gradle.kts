@@ -204,7 +204,9 @@ tasks.withType<Test>().configureEach {
 // with its own directory, so a run starts from default preferences, never opens
 // the developer's preferences store (its theme flips persist; the session file is
 // already covered by SessionPersistence.disable()), and lists no real kubeconfig
-// context (F11).
+// context (F11). To verify without launching it: `--dry-run --no-configuration-cache`
+// under an init script that prints the task's systemProperties and environment (a
+// reused configuration-cache entry skips init-script callbacks).
 val screenshotDataDir = layout.buildDirectory.dir("screenshot-data").get().asFile
 
 tasks.named<JavaExec>("generateScreenshots") {
