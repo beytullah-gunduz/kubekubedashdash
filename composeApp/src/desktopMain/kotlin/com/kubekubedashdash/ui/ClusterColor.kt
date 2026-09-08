@@ -1,12 +1,15 @@
 package com.kubekubedashdash.ui
 
 import androidx.compose.ui.graphics.Color
+import com.kubekubedashdash.util.DemoContext
 import kotlin.math.absoluteValue
 
 /**
  * Deterministic per-cluster color + initial letter, derived from the kubeconfig
- * context name. Same context name → same look across tabs, app restarts, and
- * windows, so each cluster has a stable visual identity (Decision 4 in
+ * context name. Demo labels fold to the demo row's key (see
+ * [DemoContext.preferenceKey]); any other string is its own key. Same context
+ * name → same look across tabs, app restarts, and windows, so each cluster has
+ * a stable visual identity (Decision 4 in
  * .docs/multi-cluster-plan.md).
  *
  * The hue is taken from the context-name hash; saturation/lightness are fixed
@@ -26,13 +29,16 @@ data class ClusterColor(
         ?: Color.hsl(hue, saturation, (lightness + deltaLightness).coerceIn(0f, 1f))
 
     companion object {
+        // Every minted demo label ("demo-cluster (mock) #N") folds to the one
+        // demo row the picker lists, so the demo cluster keeps one hue and one
+        // override across re-mints (F11). A real context is its own key.
         fun fromContext(context: String): ClusterColor {
-            val hash = context.hashCode().absoluteValue
+            val hash = DemoContext.preferenceKey(context).hashCode().absoluteValue
             return ClusterColor(hue = (hash % 360).toFloat())
         }
 
         fun effectiveColor(context: String, overrides: Map<String, String>): ClusterColor {
-            val hex = overrides[context] ?: return fromContext(context)
+            val hex = overrides[DemoContext.preferenceKey(context)] ?: return fromContext(context)
             return fromContext(context).copy(override = parseHex(hex))
         }
 

@@ -66,6 +66,28 @@ object ThemeManager {
             _isDarkTheme = systemIsDark
         }
     }
+
+    /**
+     * Applies the persisted mode without writing it back. `_mode` is read from
+     * `PreferenceRepository.themeMode.value` once, at object init, which on a
+     * cold launch is the compile-time default because the store is still
+     * loading; KubeDashTheme collects the flow and calls this, so the saved
+     * choice lands once the read completes (F11). After [setMode] the flow
+     * re-emits the same value and this is a no-op — no loop. A choice made before
+     * the store's first seed would be clobbered by that seed and synced back
+     * here (PreferenceRepository's documented launch-time window). The splash
+     * keeps Settings, the app's only [setMode] caller, unreachable until the
+     * seed; the screenshot generator, the other caller, awaits the seed itself.
+     */
+    internal fun syncFromPreferences(persisted: ThemeMode) {
+        if (_mode == persisted) return
+        _mode = persisted
+        when (persisted) {
+            ThemeMode.LIGHT -> _isDarkTheme = false
+            ThemeMode.DARK -> _isDarkTheme = true
+            ThemeMode.SYSTEM -> Unit // KubeDashTheme's effect re-runs on the mode change and applies the system value
+        }
+    }
 }
 
 private val KdBackgroundDark = Color(0xFF1E2124)
@@ -291,6 +313,12 @@ val LocalSystemDensity = staticCompositionLocalOf<Density> { error("no system de
 
 @Composable
 fun KubeDashTheme(content: @Composable () -> Unit) {
+    // The saved theme arrives after the first composition (the store loads
+    // asynchronously); follow the flow so it applies at launch (F11).
+    val persistedMode by PreferenceRepository.themeMode.collectAsState()
+    LaunchedEffect(persistedMode) {
+        ThemeManager.syncFromPreferences(persistedMode)
+    }
     val systemIsDark = isSystemInDarkTheme()
     LaunchedEffect(systemIsDark, ThemeManager.mode) {
         ThemeManager.applySystemDarkTheme(systemIsDark)

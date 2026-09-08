@@ -18,6 +18,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
@@ -130,6 +131,10 @@ fun main() {
 
 private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
     val watchdogs = mutableListOf<Job>()
+    // The store seeds asynchronously and ThemeManager's first read sees the
+    // default; a setMode fired before the seed is clobbered by it and, now that
+    // the theme follows the flow, would revert the dark baseline forced below.
+    withTimeoutOrNull(5_000) { PreferenceRepository.preferencesLoaded.first { it } }
     val originalTheme = ThemeManager.mode
     try {
         // Force a deterministic dark baseline so every shot looks the same regardless
@@ -502,9 +507,8 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("captured + composited multi-window")
     } finally {
         watchdogs.forEach { it.cancel() }
-        // Restore the user's prior theme — setMode persists to PreferenceRepository
-        // so any of our intermediate switches above would otherwise leak into the
-        // app's saved settings.
+        // Restore the prior theme. setMode persists, but the task runs with its own
+        // data directory (build.gradle.kts), so nothing reaches the developer's store.
         ThemeManager.setMode(originalTheme)
     }
 }
