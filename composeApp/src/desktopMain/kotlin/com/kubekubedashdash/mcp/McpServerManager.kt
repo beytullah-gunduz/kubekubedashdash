@@ -1,6 +1,8 @@
 package com.kubekubedashdash.mcp
 
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.util.isInterruption
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -14,7 +16,10 @@ import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.TextResourceContents
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
@@ -57,8 +62,16 @@ object McpServerManager {
 
     private fun isYamlAllowed(kind: String): Boolean = kind.lowercase() in MCP_YAML_ALLOWLIST
 
-    /** Missing, non-numeric, overflowing, zero or negative → the default; larger than [MAX_TAIL_LINES] → the cap. */
-    internal fun clampTailLines(raw: String?): Int = raw?.toIntOrNull()?.takeIf { it > 0 }?.coerceAtMost(MAX_TAIL_LINES) ?: DEFAULT_TAIL_LINES
+    /** An all-digit request as a Long, `Long.MAX_VALUE` when it overflows one; anything else is null. */
+    private fun requestedTail(raw: String?): Long? = raw?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.let { it.toLongOrNull() ?: Long.MAX_VALUE }
+
+    /** Missing, non-numeric, zero or negative → the default; larger than [MAX_TAIL_LINES] (however large) → the cap. */
+    internal fun clampTailLines(raw: String?): Int = requestedTail(raw)?.takeIf { it > 0 }?.coerceAtMost(MAX_TAIL_LINES.toLong())?.toInt() ?: DEFAULT_TAIL_LINES
+
+    /** True when [raw] asked for more than [MAX_TAIL_LINES]: the result then carries [tailCapNotice] first. */
+    internal fun tailLinesCapped(raw: String?): Boolean = (requestedTail(raw) ?: 0L) > MAX_TAIL_LINES
+
+    internal fun tailCapNotice(raw: String): String = "Output limited to the last $MAX_TAIL_LINES lines (${raw.take(32)} requested)."
 
     // Ktor CIO runs the application pipeline — and so every tool and resource
     // handler — on Dispatchers.IO already. A blocking fabric8 call here never
@@ -83,6 +96,33 @@ object McpServerManager {
     private val mcpWorkers = Dispatchers.IO.limitedParallelism(MCP_WORKERS, "mcp-workers")
 
     internal suspend fun <T> blockingCall(block: () -> T): T = runInterruptible(mcpWorkers, block)
+
+    /** `{"error": message}` with `isError`, the shape [toolResolutionError] uses. */
+    private fun toolError(message: String) = CallToolResult(content = listOf(TextContent(text = buildJsonObject { put("error", message) }.toString())), isError = true)
+
+    /** The API server's own sentence when fabric8 carried a `Status`; fabric8's own message, which embeds the request URL, only when it did not. */
+    internal fun errorText(e: Throwable): String = (e as? KubernetesClientException)?.status?.message?.takeIf { it.isNotBlank() } ?: e.message?.takeIf { it.isNotBlank() } ?: (e::class.simpleName ?: "Unknown error")
+
+    /**
+     * Every tool body runs in here (F9). A failure becomes an `isError` result
+     * carrying the API's message, logged once at WARN without a trace — a 403
+     * is not an app bug. An interrupted fabric8 call is a cancellation, not an
+     * error: `blockingCall` interrupts the worker when the request is cancelled
+     * (stop()'s grace period), fabric8 launders the InterruptedException into a
+     * KubernetesClientException, and runInterruptible passes that through
+     * unchanged even though the job is cancelled — so the cancelled job is
+     * checked first, then the cause chain.
+     */
+    internal suspend fun toolCall(tool: String, block: suspend () -> CallToolResult): CallToolResult = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        currentCoroutineContext().ensureActive()
+        if (isInterruption(e)) throw CancellationException("MCP tool $tool interrupted", e)
+        log.warn("MCP tool {} failed ({}): {}", tool, e::class.simpleName, e.message)
+        toolError(errorText(e))
+    }
 
     // @Volatile + @Synchronized start/stop: these are mutated from start/stop
     // (invoked on Dispatchers.IO from SettingsScreenViewModel and from the JVM
@@ -201,7 +241,7 @@ object McpServerManager {
 
     private fun toolResolutionError(r: McpClusterResolver.ClusterResolution<*>) = CallToolResult(content = listOf(TextContent(text = resolutionErrorJson(r))), isError = true)
 
-    private fun createMcpServer(): Server {
+    internal fun createMcpServer(): Server {
         val mcpServer = Server(
             serverInfo = Implementation(
                 name = "kubedash",
@@ -275,22 +315,22 @@ object McpServerManager {
                 required = listOf("kind", "name"),
             ),
         ) { request ->
-            val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
-            val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
-                is McpClusterResolver.ClusterResolution.Resolved -> r.client
-                else -> return@addTool toolResolutionError(r)
+            toolCall("get_resource_yaml") {
+                val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
+                val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
+                    is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                    else -> return@toolCall toolResolutionError(r)
+                }
+                val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
+                if (!isYamlAllowed(kind)) {
+                    return@toolCall toolError("Kind '$kind' is not exposed via MCP. Allowed kinds: ${MCP_YAML_ALLOWLIST.sorted().joinToString(", ")}")
+                }
+                val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
+                val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content
+                val yaml = blockingCall { kubeClient.fetchResourceYaml(kind, name, namespace) }
+                    ?: return@toolCall toolError("Resource not found: $kind '$name'" + (namespace?.let { " in namespace '$it'" } ?: ""))
+                CallToolResult(content = listOf(TextContent(text = yaml)))
             }
-            val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
-            if (!isYamlAllowed(kind)) {
-                return@addTool CallToolResult(
-                    content = listOf(TextContent(text = """{"error":"Kind '$kind' is not exposed via MCP. Allowed kinds: ${MCP_YAML_ALLOWLIST.sorted().joinToString(", ")}"}""")),
-                    isError = true,
-                )
-            }
-            val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
-            val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content
-            val yaml = blockingCall { kubeClient.getResourceYaml(kind, name, namespace) }
-            CallToolResult(content = listOf(TextContent(text = yaml)))
         }
 
         mcpServer.addTool(
@@ -323,7 +363,7 @@ object McpServerManager {
                         "tailLines",
                         buildJsonObject {
                             put("type", "integer")
-                            put("description", "Number of lines to fetch from the end (default $DEFAULT_TAIL_LINES, at most $MAX_TAIL_LINES)")
+                            put("description", "Number of lines to fetch from the end (default $DEFAULT_TAIL_LINES, at most $MAX_TAIL_LINES; a notice precedes the logs when the request was capped)")
                         },
                     )
                     put(
@@ -337,17 +377,25 @@ object McpServerManager {
                 required = listOf("name", "namespace"),
             ),
         ) { request ->
-            val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
-            val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
-                is McpClusterResolver.ClusterResolution.Resolved -> r.client
-                else -> return@addTool toolResolutionError(r)
+            toolCall("get_pod_logs") {
+                val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
+                val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
+                    is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                    else -> return@toolCall toolResolutionError(r)
+                }
+                val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
+                val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content ?: ""
+                val container = request.arguments?.get("container")?.jsonPrimitive?.content
+                val rawTail = request.arguments?.get("tailLines")?.jsonPrimitive?.content
+                val tailLines = clampTailLines(rawTail)
+                val logs = blockingCall { kubeClient.fetchPodLogs(name, namespace, container, tailLines) }
+                // The notice is its own block, first: the log text is raw pod output.
+                val content = buildList {
+                    if (tailLinesCapped(rawTail)) add(TextContent(text = tailCapNotice(rawTail ?: "")))
+                    add(TextContent(text = logs))
+                }
+                CallToolResult(content = content)
             }
-            val name = request.arguments?.get("name")?.jsonPrimitive?.content ?: ""
-            val namespace = request.arguments?.get("namespace")?.jsonPrimitive?.content ?: ""
-            val container = request.arguments?.get("container")?.jsonPrimitive?.content
-            val tailLines = clampTailLines(request.arguments?.get("tailLines")?.jsonPrimitive?.content)
-            val logs = blockingCall { kubeClient.getPodLogs(name, namespace, container, tailLines) }
-            CallToolResult(content = listOf(TextContent(text = logs)))
         }
 
         mcpServer.addTool(
@@ -385,35 +433,37 @@ object McpServerManager {
                 required = listOf("kind"),
             ),
         ) { request ->
-            val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
-            val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
-                is McpClusterResolver.ClusterResolution.Resolved -> r.client
-                else -> return@addTool toolResolutionError(r)
-            }
-            val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
-            val ns = request.arguments?.get("namespace")?.jsonPrimitive?.content
-            val result = blockingCall {
-                when (kind.lowercase()) {
-                    "pod" -> json.encodeToString(kubeClient.getPods(ns))
-                    "deployment" -> json.encodeToString(kubeClient.getDeployments(ns))
-                    "service" -> json.encodeToString(kubeClient.getServices(ns))
-                    "event" -> json.encodeToString(kubeClient.getEvents(ns))
-                    "namespace" -> json.encodeToString(kubeClient.getNamespacesGeneric())
-                    "statefulset" -> json.encodeToString(kubeClient.getStatefulSets(ns))
-                    "daemonset" -> json.encodeToString(kubeClient.getDaemonSets(ns))
-                    "replicaset" -> json.encodeToString(kubeClient.getReplicaSets(ns))
-                    "job" -> json.encodeToString(kubeClient.getJobs(ns))
-                    "cronjob" -> json.encodeToString(kubeClient.getCronJobs(ns))
-                    "ingress" -> json.encodeToString(kubeClient.getIngresses(ns))
-                    "endpoint" -> json.encodeToString(kubeClient.getEndpoints(ns))
-                    "networkpolicy" -> json.encodeToString(kubeClient.getNetworkPolicies(ns))
-                    "persistentvolume" -> json.encodeToString(kubeClient.getPersistentVolumes())
-                    "persistentvolumeclaim" -> json.encodeToString(kubeClient.getPersistentVolumeClaims(ns))
-                    "storageclass" -> json.encodeToString(kubeClient.getStorageClasses())
-                    else -> """{ "error": "Unknown resource kind: $kind" }"""
+            toolCall("list_resources") {
+                val ctx = request.arguments?.get("context")?.jsonPrimitive?.content
+                val kubeClient = when (val r = McpClusterResolver.resolve(ctx)) {
+                    is McpClusterResolver.ClusterResolution.Resolved -> r.client
+                    else -> return@toolCall toolResolutionError(r)
                 }
+                val kind = request.arguments?.get("kind")?.jsonPrimitive?.content ?: ""
+                val ns = request.arguments?.get("namespace")?.jsonPrimitive?.content
+                val result = blockingCall {
+                    when (kind.lowercase()) {
+                        "pod" -> json.encodeToString(kubeClient.getPods(ns))
+                        "deployment" -> json.encodeToString(kubeClient.getDeployments(ns))
+                        "service" -> json.encodeToString(kubeClient.getServices(ns))
+                        "event" -> json.encodeToString(kubeClient.getEvents(ns))
+                        "namespace" -> json.encodeToString(kubeClient.getNamespacesGeneric())
+                        "statefulset" -> json.encodeToString(kubeClient.getStatefulSets(ns))
+                        "daemonset" -> json.encodeToString(kubeClient.getDaemonSets(ns))
+                        "replicaset" -> json.encodeToString(kubeClient.getReplicaSets(ns))
+                        "job" -> json.encodeToString(kubeClient.getJobs(ns))
+                        "cronjob" -> json.encodeToString(kubeClient.getCronJobs(ns))
+                        "ingress" -> json.encodeToString(kubeClient.getIngresses(ns))
+                        "endpoint" -> json.encodeToString(kubeClient.getEndpoints(ns))
+                        "networkpolicy" -> json.encodeToString(kubeClient.getNetworkPolicies(ns))
+                        "persistentvolume" -> json.encodeToString(kubeClient.getPersistentVolumes())
+                        "persistentvolumeclaim" -> json.encodeToString(kubeClient.getPersistentVolumeClaims(ns))
+                        "storageclass" -> json.encodeToString(kubeClient.getStorageClasses())
+                        else -> null
+                    }
+                } ?: return@toolCall toolError("Unknown resource kind: $kind")
+                CallToolResult(content = listOf(TextContent(text = result)))
             }
-            CallToolResult(content = listOf(TextContent(text = result)))
         }
 
         mcpServer.addTool(
@@ -422,13 +472,15 @@ object McpServerManager {
                 "When more than one is open, pass one of these as the 'context' argument to the other tools/resources.",
             inputSchema = ToolSchema(properties = buildJsonObject {}, required = emptyList()),
         ) { _ ->
-            val ctxs = McpClusterResolver.listContexts()
-            val payload = buildJsonObject {
-                putJsonArray("clusters") { ctxs.forEach { add(it) } }
-                // true ⇒ a 'context' arg is required by the other tools.
-                put("ambiguous", ctxs.size > 1)
+            toolCall("list_clusters") {
+                val ctxs = McpClusterResolver.listContexts()
+                val payload = buildJsonObject {
+                    putJsonArray("clusters") { ctxs.forEach { add(it) } }
+                    // true ⇒ a 'context' arg is required by the other tools.
+                    put("ambiguous", ctxs.size > 1)
+                }
+                CallToolResult(content = listOf(TextContent(text = payload.toString())))
             }
-            CallToolResult(content = listOf(TextContent(text = payload.toString())))
         }
 
         return mcpServer
