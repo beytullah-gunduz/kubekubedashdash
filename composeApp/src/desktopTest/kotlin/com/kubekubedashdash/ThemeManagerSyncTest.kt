@@ -17,7 +17,9 @@ import kotlin.test.assertTrue
  * cold launch is the default because the store is still loading; the saved
  * theme therefore never applied at launch (review follow-up F11). It now
  * learns the persisted mode through [ThemeManager.syncFromPreferences], which
- * `KubeDashTheme` feeds from the repository's flow. The sync must apply the
+ * `KubeDashTheme` is expected to feed from the repository's flow (that wiring
+ * is not covered here: the build has no Compose UI-test dependency). The sync
+ * must apply the
  * mode and the dark flag without writing anything back — a write-back would
  * loop through the very flow that feeds it. Runs only against the Gradle
  * test-data store; the manager's prior mode is restored after each case.
@@ -25,6 +27,7 @@ import kotlin.test.assertTrue
 class ThemeManagerSyncTest {
 
     private lateinit var original: ThemeMode
+    private lateinit var originalPersisted: ThemeMode
 
     @BeforeTest
     fun setUp() {
@@ -33,11 +36,13 @@ class ThemeManagerSyncTest {
             "refusing to run against a data directory that is not the Gradle test-data directory",
         )
         original = ThemeManager.mode
+        originalPersisted = PreferenceRepository.themeMode.value
     }
 
     @AfterTest
     fun restore() {
         ThemeManager.syncFromPreferences(original)
+        PreferenceRepository.setThemeMode(originalPersisted)
     }
 
     @Test
@@ -66,6 +71,7 @@ class ThemeManagerSyncTest {
         ThemeManager.syncFromPreferences(ThemeMode.DARK)
         ThemeManager.syncFromPreferences(ThemeMode.SYSTEM)
         assertEquals(ThemeMode.SYSTEM, ThemeManager.mode)
+        assertTrue(ThemeManager.isDarkTheme, "syncing SYSTEM must leave the flag the DARK sync set untouched")
 
         ThemeManager.applySystemDarkTheme(false)
         assertFalse(ThemeManager.isDarkTheme)
