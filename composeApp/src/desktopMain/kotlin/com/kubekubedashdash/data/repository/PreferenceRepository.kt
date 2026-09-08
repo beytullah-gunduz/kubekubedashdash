@@ -14,6 +14,7 @@ import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.clampUiScale
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
+import com.kubekubedashdash.util.DemoContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -484,19 +485,23 @@ object PreferenceRepository {
         _pinnedResources.value = decodePinnedResources(committed[PINNED_RESOURCES])
     }
 
+    // Keyed by DemoContext.preferenceKey(context), like every other per-cluster
+    // store (N4): a minted demo label writes and clears the one demo row.
     suspend fun setClusterColor(context: String, hex: String) = persistFirst.withLock {
+        val key = DemoContext.preferenceKey(context)
         val committed = dataStore.edit { prefs ->
             val current = StringMapCodec.decode(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
-            current[context] = hex
+            current[key] = hex
             prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
         }
         _clusterColorOverrides.value = StringMapCodec.decode(committed[CLUSTER_COLOR_OVERRIDES])
     }
 
     suspend fun clearClusterColor(context: String) = persistFirst.withLock {
+        val key = DemoContext.preferenceKey(context)
         val committed = dataStore.edit { prefs ->
             val current = StringMapCodec.decode(prefs[CLUSTER_COLOR_OVERRIDES]).toMutableMap()
-            current.remove(context)
+            current.remove(key)
             prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
         }
         _clusterColorOverrides.value = StringMapCodec.decode(committed[CLUSTER_COLOR_OVERRIDES])
