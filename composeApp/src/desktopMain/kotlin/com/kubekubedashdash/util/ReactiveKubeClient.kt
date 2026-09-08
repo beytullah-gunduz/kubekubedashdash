@@ -591,24 +591,7 @@ class ReactiveKubeClient(
 
     val persistentVolumes: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.persistentVolumes().runnableInformer(0L).addEventHandler(h) },
-        mapper = { pv ->
-            GenericResourceInfo(
-                uid = pv.metadata.uid ?: "",
-                name = pv.metadata.name,
-                namespace = null,
-                status = pv.status?.phase,
-                age = formatAge(pv.metadata.creationTimestamp),
-                labels = pv.metadata.labels ?: emptyMap(),
-                annotations = pv.metadata.annotations ?: emptyMap(),
-                extraColumns = mapOf(
-                    "Capacity" to (pv.spec?.capacity?.get("storage")?.toString() ?: ""),
-                    "Access Modes" to (pv.spec?.accessModes?.joinToString(", ") ?: ""),
-                    "Reclaim" to (pv.spec?.persistentVolumeReclaimPolicy ?: ""),
-                    "Claim" to (pv.spec?.claimRef?.let { "${it.namespace}/${it.name}" } ?: ""),
-                ),
-                owners = ResourceMappers.mapOwnerRefs(pv.metadata.ownerReferences),
-            )
-        },
+        mapper = ResourceMappers::mapPersistentVolume,
     )
 
     // ── PersistentVolumeClaims ──────────────────────────────────────────────────
@@ -621,24 +604,7 @@ class ReactiveKubeClient(
                 k.persistentVolumeClaims().inAnyNamespace().runnableInformer(0L).addEventHandler(h)
             }
         },
-        mapper = { pvc ->
-            GenericResourceInfo(
-                uid = pvc.metadata.uid ?: "",
-                name = pvc.metadata.name,
-                namespace = pvc.metadata.namespace,
-                status = pvc.status?.phase,
-                age = formatAge(pvc.metadata.creationTimestamp),
-                labels = pvc.metadata.labels ?: emptyMap(),
-                annotations = pvc.metadata.annotations ?: emptyMap(),
-                extraColumns = mapOf(
-                    "Capacity" to (pvc.status?.capacity?.get("storage")?.toString() ?: ""),
-                    "Access Modes" to (pvc.status?.accessModes?.joinToString(", ") ?: ""),
-                    "Storage Class" to (pvc.spec?.storageClassName ?: ""),
-                    "Volume" to (pvc.spec?.volumeName ?: ""),
-                ),
-                owners = ResourceMappers.mapOwnerRefs(pvc.metadata.ownerReferences),
-            )
-        },
+        mapper = ResourceMappers::mapPersistentVolumeClaim,
     )
 
     // ── StorageClasses ──────────────────────────────────────────────────────────
