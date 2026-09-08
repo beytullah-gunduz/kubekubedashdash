@@ -38,12 +38,22 @@ internal fun defaultPluralForKind(kind: String): String {
 }
 
 /**
+ * A free claim or volume keeps its protection finalizer until the controller
+ * strips it, a watch round trip after the DELETE: a look-again that lands
+ * first would call it "still used by a pod" (F6). So a delete that finds a
+ * blocking finalizer looks again, this many times, this far apart, before it
+ * reports Terminating.
+ */
+internal const val DELETE_SETTLE_LOOKS = 3
+internal const val DELETE_SETTLE_DELAY_MS = 400L
+
+/**
  * The cluster mutating actions (delete / scale / restart / cordon / drain / evict /
  * force-delete / CronJob trigger+suspend / CSR approve+deny), extracted from
  * ReactiveKubeClient so the action layer is a cohesive, independently-testable unit.
  * Behaviour is unchanged.
  */
-class ClusterActions(private val connectionManager: KubeConnectionManager) {
+class ClusterActions(private val connectionManager: KubeConnectionManager, private val settleDelayMs: Long = DELETE_SETTLE_DELAY_MS) {
     private val log = LoggerFactory.getLogger(ClusterActions::class.java)
     private val k8s: KubernetesClient get() = connectionManager.client
 
@@ -75,7 +85,9 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
      * claim in use or a bound volume and the object stays in Terminating behind
      * its protection finalizer. The garbage collector's own finalizers are not
      * reported (see [blockingFinalizers]), or every Deployment delete would warn.
-     * A failed second look reports [DeleteOutcome.Gone]: the delete itself succeeded.
+     * A blocking finalizer found on the first look is given [DELETE_SETTLE_LOOKS]
+     * looks to clear — the protection controller strips a free claim's a moment
+     * later. A failed look reports [DeleteOutcome.Gone]: the delete itself succeeded.
      */
     fun deleteResourceReporting(
         kind: String,
@@ -88,15 +100,13 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
     ): Result<DeleteOutcome> = try {
         log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
         val handle = performDelete(kind, name, namespace, group, version, plural, propagationPolicy)
-        val left = try {
-            handle.get()
-        } catch (e: Exception) {
-            // The DELETE was accepted; a failed second look (no `get` verb, a
-            // transient fault) must not turn that into "Delete failed" (F6).
-            log.debug("Post-delete look-again failed kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
-            null
+        var waitingOn = lookAgain(handle, kind, name, namespace)
+        var looks = 1
+        while (waitingOn.isNotEmpty() && looks < DELETE_SETTLE_LOOKS) {
+            Thread.sleep(settleDelayMs)
+            waitingOn = lookAgain(handle, kind, name, namespace)
+            looks++
         }
-        val waitingOn = if (left?.metadata?.deletionTimestamp != null) blockingFinalizers(left.metadata?.finalizers) else emptyList()
         val outcome = if (waitingOn.isEmpty()) DeleteOutcome.Gone else DeleteOutcome.Terminating(waitingOn)
         // Finalizer names are domain-qualified by rule, so the log gets a count, not the names.
         log.info("Deleted resource kind={} name={} namespace={} outcome={}", kind, name, namespace, if (outcome is DeleteOutcome.Terminating) "Terminating(${outcome.finalizers.size})" else "Gone")
@@ -104,6 +114,22 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
     } catch (e: Exception) {
         log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         Result.failure(e)
+    }
+
+    /**
+     * The blocking finalizers a deleted object still waits on: empty when it is
+     * gone, when only the collector's own remain, or when the look itself failed —
+     * the DELETE was accepted, and a failed second look (no `get` verb, a
+     * transient fault) must not turn that into "Delete failed" (F6).
+     */
+    private fun lookAgain(handle: Resource<out HasMetadata>, kind: String, name: String, namespace: String?): List<String> {
+        val left = try {
+            handle.get()
+        } catch (e: Exception) {
+            log.debug("Post-delete look-again failed kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+            return emptyList()
+        }
+        return if (left?.metadata?.deletionTimestamp != null) blockingFinalizers(left.metadata?.finalizers) else emptyList()
     }
 
     /** Issues the DELETE and hands back the handle, so a caller can look again. */
