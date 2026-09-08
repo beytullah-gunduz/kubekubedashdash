@@ -1,5 +1,6 @@
 package com.kubekubedashdash.services.logcapture
 
+import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,11 +114,11 @@ object NamespaceLogCaptureEngine {
                     outputDirRef = dir
                     val created = dir.mkdirs()
                     if (!created && !dir.exists()) {
-                        log.warn("Failed to create capture output directory {}", dir.absolutePath)
+                        log.warn("Failed to create capture output directory {}", displayPath(dir.absolutePath))
                         state.update {
                             it.copy(
                                 outputDir = dir.absolutePath,
-                                phase = CapturePhase.Failed("Could not create output directory: ${dir.absolutePath}", summary = null),
+                                phase = CapturePhase.Failed("Could not create output directory: ${displayPath(dir.absolutePath)}", summary = null),
                             )
                         }
                         return@launch
@@ -129,7 +130,7 @@ object NamespaceLogCaptureEngine {
                         namespace,
                         pods.size,
                         totalContainers,
-                        dir.absolutePath,
+                        displayPath(dir.absolutePath),
                     )
                     state.update {
                         it.copy(

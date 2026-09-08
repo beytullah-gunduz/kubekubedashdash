@@ -208,6 +208,8 @@ class KubeconfigReaderTest {
         val result = PrerequisiteChecker.runAll()
         val kubeconfigCheck = result.checks.first { it.name == PrerequisiteChecker.NAME_KUBECONFIG }
         assertEquals(CheckStatus.PASSED, kubeconfigCheck.status, "detail: ${kubeconfigCheck.detail}")
+        // The raw path: this fixture lives in the system temp directory, outside user.home,
+        // so the home-relative rendering (F8, displayPath) leaves it unchanged.
         assertEquals(good.path, kubeconfigCheck.detail)
         val contexts = result.checks.first { it.name == PrerequisiteChecker.NAME_CONTEXTS }
         assertEquals(CheckStatus.PASSED, contexts.status, "detail: ${contexts.detail}")
