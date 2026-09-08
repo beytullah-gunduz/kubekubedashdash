@@ -31,6 +31,7 @@ import com.kubekubedashdash.ui.App
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -84,7 +85,7 @@ fun main() {
         log.error("uncaught in {}", thread.name, t)
     }
     val outDir = File("docs/screenshots").also { it.mkdirs() }
-    log.info("Writing screenshots to {}", outDir.absolutePath)
+    log.info("Writing screenshots to {}", displayPath(outDir.absolutePath))
 
     application {
         val workspaces by WorkspaceManager.workspaces.collectAsState()

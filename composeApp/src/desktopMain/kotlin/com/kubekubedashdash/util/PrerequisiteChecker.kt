@@ -110,21 +110,23 @@ object PrerequisiteChecker {
         // connect path: one readable file is enough.
         val paths = KubeconfigLocator.allPaths()
         val readable = paths.filter { File(it).let { f -> f.isFile && f.canRead() } }
+        // Shown and logged home-relative (F8): the modal and the log pane are
+        // what users paste into bug reports.
         return if (readable.isNotEmpty()) {
-            log.debug("Kubeconfig found at {}", readable)
+            log.debug("Kubeconfig found at {}", readable.map { displayPath(it) })
             PrerequisiteCheck(
                 name = NAME_KUBECONFIG,
                 description = "Kubernetes configuration file",
                 status = CheckStatus.PASSED,
-                detail = readable.joinToString(File.pathSeparator),
+                detail = readable.joinToString(File.pathSeparator) { displayPath(it) },
             )
         } else {
-            log.warn("Kubeconfig not found at {}", paths)
+            log.warn("Kubeconfig not found at {}", paths.map { displayPath(it) })
             PrerequisiteCheck(
                 name = NAME_KUBECONFIG,
                 description = "Kubernetes configuration file",
                 status = CheckStatus.FAILED,
-                detail = "Not found at ${paths.joinToString(File.pathSeparator)}",
+                detail = "Not found at ${paths.joinToString(File.pathSeparator) { displayPath(it) }}",
             )
         }
     }
@@ -165,7 +167,7 @@ object PrerequisiteChecker {
                 name = displayName,
                 description = description,
                 status = CheckStatus.PASSED,
-                detail = resolveCommandPath(command),
+                detail = resolveCommandPath(command)?.let { displayPath(it) },
                 required = required,
             )
         }
@@ -175,7 +177,7 @@ object PrerequisiteChecker {
                 name = fallbackName ?: fallbackCommand,
                 description = description,
                 status = CheckStatus.PASSED,
-                detail = resolveCommandPath(fallbackCommand),
+                detail = resolveCommandPath(fallbackCommand)?.let { displayPath(it) },
                 required = required,
             )
         }

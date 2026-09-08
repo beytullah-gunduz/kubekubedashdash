@@ -151,7 +151,7 @@ object EksClusterDiscoverer {
                 // leave a full copy of the kubeconfig — every cluster's endpoint and exec-auth
                 // config — world-readable even though the original is 0600. Tighten it to match.
                 restrictToOwner(backup)
-                log.info("Backed up kubeconfig to {}", backup.absolutePath)
+                log.info("Backed up kubeconfig to {}", displayPath(backup.absolutePath))
             }
         }
     } catch (e: Exception) {

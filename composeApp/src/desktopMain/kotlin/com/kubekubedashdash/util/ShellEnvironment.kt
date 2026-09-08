@@ -100,7 +100,7 @@ object ShellEnvironment {
         val found = scanForExecutable(command)
         commandCache[command] = Optional.ofNullable(found)
         if (found != null) {
-            log.debug("Resolved '{}' -> {}", command, found)
+            log.debug("Resolved '{}' -> {}", command, displayPath(found))
         } else {
             log.debug("Command '{}' not found on augmented PATH", command)
         }
@@ -159,7 +159,7 @@ object ShellEnvironment {
 
         val joined = seen.joinToString(sep)
         log.info("Resolved augmented PATH: {} entries", seen.size)
-        log.debug("Augmented PATH: {}", joined)
+        log.debug("Augmented PATH: {}", seen.joinToString(sep) { displayPath(it) })
         return joined
     }
 

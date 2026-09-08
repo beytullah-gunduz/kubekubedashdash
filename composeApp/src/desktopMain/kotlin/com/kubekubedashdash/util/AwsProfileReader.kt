@@ -60,7 +60,7 @@ object AwsProfileReader {
 
     private fun parseIni(file: File): Map<String, Map<String, String>> {
         if (!file.exists() || !file.canRead()) {
-            log.debug("AWS config file not found or unreadable: {}", file.path)
+            log.debug("AWS config file not found or unreadable: {}", displayPath(file.path))
             return emptyMap()
         }
         val sections = mutableMapOf<String, MutableMap<String, String>>()
@@ -81,7 +81,7 @@ object AwsProfileReader {
                 }
             }
         } catch (e: Exception) {
-            log.warn("Failed to parse AWS config file {}: {}", file.path, e.message)
+            log.warn("Failed to parse AWS config file {}: {}", displayPath(file.path), e.message)
         }
         return sections
     }

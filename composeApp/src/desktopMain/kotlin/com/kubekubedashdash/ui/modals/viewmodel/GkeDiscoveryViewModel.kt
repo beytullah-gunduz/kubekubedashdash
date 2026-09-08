@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
+import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -348,14 +349,14 @@ class GkeDiscoveryViewModel(
                     // step and error state. The return stays outside the guard — an
                     // abandoned run must still stop.
                     if (gen == runGeneration.get()) {
-                        _errorMessage.value = "Could not back up $kubeconfigPath. " +
+                        _errorMessage.value = "Could not back up ${displayPath(kubeconfigPath)}. " +
                             "gcloud rewrites the whole kubeconfig, so the import was cancelled."
                         _busy.value = false
                         _step.value = GkeDiscoveryStep.PICK_CLUSTERS
                     }
                     return@launch
                 }
-                _backupPath.value = backup.absolutePath
+                _backupPath.value = displayPath(backup.absolutePath)
             }
 
             try {
