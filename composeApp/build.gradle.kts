@@ -199,3 +199,18 @@ tasks.withType<Test>().configureEach {
     systemProperty("kkdd.dataDir", dataDir.absolutePath)
     doFirst { dataDir.deleteRecursively() }
 }
+
+// The screenshot generator is a JavaExec, not a Test: give it the same seam,
+// with its own directory, so a run starts from default preferences, never opens
+// the developer's preferences store (its theme flips persist; the session file is
+// already covered by SessionPersistence.disable()), and lists no real kubeconfig
+// context (F11).
+val screenshotDataDir = layout.buildDirectory.dir("screenshot-data").get().asFile
+
+tasks.named<JavaExec>("generateScreenshots") {
+    dependsOn(generateEmptyKubeconfig)
+    environment("KUBECONFIG", emptyKubeconfig.get().asFile.absolutePath)
+    val dataDir = screenshotDataDir
+    systemProperty("kkdd.dataDir", dataDir.absolutePath)
+    doFirst { dataDir.deleteRecursively() }
+}
