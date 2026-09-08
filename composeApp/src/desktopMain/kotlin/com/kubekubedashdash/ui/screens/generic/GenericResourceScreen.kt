@@ -92,7 +92,9 @@ import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.generic.viewmodel.GenericResourceScreenViewModel
 import com.kubekubedashdash.ui.screens.relatedScreen
 import com.kubekubedashdash.ui.screens.rememberRelated
+import com.kubekubedashdash.util.DeleteOutcome
 import com.kubekubedashdash.util.builtInKindOrNull
+import com.kubekubedashdash.util.describeTerminating
 import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -621,7 +623,7 @@ fun GenericResourceScreen(
                 delete.run(
                     failureMessage = "Delete failed",
                     block = {
-                        client.actions.deleteResource(
+                        client.actions.deleteResourceReporting(
                             kind = kind,
                             name = target.name,
                             namespace = target.namespace,
@@ -630,9 +632,16 @@ fun GenericResourceScreen(
                             plural = plural,
                         )
                     },
-                    onSuccess = {
+                    onSuccess = { outcome ->
                         pendingDelete = null
-                        feedback.success("Deleted $kind ${resourceRef(target.name, target.namespace)}")
+                        val ref = resourceRef(target.name, target.namespace)
+                        when (outcome) {
+                            DeleteOutcome.Gone -> feedback.success("Deleted $kind $ref")
+
+                            // The API accepted the delete but the object stays behind a
+                            // finalizer: a claim in use, a bound volume, a controller's own (F6).
+                            is DeleteOutcome.Terminating -> feedback.warning("Delete accepted for $kind $ref", detail = describeTerminating(outcome.finalizers))
+                        }
                     },
                 )
             },
