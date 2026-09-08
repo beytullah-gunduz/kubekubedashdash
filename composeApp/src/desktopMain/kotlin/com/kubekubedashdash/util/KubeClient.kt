@@ -521,6 +521,7 @@ class KubeClient(
 
     // ── YAML / Detail ───────────────────────────────────────────────────────────
 
+    /** The forgiving form: a comment string on not-found or failure. No production caller today — the GUI reads ReactiveKubeClient's own copy; MCP uses [fetchResourceYaml]. */
     fun getResourceYaml(
         kind: String,
         name: String,
@@ -529,6 +530,28 @@ class KubeClient(
         version: String? = null,
         plural: String? = null,
     ): String = try {
+        fetchResourceYaml(kind, name, namespace, group, version, plural) ?: run {
+            log.warn("Resource not found kind={} name={} namespace={}", kind, name, namespace)
+            "# Resource not found"
+        }
+    } catch (e: Exception) {
+        if (isInterruption(e)) {
+            log.debug("YAML fetch interrupted kind={} name={} namespace={}", kind, name, namespace)
+        } else {
+            log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+        }
+        "# Error: ${e.message}"
+    }
+
+    /** Null when the object does not exist; throws on any failure (F9: MCP reports it with isError). */
+    fun fetchResourceYaml(
+        kind: String,
+        name: String,
+        namespace: String?,
+        group: String? = null,
+        version: String? = null,
+        plural: String? = null,
+    ): String? {
         log.debug("Fetching YAML kind={} name={} namespace={} group={} version={}", kind, name, namespace, group, version)
         // A group-qualified kind never reaches a typed case (see builtInKindOrNull).
         val res: Any? = when (builtInKindOrNull(kind, group)) {
@@ -574,15 +597,7 @@ class KubeClient(
                 null
             }
         }
-        if (res != null) {
-            Serialization.asYaml(res)
-        } else {
-            log.warn("Resource not found kind={} name={} namespace={}", kind, name, namespace)
-            "# Resource not found"
-        }
-    } catch (e: Exception) {
-        log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
-        "# Error: ${e.message}"
+        return res?.let { Serialization.asYaml(it) }
     }
 
     private fun fetchGenericResource(
@@ -620,14 +635,24 @@ class KubeClient(
 
     // ── Pod Logs ────────────────────────────────────────────────────────────────
 
+    /** The forgiving form: an error string on failure. No production caller today — the GUI reads ReactiveKubeClient's own copy; MCP uses [fetchPodLogs]. */
     fun getPodLogs(name: String, namespace: String, container: String?, tailLines: Int = 1000): String = try {
+        fetchPodLogs(name, namespace, container, tailLines)
+    } catch (e: Exception) {
+        if (isInterruption(e)) {
+            log.debug("Pod log fetch interrupted pod={} namespace={}", name, namespace)
+        } else {
+            log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
+        }
+        "Error fetching logs: ${e.message}"
+    }
+
+    /** Throws on any failure (F9: MCP reports it with isError). */
+    fun fetchPodLogs(name: String, namespace: String, container: String?, tailLines: Int = 1000): String {
         log.debug("Fetching pod logs pod={} namespace={} container={} tailLines={}", name, namespace, container, tailLines)
         val op = client.pods().inNamespace(namespace).withName(name)
         val withC = if (container != null) op.inContainer(container) else op
-        withC.tailingLines(tailLines).log ?: ""
-    } catch (e: Exception) {
-        log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
-        "Error fetching logs: ${e.message}"
+        return withC.tailingLines(tailLines).log ?: ""
     }
 
     // ── Pod Metrics (single pod) ────────────────────────────────────────────────
