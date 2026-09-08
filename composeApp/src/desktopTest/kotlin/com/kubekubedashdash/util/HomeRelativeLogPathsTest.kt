@@ -34,9 +34,10 @@ class HomeRelativeLogPathsTest {
 
     @BeforeTest
     fun setUp() {
-        home = Files.createTempDirectory("kkdd-fake-home").toFile()
+        // Captured before anything can throw, so tearDown restores only what was changed.
         previousHome = System.getProperty("user.home")
         previousKubeconfig = System.getProperty("kubeconfig")
+        home = Files.createTempDirectory("kkdd-fake-home").toFile()
         System.setProperty("user.home", home.absolutePath)
         checkerLogger.addAppender(checkerEvents)
         locatorLogger.addAppender(locatorEvents)

@@ -38,6 +38,25 @@ class DisplayPathTest {
     }
 
     @Test
+    fun `a forward slash after a backslash-separated home is still the boundary`() {
+        // KubeconfigLocator builds its fallback with a forward slash; on Windows
+        // that follows a backslash-separated home.
+        assertEquals("~/.kube/config", displayPath("C:\\Users\\alice/.kube/config", "C:\\Users\\alice"))
+        assertEquals("C:\\Users\\alice2/.kube/config", displayPath("C:\\Users\\alice2/.kube/config", "C:\\Users\\alice"))
+    }
+
+    @Test
+    fun `a trailing separator on home is ignored`() {
+        assertEquals("~$sep.kube", displayPath("$home$sep.kube", "$home$sep"))
+    }
+
+    @Test
+    fun `a root home folds nothing`() {
+        val etc = listOf("", "etc", "x").joinToString(sep)
+        assertEquals(etc, displayPath(etc, sep))
+    }
+
+    @Test
     fun `an unknown home leaves the path alone`() {
         val path = "$home$sep.kube${sep}config"
         assertEquals(path, displayPath(path, null))
