@@ -84,8 +84,11 @@ object McpClusterResolver {
         .filter { it.first.isNotBlank() }
         .toList()
 
-    fun resolve(requested: String?): ClusterResolution<KubeClient> = resolve(connectedClusters(), requested)
+    /** Where the tools look for open clusters. Production never sets it; a test sets and restores it. */
+    internal var clusterSource: () -> List<Pair<String, KubeClient>> = { connectedClusters() }
+
+    fun resolve(requested: String?): ClusterResolution<KubeClient> = resolve(clusterSource(), requested)
 
     /** Distinct connected context names, for the `list_clusters` tool. */
-    fun listContexts(): List<String> = connectedClusters().map { it.first }.distinct()
+    fun listContexts(): List<String> = clusterSource().map { it.first }.distinct()
 }

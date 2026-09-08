@@ -42,9 +42,12 @@ class McpServerManagerDispatchTest {
         assertEquals(default, McpServerManager.clampTailLines("-5"))
         assertEquals(1, McpServerManager.clampTailLines("1"))
         assertEquals(50, McpServerManager.clampTailLines("50"))
+        // F9: padded digits are still digits.
+        assertEquals(50, McpServerManager.clampTailLines(" 50 "))
         assertEquals(max, McpServerManager.clampTailLines(max.toString()))
         assertEquals(max, McpServerManager.clampTailLines("2147483647"))
-        assertEquals(default, McpServerManager.clampTailLines("99999999999"))
+        // F9: an overflowing request is still "too many" — it gets the cap, not the default.
+        assertEquals(max, McpServerManager.clampTailLines("99999999999"))
     }
 
     @Test
