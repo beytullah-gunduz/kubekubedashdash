@@ -60,6 +60,7 @@ import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.pods.viewmodel.PodsScreenViewModel
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -130,7 +131,13 @@ fun PodsScreen(
     }
 
     AnimatedVisibility(state is ResourceState.Error, enter = enter, exit = exit) {
-        ResourceErrorMessage((state as ResourceState.Error).message)
+        // Composed for the whole exit transition too, like the Success block
+        // below: the restart's first emission is Loading, so the cast must be
+        // a check, not an assumption.
+        val s = state
+        if (s is ResourceState.Error) {
+            ResourceErrorMessage(s.message, onRetry = { restartListFlow(reactiveClient.pods) })
+        }
     }
 
     AnimatedVisibility(state is ResourceState.Success, enter = enter, exit = exit) {

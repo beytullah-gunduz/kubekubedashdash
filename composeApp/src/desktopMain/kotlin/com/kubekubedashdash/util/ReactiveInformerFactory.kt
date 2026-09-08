@@ -15,6 +15,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import org.slf4j.LoggerFactory
@@ -80,7 +82,21 @@ internal class ReactiveInformerFactory(
     fun <R : HasMetadata, T> informer(
         inform: (KubernetesClient, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T,
-    ): StateFlow<ResourceState<List<T>>> = connectedTrigger
+    ): StateFlow<ResourceState<List<T>>> {
+        // F3: a tick restarts this list alone — flatMapLatest cancels the
+        // running inner flow (its finally closes the informer) and builds a
+        // fresh one. Before, a list parked on Error waited for the next
+        // connection-version bump, which restarts every list.
+        val restarts = MutableStateFlow(0L)
+        val trigger = combine(connectedTrigger, restarts) { version, _ -> version }
+        return RestartableStateFlow(clusterScopedList(trigger, inform, mapper)) { restarts.update { it + 1 } }
+    }
+
+    private fun <R : HasMetadata, T> clusterScopedList(
+        trigger: Flow<Long>,
+        inform: (KubernetesClient, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
+        mapper: (R) -> T,
+    ): StateFlow<ResourceState<List<T>>> = trigger
         .flatMapLatest {
             channelFlow {
                 parkUnlessConnected()
@@ -176,7 +192,19 @@ internal class ReactiveInformerFactory(
     fun <R : HasMetadata, T> namespacedInformer(
         inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T?,
-    ): StateFlow<ResourceState<List<T>>> = combine(selectedNamespace, connectedTrigger) { ns, _ -> ns }
+    ): StateFlow<ResourceState<List<T>>> {
+        // Same restart tick as the cluster-scoped builder; the selected
+        // namespace is carried through unchanged.
+        val restarts = MutableStateFlow(0L)
+        val trigger = combine(selectedNamespace, connectedTrigger, restarts) { ns, _, _ -> ns }
+        return RestartableStateFlow(namespacedList(trigger, inform, mapper)) { restarts.update { it + 1 } }
+    }
+
+    private fun <R : HasMetadata, T> namespacedList(
+        trigger: Flow<String?>,
+        inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
+        mapper: (R) -> T?,
+    ): StateFlow<ResourceState<List<T>>> = trigger
         .flatMapLatest { ns ->
             channelFlow {
                 parkUnlessConnected()
