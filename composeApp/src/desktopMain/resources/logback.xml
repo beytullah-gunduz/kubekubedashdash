@@ -3,9 +3,18 @@
 
     <property name="LOG_DIR" value="${LOG_DIR:-logs}" />
 
+    <!-- %fold(...) renders its sub-pattern with every exact-case occurrence of the home
+         directory folded to ~ (either separator style for a Windows home), so a message or
+         stack trace that reaches any appender does not name the user (F15). UI texts are
+         folded per site (displayPath); logback cannot reach them. The converter class must
+         stay loadable: a rule whose class is missing collapses every message on every
+         appender to %PARSER_ERROR, and the status listener above is silent. The ProGuard
+         keep for com.kubekubedashdash.** in proguard-rules.pro covers it. -->
+    <conversionRule conversionWord="fold" class="com.kubekubedashdash.logging.HomePathConverter" />
+
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %-36.36logger{36} - %msg%n%throwable</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %-36.36logger{36} - %fold(%msg%n%throwable)</pattern>
         </encoder>
     </appender>
 
@@ -18,14 +27,14 @@
             <totalSizeCap>50MB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %-36.36logger{36} - %msg%n%throwable</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %-36.36logger{36} - %fold(%msg%n%throwable)</pattern>
         </encoder>
     </appender>
 
     <appender name="IN_MEMORY" class="com.kubekubedashdash.logging.InMemoryAppender">
         <maxEntries>500</maxEntries>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %-5level - %msg%throwable</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %-5level - %fold(%msg%throwable)</pattern>
         </encoder>
     </appender>
 
