@@ -266,14 +266,17 @@ private fun OwnerBreadcrumb(hops: List<RelatedRef>, onOwnerClick: ((RelatedRef) 
                     maxLines = 1,
                 )
             }
+            // A hop with no destination — a CRD owner, or a custom resource that
+            // reuses a built-in name (F16) — reads as text, as the Related chips do.
+            val click = onOwnerClick?.takeIf { relatedScreen(ref) != null }
             Text(
                 "${ref.kind} ${ref.name}",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (onOwnerClick != null) KdPrimary else KdTextSecondary,
+                color = if (click != null) KdPrimary else KdTextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = if (onOwnerClick != null) {
-                    Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { onOwnerClick(ref) }
+                modifier = if (click != null) {
+                    Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { click(ref) }
                 } else {
                     Modifier
                 },
