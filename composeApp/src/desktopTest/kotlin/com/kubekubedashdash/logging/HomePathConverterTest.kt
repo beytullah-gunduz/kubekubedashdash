@@ -42,7 +42,7 @@ class HomePathConverterTest {
     @AfterTest
     fun tearDown() {
         if (previousHome == null) System.clearProperty("user.home") else System.setProperty("user.home", previousHome)
-        home.deleteRecursively()
+        if (::home.isInitialized) home.deleteRecursively()
     }
 
     @Suppress("UNCHECKED_CAST")

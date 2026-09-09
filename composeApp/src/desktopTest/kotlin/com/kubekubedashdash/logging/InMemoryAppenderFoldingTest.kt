@@ -32,6 +32,8 @@ class InMemoryAppenderFoldingTest {
     @BeforeTest
     fun setUp() {
         previousHome = System.getProperty("user.home")
+        // The shared store is fed by the real drawer appender for the whole suite; start from empty.
+        AppLogStore.clear()
         home = Files.createTempDirectory("kkdd-fake-home").toFile()
         System.setProperty("user.home", home.absolutePath)
     }
@@ -39,7 +41,7 @@ class InMemoryAppenderFoldingTest {
     @AfterTest
     fun tearDown() {
         if (previousHome == null) System.clearProperty("user.home") else System.setProperty("user.home", previousHome)
-        home.deleteRecursively()
+        if (::home.isInitialized) home.deleteRecursively()
     }
 
     private fun appendAndFetch(appender: InMemoryAppender): AppLogEntry {
