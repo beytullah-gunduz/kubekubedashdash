@@ -34,6 +34,9 @@ internal fun crdRoute(state: ResourceState<List<CrdInfo>>, target: Screen.Main.C
                 // emits an empty Success rather than an Error.
                 CrdRoute.Missing("No custom resource definitions are visible on this cluster: none are installed, listing them is not permitted, or the list could not be read.")
             } else {
-                CrdRoute.Missing("${target.kind} (${target.group}) is not installed on this cluster. It may have been removed since this tab was saved.")
+                CrdRoute.Missing("${crdLabel(target)} is not installed on this cluster. It may have been removed since this tab was saved.")
             }
 }
+
+/** `Widget (example.io)`, or just the kind for a tab saved before a group was required (F13). */
+private fun crdLabel(target: Screen.Main.CustomResource): String = if (target.group.isBlank()) target.kind else "${target.kind} (${target.group})"

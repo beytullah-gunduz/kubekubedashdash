@@ -33,7 +33,9 @@ import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.builtInKindLabelOrNull
 import com.kubekubedashdash.util.childrenOf
+import com.kubekubedashdash.util.isBuiltIn
 import com.kubekubedashdash.util.jobsOwnedBy
+import com.kubekubedashdash.util.namesBuiltIn
 import com.kubekubedashdash.util.ownerChain
 import com.kubekubedashdash.util.servicesFor
 import kotlinx.coroutines.flow.StateFlow
@@ -43,43 +45,30 @@ private const val CHILDREN_CHIP_CAP = 12
 
 /**
  * The one destination rule for a chip click (D5). Pod routes to the real pod
- * panel when its uid is known — no other route opens it. Every other kind,
- * including CRDs the app has no list screen for, routes to the generic
- * detail screen, which takes exactly [RelatedRef]'s three identifying
- * fields. Never routes at a bare `Screen.Main.*` list object: those carry no
- * selection, so a chip sent there would land on an unfiltered list.
+ * panel when its uid is known — no other route opens it. Every other
+ * built-in kind routes to the generic detail screen, which takes exactly
+ * [RelatedRef]'s three identifying fields. Never routes at a bare
+ * `Screen.Main.*` list object: those carry no selection, so a chip sent
+ * there would land on an unfiltered list.
  */
 fun relatedScreen(ref: RelatedRef): Screen? {
     if (ref.name.isBlank()) return null
+    // ResourceDetail resolves a kind by name only for the built-ins in
+    // BUILT_IN_KIND_GROUPS; for anything else `getResourceYaml` needs a group
+    // and version that a relation reference does not carry, and the pane would
+    // render "# Resource not found". A CRD owner — a SparkApplication, an Argo
+    // Workflow — is real and worth naming, so it renders as plain text rather
+    // than a dead link. So does a custom resource that reuses a built-in name
+    // in its own group: it must open neither the built-in's detail nor, with a
+    // uid, the Pods screen (F16).
+    if (!namesBuiltIn(ref.kind, ref.group)) return null
     val uid = ref.uid?.takeIf { it.isNotBlank() }
     // With a uid a Pod opens its real panel; without one it still resolves by
     // name in the detail pane below, which is better than nothing. What it must
     // not do is open the Pods screen waiting on a selection that never arrives.
     if (ref.kind == "Pod" && uid != null) return Screen.Main.Pods(selectPodUid = uid)
-    // ResourceDetail resolves a kind by name only for the built-ins below; for
-    // anything else `getResourceYaml` needs a group and version that a relation
-    // reference does not carry, and the pane would render "# Resource not
-    // found". A CRD owner — a SparkApplication, an Argo Workflow — is real and
-    // worth naming, so it renders as plain text rather than a dead link.
-    return if (ref.kind.lowercase() in DETAIL_ROUTABLE_KINDS) {
-        Screen.Detail.ResourceDetail(kind = ref.kind, name = ref.name, namespace = ref.namespace)
-    } else {
-        null
-    }
+    return Screen.Detail.ResourceDetail(kind = ref.kind, name = ref.name, namespace = ref.namespace)
 }
-
-/**
- * The kinds `ReactiveKubeClient.getResourceYaml` resolves from a kind string
- * alone — the `when` branches that do not need a group/version.
- */
-private val DETAIL_ROUTABLE_KINDS = setOf(
-    "pod", "deployment", "service", "node", "namespace", "configmap", "secret",
-    "statefulset", "daemonset", "replicaset", "job", "cronjob", "ingress",
-    "persistentvolume", "persistentvolumeclaim", "storageclass", "serviceaccount",
-    "role", "clusterrole", "rolebinding", "clusterrolebinding",
-    "horizontalpodautoscaler", "poddisruptionbudget", "resourcequota",
-    "limitrange", "priorityclass",
-)
 
 /**
  * Assembles [RelatedResources] for the resource identified by [kind]/[uid],
@@ -109,10 +98,10 @@ fun rememberRelated(
         val pods = client.pods.successOrEmpty()
         // Collecting a flow STARTS its informer, and in the default
         // All-Namespaces scope that is a cluster-wide watch. Subscribe only to
-        // the ones this pod's own owner reference can actually lead to.
-        val ownerKinds = owners.map { it.kind }.toSet()
-        val replicaSets = if ("ReplicaSet" in ownerKinds) client.replicaSets.successOrEmpty() else emptyList()
-        val jobs = if ("Job" in ownerKinds) client.jobs.successOrEmpty() else emptyList()
+        // the ones this pod's own owner reference can actually lead to — and a
+        // custom resource reusing the name in its own group leads nowhere (F16).
+        val replicaSets = if (owners.any { it.isBuiltIn("ReplicaSet") }) client.replicaSets.successOrEmpty() else emptyList()
+        val jobs = if (owners.any { it.isBuiltIn("Job") }) client.jobs.successOrEmpty() else emptyList()
         val services = client.services.successOrEmpty()
         remember(uid, namespace, owners, labels, pods, replicaSets, jobs, services) {
             RelatedResources(

@@ -36,16 +36,18 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 object ResourceMappers {
 
     /**
-     * Trims a fabric8 `metadata.ownerReferences` list to the three fields a
-     * relation chain needs. An entry missing a kind, a name or a uid is
+     * Trims a fabric8 `metadata.ownerReferences` list to the fields a relation
+     * chain needs. An entry missing a kind, a name, a uid or an apiVersion is
      * dropped rather than carried through partially populated — a chain hop
-     * with a blank field is worse than no hop at all.
+     * with a blank field is worse than no hop at all, and one whose group is
+     * unknown could not be told from a built-in (F16).
      */
     fun mapOwnerRefs(refs: List<OwnerReference>?): List<OwnerRefInfo> = refs?.mapNotNull { ref ->
         val kind = ref.kind?.ifBlank { null } ?: return@mapNotNull null
         val name = ref.name?.ifBlank { null } ?: return@mapNotNull null
         val uid = ref.uid?.ifBlank { null } ?: return@mapNotNull null
-        OwnerRefInfo(kind = kind, name = name, uid = uid, controller = ref.controller == true)
+        val apiVersion = ref.apiVersion?.ifBlank { null } ?: return@mapNotNull null
+        OwnerRefInfo(kind = kind, name = name, uid = uid, controller = ref.controller == true, group = apiVersion.substringBefore('/', ""))
     } ?: emptyList()
 
     /** The row a PersistentVolume list shows; a volume the API is tearing down reads Terminating (F6). */
