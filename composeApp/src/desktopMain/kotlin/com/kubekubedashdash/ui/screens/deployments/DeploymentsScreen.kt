@@ -46,6 +46,7 @@ import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -96,7 +97,7 @@ fun DeploymentsScreen(
     val delete = rememberConfirmableAction()
     val feedback = LocalActionFeedback.current
 
-    ResourceListScaffold(state, loading = { ResourceLoadingIndicator() }) { data ->
+    ResourceListScaffold(state, onRetry = { restartListFlow(reactiveClient.deployments) }, loading = { ResourceLoadingIndicator() }) { data ->
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
         val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
         val filtered = rememberResourceFilter(

@@ -33,6 +33,7 @@ import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.rememberResourceFilter
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.screens.namespaces.viewmodel.NamespacesScreenViewModel
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -61,7 +62,7 @@ fun NamespacesScreen(
     val delete = rememberConfirmableAction()
     val feedback = LocalActionFeedback.current
 
-    ResourceListScaffold(state) { data ->
+    ResourceListScaffold(state, onRetry = { restartListFlow(reactiveClient.namespaces) }) { data ->
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
         val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
         val filtered = rememberResourceFilter(data, searchQuery, labelSelector, annotationSelector) { ns, q, labels, anns ->
