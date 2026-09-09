@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -337,4 +338,24 @@ internal class ReactiveInformerFactory(
         }
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), initial)
+
+    /**
+     * A second view over a list this factory built — the picker's names
+     * beside the table's rows — so one informer serves both (F17). Shares
+     * while subscribed like every list here, and restarting the view
+     * restarts the source, so a Retry on either side revives both.
+     */
+    fun <T, R> derivedList(source: StateFlow<ResourceState<List<T>>>, transform: (List<T>) -> List<R>): StateFlow<ResourceState<List<R>>> {
+        val view = source
+            .map { state ->
+                when (state) {
+                    ResourceState.Loading -> ResourceState.Loading
+                    is ResourceState.Error -> state
+                    is ResourceState.Success -> ResourceState.Success(transform(state.data))
+                }
+            }
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
+        return RestartableStateFlow(view) { restartListFlow(source) }
+    }
 }
