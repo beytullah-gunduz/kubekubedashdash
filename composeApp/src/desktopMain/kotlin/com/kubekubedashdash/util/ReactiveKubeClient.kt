@@ -1435,6 +1435,7 @@ class ReactiveKubeClient(
                     .withVersion(version)
                     .withKind(kind)
                     .withPlural(effectivePlural)
+                    // An instance carries a namespace iff its CRD is namespaced; every object here came from a list (F13).
                     .withNamespaced(namespace != null)
                     .build()
                 val op = k8s.genericKubernetesResources(rdc)

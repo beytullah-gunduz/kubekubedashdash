@@ -60,6 +60,7 @@ import com.kubekubedashdash.util.QuotaUsageRow
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.RoleBindingDetail
+import com.kubekubedashdash.util.builtInKindLabelOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -68,14 +69,15 @@ import kotlinx.coroutines.withContext
  * Returns kind-specific extra tabs for [ResourceDetailPanel].
  *
  * Extension point: add new `when` branches here as more kind-specific tabs are needed.
- * Signature: (kind, selected resource, kube client, onNavigate) → list of [ExtraTab] (may be empty).
+ * Signature: (kind, selected resource, kube client, onNavigate, group) → list of [ExtraTab] (may be empty).
  */
 fun kindExtraTabs(
     kind: String,
     res: GenericResourceInfo,
     client: ReactiveKubeClient,
     onNavigate: (Screen) -> Unit = {},
-): List<ExtraTab> = when (kind) {
+    group: String? = null,
+): List<ExtraTab> = when (builtInKindLabelOrNull(kind, group)) {
     "ResourceQuota" -> listOf(resourceQuotaUsageTab(res, client))
     "Role", "ClusterRole" -> listOf(policyRulesTab(res, client, kind))
     "RoleBinding", "ClusterRoleBinding" -> listOf(roleBindingTab(res, client, kind))
@@ -101,25 +103,30 @@ fun kindOverviewSections(
     client: ReactiveKubeClient,
     related: RelatedResources = RelatedResources(),
     onNavigate: (Screen) -> Unit = {},
+    group: String? = null,
 ): List<OverviewSection> = when (kind) {
+    // A CRD kind, matched by name whatever its group.
     "SparkApplication" ->
         res.namespace?.let { ns ->
             listOf(podsOverviewSection(res, onNavigate) { client.listSparkApplicationPods(ns, res.uid, res.name) })
         } ?: emptyList()
 
-    "Job" -> buildList {
-        res.namespace?.let { ns -> add(podsOverviewSection(res, onNavigate) { client.listJobPods(ns, res.uid) }) }
-        if (!related.isEmpty) add(relatedOverviewSection(related, onNavigate))
+    // Built-in kinds: a CRD reusing one of these names gets nothing (F13).
+    else -> when (builtInKindLabelOrNull(kind, group)) {
+        "Job" -> buildList {
+            res.namespace?.let { ns -> add(podsOverviewSection(res, onNavigate) { client.listJobPods(ns, res.uid) }) }
+            if (!related.isEmpty) add(relatedOverviewSection(related, onNavigate))
+        }
+
+        "CronJob" -> buildList {
+            res.namespace?.let { ns -> add(podsOverviewSection(res, onNavigate) { client.listCronJobPods(ns, res.uid) }) }
+            if (!related.isEmpty) add(relatedOverviewSection(related, onNavigate))
+        }
+
+        "ReplicaSet", "StatefulSet", "DaemonSet" -> if (related.isEmpty) emptyList() else listOf(relatedOverviewSection(related, onNavigate))
+
+        else -> emptyList()
     }
-
-    "CronJob" -> buildList {
-        res.namespace?.let { ns -> add(podsOverviewSection(res, onNavigate) { client.listCronJobPods(ns, res.uid) }) }
-        if (!related.isEmpty) add(relatedOverviewSection(related, onNavigate))
-    }
-
-    "ReplicaSet", "StatefulSet", "DaemonSet" -> if (related.isEmpty) emptyList() else listOf(relatedOverviewSection(related, onNavigate))
-
-    else -> emptyList()
 }
 
 private fun resourceQuotaUsageTab(
