@@ -3,6 +3,8 @@ package com.kubekubedashdash.ui.screens.generic
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.RelatedRef
+import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
@@ -61,6 +63,21 @@ class DetailExtraTabsGuardTest {
         assertEquals(1, kindExtraTabs("Role", res, client).size)
         assertTrue(kindExtraTabs("Role", res, client, group = "widgets.example").isEmpty())
         assertTrue(kindExtraTabs("EndpointSlice", res, client, group = "widgets.example").isEmpty())
+        assertEquals(1, kindExtraTabs("EndpointSlice", res, client).size)
+        assertEquals(1, kindExtraTabs("ClusterRole", res, client).size)
+        assertEquals(1, kindExtraTabs("RoleBinding", res, client).size)
+        assertTrue(kindExtraTabs("ClusterRole", res, client, group = "widgets.example").isEmpty())
+        assertTrue(kindExtraTabs("RoleBinding", res, client, group = "widgets.example").isEmpty())
+        assertTrue(kindExtraTabs("ClusterRoleBinding", res, client, group = "widgets.example").isEmpty())
+    }
+
+    @Test
+    fun `the related-only overview kinds are guarded too`() {
+        val related = RelatedResources(owners = listOf(RelatedRef(kind = "Deployment", name = "d", namespace = "ns")))
+        for (k in listOf("ReplicaSet", "StatefulSet", "DaemonSet")) {
+            assertEquals(1, kindOverviewSections(k, res, client, related).size, "$k gets the related section as a built-in")
+            assertTrue(kindOverviewSections(k, res, client, related, group = "widgets.example").isEmpty(), "a CRD named $k must not get the related section")
+        }
     }
 
     @Test
