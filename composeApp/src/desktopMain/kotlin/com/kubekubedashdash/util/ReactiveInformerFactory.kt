@@ -346,6 +346,8 @@ internal class ReactiveInformerFactory(
      * restarts the source, so a Retry on either side revives both.
      */
     fun <T, R> derivedList(source: StateFlow<ResourceState<List<T>>>, transform: (List<T>) -> List<R>): StateFlow<ResourceState<List<R>>> {
+        // A view over a plain derived flow would report a restart that restarted nothing.
+        require(source is Restartable) { "derivedList needs a list this factory built" }
         val view = source
             .map { state ->
                 when (state) {

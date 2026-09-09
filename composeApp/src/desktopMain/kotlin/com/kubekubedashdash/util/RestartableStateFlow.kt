@@ -28,7 +28,8 @@ internal class RestartableStateFlow<T>(
  * parked on `Error` — a start failure, a sync failure, a mapping failure —
  * has no other way back before the next connection-version bump restarts
  * every list (review follow-up F3); a screen's Retry calls this. A flow the
- * factory did not build (a derived flow, the CRD list) is left alone.
+ * factory did not build (a view model's derived state, the CRD list) is left
+ * alone; a view the factory derived from a list restarts that list.
  */
 fun restartListFlow(flow: StateFlow<*>): Boolean {
     val restartable = flow as? Restartable ?: return false

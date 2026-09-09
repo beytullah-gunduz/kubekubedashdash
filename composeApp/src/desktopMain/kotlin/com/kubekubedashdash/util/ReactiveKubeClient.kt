@@ -194,8 +194,9 @@ class ReactiveKubeClient(
     )
 
     /**
-     * The picker's and the overview's view of [namespaces]: names only, from
-     * the same informer as the table's rows (F17). Before, a second informer
+     * The view of [namespaces] the picker, the overview count and the
+     * cluster-info combine read: names only, from the same informer as the
+     * table's rows (F17). Before, a second informer
      * over the same resource, which a denial parked beside the first and the
      * table's Retry did not revive.
      */
