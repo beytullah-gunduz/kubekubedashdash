@@ -29,6 +29,7 @@ import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberResourceFilter
 import com.kubekubedashdash.ui.screens.services.viewmodel.ServicesScreenViewModel
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,7 +53,7 @@ fun ServicesScreen(
     val scope = rememberCoroutineScope()
     var selectedUid by rememberSaveable { mutableStateOf(initialSelectedUid) }
 
-    ResourceListScaffold(state) { data ->
+    ResourceListScaffold(state, onRetry = { restartListFlow(reactiveClient.services) }) { data ->
         val labelSelector = remember(labelQuery) { parseMapSelector(labelQuery) }
         val annotationSelector = remember(annotationQuery) { parseMapSelector(annotationQuery) }
         val filtered = rememberResourceFilter(data, searchQuery, labelSelector, annotationSelector) { svc, q, labels, anns ->

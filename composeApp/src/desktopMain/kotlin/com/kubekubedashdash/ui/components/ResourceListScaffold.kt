@@ -6,13 +6,18 @@ import androidx.compose.ui.Modifier
 import com.kubekubedashdash.models.ResourceState
 
 /** Loading/Error/Success switch shared by simple list screens. The success slot receives the
- *  raw data; the screen computes its filtered list INSIDE the slot (so remember-keys stay correct). */
+ *  raw data; the screen computes its filtered list INSIDE the slot (so remember-keys stay correct).
+ *  [onRetry] puts a Retry button on the default error slot: a list parked on Error comes back only
+ *  when its flow is rebuilt — this restart, a namespace change, or the next connection-version bump
+ *  (F3) — so pass the factory flow's restart, `{ restartListFlow(reactiveClient.services) }`, never
+ *  the view model's derived state, which restartListFlow leaves alone. */
 @Composable
 fun <T> ResourceListScaffold(
     state: ResourceState<List<T>>,
     modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
     loading: @Composable () -> Unit = { SkeletonRows() },
-    error: @Composable (String) -> Unit = { ResourceErrorMessage(it) },
+    error: @Composable (String) -> Unit = { ResourceErrorMessage(it, onRetry) },
     success: @Composable (data: List<T>) -> Unit,
 ) {
     when (val s = state) {
