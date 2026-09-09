@@ -11,6 +11,8 @@ import com.kubekubedashdash.models.PodInfo
 import io.fabric8.kubernetes.api.model.Event
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.OwnerReference
+import io.fabric8.kubernetes.api.model.PersistentVolume
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 
@@ -45,6 +47,42 @@ object ResourceMappers {
         val uid = ref.uid?.ifBlank { null } ?: return@mapNotNull null
         OwnerRefInfo(kind = kind, name = name, uid = uid, controller = ref.controller == true)
     } ?: emptyList()
+
+    /** The row a PersistentVolume list shows; a volume the API is tearing down reads Terminating (F6). */
+    fun mapPersistentVolume(pv: PersistentVolume): GenericResourceInfo = GenericResourceInfo(
+        uid = pv.metadata.uid ?: "",
+        name = pv.metadata.name,
+        namespace = null,
+        status = terminatingOr(pv.metadata, pv.status?.phase),
+        age = formatAge(pv.metadata.creationTimestamp),
+        labels = pv.metadata.labels ?: emptyMap(),
+        annotations = pv.metadata.annotations ?: emptyMap(),
+        extraColumns = mapOf(
+            "Capacity" to (pv.spec?.capacity?.get("storage")?.toString() ?: ""),
+            "Access Modes" to (pv.spec?.accessModes?.joinToString(", ") ?: ""),
+            "Reclaim" to (pv.spec?.persistentVolumeReclaimPolicy ?: ""),
+            "Claim" to (pv.spec?.claimRef?.let { "${it.namespace}/${it.name}" } ?: ""),
+        ),
+        owners = mapOwnerRefs(pv.metadata.ownerReferences),
+    )
+
+    /** The row a PersistentVolumeClaim list shows; a claim the API is tearing down reads Terminating (F6). */
+    fun mapPersistentVolumeClaim(pvc: PersistentVolumeClaim): GenericResourceInfo = GenericResourceInfo(
+        uid = pvc.metadata.uid ?: "",
+        name = pvc.metadata.name,
+        namespace = pvc.metadata.namespace,
+        status = terminatingOr(pvc.metadata, pvc.status?.phase),
+        age = formatAge(pvc.metadata.creationTimestamp),
+        labels = pvc.metadata.labels ?: emptyMap(),
+        annotations = pvc.metadata.annotations ?: emptyMap(),
+        extraColumns = mapOf(
+            "Capacity" to (pvc.status?.capacity?.get("storage")?.toString() ?: ""),
+            "Access Modes" to (pvc.status?.accessModes?.joinToString(", ") ?: ""),
+            "Storage Class" to (pvc.spec?.storageClassName ?: ""),
+            "Volume" to (pvc.spec?.volumeName ?: ""),
+        ),
+        owners = mapOwnerRefs(pvc.metadata.ownerReferences),
+    )
 
     fun mapPod(pod: Pod): PodInfo {
         val containers = pod.spec?.containers?.map { c ->
@@ -166,7 +204,7 @@ object ResourceMappers {
             uid = gkr.metadata?.uid ?: "",
             name = gkr.metadata?.name ?: "",
             namespace = gkr.metadata?.namespace,
-            status = null,
+            status = terminatingOr(gkr.metadata, null),
             age = formatAge(gkr.metadata?.creationTimestamp),
             labels = gkr.metadata?.labels ?: emptyMap(),
             annotations = gkr.metadata?.annotations ?: emptyMap(),

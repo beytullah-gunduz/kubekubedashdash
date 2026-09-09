@@ -1,6 +1,7 @@
 package com.kubekubedashdash.util
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation
+import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
@@ -10,6 +11,7 @@ import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestConditionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.Resource
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import org.slf4j.LoggerFactory
 
@@ -36,12 +38,22 @@ internal fun defaultPluralForKind(kind: String): String {
 }
 
 /**
+ * A free claim or volume keeps its protection finalizer until the controller
+ * strips it, a watch round trip after the DELETE: a look-again that lands
+ * first would call it "still used by a pod" (F6). So a delete that finds a
+ * blocking finalizer looks again, this many times, this far apart, before it
+ * reports Terminating.
+ */
+internal const val DELETE_SETTLE_LOOKS = 3
+internal const val DELETE_SETTLE_DELAY_MS = 400L
+
+/**
  * The cluster mutating actions (delete / scale / restart / cordon / drain / evict /
  * force-delete / CronJob trigger+suspend / CSR approve+deny), extracted from
  * ReactiveKubeClient so the action layer is a cohesive, independently-testable unit.
  * Behaviour is unchanged.
  */
-class ClusterActions(private val connectionManager: KubeConnectionManager) {
+class ClusterActions(private val connectionManager: KubeConnectionManager, private val settleDelayMs: Long = DELETE_SETTLE_DELAY_MS) {
     private val log = LoggerFactory.getLogger(ClusterActions::class.java)
     private val k8s: KubernetesClient get() = connectionManager.client
 
@@ -49,6 +61,7 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
 
     // ── On-demand: Delete ───────────────────────────────────────────────────────
 
+    /** The forgiving form for callers that only need success or failure (the bulk runners). */
     fun deleteResource(
         kind: String,
         name: String,
@@ -59,176 +72,236 @@ class ClusterActions(private val connectionManager: KubeConnectionManager) {
         propagationPolicy: DeletionPropagation? = null,
     ): Result<Unit> = try {
         log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
-        // A group-qualified kind never reaches a typed case (see builtInKindOrNull):
-        // it would delete the same-named built-in object instead of the custom one.
-        when (builtInKindOrNull(kind, group)) {
-            "pod" -> {
-                val ns = requireNamespace("Pod", namespace)
-                k8s.pods().inNamespace(ns).withName(name).delete()
-            }
-
-            "deployment" -> {
-                val ns = requireNamespace("Deployment", namespace)
-                // Foreground so dependent ReplicaSets/Pods are deleted before the
-                // call returns, matching the "click Delete → it's gone" expectation.
-                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
-                k8s.apps().deployments().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
-            }
-
-            "service" -> {
-                val ns = requireNamespace("Service", namespace)
-                k8s.services().inNamespace(ns).withName(name).delete()
-            }
-
-            "configmap" -> {
-                val ns = requireNamespace("ConfigMap", namespace)
-                k8s.configMaps().inNamespace(ns).withName(name).delete()
-            }
-
-            "secret" -> {
-                val ns = requireNamespace("Secret", namespace)
-                k8s.secrets().inNamespace(ns).withName(name).delete()
-            }
-
-            "job" -> {
-                val ns = requireNamespace("Job", namespace)
-                // kubectl's default orphans Pods; users hitting "Delete" in a
-                // dashboard expect the Pods to go too.
-                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
-                k8s.batch().v1().jobs().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
-            }
-
-            "cronjob" -> {
-                val ns = requireNamespace("CronJob", namespace)
-                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
-                k8s.batch().v1().cronjobs().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
-            }
-
-            "namespace" -> k8s.namespaces().withName(name).delete()
-
-            "serviceaccount" -> {
-                val ns = requireNamespace("ServiceAccount", namespace)
-                k8s.serviceAccounts().inNamespace(ns).withName(name).delete()
-            }
-
-            "role" -> {
-                val ns = requireNamespace("Role", namespace)
-                k8s.rbac().roles().inNamespace(ns).withName(name).delete()
-            }
-
-            "clusterrole" -> k8s.rbac().clusterRoles().withName(name).delete()
-
-            "rolebinding" -> {
-                val ns = requireNamespace("RoleBinding", namespace)
-                k8s.rbac().roleBindings().inNamespace(ns).withName(name).delete()
-            }
-
-            "clusterrolebinding" -> k8s.rbac().clusterRoleBindings().withName(name).delete()
-
-            "horizontalpodautoscaler" -> {
-                val ns = requireNamespace("HorizontalPodAutoscaler", namespace)
-                k8s.autoscaling().v2().horizontalPodAutoscalers().inNamespace(ns).withName(name).delete()
-            }
-
-            "poddisruptionbudget" -> {
-                val ns = requireNamespace("PodDisruptionBudget", namespace)
-                k8s.policy().v1().podDisruptionBudget().inNamespace(ns).withName(name).delete()
-            }
-
-            "resourcequota" -> {
-                val ns = requireNamespace("ResourceQuota", namespace)
-                k8s.resourceQuotas().inNamespace(ns).withName(name).delete()
-            }
-
-            "limitrange" -> {
-                val ns = requireNamespace("LimitRange", namespace)
-                k8s.limitRanges().inNamespace(ns).withName(name).delete()
-            }
-
-            "priorityclass" -> k8s.scheduling().v1().priorityClasses().withName(name).delete()
-
-            "validatingwebhookconfiguration" -> k8s.admissionRegistration().v1().validatingWebhookConfigurations().withName(name).delete()
-
-            "mutatingwebhookconfiguration" -> k8s.admissionRegistration().v1().mutatingWebhookConfigurations().withName(name).delete()
-
-            "ingressclass" -> k8s.network().v1().ingressClasses().withName(name).delete()
-
-            "endpointslice" -> {
-                val ns = requireNamespace("EndpointSlice", namespace)
-                k8s.discovery().v1().endpointSlices().inNamespace(ns).withName(name).delete()
-            }
-
-            "csidriver" -> k8s.storage().v1().csiDrivers().withName(name).delete()
-
-            "certificatesigningrequest" -> k8s.certificates().v1().certificateSigningRequests().withName(name).delete()
-
-            // The kinds the sidebar lists through GenericResourceScreen without an
-            // API group. They used to fall through to the generic branch below,
-            // which needs group/version, so "Delete" on these rows always failed.
-            "statefulset" -> {
-                val ns = requireNamespace("StatefulSet", namespace)
-                // Foreground, like Deployment: the pods go with it.
-                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
-                k8s.apps().statefulSets().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
-            }
-
-            "daemonset" -> {
-                val ns = requireNamespace("DaemonSet", namespace)
-                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
-                k8s.apps().daemonSets().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
-            }
-
-            "replicaset" -> {
-                val ns = requireNamespace("ReplicaSet", namespace)
-                val prop = propagationPolicy ?: DeletionPropagation.FOREGROUND
-                k8s.apps().replicaSets().inNamespace(ns).withName(name).withPropagationPolicy(prop).delete()
-            }
-
-            "ingress" -> {
-                val ns = requireNamespace("Ingress", namespace)
-                k8s.network().v1().ingresses().inNamespace(ns).withName(name).delete()
-            }
-
-            // The router labels the screen "Endpoint"; the API kind is "Endpoints".
-            "endpoint", "endpoints" -> {
-                val ns = requireNamespace("Endpoints", namespace)
-                k8s.endpoints().inNamespace(ns).withName(name).delete()
-            }
-
-            "networkpolicy" -> {
-                val ns = requireNamespace("NetworkPolicy", namespace)
-                k8s.network().v1().networkPolicies().inNamespace(ns).withName(name).delete()
-            }
-
-            "persistentvolume" -> k8s.persistentVolumes().withName(name).delete()
-
-            "persistentvolumeclaim" -> {
-                val ns = requireNamespace("PersistentVolumeClaim", namespace)
-                k8s.persistentVolumeClaims().inNamespace(ns).withName(name).delete()
-            }
-
-            "storageclass" -> k8s.storage().v1().storageClasses().withName(name).delete()
-
-            else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
-                val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
-                val rdc = ResourceDefinitionContext.Builder()
-                    .withGroup(group)
-                    .withVersion(version)
-                    .withKind(kind)
-                    .withPlural(effectivePlural)
-                    .withNamespaced(namespace != null)
-                    .build()
-                val op = k8s.genericKubernetesResources(rdc)
-                if (namespace != null) op.inNamespace(namespace).withName(name).delete() else op.withName(name).delete()
-            } else {
-                throw IllegalArgumentException("Delete not supported for $kind")
-            }
-        }
+        performDelete(kind, name, namespace, group, version, plural, propagationPolicy)
         log.info("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
         Result.success(Unit)
     } catch (e: Exception) {
         log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         Result.failure(e)
+    }
+
+    /**
+     * [deleteResource], then one more look (F6): the API accepts a DELETE on a
+     * claim in use or a bound volume and the object stays in Terminating behind
+     * its protection finalizer. The garbage collector's own finalizers are not
+     * reported (see [blockingFinalizers]), or every Deployment delete would warn.
+     * A blocking finalizer found on the first look is given [DELETE_SETTLE_LOOKS]
+     * looks to clear — the protection controller strips a free claim's a moment
+     * later. A failed look reports [DeleteOutcome.Gone]: the delete itself succeeded.
+     */
+    fun deleteResourceReporting(
+        kind: String,
+        name: String,
+        namespace: String?,
+        group: String? = null,
+        version: String? = null,
+        plural: String? = null,
+        propagationPolicy: DeletionPropagation? = null,
+    ): Result<DeleteOutcome> = try {
+        log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
+        val handle = performDelete(kind, name, namespace, group, version, plural, propagationPolicy)
+        var waitingOn = lookAgain(handle, kind, name, namespace)
+        var looks = 1
+        while (waitingOn.isNotEmpty() && looks < DELETE_SETTLE_LOOKS) {
+            Thread.sleep(settleDelayMs)
+            waitingOn = lookAgain(handle, kind, name, namespace)
+            looks++
+        }
+        val outcome = if (waitingOn.isEmpty()) DeleteOutcome.Gone else DeleteOutcome.Terminating(waitingOn)
+        // Finalizer names are domain-qualified by rule, so the log gets a count, not the names.
+        log.info("Deleted resource kind={} name={} namespace={} outcome={}", kind, name, namespace, if (outcome is DeleteOutcome.Terminating) "Terminating(${outcome.finalizers.size})" else "Gone")
+        Result.success(outcome)
+    } catch (e: Exception) {
+        log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+        Result.failure(e)
+    }
+
+    /**
+     * The blocking finalizers a deleted object still waits on: empty when it is
+     * gone, when only the collector's own remain, or when the look itself failed —
+     * the DELETE was accepted, and a failed second look (no `get` verb, a
+     * transient fault) must not turn that into "Delete failed" (F6).
+     */
+    private fun lookAgain(handle: Resource<out HasMetadata>, kind: String, name: String, namespace: String?): List<String> {
+        val left = try {
+            handle.get()
+        } catch (e: Exception) {
+            log.debug("Post-delete look-again failed kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+            return emptyList()
+        }
+        return if (left?.metadata?.deletionTimestamp != null) blockingFinalizers(left.metadata?.finalizers) else emptyList()
+    }
+
+    /** Issues the DELETE and hands back the handle, so a caller can look again. */
+    private fun performDelete(kind: String, name: String, namespace: String?, group: String?, version: String?, plural: String?, propagationPolicy: DeletionPropagation?): Resource<out HasMetadata> {
+        val (handle, defaultPropagation) = resourceHandle(kind, name, namespace, group, version, plural)
+        val propagation = propagationPolicy ?: defaultPropagation
+        if (propagation != null) handle.withPropagationPolicy(propagation).delete() else handle.delete()
+        return handle
+    }
+
+    /**
+     * The typed handle for a built-in kind, or the generic one for a custom
+     * resource, with the propagation policy its delete defaults to. A
+     * group-qualified kind never reaches a typed case (see builtInKindOrNull):
+     * it would delete the same-named built-in object instead of the custom one.
+     */
+    private fun resourceHandle(kind: String, name: String, namespace: String?, group: String?, version: String?, plural: String?): Pair<Resource<out HasMetadata>, DeletionPropagation?> = when (builtInKindOrNull(kind, group)) {
+        "pod" -> {
+            val ns = requireNamespace("Pod", namespace)
+            k8s.pods().inNamespace(ns).withName(name) to null
+        }
+
+        "deployment" -> {
+            val ns = requireNamespace("Deployment", namespace)
+            // Foreground so dependent ReplicaSets/Pods are deleted before the
+            // call returns, matching the "click Delete → it's gone" expectation.
+            k8s.apps().deployments().inNamespace(ns).withName(name) to DeletionPropagation.FOREGROUND
+        }
+
+        "service" -> {
+            val ns = requireNamespace("Service", namespace)
+            k8s.services().inNamespace(ns).withName(name) to null
+        }
+
+        "configmap" -> {
+            val ns = requireNamespace("ConfigMap", namespace)
+            k8s.configMaps().inNamespace(ns).withName(name) to null
+        }
+
+        "secret" -> {
+            val ns = requireNamespace("Secret", namespace)
+            k8s.secrets().inNamespace(ns).withName(name) to null
+        }
+
+        "job" -> {
+            val ns = requireNamespace("Job", namespace)
+            // kubectl's default orphans Pods; users hitting "Delete" in a
+            // dashboard expect the Pods to go too.
+            k8s.batch().v1().jobs().inNamespace(ns).withName(name) to DeletionPropagation.FOREGROUND
+        }
+
+        "cronjob" -> {
+            val ns = requireNamespace("CronJob", namespace)
+            k8s.batch().v1().cronjobs().inNamespace(ns).withName(name) to DeletionPropagation.FOREGROUND
+        }
+
+        "namespace" -> k8s.namespaces().withName(name) to null
+
+        "serviceaccount" -> {
+            val ns = requireNamespace("ServiceAccount", namespace)
+            k8s.serviceAccounts().inNamespace(ns).withName(name) to null
+        }
+
+        "role" -> {
+            val ns = requireNamespace("Role", namespace)
+            k8s.rbac().roles().inNamespace(ns).withName(name) to null
+        }
+
+        "clusterrole" -> k8s.rbac().clusterRoles().withName(name) to null
+
+        "rolebinding" -> {
+            val ns = requireNamespace("RoleBinding", namespace)
+            k8s.rbac().roleBindings().inNamespace(ns).withName(name) to null
+        }
+
+        "clusterrolebinding" -> k8s.rbac().clusterRoleBindings().withName(name) to null
+
+        "horizontalpodautoscaler" -> {
+            val ns = requireNamespace("HorizontalPodAutoscaler", namespace)
+            k8s.autoscaling().v2().horizontalPodAutoscalers().inNamespace(ns).withName(name) to null
+        }
+
+        "poddisruptionbudget" -> {
+            val ns = requireNamespace("PodDisruptionBudget", namespace)
+            k8s.policy().v1().podDisruptionBudget().inNamespace(ns).withName(name) to null
+        }
+
+        "resourcequota" -> {
+            val ns = requireNamespace("ResourceQuota", namespace)
+            k8s.resourceQuotas().inNamespace(ns).withName(name) to null
+        }
+
+        "limitrange" -> {
+            val ns = requireNamespace("LimitRange", namespace)
+            k8s.limitRanges().inNamespace(ns).withName(name) to null
+        }
+
+        "priorityclass" -> k8s.scheduling().v1().priorityClasses().withName(name) to null
+
+        "validatingwebhookconfiguration" -> k8s.admissionRegistration().v1().validatingWebhookConfigurations().withName(name) to null
+
+        "mutatingwebhookconfiguration" -> k8s.admissionRegistration().v1().mutatingWebhookConfigurations().withName(name) to null
+
+        "ingressclass" -> k8s.network().v1().ingressClasses().withName(name) to null
+
+        "endpointslice" -> {
+            val ns = requireNamespace("EndpointSlice", namespace)
+            k8s.discovery().v1().endpointSlices().inNamespace(ns).withName(name) to null
+        }
+
+        "csidriver" -> k8s.storage().v1().csiDrivers().withName(name) to null
+
+        "certificatesigningrequest" -> k8s.certificates().v1().certificateSigningRequests().withName(name) to null
+
+        // The kinds the sidebar lists through GenericResourceScreen without an
+        // API group. They used to fall through to the generic branch below,
+        // which needs group/version, so "Delete" on these rows always failed.
+        "statefulset" -> {
+            val ns = requireNamespace("StatefulSet", namespace)
+            // Foreground, like Deployment: the pods go with it.
+            k8s.apps().statefulSets().inNamespace(ns).withName(name) to DeletionPropagation.FOREGROUND
+        }
+
+        "daemonset" -> {
+            val ns = requireNamespace("DaemonSet", namespace)
+            k8s.apps().daemonSets().inNamespace(ns).withName(name) to DeletionPropagation.FOREGROUND
+        }
+
+        "replicaset" -> {
+            val ns = requireNamespace("ReplicaSet", namespace)
+            k8s.apps().replicaSets().inNamespace(ns).withName(name) to DeletionPropagation.FOREGROUND
+        }
+
+        "ingress" -> {
+            val ns = requireNamespace("Ingress", namespace)
+            k8s.network().v1().ingresses().inNamespace(ns).withName(name) to null
+        }
+
+        // The router labels the screen "Endpoint"; the API kind is "Endpoints".
+        "endpoint", "endpoints" -> {
+            val ns = requireNamespace("Endpoints", namespace)
+            k8s.endpoints().inNamespace(ns).withName(name) to null
+        }
+
+        "networkpolicy" -> {
+            val ns = requireNamespace("NetworkPolicy", namespace)
+            k8s.network().v1().networkPolicies().inNamespace(ns).withName(name) to null
+        }
+
+        "persistentvolume" -> k8s.persistentVolumes().withName(name) to null
+
+        "persistentvolumeclaim" -> {
+            val ns = requireNamespace("PersistentVolumeClaim", namespace)
+            k8s.persistentVolumeClaims().inNamespace(ns).withName(name) to null
+        }
+
+        "storageclass" -> k8s.storage().v1().storageClasses().withName(name) to null
+
+        else -> if (!group.isNullOrBlank() && !version.isNullOrBlank()) {
+            val effectivePlural = plural?.takeIf { it.isNotBlank() } ?: defaultPluralForKind(kind)
+            val rdc = ResourceDefinitionContext.Builder()
+                .withGroup(group)
+                .withVersion(version)
+                .withKind(kind)
+                .withPlural(effectivePlural)
+                .withNamespaced(namespace != null)
+                .build()
+            val op = k8s.genericKubernetesResources(rdc)
+            (if (namespace != null) op.inNamespace(namespace).withName(name) else op.withName(name)) to null
+        } else {
+            throw IllegalArgumentException("Delete not supported for $kind")
+        }
     }
 
     // ── On-demand: Scale / Rollout Restart ─────────────────────────────────────
