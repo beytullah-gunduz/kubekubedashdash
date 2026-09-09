@@ -31,6 +31,7 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.RelatedResources
+import com.kubekubedashdash.util.builtInKindLabelOrNull
 import com.kubekubedashdash.util.childrenOf
 import com.kubekubedashdash.util.jobsOwnedBy
 import com.kubekubedashdash.util.ownerChain
@@ -84,7 +85,9 @@ private val DETAIL_ROUTABLE_KINDS = setOf(
  * Assembles [RelatedResources] for the resource identified by [kind]/[uid],
  * from the informer-backed flows on [client] — per D4, no suspend, no fetch,
  * no polling. Only the flows the given [kind] actually needs are collected,
- * so opening (say) a Deployment panel never starts a Jobs watch. A flow that
+ * so opening (say) a Deployment panel never starts a Jobs watch. A
+ * group-qualified kind — a CRD reusing a built-in name — relates to nothing
+ * (F13). A flow that
  * is not yet [ResourceState.Success] (including one nobody has subscribed to
  * before now, which starts out `Loading`) contributes an empty list rather
  * than blocking or erroring — see D4's caveat about `WhileSubscribed(60_000)`.
@@ -97,7 +100,8 @@ fun rememberRelated(
     namespace: String?,
     labels: Map<String, String>,
     owners: List<OwnerRefInfo>,
-): RelatedResources = when (kind) {
+    group: String? = null,
+): RelatedResources = when (builtInKindLabelOrNull(kind, group)) {
     // A Pod can be owned all the way up through a ReplicaSet (→ Deployment),
     // a Job (→ CronJob), or another Pod (Spark executor → driver) — so it is
     // the one kind that needs every flow, to walk past its immediate owner.

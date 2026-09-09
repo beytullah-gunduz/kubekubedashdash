@@ -101,7 +101,7 @@ fun CustomResourcesSection(
                     CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
                 }
             }
-            val grouped = unpinned.groupBy { it.group.ifBlank { "(core)" } }
+            val grouped = unpinned.groupBy { it.group.ifBlank { "(core)" } } // unreachable since F13: mapCrd refuses a group-less CRD
                 .toSortedMap()
             grouped.forEach { (group, items) ->
                 GroupBlock(

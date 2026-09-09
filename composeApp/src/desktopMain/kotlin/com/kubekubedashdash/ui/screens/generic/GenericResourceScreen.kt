@@ -399,7 +399,7 @@ fun GenericResourceScreen(
                                         pendingDelete = res
                                         delete.clearError()
                                     },
-                                    extraActions = if (kind.equals("Job", ignoreCase = true) && onOpenLogs != null) {
+                                    extraActions = if (builtInKindOrNull(kind, apiGroup) == "job" && onOpenLogs != null) {
                                         { res -> listOf(RowAction("View logs") { jobLogsTarget = res }) }
                                     } else {
                                         null
@@ -424,6 +424,7 @@ fun GenericResourceScreen(
                                 namespace = res.namespace,
                                 labels = res.labels,
                                 owners = res.owners,
+                                group = apiGroup,
                             )
                             val fields = buildList {
                                 if (namespacedKind && res.namespace != null) {
@@ -560,7 +561,7 @@ fun GenericResourceScreen(
                             } else {
                                 emptyList()
                             }
-                            val jobLogActions = if (kind.equals("Job", ignoreCase = true) && onOpenLogs != null) {
+                            val jobLogActions = if (builtInKindOrNull(kind, apiGroup) == "job" && onOpenLogs != null) {
                                 listOf(
                                     DetailAction(
                                         label = "Logs",
@@ -583,8 +584,8 @@ fun GenericResourceScreen(
                                 annotations = res.annotations,
                                 onClose = { viewModel.clearSelection() },
                                 modifier = Modifier.fillMaxSize(),
-                                extraTabs = kindExtraTabs(kind, res, client, onNavigate),
-                                overviewSections = kindOverviewSections(kind, res, client, related, onNavigate),
+                                extraTabs = kindExtraTabs(kind, res, client, onNavigate, group = apiGroup),
+                                overviewSections = kindOverviewSections(kind, res, client, related, onNavigate, group = apiGroup),
                                 labelQuery = labelQuery,
                                 onToggleLabel = { k, v ->
                                     onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))

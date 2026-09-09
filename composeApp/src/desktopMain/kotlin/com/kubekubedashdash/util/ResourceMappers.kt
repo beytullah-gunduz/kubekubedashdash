@@ -183,7 +183,8 @@ object ResourceMappers {
             }
             .orEmpty()
         return CrdInfo(
-            group = spec.group ?: "",
+            // A CRD without a group is malformed (the API requires one); listed, it would read as a built-in at every guarded site and its RDC would target the core group (F13).
+            group = spec.group?.takeIf { it.isNotBlank() } ?: return null,
             version = version.name ?: return null,
             kind = spec.names?.kind ?: return null,
             plural = spec.names?.plural ?: return null,

@@ -26,6 +26,9 @@ import org.slf4j.LoggerFactory
  */
 internal fun builtInKindOrNull(kind: String, group: String?): String? = if (group.isNullOrBlank()) kind.lowercase() else null
 
+/** The exact-case twin of [builtInKindOrNull], for `when`s over the router's kind labels ("ReplicaSet"). */
+internal fun builtInKindLabelOrNull(kind: String, group: String?): String? = if (group.isNullOrBlank()) kind else null
+
 /** Pure Kind -> lowercase plural fallback. Shared by ReactiveKubeClient (CRD list/yaml
  *  path) and ClusterActions (deleteResource). Top-level so both can call it. */
 internal fun defaultPluralForKind(kind: String): String {
