@@ -3,9 +3,13 @@
 
     <property name="LOG_DIR" value="${LOG_DIR:-logs}" />
 
-    <!-- %fold(...) renders its sub-pattern with the home directory folded to ~ in either
-         separator style, so a path that reaches any appender never names the user (F15).
-         UI texts are folded per site (displayPath); logback cannot reach them. -->
+    <!-- %fold(...) renders its sub-pattern with every exact-case occurrence of the home
+         directory folded to ~ (either separator style for a Windows home), so a message or
+         stack trace that reaches any appender does not name the user (F15). UI texts are
+         folded per site (displayPath); logback cannot reach them. The converter class must
+         stay loadable: a rule whose class is missing collapses every message on every
+         appender to %PARSER_ERROR, and the status listener above is silent. The ProGuard
+         keep for com.kubekubedashdash.** in proguard-rules.pro covers it. -->
     <conversionRule conversionWord="fold" class="com.kubekubedashdash.logging.HomePathConverter" />
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
