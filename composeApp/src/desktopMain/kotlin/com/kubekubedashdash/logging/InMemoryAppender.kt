@@ -22,19 +22,19 @@ class InMemoryAppender : AppenderBase<ILoggingEvent>() {
     }
 
     override fun append(event: ILoggingEvent) {
-        val formattedMessage =
-            encoder?.let {
-                String(it.encode(event)).trimEnd()
-            } ?: event.formattedMessage
+        // The pattern folds the rendered line (%fold in logback.xml); the raw
+        // fields kept beside it are folded here too, so no reader of an
+        // AppLogEntry sees a home path whatever the configured pattern (F15).
+        val formattedMessage = HomePathFolding.fold(encoder?.let { String(it.encode(event)).trimEnd() } ?: event.formattedMessage)
 
         val entry = AppLogEntry(
             timestamp = event.timeStamp,
             level = event.level.toString(),
             loggerName = event.loggerName,
-            message = event.formattedMessage,
+            message = HomePathFolding.fold(event.formattedMessage),
             formattedMessage = formattedMessage,
             threadName = event.threadName,
-            throwable = event.throwableProxy?.message,
+            throwable = event.throwableProxy?.message?.let(HomePathFolding::fold),
         )
 
         entries.addLast(entry)
