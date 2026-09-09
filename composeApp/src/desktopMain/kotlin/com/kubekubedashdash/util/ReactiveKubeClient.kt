@@ -177,11 +177,6 @@ class ReactiveKubeClient(
 
     // ── Namespaces ──────────────────────────────────────────────────────────────
 
-    val namespaceNames: StateFlow<ResourceState<List<String>>> = informers.informer(
-        inform = { k, h -> k.namespaces().runnableInformer(0L).addEventHandler(h) },
-        mapper = { ns -> ns.metadata.name },
-    )
-
     val namespaces: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.informer(
         inform = { k, h -> k.namespaces().runnableInformer(0L).addEventHandler(h) },
         mapper = { ns ->
@@ -197,6 +192,15 @@ class ReactiveKubeClient(
             )
         },
     )
+
+    /**
+     * The view of [namespaces] the picker, the overview count and the
+     * cluster-info combine read: names only, from the same informer as the
+     * table's rows (F17). Before, a second informer
+     * over the same resource, which a denial parked beside the first and the
+     * table's Retry did not revive.
+     */
+    val namespaceNames: StateFlow<ResourceState<List<String>>> = informers.derivedList(namespaces) { list -> list.map { it.name } }
 
     // ── Pods ────────────────────────────────────────────────────────────────────
 
