@@ -152,15 +152,19 @@ internal val BUILT_IN_KIND_GROUPS: Map<String, String> = mapOf(
 /** The built-in group for [kind] (any case), or null when no built-in of that name is routable. */
 internal fun builtInGroupOf(kind: String): String? = BUILT_IN_KIND_GROUPS[kind.lowercase()]
 
+/** The kinds that lived in `extensions/v1beta1` before their current group; a reference stamped then still names the same built-in. */
+private val LEGACY_EXTENSIONS_KINDS = setOf("deployment", "daemonset", "replicaset", "ingress")
+
 /**
  * True when [group] names the built-in [kind]: a routable kind whose group
- * is the built-in's own or unknown. A custom resource reusing the name in
+ * is the built-in's own, its legacy `extensions` group for the four kinds
+ * that once lived there, or unknown. A custom resource reusing the name in
  * its own group — or a core-group `Deployment`, which does not exist — is
  * not the built-in (F16).
  */
 internal fun namesBuiltIn(kind: String, group: String?): Boolean {
     val builtInGroup = builtInGroupOf(kind) ?: return false
-    return group == null || group == builtInGroup
+    return group == null || group == builtInGroup || (group == "extensions" && kind.lowercase() in LEGACY_EXTENSIONS_KINDS)
 }
 
 /** True when this reference names the built-in [kind] — same kind label, and a group that [namesBuiltIn] accepts. */

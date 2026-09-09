@@ -46,8 +46,8 @@ private const val CHILDREN_CHIP_CAP = 12
 /**
  * The one destination rule for a chip click (D5). Pod routes to the real pod
  * panel when its uid is known — no other route opens it. Every other
- * built-in kind routes to the generic detail screen, which takes exactly
- * [RelatedRef]'s three identifying fields. Never routes at a bare
+ * built-in kind routes to the generic detail screen, which takes
+ * [RelatedRef]'s kind, name and namespace. Never routes at a bare
  * `Screen.Main.*` list object: those carry no selection, so a chip sent
  * there would land on an unfiltered list.
  */
