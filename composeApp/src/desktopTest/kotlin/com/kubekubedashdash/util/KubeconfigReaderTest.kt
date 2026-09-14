@@ -220,6 +220,9 @@ class KubeconfigReaderTest {
 
     /** A kubeconfig whose exec users' plugin only touches [marker]; a user without a profile carries a placeholder token. */
     private fun kubeconfig(currentContext: String?, vararg contexts: Ctx): String = buildString {
+        // Single-quoted YAML for the plugin args: a double-quoted scalar reads the
+        // backslashes of a Windows temp path as escapes and the whole file fails to parse.
+        val markerPath = marker.absolutePath.replace("'", "''")
         appendLine("apiVersion: v1")
         appendLine("kind: Config")
         if (currentContext != null) appendLine("current-context: $currentContext")
@@ -244,7 +247,7 @@ class KubeconfigReaderTest {
                 appendLine("    exec:")
                 appendLine("      apiVersion: client.authentication.k8s.io/v1beta1")
                 appendLine("      command: /bin/sh")
-                appendLine("      args: [\"-c\", \"touch '${marker.absolutePath}'\"]")
+                appendLine("      args: ['-c', 'touch \"$markerPath\"']")
                 appendLine("      env:")
                 appendLine("      - name: AWS_PROFILE")
                 appendLine("        value: ${it.awsProfile}")

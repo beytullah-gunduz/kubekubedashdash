@@ -68,8 +68,11 @@ class KubeconfigDiscoveryNoExecTest {
         assertFalse(marker.exists(), "counting contexts must not execute the exec credential plugin")
     }
 
-    private fun kubeconfigWithExecPlugin(marker: File): String =
-        """
+    private fun kubeconfigWithExecPlugin(marker: File): String {
+        // Single-quoted YAML for the plugin args: a double-quoted scalar reads the
+        // backslashes of a Windows temp path as escapes and the whole file fails to parse.
+        val markerPath = marker.absolutePath.replace("'", "''")
+        return """
         apiVersion: v1
         kind: Config
         current-context: ctx-a
@@ -95,7 +98,7 @@ class KubeconfigDiscoveryNoExecTest {
             exec:
               apiVersion: client.authentication.k8s.io/v1beta1
               command: /bin/sh
-              args: ["-c", "touch '${marker.absolutePath}'"]
+              args: ['-c', 'touch "$markerPath"']
               env:
               - name: AWS_PROFILE
                 value: example-profile
@@ -103,4 +106,5 @@ class KubeconfigDiscoveryNoExecTest {
           user:
             token: placeholder
         """.trimIndent()
+    }
 }
