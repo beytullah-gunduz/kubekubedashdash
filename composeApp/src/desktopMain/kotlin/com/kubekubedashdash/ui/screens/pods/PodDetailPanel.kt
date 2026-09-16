@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,8 +32,10 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -51,15 +55,19 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ContainerInfo
+import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.delete_filled
+import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.terminal_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -68,6 +76,7 @@ import com.kubekubedashdash.ui.components.EMPTY_DASH
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.MetricsLineChart
 import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
+import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
@@ -80,21 +89,30 @@ import com.kubekubedashdash.ui.screens.DetailActionMenuItem
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import com.kubekubedashdash.ui.screens.RelatedSection
+import com.kubekubedashdash.ui.screens.events.EventListItem
+import com.kubekubedashdash.ui.screens.events.eventsForObject
+import com.kubekubedashdash.ui.screens.events.warningEventCount
 import com.kubekubedashdash.ui.screens.relatedScreen
 import com.kubekubedashdash.ui.screens.rememberRelated
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.RelatedResources
+import com.kubekubedashdash.util.formatAge
 import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
+import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
+import java.time.Instant
 
 private enum class DetailTab(val label: String, val icon: DrawableResource) {
     Overview("Overview", Res.drawable.info_filled),
+    Events("Events", Res.drawable.event_note_filled),
     Yaml("YAML", Res.drawable.code_filled),
 }
 
@@ -130,6 +148,36 @@ fun PodDetailPanel(
         labels = pod.labels,
         owners = pod.owners,
     )
+
+    // Events come from the cached namespace informer that the cluster-health
+    // flow already keeps running — no API call. Deriving on the flow and
+    // de-duplicating BEFORE collecting means the panel recomposes only when
+    // this pod's own events change, not on every cluster-wide emission.
+    // The informer follows the namespace filter, so a pod outside that scope
+    // (filter switched with the panel open) has no events in it; the tab
+    // says so instead of claiming "No events".
+    val podEventsState by remember(kubeClient, pod.uid, pod.name, pod.namespace) {
+        kubeClient.events
+            .map { state ->
+                when (state) {
+                    ResourceState.Loading -> ResourceState.Loading
+
+                    is ResourceState.Error -> state
+
+                    is ResourceState.Success -> ResourceState.Success(
+                        eventsForObject(state.data, kind = "Pod", name = pod.name, namespace = pod.namespace, uid = pod.uid),
+                    )
+                }
+            }
+            .distinctUntilChanged()
+    }.collectAsState(ResourceState.Loading)
+    val selectedNamespace by kubeClient.selectedNamespace.collectAsState()
+    val eventsInScope = selectedNamespace == null || selectedNamespace == pod.namespace
+    val warningCount = if (eventsInScope) {
+        warningEventCount((podEventsState as? ResourceState.Success)?.data ?: emptyList())
+    } else {
+        0
+    }
 
     // ── Evict dialog state ─────────────────────────────────────────────────────
     var showEvictDialog by remember(pod.uid) { mutableStateOf(false) }
@@ -185,7 +233,7 @@ fun PodDetailPanel(
                     ownerChain = related.owners,
                     onOwnerClick = { ref -> relatedScreen(ref)?.let(onNavigate) },
                 )
-                PanelTabs(activeTab, tabs) { newTab ->
+                PanelTabs(activeTab, tabs, warningCount) { newTab ->
                     activeTab = newTab
                     scope.launch {
                         pagerState.animateScrollToPage(tabs.indexOf(newTab).coerceAtLeast(0))
@@ -206,6 +254,14 @@ fun PodDetailPanel(
                             onToggleLabel = onToggleLabel,
                             annotationQuery = annotationQuery,
                             onToggleAnnotation = onToggleAnnotation,
+                        )
+
+                        DetailTab.Events -> PodEventsTab(
+                            state = podEventsState,
+                            inScope = eventsInScope,
+                            podNamespace = pod.namespace,
+                            onRetry = { restartListFlow(kubeClient.events) },
+                            onEventClick = { ev -> onNavigate(Screen.Detail.EventDetail(ev)) },
                         )
 
                         DetailTab.Yaml -> GenericYamlTab("Pod", pod.name, pod.namespace)
@@ -348,7 +404,7 @@ private fun PanelHeader(
 // ── Tab Bar ─────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, onTabChange: (DetailTab) -> Unit) {
+private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount: Int, onTabChange: (DetailTab) -> Unit) {
     SecondaryTabRow(
         selectedTabIndex = tabs.indexOf(activeTab).coerceAtLeast(0),
         containerColor = KdSurfaceVariant.copy(alpha = 0.5f),
@@ -369,6 +425,18 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, onTabChange: 
                     Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
                     Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                    if (tab == DetailTab.Events && warningCount > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(shape = RoundedCornerShape(8.dp), color = KdWarning.copy(alpha = 0.18f)) {
+                            Text(
+                                "$warningCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KdWarning,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -438,6 +506,70 @@ private fun OverviewTab(
         }
 
         RelatedSection(related, onNavigate)
+    }
+}
+
+// ── Events Tab ──────────────────────────────────────────────────────────────────
+
+private const val EVENT_AGE_TICK_MS = 10_000L
+
+@Composable
+private fun PodEventsTab(
+    state: ResourceState<List<EventInfo>>,
+    inScope: Boolean,
+    podNamespace: String,
+    onRetry: () -> Unit,
+    onEventClick: (EventInfo) -> Unit,
+) {
+    when {
+        !inScope -> CenteredNote(
+            title = "Not watching namespace “$podNamespace”",
+            body = "Switch the namespace filter to “$podNamespace” or All Namespaces to see this pod's events.",
+        )
+
+        state is ResourceState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+        }
+
+        state is ResourceState.Error -> ResourceErrorMessage(state.message, onRetry = onRetry)
+
+        state is ResourceState.Success && state.data.isEmpty() -> CenteredNote(
+            title = "No events for this pod",
+            body = "Kubernetes discards events after about an hour by default.",
+        )
+
+        state is ResourceState.Success -> {
+            // The informer only re-emits on change, so "Last seen 30s" would
+            // otherwise freeze while a crash-looping pod's panel stays open.
+            val now by produceState(Instant.now()) {
+                while (true) {
+                    delay(EVENT_AGE_TICK_MS)
+                    value = Instant.now()
+                }
+            }
+            val events = state.data
+            val rows = remember(events, now) { events.map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) } }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item { SectionLabel("${rows.size} Events") }
+                items(rows.size) { i -> EventListItem(rows[i], onClick = { onEventClick(rows[i]) }) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CenteredNote(title: String, body: String) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(14.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(4.dp))
+        Text(body, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
     }
 }
 

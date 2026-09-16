@@ -1,6 +1,5 @@
 package com.kubekubedashdash.ui.screens.nodes
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -37,11 +35,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
-import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
@@ -76,6 +72,7 @@ import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.DetailFieldsCard
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
 import com.kubekubedashdash.ui.screens.GenericYamlTab
+import com.kubekubedashdash.ui.screens.events.EventListItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -468,7 +465,7 @@ private fun NodeOverviewCombinedTab(
         } else if (events.isEmpty()) {
             item { Text("No events for this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary) }
         } else {
-            items(events.size) { i -> NodeEventItem(events[i]) }
+            items(events.size) { i -> EventListItem(events[i]) }
         }
 
         item { Spacer(Modifier.height(8.dp)) }
@@ -594,7 +591,7 @@ private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-            items(events.size) { i -> NodeEventItem(events[i]) }
+            items(events.size) { i -> EventListItem(events[i]) }
         }
     }
 }
@@ -640,75 +637,6 @@ private fun NodePodItem(pod: PodInfo, onClick: () -> Unit) {
                     )
                     Text(
                         pod.age,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NodeEventItem(event: EventInfo) {
-    val typeColor = when (event.type.lowercase()) {
-        "warning" -> KdWarning
-        "error" -> KdError
-        else -> KdTextSecondary
-    }
-
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = KdSurfaceVariant,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Box(
-                Modifier
-                    .padding(top = 4.dp)
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(typeColor),
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        event.reason,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdTextPrimary,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        event.type,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = typeColor,
-                    )
-                }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    event.message,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = KdTextSecondary,
-                    maxLines = 3,
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (event.count > 1) {
-                        Text(
-                            "×${event.count}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Text(
-                        "Last seen ${event.lastSeen}",
                         style = MaterialTheme.typography.labelSmall,
                         color = KdTextSecondary,
                     )

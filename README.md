@@ -96,7 +96,8 @@ Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scorin
 
 ### Pod details
 
-- Overview and YAML views, with a container picker for multi-container pods
+- Overview, Events, and YAML views, with a container picker for multi-container pods
+- **Events** tab listing the pod's own Kubernetes events, newest first, with a warning-count badge on the tab; click an event to open its detail
 - CPU and memory usage gauges when a Metrics Server is installed
 - One-click **View logs** (streamed into the bottom drawer) and **Open shell** (interactive terminal — see below)
 - **Evict**, **Force-Delete**, and **Delete** actions
