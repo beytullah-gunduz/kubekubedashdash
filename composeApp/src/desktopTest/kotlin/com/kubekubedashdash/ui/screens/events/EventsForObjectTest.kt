@@ -52,6 +52,15 @@ class EventsForObjectTest {
     }
 
     @Test
+    fun `falls back to the name when the pod has no uid`() {
+        // A demo pod maps to uid = "" (the mock server assigns none), while a
+        // real event always carries one — the guard must fall back on either
+        // blank side, not only the event's.
+        val carriesUid = event("e1", "web-0", objectUid = "pod-a")
+        assertEquals(listOf(carriesUid), forPod(listOf(carriesUid), uid = ""))
+    }
+
+    @Test
     fun `excludes other kinds and other namespaces`() {
         val mine = event("e1", "web-0", objectUid = "pod-a")
         val replicaSet = event("e2", "web-0", objectUid = "pod-a", kind = "ReplicaSet")
