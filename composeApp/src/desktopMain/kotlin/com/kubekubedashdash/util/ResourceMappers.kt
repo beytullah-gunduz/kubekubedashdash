@@ -151,6 +151,7 @@ object ResourceMappers {
             objectRef = "$objKind/$objName",
             objectKind = objKind,
             objectName = objName,
+            objectUid = ev.involvedObject?.uid ?: "",
             message = ev.message ?: "",
             count = ev.count ?: 1,
             firstSeen = formatAge(ev.firstTimestamp ?: ev.metadata?.creationTimestamp),
