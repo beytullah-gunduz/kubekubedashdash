@@ -36,6 +36,7 @@ import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.screens.events.viewmodel.EventsScreenViewModel
+import com.kubekubedashdash.ui.screens.events.viewmodel.nodeFilterKey
 import com.kubekubedashdash.util.restartListFlow
 import kotlinx.coroutines.flow.first
 
@@ -83,7 +84,7 @@ fun EventsScreen(
         is ResourceState.Success -> {
             val availableTypes = remember(s.data) { s.data.map { it.type }.toSet() }
             val availableNodes = remember(s.data) {
-                s.data.map { it.node.ifEmpty { "-" } }.toSet()
+                s.data.map { it.nodeFilterKey() }.toSet()
             }
 
             val effectiveTypes = typeFilter ?: availableTypes
@@ -92,7 +93,7 @@ fun EventsScreen(
             val filtered = remember(s.data, effectiveTypes, effectiveNodes, searchQuery) {
                 s.data.filter { ev ->
                     ev.type in effectiveTypes &&
-                        (ev.node.ifEmpty { "-" }) in effectiveNodes &&
+                        ev.nodeFilterKey() in effectiveNodes &&
                         (
                             searchQuery.isBlank() ||
                                 ev.reason.contains(searchQuery, ignoreCase = true) ||
@@ -164,6 +165,7 @@ fun EventsScreen(
                     events = filtered,
                     selectedUid = selectedEventUid,
                     onEventClick = { event ->
+                        viewModel.dismissPendingSelection()
                         selectedEventUid = event.uid
                         onNavigate(Screen.Detail.EventDetail(event))
                     },

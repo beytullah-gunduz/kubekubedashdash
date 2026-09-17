@@ -261,7 +261,10 @@ fun PodDetailPanel(
                             inScope = eventsInScope,
                             podNamespace = pod.namespace,
                             onRetry = { restartListFlow(kubeClient.events) },
-                            onEventClick = { ev -> onNavigate(Screen.Detail.EventDetail(ev)) },
+                            // Like every other cross-kind link: land on the
+                            // Events screen with the row selected, which opens
+                            // the detail itself (ClusterOverview does the same).
+                            onEventClick = { ev -> onNavigate(Screen.Main.Events(selectEventUid = ev.uid)) },
                         )
 
                         DetailTab.Yaml -> GenericYamlTab("Pod", pod.name, pod.namespace)
