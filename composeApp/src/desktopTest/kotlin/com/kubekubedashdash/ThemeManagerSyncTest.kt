@@ -1,5 +1,7 @@
 package com.kubekubedashdash
 
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.util.SystemDirectories
 import kotlinx.coroutines.flow.first
@@ -28,6 +30,16 @@ class ThemeManagerSyncTest {
 
     private lateinit var original: ThemeMode
     private lateinit var originalPersisted: ThemeMode
+    private val themeKey = stringPreferencesKey("theme_mode")
+
+    // setThemeMode persists from an un-awaited launch. Wait for the file to
+    // show the value before moving on, so no write is still in flight when
+    // the next case — or the next test class — touches the same key.
+    private fun awaitPersisted(mode: ThemeMode) = runBlocking {
+        withTimeout(10_000) {
+            dataStorePreferencesInstance.data.first { (it[themeKey] ?: ThemeMode.SYSTEM.name) == mode.name }
+        }
+    }
 
     @BeforeTest
     fun setUp() {
@@ -43,12 +55,14 @@ class ThemeManagerSyncTest {
     fun restore() {
         ThemeManager.syncFromPreferences(original)
         PreferenceRepository.setThemeMode(originalPersisted)
+        awaitPersisted(originalPersisted)
     }
 
     @Test
     fun `a persisted DARK lands in the manager without being written back`() = runBlocking<Unit> {
         withTimeout(10_000) { PreferenceRepository.preferencesLoaded.first { it } }
         PreferenceRepository.setThemeMode(ThemeMode.LIGHT)
+        awaitPersisted(ThemeMode.LIGHT)
 
         ThemeManager.syncFromPreferences(ThemeMode.DARK)
 
@@ -85,6 +99,7 @@ class ThemeManagerSyncTest {
 
         ThemeManager.setMode(ThemeMode.DARK)
         assertEquals(ThemeMode.DARK, PreferenceRepository.themeMode.value)
+        awaitPersisted(ThemeMode.DARK)
 
         ThemeManager.syncFromPreferences(PreferenceRepository.themeMode.value)
         assertEquals(ThemeMode.DARK, ThemeManager.mode)
