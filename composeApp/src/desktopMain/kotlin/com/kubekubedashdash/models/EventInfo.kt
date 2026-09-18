@@ -10,6 +10,7 @@ data class EventInfo(
     val objectRef: String,
     val objectKind: String = "",
     val objectName: String = "",
+    val objectUid: String = "",
     val message: String,
     val count: Int,
     val firstSeen: String,

@@ -164,7 +164,7 @@ class ResourceMappersTest {
             .withNewMetadata().withName("e").withNamespace("kube-system").withUid("ev-1").endMetadata()
             .withLastTimestamp("2026-02-02T10:00:00Z")
             .withInvolvedObject(
-                ObjectReferenceBuilder().withKind("Pod").withName("web-0").build(),
+                ObjectReferenceBuilder().withKind("Pod").withName("web-0").withUid("pod-uid-1").build(),
             )
             .withMessage("Back-off restarting failed container")
             .build()
@@ -173,9 +173,21 @@ class ResourceMappersTest {
         assertEquals("Pod/web-0", info.objectRef)
         assertEquals("Pod", info.objectKind)
         assertEquals("web-0", info.objectName)
+        assertEquals("pod-uid-1", info.objectUid)
         assertEquals("Normal", info.type) // default when ev.type is null
         assertEquals(1, info.count) // default when ev.count is null
         assertEquals("kube-system", info.namespace)
+    }
+
+    @Test
+    fun `mapEvent leaves objectUid blank when the involved object carries none`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").withUid("ev-2").endMetadata()
+            .withLastTimestamp("2026-02-02T10:00:00Z")
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        assertEquals("", ResourceMappers.mapEvent(ev)!!.objectUid)
     }
 
     // ── mapCrd ──────────────────────────────────────────────────────────────

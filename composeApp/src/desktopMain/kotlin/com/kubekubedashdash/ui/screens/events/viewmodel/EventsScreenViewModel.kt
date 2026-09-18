@@ -11,10 +11,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import org.slf4j.LoggerFactory
 
 class EventsScreenViewModel(
     reactiveClient: ReactiveKubeClient,
 ) : ViewModel() {
+
+    private val log = LoggerFactory.getLogger(EventsScreenViewModel::class.java)
 
     private val _selected = MutableStateFlow<EventInfo?>(null)
     val selected: StateFlow<EventInfo?> = _selected.asStateFlow()
@@ -38,26 +41,53 @@ class EventsScreenViewModel(
     private var pendingSelectUid: String? = null
 
     val state: StateFlow<ResourceState<List<EventInfo>>> = reactiveClient.events
-        .onEach { s ->
-            if (s is ResourceState.Success) {
-                val uid = pendingSelectUid
-                if (uid != null) {
-                    _selected.value = s.data.firstOrNull { it.uid == uid }
-                    pendingSelectUid = null
-                }
-            }
-        }
+        .onEach { s -> if (s is ResourceState.Success) resolvePending(s.data) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
 
     fun setParams(selectEventUid: String? = null) {
         _selected.value = null
         pendingSelectUid = selectEventUid
+        // Resolve against the snapshot already in hand: the informer replays
+        // its current value when the screen subscribes, which happens BEFORE
+        // this call — on a quiet cluster no further emission may ever arrive,
+        // and the pending uid would wait forever on an event that never comes.
         if (selectEventUid != null) {
-            val current = state.value
-            if (current is ResourceState.Success) {
-                _selected.value = current.data.firstOrNull { it.uid == selectEventUid }
-                pendingSelectUid = null
-            }
+            (state.value as? ResourceState.Success)?.let { resolvePending(it.data) }
         }
     }
+
+    /** A manual row click supersedes any unresolved jump-to-event target. */
+    fun dismissPendingSelection() {
+        pendingSelectUid = null
+    }
+
+    private fun resolvePending(current: List<EventInfo>) {
+        val uid = pendingSelectUid ?: return
+        // Keep the pending uid until the event actually appears: a snapshot
+        // that lacks it (the stale value of a previous visit, a pre-switch
+        // replay) must not consume the jump — the next one may carry it.
+        val resolved = current.firstOrNull { it.uid == uid }
+        if (resolved == null) {
+            log.debug("Pending event selection uid={} not in snapshot of {} events; keeping", uid, current.size)
+            return
+        }
+        log.debug("Pending event selection resolved uid={}", uid)
+        revealInFilters(resolved)
+        _selected.value = resolved
+        pendingSelectUid = null
+    }
+
+    // A jump must land on a visible row: an allowlist left over from an
+    // earlier visit (Warning-only, a single node) that would hide the target
+    // is cleared. One that already shows it is kept.
+    private fun revealInFilters(event: EventInfo) {
+        if (filterHides(_typeFilter.value, event.type)) _typeFilter.value = null
+        if (filterHides(_nodeFilter.value, event.nodeFilterKey())) _nodeFilter.value = null
+    }
 }
+
+/** True when a non-null allowlist would hide [value]. */
+internal fun filterHides(filter: Set<String>?, value: String): Boolean = filter != null && value !in filter
+
+/** The key the Events screen's node filter matches on: an event with no source host files under "-". */
+internal fun EventInfo.nodeFilterKey(): String = node.ifEmpty { "-" }
