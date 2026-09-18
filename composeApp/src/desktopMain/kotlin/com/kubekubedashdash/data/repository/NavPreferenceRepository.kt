@@ -108,7 +108,13 @@ internal fun encodeContextLists(map: Map<String, List<String>>): String = navPre
 object NavPreferenceRepository {
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + preferenceWriteFailureHandler("NavPreferenceRepository"))
+
+    // One writer at a time, in call order. Every setter updates memory and
+    // launches its persist without awaiting it; on a shared pool two quick
+    // launches can reach DataStore in either order, so a rapid A-then-B could
+    // persist B-then-A and come back as A on the next start (and the
+    // preference tests raced each other the same way on CI).
+    private val ioScope = CoroutineScope(Dispatchers.IO.limitedParallelism(1) + SupervisorJob() + preferenceWriteFailureHandler("NavPreferenceRepository"))
 
     private val NAV_FAVOURITES by lazy { stringPreferencesKey("nav_favourites_per_context") }
     private val NAV_RECENTS by lazy { stringPreferencesKey("nav_recents_per_context") }

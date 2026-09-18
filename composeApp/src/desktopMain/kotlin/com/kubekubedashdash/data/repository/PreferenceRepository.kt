@@ -38,7 +38,13 @@ object PreferenceRepository {
     const val STATS_PANEL_ALL_CLUSTERS = "all_clusters"
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + preferenceWriteFailureHandler("PreferenceRepository"))
+
+    // One writer at a time, in call order. Every setter updates memory and
+    // launches its persist without awaiting it; on a shared pool two quick
+    // launches can reach DataStore in either order, so a rapid A-then-B could
+    // persist B-then-A and come back as A on the next start (and the
+    // preference tests raced each other the same way on CI).
+    private val ioScope = CoroutineScope(Dispatchers.IO.limitedParallelism(1) + SupervisorJob() + preferenceWriteFailureHandler("PreferenceRepository"))
     private val json = Json { ignoreUnknownKeys = true }
 
     // ── Preference keys ───────────────────────────────────────────────────────
