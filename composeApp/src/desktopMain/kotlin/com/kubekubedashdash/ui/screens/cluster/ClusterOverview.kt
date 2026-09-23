@@ -78,6 +78,7 @@ fun ClusterOverviewScreen(
     val deploymentsCount by viewModel.deploymentsCount.collectAsState()
     val servicesCount by viewModel.servicesCount.collectAsState()
     val phaseCounts by viewModel.podPhaseCounts.collectAsState()
+    val namespace by viewModel.selectedNamespace.collectAsState()
     val health = clusterHealth
 
     val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
@@ -106,6 +107,11 @@ fun ClusterOverviewScreen(
             .padding(24.dp),
     ) {
         ClusterHeader(name = clusterName, server = clusterServer, version = clusterVersion)
+
+        namespace?.let {
+            Spacer(Modifier.height(8.dp))
+            NamespaceScopeNote(it)
+        }
 
         Spacer(Modifier.height(16.dp))
 
@@ -204,6 +210,7 @@ fun ClusterOverviewScreen(
             expanded = statsExpanded,
             onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_CLUSTER, !statsExpanded) },
             onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
+            namespace = namespace,
         )
 
         Spacer(Modifier.height(24.dp))
@@ -247,6 +254,35 @@ private fun IssueBadge(count: Int, label: String, color: Color) {
             color = color,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
+/**
+ * Says which figures follow the selected namespace. The overview mixes both
+ * scopes — node, namespace and capacity figures are always whole-cluster — so
+ * the header's selector alone doesn't tell the user what a number covers.
+ */
+@Composable
+private fun NamespaceScopeNote(namespace: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = KdInfo.copy(alpha = 0.12f),
+        ) {
+            Text(
+                "Namespace: $namespace",
+                style = MaterialTheme.typography.labelSmall,
+                color = KdInfo,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "Pods, deployments, services, usage and events cover this namespace; nodes and capacity cover the whole cluster.",
+            style = MaterialTheme.typography.labelSmall,
+            color = KdTextSecondary,
         )
     }
 }

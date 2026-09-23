@@ -1,5 +1,10 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,7 +19,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,14 +77,22 @@ import org.jetbrains.compose.resources.painterResource
 private val sessionHeaderIsMacOS: Boolean =
     System.getProperty("os.name").orEmpty().lowercase().contains("mac")
 
+// Both header controls have fixed widths so each keeps one position on every
+// screen that shows it: the search field is always flush right, and screens
+// without it reserve its slot, which pins the selector's right edge; the
+// selector's own fixed width pins its left edge whatever the namespace name.
+private val SearchFieldWidth = 200.dp
+private val SearchFieldHeight = if (sessionHeaderIsMacOS) 30.dp else 32.dp
+private val NamespaceSelectorWidth = 150.dp
+
 /**
  * Per-tab toolbar above the resource list (right of the sidebar). Hosts the
  * namespace filter and search — controls scoped to *this* cluster tab, so they
  * live with the data they act on instead of in the window-global title bar.
  *
- * The namespace selector is shown only for namespaced resource lists; on
- * cluster-scoped screens (Nodes, PVs, Cluster overview, the Namespaces list
- * itself, non-namespaced CRDs) it would be a no-op, so it is omitted entirely.
+ * The namespace selector is shown on every screen whose data follows it; on
+ * cluster-scoped screens (Nodes, PVs, the Namespaces list itself,
+ * non-namespaced CRDs) it would be a no-op, so it is omitted entirely.
  * The whole header is suppressed on the connecting / error screens, where
  * neither control has anything to act on.
  */
@@ -104,10 +116,7 @@ internal fun SessionContentHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                // The filter field is the tallest child and is absent on Overview /
-                // Topology; pin the row to its height so content below never shifts.
-                .heightIn(min = if (sessionHeaderIsMacOS) 30.dp else 32.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -124,28 +133,51 @@ internal fun SessionContentHeader(
                 modifier = Modifier.weight(1f),
             )
 
-            if (screen.showsNamespaceSelector()) {
+            // Both controls fade, never slide or resize: their slots are
+            // fixed, so only visibility changes. Default specs, as in the
+            // content crossfade (WorkspaceRouters), so header and page move
+            // together.
+            AnimatedVisibility(
+                visible = screen.showsNamespaceSelector(),
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
                 CompactNamespaceSelector(selectedNamespace, namespaces, onNamespaceChange)
             }
 
-            if (screen.showsSearchField()) {
-                val searchFocusRequester = remember { FocusRequester() }
-                // Baseline captured when the field enters composition: only a
-                // press that happens WHILE the field exists moves focus. Without
-                // it, one earlier Cmd+F would auto-focus the box on every later
-                // Overview/Topology -> list navigation (the field is re-created
-                // there, so the effect would re-run with a stale counter). The
-                // requester may be unattached for a frame; that is tolerated.
-                val focusBaseline = remember { searchFocusRequests }
-                LaunchedEffect(searchFocusRequests) {
-                    if (searchFocusRequests > focusBaseline) runCatching { searchFocusRequester.requestFocus() }
+            // The search slot is always reserved (Overview/Topology leave it
+            // empty), which pins the selector's right edge and the row height.
+            // AnimatedContent, not AnimatedVisibility: a fading-out field is
+            // still composed after `screen` has moved on, and each target here
+            // keeps its own title, so the placeholder can't flash
+            // "Filter Cluster Overview…" on the way out. contentKey: between two
+            // searchable screens the placeholder swaps in place instead of
+            // cross-fading two fields.
+            AnimatedContent(
+                targetState = screen.title.takeIf { screen.showsSearchField() },
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                contentKey = { it != null },
+                modifier = Modifier.size(SearchFieldWidth, SearchFieldHeight),
+            ) { title ->
+                if (title != null) {
+                    val searchFocusRequester = remember { FocusRequester() }
+                    // Baseline captured when the field enters composition: only a
+                    // press that happens WHILE the field exists moves focus. Without
+                    // it, one earlier Cmd+F would auto-focus the box on every later
+                    // Overview/Topology -> list navigation (the field is re-created
+                    // there, so the effect would re-run with a stale counter). The
+                    // requester may be unattached for a frame; that is tolerated.
+                    val focusBaseline = remember { searchFocusRequests }
+                    LaunchedEffect(searchFocusRequests) {
+                        if (searchFocusRequests > focusBaseline) runCatching { searchFocusRequester.requestFocus() }
+                    }
+                    CompactSearchField(
+                        searchQuery = searchQuery,
+                        onSearchChange = onSearchChange,
+                        placeholder = "Filter $title…",
+                        focusRequester = searchFocusRequester,
+                    )
                 }
-                CompactSearchField(
-                    searchQuery = searchQuery,
-                    onSearchChange = onSearchChange,
-                    placeholder = "Filter ${screen.title}…",
-                    focusRequester = searchFocusRequester,
-                )
             }
         }
         HorizontalDivider(
@@ -175,10 +207,12 @@ private fun Screen.showsSearchField(): Boolean = when (this) {
 
 /**
  * Whether the namespace filter is meaningful for this screen. True for
- * namespaced resource lists; false for cluster-scoped views. CRDs carry their
- * own scope flag.
+ * namespaced resource lists and for the Overview and Topology, which read
+ * namespace-scoped data despite their cluster-sounding names — both once hid
+ * the selector while silently applying it; false for cluster-scoped views.
+ * CRDs carry their own scope flag.
  */
-private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
+internal fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.Pods,
     is Screen.Main.Deployments,
     is Screen.Main.Events,
@@ -202,6 +236,7 @@ private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.LimitRanges,
     is Screen.Main.PersistentVolumeClaims,
     is Screen.Main.EndpointSlices,
+    is Screen.Main.ClusterOverview,
     is Screen.Main.ClusterTopology,
     -> true
 
@@ -250,7 +285,7 @@ private fun CompactSearchField(
         textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
         cursorBrush = SolidColor(KdPrimary),
         interactionSource = interactionSource,
-        modifier = Modifier.width(200.dp).height(if (sessionHeaderIsMacOS) 30.dp else 32.dp).focusRequester(focusRequester),
+        modifier = Modifier.width(SearchFieldWidth).height(SearchFieldHeight).focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
                 value = searchQuery,
@@ -307,7 +342,7 @@ private fun CompactNamespaceSelector(
     Box {
         OutlinedButton(
             onClick = { expanded = !expanded },
-            modifier = Modifier.height(buttonHeight),
+            modifier = Modifier.height(buttonHeight).width(NamespaceSelectorWidth),
             shape = RoundedCornerShape(4.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
             border = ButtonDefaults.outlinedButtonBorder(true).copy(
@@ -317,7 +352,14 @@ private fun CompactNamespaceSelector(
         ) {
             Icon(painterResource(Res.drawable.folder_special_filled), null, Modifier.size(12.dp), tint = KdTextSecondary)
             Spacer(Modifier.width(4.dp))
-            Text(selectedNamespace, style = MaterialTheme.typography.labelSmall)
+            // Names run to 63 chars; the menu shows them in full.
+            Text(
+                selectedNamespace,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             Spacer(Modifier.width(2.dp))
             Icon(painterResource(Res.drawable.expand_more_filled), "Show namespaces", Modifier.size(12.dp))
         }
