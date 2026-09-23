@@ -1,5 +1,6 @@
 package com.kubekubedashdash
 
+import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,6 +64,16 @@ fun main() {
                 .onFailure { shutdownLog.warn("Log stream teardown failed: {}", it.message) }
         }, "app-shutdown"),
     )
+
+    // Compose 1.12 added selection auto-scroll: every move of a text-selection drag asks
+    // each scrollable ancestor to bring the pointer into view. The cluster-tab pager obeys
+    // that despite userScrollEnabled = false and rounds it up to a whole page, so dragging
+    // a YAML selection left past the start of the text left the pager stuck most of the
+    // way to the next tab (and the Events|YAML pager part-way to the previous one). Off
+    // restores the pre-1.12 behaviour: a selection no longer scrolls its pane when dragged
+    // past the edge. Upstream marks the flag temporary; when it is removed this line stops
+    // compiling, so re-try that drag with two cluster tabs open before deleting it.
+    ComposeFoundationFlags.isSelectionAutoScrollEnabled = false
 
     application {
         val workspaces by WorkspaceManager.workspaces.collectAsState()
