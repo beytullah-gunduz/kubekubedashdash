@@ -65,6 +65,9 @@ fun ClusterUsageStatistics(
     expanded: Boolean,
     onToggle: () -> Unit,
     onNodeClick: (String) -> Unit,
+    // Non-null when the pod count and usage are scoped to one namespace while
+    // capacity (the gauges' denominator) stays whole-cluster.
+    namespace: String? = null,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -80,13 +83,21 @@ fun ClusterUsageStatistics(
                     .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "Cluster Usage Statistics",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = KdTextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (namespace == null) "Cluster Usage Statistics" else "Usage Statistics · $namespace",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = KdTextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (namespace != null) {
+                        Text(
+                            "This namespace's usage and pods, against whole-cluster capacity",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdTextSecondary,
+                        )
+                    }
+                }
                 Icon(
                     painter = painterResource(
                         if (expanded) {

@@ -78,9 +78,9 @@ private val sessionHeaderIsMacOS: Boolean =
  * namespace filter and search — controls scoped to *this* cluster tab, so they
  * live with the data they act on instead of in the window-global title bar.
  *
- * The namespace selector is shown only for namespaced resource lists; on
- * cluster-scoped screens (Nodes, PVs, Cluster overview, the Namespaces list
- * itself, non-namespaced CRDs) it would be a no-op, so it is omitted entirely.
+ * The namespace selector is shown on every screen whose data follows it; on
+ * cluster-scoped screens (Nodes, PVs, the Namespaces list itself,
+ * non-namespaced CRDs) it would be a no-op, so it is omitted entirely.
  * The whole header is suppressed on the connecting / error screens, where
  * neither control has anything to act on.
  */
@@ -175,10 +175,12 @@ private fun Screen.showsSearchField(): Boolean = when (this) {
 
 /**
  * Whether the namespace filter is meaningful for this screen. True for
- * namespaced resource lists; false for cluster-scoped views. CRDs carry their
- * own scope flag.
+ * namespaced resource lists and for the Overview and Topology, which read
+ * namespace-scoped data despite their cluster-sounding names — both once hid
+ * the selector while silently applying it; false for cluster-scoped views.
+ * CRDs carry their own scope flag.
  */
-private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
+internal fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.Pods,
     is Screen.Main.Deployments,
     is Screen.Main.Events,
@@ -202,6 +204,7 @@ private fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.LimitRanges,
     is Screen.Main.PersistentVolumeClaims,
     is Screen.Main.EndpointSlices,
+    is Screen.Main.ClusterOverview,
     is Screen.Main.ClusterTopology,
     -> true
 

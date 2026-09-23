@@ -20,11 +20,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.time.Instant
 
 internal const val CLUSTER_OVERVIEW_RECENT_LIMIT = 10
@@ -91,6 +93,23 @@ class ClusterOverviewViewModel(
     private val _podsHistory = MutableStateFlow<List<Float>>(emptyList())
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
 
+    /** The namespace the pods/usage figures are scoped to; null is all namespaces. */
+    val selectedNamespace: StateFlow<String?> = reactiveClient.selectedNamespace
+
+    init {
+        // Pod counts and usage follow the selected namespace, but this
+        // ViewModel lives as long as the session. Clear the series on a switch
+        // so the old namespace's readings don't run into the new one's as a
+        // cliff. drop(1): the value current at construction is not a switch.
+        viewModelScope.launch {
+            reactiveClient.selectedNamespace.drop(1).collect {
+                _cpuHistory.value = emptyList()
+                _memHistory.value = emptyList()
+                _podsHistory.value = emptyList()
+            }
+        }
+    }
+
     val resourceUsage: StateFlow<ResourceUsageSummary?> = reactiveClient.resourceUsage
         .onEach { s ->
             val u = if (s is ResourceState.Success) s.data else null
@@ -120,7 +139,9 @@ class ClusterOverviewViewModel(
 
     val podsLoaded: StateFlow<Boolean> = combine(podsCount, podsCapacity) { c, cap ->
         val cInt = c ?: 0
-        if (cap > 0) {
+        // c is null while the pod list (re)loads; sampling then would plot a
+        // false 0 % point.
+        if (c != null && cap > 0) {
             val frac = cInt.toFloat() / cap.toFloat()
             _podsHistory.update { appendDistinctSample(it, frac, CLUSTER_OVERVIEW_HISTORY_SIZE) }
         }
