@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
@@ -23,10 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,24 +38,24 @@ import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.ui.screens.logviewer.LogLine
 import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
-fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
+fun DrawerLogPane(stream: ActiveLogStream, viewState: LogPaneViewState, modifier: Modifier = Modifier) {
     val lines by stream.lines.collectAsState()
     val droppedLines by stream.droppedLines.collectAsState()
     val containers by stream.containers.collectAsState()
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val copyToClipboard = rememberCopyToClipboard()
     val logSaver = rememberLogSaver()
 
-    var filterText by remember(stream.id.key) { mutableStateOf("") }
-    var useRegex by remember(stream.id.key) { mutableStateOf(false) }
-    var caseSensitive by remember(stream.id.key) { mutableStateOf(false) }
-    var wrap by remember(stream.id.key) { mutableStateOf(false) }
-    var follow by remember(stream.id.key) { mutableStateOf(true) }
+    var filterText by viewState::filterText
+    var useRegex by viewState::useRegex
+    var caseSensitive by viewState::caseSensitive
+    var wrap by viewState::wrap
+    var follow by viewState::follow
 
     val matcher = remember(filterText, useRegex, caseSensitive) { LogMatcher(filterText, useRegex, caseSensitive) }
     // An inactive matcher (blank query, or a pattern that does not compile)
@@ -68,6 +66,25 @@ fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
         if (!matcher.active) lines else lines.filter { matcher.matches(it) }
     }
 
+    // Plain remember, not rememberLazyListState (rememberSaveable): inside a
+    // pager page the saveable registry would hand back a stale position when
+    // the drawer re-enters that page. A following pane starts on the newest
+    // line; any other starts where the user left it (LogPaneViewState).
+    val listState = remember {
+        if (viewState.follow) {
+            LazyListState(firstVisibleItemIndex = visibleLines.lastIndex.coerceAtLeast(0))
+        } else {
+            LazyListState(viewState.scrollIndex, viewState.scrollOffset)
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewState.scrollIndex = index
+                viewState.scrollOffset = offset
+            }
+    }
+
     // Follow (D6) — copied verbatim from DrawerNamespaceTailPane.kt: a live
     // mirror of "the viewport is pinned to the last line", recomputed from
     // the list's own layout on every scroll rather than a one-shot flag. See
@@ -76,10 +93,14 @@ fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
+            // Not laid out yet: no answer. The empty-list rule below would
+            // report "at bottom" and switch a restored, scrolled-away pane
+            // back to Follow — yanking it to the newest line.
+            if (info.viewportEndOffset <= 0) return@snapshotFlow null
             val lastVisible = info.visibleItemsInfo.lastOrNull()
             lastVisible == null ||
                 (lastVisible.index == info.totalItemsCount - 1 && lastVisible.offset + lastVisible.size <= info.viewportEndOffset)
-        }.collect { atBottom -> follow = atBottom }
+        }.filterNotNull().collect { atBottom -> follow = atBottom }
     }
     LaunchedEffect(visibleLines.size) {
         if (follow && visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex)

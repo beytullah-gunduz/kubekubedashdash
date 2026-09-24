@@ -67,6 +67,7 @@ import com.kubekubedashdash.services.logtail.DefaultNamespaceTailGateway
 import com.kubekubedashdash.services.logtail.NamespaceTailEngine
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
+import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.components.stepUiScale
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -242,6 +243,11 @@ fun App(
         // on the non-empty -> empty transition — not the empty *state* — so
         // Cmd+J can still deliberately open an empty drawer to show its hint.
         val openDrawerTabs by LogStreamRegistry.tabs.collectAsState()
+        // Each drawer tab's filter, toggles and scroll position — per window, so
+        // they survive tab switches, collapse and the drawer moving between the
+        // window and a cluster tab. Dropped with the tab.
+        val logPaneStates = remember { LogPaneStateStore() }
+        LaunchedEffect(openDrawerTabs.keys) { logPaneStates.retainOnly(openDrawerTabs.keys) }
         val visibleDrawerTabCount = remember(openDrawerTabs, visibleSessionIds) {
             openDrawerTabs.count { (_, tab) -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
         }
@@ -662,6 +668,7 @@ fun App(
                         LogDrawer(
                             state = drawerState,
                             onStateChange = { drawerState = it },
+                            paneStates = logPaneStates,
                             visibleSessionIds = visibleSessionIds,
                         )
                     }

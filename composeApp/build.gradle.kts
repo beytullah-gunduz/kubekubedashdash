@@ -40,6 +40,8 @@ kotlin {
                 implementation(libs.ktor.server.test.host)
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                // runComposeUiTest: drawer-pane state retention (widescreen log panel plan).
+                implementation(libs.compose.ui.test)
             }
         }
 

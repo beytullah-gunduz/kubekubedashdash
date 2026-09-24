@@ -68,6 +68,7 @@ import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerCapturePane
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
+import com.kubekubedashdash.ui.components.LogPaneStateStore
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
 
@@ -80,6 +81,9 @@ private val DrawerResizeHandleHeight = 6.dp
 fun LogDrawer(
     state: LogDrawerState,
     onStateChange: (LogDrawerState) -> Unit,
+    // Per-tab filter/toggle/scroll state, owned by the window so it outlives
+    // this composable (tab switches, collapse, moving between window and page).
+    paneStates: LogPaneStateStore,
     modifier: Modifier = Modifier,
     // Pod-log tabs belong to a specific cluster session; show only this
     // window's sessions so logs don't bleed across windows (the registry is a
@@ -245,6 +249,7 @@ fun LogDrawer(
                             when (val tab = tabs[key]) {
                                 is ActiveLogStream -> DrawerLogPane(
                                     stream = tab,
+                                    viewState = paneStates.stateFor(tab.key),
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
@@ -259,6 +264,7 @@ fun LogDrawer(
 
                                 is ActiveNamespaceTail -> DrawerNamespaceTailPane(
                                     tab = tab,
+                                    viewState = paneStates.stateFor(tab.key),
                                     modifier = Modifier.fillMaxSize(),
                                 )
 

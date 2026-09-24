@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +59,7 @@ import com.kubekubedashdash.services.logtail.TailLine
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
 import com.kubekubedashdash.ui.screens.logviewer.logSeverityColor
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -141,21 +142,39 @@ internal fun visibleTailLines(
 }
 
 @Composable
-fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modifier) {
+fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, viewState: LogPaneViewState, modifier: Modifier = Modifier) {
     val state by tab.task.state.collectAsState()
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    var filterText by remember(tab.key) { mutableStateOf("") }
-    var useRegex by remember(tab.key) { mutableStateOf(false) }
-    var caseSensitive by remember(tab.key) { mutableStateOf(false) }
-    var wrap by remember(tab.key) { mutableStateOf(false) }
-    var mutedPods by remember(tab.key) { mutableStateOf(emptySet<String>()) }
+    var filterText by viewState::filterText
+    var useRegex by viewState::useRegex
+    var caseSensitive by viewState::caseSensitive
+    var wrap by viewState::wrap
+    var mutedPods by viewState::mutedPods
     val copyToClipboard = rememberCopyToClipboard()
     val logSaver = rememberLogSaver()
 
     val matcher = remember(filterText, useRegex, caseSensitive) { LogMatcher(filterText, useRegex, caseSensitive) }
     val visibleLines = remember(state.lines, matcher, mutedPods) {
         visibleTailLines(state.lines, matcher, mutedPods)
+    }
+
+    // Plain remember, not rememberLazyListState (rememberSaveable): inside a
+    // pager page the saveable registry would hand back a stale position when
+    // the drawer re-enters that page. A following pane starts on the newest
+    // line; any other starts where the user left it (LogPaneViewState).
+    val listState = remember {
+        if (viewState.follow) {
+            LazyListState(firstVisibleItemIndex = visibleLines.lastIndex.coerceAtLeast(0))
+        } else {
+            LazyListState(viewState.scrollIndex, viewState.scrollOffset)
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewState.scrollIndex = index
+                viewState.scrollOffset = offset
+            }
     }
 
     // stickToBottom (D6, D11) — the pattern this pane originated and
@@ -168,14 +187,18 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
     // always lands exactly there — flips it back on. See DrawerLogPane.kt
     // for why an `autoScrolling` guard or a `layoutInfo`-vs-
     // `visibleLines.lastIndex` comparison are both broken here.
-    var stickToBottom by remember(tab.key) { mutableStateOf(true) }
+    var stickToBottom by viewState::follow
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
+            // Not laid out yet: no answer. The empty-list rule below would
+            // report "at bottom" and switch a restored, scrolled-away pane
+            // back to Follow — yanking it to the newest line.
+            if (info.viewportEndOffset <= 0) return@snapshotFlow null
             val lastVisible = info.visibleItemsInfo.lastOrNull()
             lastVisible == null ||
                 (lastVisible.index == info.totalItemsCount - 1 && lastVisible.offset + lastVisible.size <= info.viewportEndOffset)
-        }.collect { atBottom -> stickToBottom = atBottom }
+        }.filterNotNull().collect { atBottom -> stickToBottom = atBottom }
     }
     LaunchedEffect(visibleLines.size) {
         if (stickToBottom && visibleLines.isNotEmpty()) {
