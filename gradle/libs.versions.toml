@@ -1,7 +1,7 @@
 [versions]
-kotlin = "2.3.21"
+kotlin = "2.4.20"
 compose-multiplatform = "1.12.1"
-compose-material3 = "1.12.0-alpha03"
+compose-material3 = "1.13.0-alpha01"
 # Held at 7.7.0 deliberately. 7.8.0's VertxMockWebSocket.send() blocks on the
 # Vert.x write future (awaitWrite, 30s); WatchEventsListener calls it off the
 # event loop while onClosed() blocks the event loop in awaitTermination, so
@@ -9,15 +9,15 @@ compose-material3 = "1.12.0-alpha03"
 # enough: kubernetes-server-mock 7.8.0 calls Dispatcher.releaseResources(),
 # which 7.7.0 does not declare, and ProGuard fails the release build on the
 # unresolved reference. The whole fabric8 train has to move together.
-fabric8 = "7.7.0"
+fabric8 = "7.9.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 lifecycle = "2.11.0"
-logback = "1.5.38"
+logback = "1.6.3"
 compose-material3-adaptive = "1.3.0-rc01"
-spotless = "8.7.0"
-mcp = "0.8.3"
-ktor = "3.1.3"
+spotless = "8.10.2"
+mcp = "0.15.0"
+ktor = "3.6.0"
 jna = "5.19.1"
 jsonpath = "2.10.0"
 jediterm = "3.74"
