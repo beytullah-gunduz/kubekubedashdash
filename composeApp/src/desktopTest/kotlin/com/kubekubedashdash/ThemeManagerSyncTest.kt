@@ -20,9 +20,8 @@ import kotlin.test.assertTrue
  * theme therefore never applied at launch (review follow-up F11). It now
  * learns the persisted mode through [ThemeManager.syncFromPreferences], which
  * `KubeDashTheme` is expected to feed from the repository's flow (that wiring
- * is not covered here: the build has no Compose UI-test dependency). The sync
- * must apply the
- * mode and the dark flag without writing anything back — a write-back would
+ * is not covered here). The sync must apply the mode and the dark flag
+ * without writing anything back — a write-back would
  * loop through the very flow that feeds it. Runs only against the Gradle
  * test-data store; the manager's prior mode is restored after each case.
  */

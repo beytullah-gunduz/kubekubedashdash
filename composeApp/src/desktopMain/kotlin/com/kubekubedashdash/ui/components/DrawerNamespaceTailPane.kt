@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,8 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +60,8 @@ import com.kubekubedashdash.services.logtail.TailLine
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
 import com.kubekubedashdash.ui.screens.logviewer.logSeverityColor
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -140,22 +143,45 @@ internal fun visibleTailLines(
     }
 }
 
+// Below this pane width the controls move to a second, sideways-scrolling row
+// under the filter (a narrow window, or the widescreen layout giving the
+// sidebar's width away).
+private val TailToolbarOneRowMinWidth = 600.dp
+
 @Composable
-fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modifier) {
+fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, viewState: LogPaneViewState, modifier: Modifier = Modifier) {
     val state by tab.task.state.collectAsState()
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    var filterText by remember(tab.key) { mutableStateOf("") }
-    var useRegex by remember(tab.key) { mutableStateOf(false) }
-    var caseSensitive by remember(tab.key) { mutableStateOf(false) }
-    var wrap by remember(tab.key) { mutableStateOf(false) }
-    var mutedPods by remember(tab.key) { mutableStateOf(emptySet<String>()) }
+    var filterText by viewState::filterText
+    var useRegex by viewState::useRegex
+    var caseSensitive by viewState::caseSensitive
+    var wrap by viewState::wrap
+    var mutedPods by viewState::mutedPods
     val copyToClipboard = rememberCopyToClipboard()
     val logSaver = rememberLogSaver()
 
     val matcher = remember(filterText, useRegex, caseSensitive) { LogMatcher(filterText, useRegex, caseSensitive) }
     val visibleLines = remember(state.lines, matcher, mutedPods) {
         visibleTailLines(state.lines, matcher, mutedPods)
+    }
+
+    // Plain remember, not rememberLazyListState (rememberSaveable): inside a
+    // pager page the saveable registry would hand back a stale position when
+    // the drawer re-enters that page. A following pane starts on the newest
+    // line; any other starts where the user left it (LogPaneViewState).
+    val listState = remember {
+        if (viewState.follow) {
+            LazyListState(firstVisibleItemIndex = visibleLines.lastIndex.coerceAtLeast(0))
+        } else {
+            LazyListState(viewState.scrollIndex, viewState.scrollOffset)
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewState.scrollIndex = index
+                viewState.scrollOffset = offset
+            }
     }
 
     // stickToBottom (D6, D11) — the pattern this pane originated and
@@ -168,14 +194,23 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
     // always lands exactly there — flips it back on. See DrawerLogPane.kt
     // for why an `autoScrolling` guard or a `layoutInfo`-vs-
     // `visibleLines.lastIndex` comparison are both broken here.
-    var stickToBottom by remember(tab.key) { mutableStateOf(true) }
+    var stickToBottom by viewState::follow
     LaunchedEffect(listState) {
+        // A pane re-entering with Follow off keeps it off even when it lands on
+        // the last line (Follow switched off on a quiet log): its first laid-out
+        // answer restates where it was restored to, not a user scroll.
+        val skipFirst = if (viewState.follow) 0 else 1
         snapshotFlow {
             val info = listState.layoutInfo
+            // Not laid out yet: no answer. When this effect starts before the
+            // first layout (the ui-test dispatcher does; the app's normally
+            // doesn't), the empty-list rule below would report "at bottom" and
+            // switch a restored, scrolled-away pane back to Follow.
+            if (info.viewportEndOffset <= 0) return@snapshotFlow null
             val lastVisible = info.visibleItemsInfo.lastOrNull()
             lastVisible == null ||
                 (lastVisible.index == info.totalItemsCount - 1 && lastVisible.offset + lastVisible.size <= info.viewportEndOffset)
-        }.collect { atBottom -> stickToBottom = atBottom }
+        }.filterNotNull().drop(skipFirst).collect { atBottom -> stickToBottom = atBottom }
     }
     LaunchedEffect(visibleLines.size) {
         if (stickToBottom && visibleLines.isNotEmpty()) {
@@ -184,93 +219,110 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, modifier: Modifier = Modif
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            LogFilterField(
-                value = filterText,
-                onValueChange = { filterText = it },
-                regex = useRegex,
-                onRegexChange = { useRegex = it },
-                caseSensitive = caseSensitive,
-                onCaseChange = { caseSensitive = it },
-                invalid = matcher.invalid,
-                placeholder = "Filter tail…",
-                modifier = Modifier.weight(1f),
-            )
-
-            LogToolbarDivider()
-
-            LogToolbarToggle(
-                label = "Follow",
-                on = stickToBottom,
-                onToggle = {
-                    if (stickToBottom) {
-                        stickToBottom = false
-                    } else {
-                        // See DrawerLogPane: snapshotFlow only emits on change,
-                        // so a scroll that lands where we already are would
-                        // never turn the chip back on by itself.
-                        stickToBottom = true
-                        scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
-                    }
-                },
-                description = "Keep the view pinned to the newest line as more arrive.",
-            )
-            LogToolbarToggle(
-                label = "Wrap",
-                on = wrap,
-                onToggle = { wrap = !wrap },
-                description = "Wrap long lines instead of scrolling each one sideways.",
-            )
-
-            LogToolbarDivider()
-
-            PodMuteMenu(
-                pods = state.attachedPods,
-                muted = mutedPods,
-                onToggle = { pod -> mutedPods = if (pod in mutedPods) mutedPods - pod else mutedPods + pod },
-            )
-
-            LogToolbarDivider()
-
-            IconButton(
-                onClick = {
-                    logSaver(
-                        "tail-${tab.task.namespace}",
-                        visibleLines.map { line -> if (line.notice) line.text else "[${line.podName}] ${line.text}" },
-                    )
-                },
-                modifier = Modifier.size(28.dp),
-                enabled = visibleLines.isNotEmpty(),
-            ) {
-                Icon(
-                    painterResource(Res.drawable.save_filled),
-                    contentDescription = "Save visible lines",
-                    modifier = Modifier.size(14.dp),
-                    tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+            val oneRow = maxWidth >= TailToolbarOneRowMinWidth
+            val controls: @Composable () -> Unit = {
+                LogToolbarToggle(
+                    label = "Follow",
+                    on = stickToBottom,
+                    onToggle = {
+                        if (stickToBottom) {
+                            stickToBottom = false
+                        } else {
+                            // See DrawerLogPane: snapshotFlow only emits on change,
+                            // so a scroll that lands where we already are would
+                            // never turn the chip back on by itself.
+                            stickToBottom = true
+                            scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
+                        }
+                    },
+                    description = "Keep the view pinned to the newest line as more arrive.",
                 )
+                LogToolbarToggle(
+                    label = "Wrap",
+                    on = wrap,
+                    onToggle = { wrap = !wrap },
+                    description = "Wrap long lines instead of scrolling each one sideways.",
+                )
+
+                LogToolbarDivider()
+
+                PodMuteMenu(
+                    pods = state.attachedPods,
+                    muted = mutedPods,
+                    onToggle = { pod -> mutedPods = if (pod in mutedPods) mutedPods - pod else mutedPods + pod },
+                )
+
+                LogToolbarDivider()
+
+                IconButton(
+                    onClick = {
+                        logSaver(
+                            "tail-${tab.task.namespace}",
+                            visibleLines.map { line -> if (line.notice) line.text else "[${line.podName}] ${line.text}" },
+                        )
+                    },
+                    modifier = Modifier.size(28.dp),
+                    enabled = visibleLines.isNotEmpty(),
+                ) {
+                    Icon(
+                        painterResource(Res.drawable.save_filled),
+                        contentDescription = "Save visible lines",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        copyToClipboard(
+                            visibleLines.joinToString("\n") { line ->
+                                if (line.notice) line.text else "[${line.podName}] ${line.text}"
+                            },
+                        )
+                    },
+                    modifier = Modifier.size(28.dp),
+                    enabled = visibleLines.isNotEmpty(),
+                ) {
+                    Icon(
+                        painterResource(Res.drawable.content_copy_filled),
+                        contentDescription = "Copy visible lines",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
+                    )
+                }
             }
-
-            IconButton(
-                onClick = {
-                    copyToClipboard(
-                        visibleLines.joinToString("\n") { line ->
-                            if (line.notice) line.text else "[${line.podName}] ${line.text}"
-                        },
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    LogFilterField(
+                        value = filterText,
+                        onValueChange = { filterText = it },
+                        regex = useRegex,
+                        onRegexChange = { useRegex = it },
+                        caseSensitive = caseSensitive,
+                        onCaseChange = { caseSensitive = it },
+                        invalid = matcher.invalid,
+                        placeholder = "Filter tail…",
+                        modifier = Modifier.weight(1f),
                     )
-                },
-                modifier = Modifier.size(28.dp),
-                enabled = visibleLines.isNotEmpty(),
-            ) {
-                Icon(
-                    painterResource(Res.drawable.content_copy_filled),
-                    contentDescription = "Copy visible lines",
-                    modifier = Modifier.size(14.dp),
-                    tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
-                )
+                    if (oneRow) {
+                        LogToolbarDivider()
+                        controls()
+                    }
+                }
+                if (!oneRow) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        controls()
+                    }
+                }
             }
         }
 

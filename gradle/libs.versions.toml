@@ -32,6 +32,7 @@ compose-material3-adaptive = { module = "org.jetbrains.compose.material3.adaptiv
 compose-material3-adaptive-layout = { module = "org.jetbrains.compose.material3.adaptive:adaptive-layout", version.ref = "compose-material3-adaptive" }
 compose-material3-adaptive-navigation = { module = "org.jetbrains.compose.material3.adaptive:adaptive-navigation", version.ref = "compose-material3-adaptive" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
+compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "compose-multiplatform" }
 fabric8-kubernetes-client = { module = "io.fabric8:kubernetes-client", version.ref = "fabric8" }
 fabric8-kubernetes-server-mock = { module = "io.fabric8:kubernetes-server-mock", version.ref = "fabric8" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }

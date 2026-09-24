@@ -1,8 +1,10 @@
 package com.kubekubedashdash.ui.components
 
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -11,8 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
@@ -23,10 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,24 +41,30 @@ import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.ui.screens.logviewer.LogLine
 import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
+// Below this pane width the controls move to a second, sideways-scrolling row
+// under the filter (a narrow window, or the widescreen layout giving the
+// sidebar's width away).
+private val PodLogToolbarOneRowMinWidth = 860.dp
+
 @Composable
-fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
+fun DrawerLogPane(stream: ActiveLogStream, viewState: LogPaneViewState, modifier: Modifier = Modifier) {
     val lines by stream.lines.collectAsState()
     val droppedLines by stream.droppedLines.collectAsState()
     val containers by stream.containers.collectAsState()
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val copyToClipboard = rememberCopyToClipboard()
     val logSaver = rememberLogSaver()
 
-    var filterText by remember(stream.id.key) { mutableStateOf("") }
-    var useRegex by remember(stream.id.key) { mutableStateOf(false) }
-    var caseSensitive by remember(stream.id.key) { mutableStateOf(false) }
-    var wrap by remember(stream.id.key) { mutableStateOf(false) }
-    var follow by remember(stream.id.key) { mutableStateOf(true) }
+    var filterText by viewState::filterText
+    var useRegex by viewState::useRegex
+    var caseSensitive by viewState::caseSensitive
+    var wrap by viewState::wrap
+    var follow by viewState::follow
 
     val matcher = remember(filterText, useRegex, caseSensitive) { LogMatcher(filterText, useRegex, caseSensitive) }
     // An inactive matcher (blank query, or a pattern that does not compile)
@@ -68,143 +75,188 @@ fun DrawerLogPane(stream: ActiveLogStream, modifier: Modifier = Modifier) {
         if (!matcher.active) lines else lines.filter { matcher.matches(it) }
     }
 
+    // Plain remember, not rememberLazyListState (rememberSaveable): inside a
+    // pager page the saveable registry would hand back a stale position when
+    // the drawer re-enters that page. A following pane starts on the newest
+    // line; any other starts where the user left it (LogPaneViewState).
+    val listState = remember {
+        if (viewState.follow) {
+            LazyListState(firstVisibleItemIndex = visibleLines.lastIndex.coerceAtLeast(0))
+        } else {
+            LazyListState(viewState.scrollIndex, viewState.scrollOffset)
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewState.scrollIndex = index
+                viewState.scrollOffset = offset
+            }
+    }
+
     // Follow (D6) — copied verbatim from DrawerNamespaceTailPane.kt: a live
     // mirror of "the viewport is pinned to the last line", recomputed from
     // the list's own layout on every scroll rather than a one-shot flag. See
     // that file for why an `autoScrolling` guard or a `layoutInfo`-vs-
     // `visibleLines.lastIndex` comparison are both broken here.
     LaunchedEffect(listState) {
+        // A pane re-entering with Follow off keeps it off even when it lands on
+        // the last line (Follow switched off on a quiet log): its first laid-out
+        // answer restates where it was restored to, not a user scroll.
+        val skipFirst = if (viewState.follow) 0 else 1
         snapshotFlow {
             val info = listState.layoutInfo
+            // Not laid out yet: no answer. When this effect starts before the
+            // first layout (the ui-test dispatcher does; the app's normally
+            // doesn't), the empty-list rule below would report "at bottom" and
+            // switch a restored, scrolled-away pane back to Follow.
+            if (info.viewportEndOffset <= 0) return@snapshotFlow null
             val lastVisible = info.visibleItemsInfo.lastOrNull()
             lastVisible == null ||
                 (lastVisible.index == info.totalItemsCount - 1 && lastVisible.offset + lastVisible.size <= info.viewportEndOffset)
-        }.collect { atBottom -> follow = atBottom }
+        }.filterNotNull().drop(skipFirst).collect { atBottom -> follow = atBottom }
     }
     LaunchedEffect(visibleLines.size) {
         if (follow && visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex)
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            LogFilterField(
-                value = filterText,
-                onValueChange = { filterText = it },
-                regex = useRegex,
-                onRegexChange = { useRegex = it },
-                caseSensitive = caseSensitive,
-                onCaseChange = { caseSensitive = it },
-                invalid = matcher.invalid,
-                placeholder = "Filter logs…",
-                modifier = Modifier.weight(1f),
-            )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+            val oneRow = maxWidth >= PodLogToolbarOneRowMinWidth
+            val controls: @Composable () -> Unit = {
+                LogToolbarToggle(
+                    label = "Follow",
+                    on = follow,
+                    onToggle = {
+                        if (follow) {
+                            follow = false
+                        } else {
+                            // Set it here rather than waiting for the scroll to be
+                            // observed: snapshotFlow only emits on CHANGE, so when
+                            // the viewport is already at the bottom — a quiet pod,
+                            // a Prev snapshot, a filter narrow enough to fit — the
+                            // scroll is a no-op, nothing re-emits, and the chip
+                            // would never come back on.
+                            follow = true
+                            scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
+                        }
+                    },
+                    description = "Keep the view pinned to the newest line as more arrive.",
+                )
+                LogToolbarToggle(
+                    label = "Wrap",
+                    on = wrap,
+                    onToggle = { wrap = !wrap },
+                    description = "Wrap long lines instead of scrolling each one sideways.",
+                )
 
-            LogToolbarDivider()
+                LogToolbarDivider()
 
-            LogToolbarToggle(
-                label = "Follow",
-                on = follow,
-                onToggle = {
-                    if (follow) {
-                        follow = false
-                    } else {
-                        // Set it here rather than waiting for the scroll to be
-                        // observed: snapshotFlow only emits on CHANGE, so when
-                        // the viewport is already at the bottom — a quiet pod,
-                        // a Prev snapshot, a filter narrow enough to fit — the
-                        // scroll is a no-op, nothing re-emits, and the chip
-                        // would never come back on.
-                        follow = true
-                        scope.launch { if (visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex) }
-                    }
-                },
-                description = "Keep the view pinned to the newest line as more arrive.",
-            )
-            LogToolbarToggle(
-                label = "Wrap",
-                on = wrap,
-                onToggle = { wrap = !wrap },
-                description = "Wrap long lines instead of scrolling each one sideways.",
-            )
-
-            LogToolbarDivider()
-
-            LogToolbarToggle(
-                label = "Timestamps",
-                on = stream.options.timestamps,
-                onToggle = {
-                    LogStreamRegistry.setOptions(stream.id.key, stream.options.copy(timestamps = !stream.options.timestamps))
-                },
-                description = "Prefix every line with its Kubernetes timestamp.",
-            )
-            LogToolbarToggle(
-                label = "Prev",
-                on = stream.options.previous,
-                onToggle = {
-                    LogStreamRegistry.setOptions(stream.id.key, stream.options.copy(previous = !stream.options.previous))
-                },
-                description = "Show the previous (crashed) container's log instead of the live stream.",
-            )
-            LogToolbarMenu(
-                label = sinceChipLabel(stream.options.sinceSeconds),
-                items = SincePreset.entries.map { preset ->
-                    LogToolbarMenuItem(
-                        label = preset.label,
-                        selected = preset.seconds == stream.options.sinceSeconds,
-                        onClick = {
-                            LogStreamRegistry.setOptions(stream.id.key, stream.options.copy(sinceSeconds = preset.seconds))
-                        },
-                    )
-                },
-                description = "Only show lines from within this time window.",
-            )
-            if (containers.size > 1) {
+                LogToolbarToggle(
+                    label = "Timestamps",
+                    on = stream.options.timestamps,
+                    onToggle = {
+                        LogStreamRegistry.setOptions(stream.id.key, stream.options.copy(timestamps = !stream.options.timestamps))
+                    },
+                    description = "Prefix every line with its Kubernetes timestamp.",
+                )
+                LogToolbarToggle(
+                    label = "Prev",
+                    on = stream.options.previous,
+                    onToggle = {
+                        LogStreamRegistry.setOptions(stream.id.key, stream.options.copy(previous = !stream.options.previous))
+                    },
+                    description = "Show the previous (crashed) container's log instead of the live stream.",
+                )
                 LogToolbarMenu(
-                    label = stream.id.container?.let { "$it ▾" } ?: "Container ▾",
-                    items = containers.map { container ->
+                    label = sinceChipLabel(stream.options.sinceSeconds),
+                    items = SincePreset.entries.map { preset ->
                         LogToolbarMenuItem(
-                            label = container,
-                            selected = container == stream.id.container,
-                            onClick = { LogStreamRegistry.switchContainer(stream.id.key, container) },
+                            label = preset.label,
+                            selected = preset.seconds == stream.options.sinceSeconds,
+                            onClick = {
+                                LogStreamRegistry.setOptions(stream.id.key, stream.options.copy(sinceSeconds = preset.seconds))
+                            },
                         )
                     },
-                    description = "Switch this tab to a different container's log stream.",
+                    description = "Only show lines from within this time window.",
                 )
+                if (containers.size > 1) {
+                    LogToolbarMenu(
+                        label = stream.id.container?.let { "$it ▾" } ?: "Container ▾",
+                        items = containers.map { container ->
+                            LogToolbarMenuItem(
+                                label = container,
+                                selected = container == stream.id.container,
+                                onClick = { LogStreamRegistry.switchContainer(stream.id.key, container) },
+                            )
+                        },
+                        description = "Switch this tab to a different container's log stream.",
+                    )
+                }
+
+                LogToolbarDivider()
+
+                IconButton(
+                    onClick = {
+                        val baseName = stream.id.podName + (stream.id.container?.let { "-$it" } ?: "")
+                        logSaver(baseName, visibleLines)
+                    },
+                    modifier = Modifier.size(28.dp),
+                    enabled = visibleLines.isNotEmpty(),
+                ) {
+                    Icon(
+                        painterResource(Res.drawable.save_filled),
+                        contentDescription = "Save visible lines",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
+                    )
+                }
+
+                IconButton(
+                    onClick = { copyToClipboard(visibleLines.joinToString("\n")) },
+                    modifier = Modifier.size(28.dp),
+                    enabled = visibleLines.isNotEmpty(),
+                ) {
+                    Icon(
+                        painterResource(Res.drawable.content_copy_filled),
+                        contentDescription = "Copy visible lines",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
+                    )
+                }
             }
-
-            LogToolbarDivider()
-
-            IconButton(
-                onClick = {
-                    val baseName = stream.id.podName + (stream.id.container?.let { "-$it" } ?: "")
-                    logSaver(baseName, visibleLines)
-                },
-                modifier = Modifier.size(28.dp),
-                enabled = visibleLines.isNotEmpty(),
-            ) {
-                Icon(
-                    painterResource(Res.drawable.save_filled),
-                    contentDescription = "Save visible lines",
-                    modifier = Modifier.size(14.dp),
-                    tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
-                )
-            }
-
-            IconButton(
-                onClick = { copyToClipboard(visibleLines.joinToString("\n")) },
-                modifier = Modifier.size(28.dp),
-                enabled = visibleLines.isNotEmpty(),
-            ) {
-                Icon(
-                    painterResource(Res.drawable.content_copy_filled),
-                    contentDescription = "Copy visible lines",
-                    modifier = Modifier.size(14.dp),
-                    tint = if (visibleLines.isNotEmpty()) KdTextSecondary else KdTextSecondary.copy(alpha = 0.4f),
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    LogFilterField(
+                        value = filterText,
+                        onValueChange = { filterText = it },
+                        regex = useRegex,
+                        onRegexChange = { useRegex = it },
+                        caseSensitive = caseSensitive,
+                        onCaseChange = { caseSensitive = it },
+                        invalid = matcher.invalid,
+                        placeholder = "Filter logs…",
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (oneRow) {
+                        LogToolbarDivider()
+                        controls()
+                    }
+                }
+                if (!oneRow) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        controls()
+                    }
+                }
             }
         }
 

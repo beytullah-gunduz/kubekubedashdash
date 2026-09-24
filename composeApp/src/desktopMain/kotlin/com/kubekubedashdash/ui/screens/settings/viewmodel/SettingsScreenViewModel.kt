@@ -111,6 +111,12 @@ class SettingsScreenViewModel : ViewModel() {
         PreferenceRepository.setRestoreSessionOnLaunch(value)
     }
 
+    val logDrawerBesideSidebar: StateFlow<Boolean> = PreferenceRepository.logDrawerBesideSidebar
+
+    fun setLogDrawerBesideSidebar(value: Boolean) {
+        PreferenceRepository.setLogDrawerBesideSidebar(value)
+    }
+
     val tableDensity: StateFlow<TableDensity> = PreferenceRepository.tableDensity
 
     fun setTableDensity(value: TableDensity) {

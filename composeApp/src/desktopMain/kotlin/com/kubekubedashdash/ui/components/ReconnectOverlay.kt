@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +32,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
@@ -51,6 +53,10 @@ import com.kubekubedashdash.KdTextSecondary
  *
  * Keyboard input is not blocked (Compose scrims block pointers only); actions
  * reached that way fail against the dead cluster with their usual surfaces.
+ *
+ * [cutoutHeight] > 0 leaves a bottom-end rectangle uncovered — the log drawer in
+ * the widescreen layout, which shows other clusters' logs and must stay usable;
+ * only the strip left of [cutoutStart] (the sidebar beside the drawer) is dimmed there.
  */
 @Composable
 fun ReconnectOverlay(
@@ -61,90 +67,102 @@ fun ReconnectOverlay(
     onRetryNow: () -> Unit,
     onSwitchCluster: () -> Unit,
     modifier: Modifier = Modifier,
+    cutoutStart: () -> Dp = { 0.dp },
+    cutoutHeight: () -> Dp = { 0.dp },
 ) {
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut(), modifier = modifier) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .semantics { contentDescription = "Connection lost — content disabled until reconnected" }
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent().changes.forEach { it.consume() }
-                            }
-                        }
-                    },
-            )
-            Surface(
-                modifier = Modifier.align(Alignment.Center).widthIn(max = 440.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = KdSurface,
-                shadowElevation = 8.dp,
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .reconnectScrim()
+                        .semantics { contentDescription = "Connection lost — content disabled until reconnected" },
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.Center).widthIn(max = 440.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = KdSurface,
+                    shadowElevation = 8.dp,
                 ) {
-                    Text(
-                        "Connection lost",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    if (!error.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        // Bounded: a multi-hundred-character TLS/RBAC message must
-                        // not push the buttons — the only pointer-reachable exits —
-                        // off a short window.
-                        Text(
-                            error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = KdTextSecondary,
-                            textAlign = TextAlign.Center,
-                            maxLines = 6,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Neither connecting nor counting down means the last reconnect
-                        // failed without re-arming (or, for at most one frame, the
-                        // countdown is between two writes): no spinner, say it plainly.
-                        val retryArmed = isConnecting || retryCountdown > 0
-                        val statusText = when {
-                            isConnecting -> "Reconnecting…"
-                            retryCountdown > 0 -> "Retrying in ${retryCountdown}s…"
-                            else -> "Automatic retry stopped"
-                        }
-                        if (retryArmed) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = KdPrimary,
-                                strokeWidth = 2.dp,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text(
-                            statusText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = KdTextPrimary,
-                        )
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Button(onClick = onRetryNow, enabled = !isConnecting) {
-                            Text("Retry now")
+                        Text(
+                            "Connection lost",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        if (!error.isNullOrBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            // Bounded: a multi-hundred-character TLS/RBAC message must
+                            // not push the buttons — the only pointer-reachable exits —
+                            // off a short window.
+                            Text(
+                                error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                                textAlign = TextAlign.Center,
+                                maxLines = 6,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
-                        OutlinedButton(onClick = onSwitchCluster) {
-                            Text("Switch cluster…")
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Neither connecting nor counting down means the last reconnect
+                            // failed without re-arming (or, for at most one frame, the
+                            // countdown is between two writes): no spinner, say it plainly.
+                            val retryArmed = isConnecting || retryCountdown > 0
+                            val statusText = when {
+                                isConnecting -> "Reconnecting…"
+                                retryCountdown > 0 -> "Retrying in ${retryCountdown}s…"
+                                else -> "Automatic retry stopped"
+                            }
+                            if (retryArmed) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = KdPrimary,
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                statusText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextPrimary,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Button(onClick = onRetryNow, enabled = !isConnecting) {
+                                Text("Retry now")
+                            }
+                            OutlinedButton(onClick = onSwitchCluster) {
+                                Text("Switch cluster…")
+                            }
                         }
                     }
                 }
             }
+            val cutout = cutoutHeight()
+            if (cutout > 0.dp) {
+                Box(modifier = Modifier.width(cutoutStart()).height(cutout).reconnectScrim())
+            }
         }
     }
 }
+
+/** The overlay's dimmed, pointer-eating surface. */
+private fun Modifier.reconnectScrim(): Modifier = this
+    .background(Color.Black.copy(alpha = 0.45f))
+    .pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                awaitPointerEvent().changes.forEach { it.consume() }
+            }
+        }
+    }

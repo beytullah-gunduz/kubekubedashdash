@@ -9,6 +9,9 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,13 +46,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
@@ -64,10 +74,12 @@ import com.kubekubedashdash.services.ActiveNamespaceTail
 import com.kubekubedashdash.services.DrawerLogTab
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.logcapture.CapturePhase
+import com.kubekubedashdash.ui.components.ActionTooltip
 import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerCapturePane
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
+import com.kubekubedashdash.ui.components.LogPaneStateStore
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
 
@@ -76,15 +88,38 @@ enum class LogDrawerState { HIDDEN, COLLAPSED, EXPANDED }
 val DrawerHeaderHeight = 48.dp
 private val DrawerResizeHandleHeight = 6.dp
 
+/** The cluster a session-scoped log tab belongs to: a dot in its colour with its initial. */
+data class LogTabBadge(val context: String, val color: Color)
+
+/**
+ * Badges for a window's log tabs, keyed by session id: one per cluster tab with
+ * a known context — and none at all while the window holds fewer than two
+ * cluster tabs, where every log tab belongs to the one cluster and a badge is noise.
+ */
+internal fun logTabBadges(
+    contextsBySession: Map<String, String>,
+    colorFor: (String) -> Color,
+): Map<String, LogTabBadge> = if (contextsBySession.size < 2) {
+    emptyMap()
+} else {
+    contextsBySession
+        .filterValues { it.isNotBlank() }
+        .mapValues { (_, context) -> LogTabBadge(context, colorFor(context)) }
+}
+
 @Composable
 fun LogDrawer(
     state: LogDrawerState,
     onStateChange: (LogDrawerState) -> Unit,
+    // Per-tab filter/toggle/scroll state, owned by the window so it outlives
+    // this composable (tab switches, collapse, moving between window and page).
+    paneStates: LogPaneStateStore,
     modifier: Modifier = Modifier,
     // Pod-log tabs belong to a specific cluster session; show only this
     // window's sessions so logs don't bleed across windows (the registry is a
     // process-global singleton). The shared application-log tab always shows.
     visibleSessionIds: Set<String> = emptySet(),
+    clusterBadges: Map<String, LogTabBadge> = emptyMap(),
 ) {
     val allTabs by LogStreamRegistry.tabs.collectAsState()
     val focusedKey by LogStreamRegistry.focusedKey.collectAsState()
@@ -151,6 +186,9 @@ fun LogDrawer(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                             ) {
+                                                tab.sessionId?.let { clusterBadges[it] }?.let { badge ->
+                                                    LogTabClusterBadge(badge)
+                                                }
                                                 Text(
                                                     drawerTabLabel(tab),
                                                     maxLines = 1,
@@ -245,6 +283,7 @@ fun LogDrawer(
                             when (val tab = tabs[key]) {
                                 is ActiveLogStream -> DrawerLogPane(
                                     stream = tab,
+                                    viewState = paneStates.stateFor(tab.key),
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
@@ -259,6 +298,7 @@ fun LogDrawer(
 
                                 is ActiveNamespaceTail -> DrawerNamespaceTailPane(
                                     tab = tab,
+                                    viewState = paneStates.stateFor(tab.key),
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
@@ -305,6 +345,32 @@ private fun drawerTabLabel(tab: DrawerLogTab): String = when (tab) {
     }
 
     else -> tab.displayLabel
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LogTabClusterBadge(badge: LogTabBadge) {
+    TooltipArea(
+        tooltip = { ActionTooltip(badge.context, null) },
+        tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(CircleShape)
+                .background(badge.color)
+                .semantics { contentDescription = "Cluster ${badge.context}" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                clusterInitial(badge.context),
+                color = Color.White,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
 }
 
 @Composable

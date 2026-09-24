@@ -23,6 +23,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,6 +68,7 @@ import com.kubekubedashdash.services.logtail.DefaultNamespaceTailGateway
 import com.kubekubedashdash.services.logtail.NamespaceTailEngine
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
+import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.components.stepUiScale
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -101,6 +103,7 @@ fun App(
 
         val sidebarCollapsed by PreferenceRepository.sidebarCollapsed.collectAsState()
         val tabStripVisibility by PreferenceRepository.tabStripVisibility.collectAsState()
+        val logDrawerBesideSidebar by PreferenceRepository.logDrawerBesideSidebar.collectAsState()
 
         val tabs by workspace.tabs.collectAsState()
         val activeTabKey by workspace.activeTabKey.collectAsState()
@@ -236,12 +239,30 @@ fun App(
         val visibleSessionIds = remember(tabs) {
             tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(mutableSetOf()) { it.session.id.value }
         }
+        // Cluster badges on the drawer's log tabs: session id → the context that
+        // cluster tab shows now. logTabBadges() returns none below two cluster tabs.
+        val contextsBySession: Map<String, String> = tabs.filterIsInstance<WorkspaceTab.Cluster>().associate { ct ->
+            key(ct.session.id) {
+                val ctx by ct.session.viewModel.selectedContext.collectAsState()
+                ct.session.id.value to ctx
+            }
+        }
+        val clusterBadges = remember(contextsBySession, clusterColorOverrides) {
+            logTabBadges(contextsBySession) { ctx ->
+                ClusterColor.effectiveColor(ctx, clusterColorOverrides).composeColor
+            }
+        }
         // Auto-hide the drawer when the user closes its last visible tab.
         // drawerState (visibility) and the registry (tab list) are otherwise
         // independent, so without this the panel lingers empty. Edge-triggered
         // on the non-empty -> empty transition — not the empty *state* — so
         // Cmd+J can still deliberately open an empty drawer to show its hint.
         val openDrawerTabs by LogStreamRegistry.tabs.collectAsState()
+        // Each drawer tab's filter, toggles and scroll position — per window, so
+        // they survive tab switches, collapse and the drawer moving between the
+        // window and a cluster tab. Dropped with the tab.
+        val logPaneStates = remember { LogPaneStateStore() }
+        LaunchedEffect(openDrawerTabs.keys) { logPaneStates.retainOnly(openDrawerTabs.keys) }
         val visibleDrawerTabCount = remember(openDrawerTabs, visibleSessionIds) {
             openDrawerTabs.count { (_, tab) -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
         }
@@ -614,6 +635,33 @@ fun App(
                             }
                         }
 
+                        // Widescreen layout (Settings → Appearance): the one LogDrawer renders
+                        // inside the cluster tab the pager shows — under the content, right of
+                        // the sidebar. Setting off, or a tab without a sidebar (All Clusters,
+                        // a terminal): below the pager at full width. The host is tracked by tab
+                        // key and only moves once the pager reaches its target — see
+                        // rememberLogDrawerHostKey. A move rebuilds the LogDrawer: the log tabs'
+                        // filters, toggles and scroll survive (logPaneStates), as do visibility
+                        // (drawerState) and height (preferences); a resize drag in progress, the
+                        // tab strip's scroll and the app-log/capture panes' scroll do not.
+                        val drawerHostKey: String? = if (logDrawerBesideSidebar) {
+                            rememberLogDrawerHostKey(
+                                pagerState = pagerState,
+                                tabKeys = tabs.map { it.key },
+                                clusterTabKeys = tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(HashSet()) { it.key },
+                            )
+                        } else {
+                            null
+                        }
+                        val logDrawer: @Composable () -> Unit = {
+                            LogDrawer(
+                                state = drawerState,
+                                onStateChange = { drawerState = it },
+                                paneStates = logPaneStates,
+                                visibleSessionIds = visibleSessionIds,
+                                clusterBadges = clusterBadges,
+                            )
+                        }
                         HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -645,6 +693,7 @@ fun App(
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,
                                     onTailLogs = onTailLogs,
+                                    bottomSlot = if (tab.key == drawerHostKey) logDrawer else null,
                                 )
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()
@@ -659,11 +708,7 @@ fun App(
                                 null -> Unit
                             }
                         }
-                        LogDrawer(
-                            state = drawerState,
-                            onStateChange = { drawerState = it },
-                            visibleSessionIds = visibleSessionIds,
-                        )
+                        if (drawerHostKey == null) logDrawer()
                     }
                 } // end if (showFirstRun) else
 
