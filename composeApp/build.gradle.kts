@@ -1,4 +1,8 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractProguardTask
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -153,6 +157,36 @@ compose.desktop {
             // tcnative, jakarta.servlet, etc.) — the optimizer chokes on
             // missing superclasses even when the code paths are unreachable.
             optimize.set(false)
+        }
+    }
+}
+
+// ProGuard rewrites every class it passes through, -keep or not, but copies a
+// signed jar's META-INF signature files across verbatim. The JVM then sees a
+// signed jar whose classes no longer match their recorded digests and refuses to
+// load any of them ("SHA-256 digest error for org/bouncycastle/..."). BouncyCastle
+// is the only signed jar on the runtime classpath, and fabric8's MockWebServer
+// references it directly since 7.7.0, so merely loading that class failed and
+// every release build's demo cluster died on boot while `run` (no ProGuard) was
+// fine. Dropping the signature files turns these into ordinary unsigned jars;
+// nothing needs them signed (BouncyCastle is never registered as a JCE provider,
+// and the bundled OpenJDK runtime does not demand signed providers anyway).
+tasks.withType<AbstractProguardTask>().configureEach {
+    // A local, so the doLast lambda captures a provider rather than the build
+    // script (the configuration cache cannot serialise script objects).
+    val outputDir = destinationDir
+    doLast {
+        val signatureFile = Regex("META-INF/(?:[^/]+\\.(?:SF|RSA|DSA|EC)|SIG-[^/]+)", RegexOption.IGNORE_CASE)
+        outputDir.get().asFile.listFiles { file -> file.extension == "jar" }.orEmpty().forEach { jar ->
+            val signatureEntries = ZipFile(jar).use { zip ->
+                zip.entries().asSequence().map { it.name }.filter(signatureFile::matches).toList()
+            }
+            if (signatureEntries.isNotEmpty()) {
+                FileSystems.newFileSystem(jar.toPath()).use { fs ->
+                    signatureEntries.forEach { Files.delete(fs.getPath(it)) }
+                }
+                logger.lifecycle("Stripped stale signature files $signatureEntries from ${jar.name}")
+            }
         }
     }
 }
