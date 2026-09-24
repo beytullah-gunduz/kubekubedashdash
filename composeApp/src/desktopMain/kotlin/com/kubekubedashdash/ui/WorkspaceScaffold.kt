@@ -52,7 +52,8 @@ import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
  * [CompositionLocalProvider] routes every `viewModel { … }` lookup, plus
  * any read of [LocalReactiveKubeClient], to *this* page's session — keeping
  * state isolated per cluster.
- * [bottomSlot] is the window's log drawer when the widescreen layout places it in this tab: rendered under the content, right of the sidebar.
+ * [bottomSlot] is the window's log drawer when the widescreen layout places
+ * it in this tab: rendered under the content, right of the sidebar.
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -144,7 +145,8 @@ internal fun SessionPaneContent(
     ) {
         // The overlay must be a later sibling of the session Row inside one
         // Box: Compose hit-testing then routes every pointer event to the
-        // scrim while it is visible, and AnimatedVisibility composes nothing
+        // scrim while it is visible — except inside its bottom-end cutout,
+        // the widescreen log drawer — and AnimatedVisibility composes nothing
         // while it is not.
         Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { pageCoordinates.value = it }) {
             Row(modifier = Modifier.fillMaxSize()) {

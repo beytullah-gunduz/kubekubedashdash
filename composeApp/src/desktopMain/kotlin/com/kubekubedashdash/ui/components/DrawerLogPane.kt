@@ -41,6 +41,7 @@ import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.ui.screens.logviewer.LogLine
 import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -99,16 +100,21 @@ fun DrawerLogPane(stream: ActiveLogStream, viewState: LogPaneViewState, modifier
     // that file for why an `autoScrolling` guard or a `layoutInfo`-vs-
     // `visibleLines.lastIndex` comparison are both broken here.
     LaunchedEffect(listState) {
+        // A pane re-entering with Follow off keeps it off even when it lands on
+        // the last line (Follow switched off on a quiet log): its first laid-out
+        // answer restates where it was restored to, not a user scroll.
+        val skipFirst = if (viewState.follow) 0 else 1
         snapshotFlow {
             val info = listState.layoutInfo
-            // Not laid out yet: no answer. The empty-list rule below would
-            // report "at bottom" and switch a restored, scrolled-away pane
-            // back to Follow — yanking it to the newest line.
+            // Not laid out yet: no answer. When this effect starts before the
+            // first layout (the ui-test dispatcher does; the app's normally
+            // doesn't), the empty-list rule below would report "at bottom" and
+            // switch a restored, scrolled-away pane back to Follow.
             if (info.viewportEndOffset <= 0) return@snapshotFlow null
             val lastVisible = info.visibleItemsInfo.lastOrNull()
             lastVisible == null ||
                 (lastVisible.index == info.totalItemsCount - 1 && lastVisible.offset + lastVisible.size <= info.viewportEndOffset)
-        }.filterNotNull().collect { atBottom -> follow = atBottom }
+        }.filterNotNull().drop(skipFirst).collect { atBottom -> follow = atBottom }
     }
     LaunchedEffect(visibleLines.size) {
         if (follow && visibleLines.isNotEmpty()) listState.animateScrollToItem(visibleLines.lastIndex)

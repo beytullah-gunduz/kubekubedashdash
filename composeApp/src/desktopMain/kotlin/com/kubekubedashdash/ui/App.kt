@@ -638,18 +638,20 @@ fun App(
                         // Widescreen layout (Settings → Appearance): the one LogDrawer renders
                         // inside the cluster tab the pager shows — under the content, right of
                         // the sidebar. Setting off, or a tab without a sidebar (All Clusters,
-                        // a terminal): below the pager at full width. Gated on currentPage, not
-                        // activeTabKey, so it stays on the page that is mostly on screen during
-                        // a tab-switch animation (clamped: currentPage can trail a tab close by
-                        // a frame). A move rebuilds the LogDrawer: the log tabs' filters, toggles
-                        // and scroll survive (logPaneStates), as do visibility (drawerState) and
-                        // height (preferences); a resize drag in progress, the tab strip's scroll
-                        // and the app-log/capture panes' scroll do not.
-                        val drawerHostPage: Int? = if (!logDrawerBesideSidebar) {
-                            null
+                        // a terminal): below the pager at full width. The host is tracked by tab
+                        // key and only moves once the pager reaches its target — see
+                        // rememberLogDrawerHostKey. A move rebuilds the LogDrawer: the log tabs'
+                        // filters, toggles and scroll survive (logPaneStates), as do visibility
+                        // (drawerState) and height (preferences); a resize drag in progress, the
+                        // tab strip's scroll and the app-log/capture panes' scroll do not.
+                        val drawerHostKey: String? = if (logDrawerBesideSidebar) {
+                            rememberLogDrawerHostKey(
+                                pagerState = pagerState,
+                                tabKeys = tabs.map { it.key },
+                                clusterTabKeys = tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(HashSet()) { it.key },
+                            )
                         } else {
-                            pagerState.currentPage.coerceAtMost(tabs.lastIndex)
-                                .takeIf { page -> tabs.getOrNull(page) is WorkspaceTab.Cluster }
+                            null
                         }
                         val logDrawer: @Composable () -> Unit = {
                             LogDrawer(
@@ -691,7 +693,7 @@ fun App(
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,
                                     onTailLogs = onTailLogs,
-                                    bottomSlot = if (page == drawerHostPage) logDrawer else null,
+                                    bottomSlot = if (tab.key == drawerHostKey) logDrawer else null,
                                 )
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()
@@ -706,7 +708,7 @@ fun App(
                                 null -> Unit
                             }
                         }
-                        if (drawerHostPage == null) logDrawer()
+                        if (drawerHostKey == null) logDrawer()
                     }
                 } // end if (showFirstRun) else
 

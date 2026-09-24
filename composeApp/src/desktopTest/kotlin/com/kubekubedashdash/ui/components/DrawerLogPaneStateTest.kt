@@ -10,11 +10,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -35,7 +39,13 @@ import kotlin.test.assertTrue
  * [LogPaneViewState] owned outside it, so they survive the pane leaving
  * composition. Composing the pane initialises ThemeManager (its Kd* colours),
  * which opens the preferences store — the Gradle test-data one, guarded below.
+ *
+ * Deliberately the v1 runComposeUiTest (deprecated): its dispatcher starts
+ * LaunchedEffects before the first layout, the ordering the panes' "not laid
+ * out yet" guard defends against. Under v2, which queues effects, the second
+ * test passes even without the guard.
  */
+@Suppress("DEPRECATION")
 @OptIn(ExperimentalTestApi::class)
 class DrawerLogPaneStateTest {
 
@@ -124,5 +134,47 @@ class DrawerLogPaneStateTest {
         lines.value = lines.value + "line 202"
         waitForIdle()
         onNodeWithText("line 202").assertIsDisplayed()
+    }
+
+    @Test
+    fun `Follow switched off on the last line stays off after re-entering composition`() = runComposeUiTest {
+        val viewState = LogPaneViewState()
+        var shown by mutableStateOf(true)
+        host(stream(MutableStateFlow((1..200).map { "line $it" })), viewState) { shown }
+        waitForIdle()
+        onNodeWithText("Follow").performClick()
+        waitForIdle()
+        assertFalse(viewState.follow, "the chip switches Follow off")
+        shown = false
+        waitForIdle()
+        shown = true
+        waitForIdle()
+        assertFalse(viewState.follow, "re-entering on the last line must not switch Follow back on")
+        onNodeWithText("line 200").assertIsDisplayed()
+    }
+
+    @Test
+    fun `crossing the one-row width keeps the filter field focused and each control once`() = runComposeUiTest {
+        val viewState = LogPaneViewState()
+        var width by mutableStateOf(900.dp)
+        val stream = stream(MutableStateFlow((1..50).map { "line $it" }))
+        setContent {
+            MaterialTheme {
+                Box(Modifier.size(width = width, height = 300.dp)) {
+                    DrawerLogPane(stream = stream, viewState = viewState)
+                }
+            }
+        }
+        onNode(hasSetTextAction()).performClick()
+        onNode(hasSetTextAction()).performTextInput("abc")
+        waitForIdle()
+        for (w in listOf(500.dp, 900.dp)) {
+            width = w
+            waitForIdle()
+            onNode(hasSetTextAction()).assertIsFocused()
+            onNode(hasSetTextAction()).assert(hasText("abc"))
+            onAllNodesWithText("Follow").assertCountEquals(1)
+            onAllNodesWithText("Wrap").assertCountEquals(1)
+        }
     }
 }
