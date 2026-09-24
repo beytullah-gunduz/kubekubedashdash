@@ -251,6 +251,8 @@ class ResourceMappersTest {
             .endCondition()
             .endStatus()
             .build()
+        // A scheduled pod failing readiness: its False condition is Ready, not
+        // PodScheduled, so its message must not read as a scheduling failure.
         val scheduled = PodBuilder()
             .withNewMetadata().withName("app-1").endMetadata()
             .withNewStatus()
@@ -258,6 +260,11 @@ class ResourceMappersTest {
             .withType("PodScheduled")
             .withStatus("True")
             .withMessage("scheduled")
+            .endCondition()
+            .addNewCondition()
+            .withType("Ready")
+            .withStatus("False")
+            .withMessage("containers with unready status: [app]")
             .endCondition()
             .endStatus()
             .build()
@@ -325,8 +332,10 @@ class ResourceMappersTest {
 
     @Test
     fun `mapEvent falls back to eventTime for a first occurrence`() {
+        // creationTimestamp a month away, so falling back to it for either
+        // timestamp would show in the assertions.
         val ev = EventBuilder()
-            .withNewMetadata().withName("e").withNamespace("default").withCreationTimestamp("2026-02-02T10:00:01Z").endMetadata()
+            .withNewMetadata().withName("e").withNamespace("default").withCreationTimestamp("2026-01-01T00:00:00Z").endMetadata()
             .withNewEventTime("2026-02-02T10:00:00.123456Z")
             .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
             .build()
@@ -334,6 +343,7 @@ class ResourceMappersTest {
         val info = ResourceMappers.mapEvent(ev)!!
         assertEquals("2026-02-02T10:00:00Z", info.lastSeenTimestamp)
         assertEquals(1, info.count)
+        assertEquals(formatAge("2026-02-02T10:00:00.123456Z"), info.firstSeen)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.screens.pods
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -288,7 +288,7 @@ fun PodDetailPanel(
                             onToggleAnnotation = onToggleAnnotation,
                             now = now,
                             warningEvents = calloutEvents,
-                            warningTotal = warningCount,
+                            warningTotal = warningEventCount(currentPodEvents),
                             eventTotal = currentPodEvents.size,
                             onShowAllEvents = {
                                 activeTab = DetailTab.Events
@@ -507,10 +507,14 @@ private fun OverviewTab(
 ) {
     val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
     val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
+    // The panel outlives a pod switch, so without the key a scroll offset from
+    // the previous pod would carry over and hide this pod's warnings section.
+    // Keyed on the name too: demo pods can carry a blank uid.
+    val scrollState = remember(pod.uid, pod.namespace, pod.name) { ScrollState(0) }
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {

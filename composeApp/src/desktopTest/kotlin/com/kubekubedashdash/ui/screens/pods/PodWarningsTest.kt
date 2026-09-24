@@ -82,6 +82,18 @@ class PodWarningsTest {
     }
 
     @Test
+    fun `one unready container among ready ones counts as needing attention`() {
+        val p = pod().copy(
+            containers = listOf(
+                ContainerInfo(name = "app", image = "fake.example/app:latest", ready = true, restartCount = 0, state = "Running"),
+                ContainerInfo(name = "sidecar", image = "fake.example/sidecar:latest", ready = false, restartCount = 3, state = "CrashLoopBackOff"),
+            ),
+        )
+        val events = listOf(event("e1", lastSeen = "2026-01-01T09:00:00Z"))
+        assertEquals(listOf("e1"), warningCalloutEvents(p, events, now).map { it.uid })
+    }
+
+    @Test
     fun `a succeeded pod needs a recent warning`() {
         val p = pod(phase = "Succeeded", status = "Succeeded", ready = false)
         val events = listOf(event("e1", lastSeen = "2026-01-01T09:00:00Z"))
