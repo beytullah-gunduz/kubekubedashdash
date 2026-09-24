@@ -38,6 +38,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Appearance", "Theme", listOf("dark", "light", "system")),
     SettingsEntry("Appearance", "UI zoom", listOf("font", "size", "scale", "bigger")),
     SettingsEntry("Appearance", "Table density", listOf("rows", "compact", "comfortable", "spacing")),
+    SettingsEntry("Appearance", "Log panel beside sidebar", listOf("widescreen", "logs", "drawer", "bottom panel", "sidebar", "layout")),
     SettingsEntry("Cluster colors", "Cluster colors", listOf("color", "colour", "identify", "tab")),
     SettingsEntry("Default namespace", "Default namespace", listOf("namespace", "cluster", "startup", "connect")),
     SettingsEntry("Tab behavior", "When closing the active tab, focus:", listOf("close", "tab")),

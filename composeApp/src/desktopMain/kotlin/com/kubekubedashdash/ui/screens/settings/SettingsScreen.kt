@@ -735,6 +735,32 @@ fun SettingsScreen(
                                         }
                                     }
                                 }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                val logDrawerBesideSidebar by viewModel.logDrawerBesideSidebar.collectAsState()
+                                SettingsRowTitle("Log panel beside sidebar")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Widescreen layout: the sidebar keeps its full height and the log panel opens to its right. Off: the log panel spans the whole window.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = logDrawerBesideSidebar,
+                                        onCheckedChange = { viewModel.setLogDrawerBesideSidebar(it) },
+                                    )
+                                    Text(
+                                        if (logDrawerBesideSidebar) "Beside the sidebar" else "Full window width",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (logDrawerBesideSidebar) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.height(16.dp))

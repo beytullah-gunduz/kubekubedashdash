@@ -102,6 +102,7 @@ fun App(
 
         val sidebarCollapsed by PreferenceRepository.sidebarCollapsed.collectAsState()
         val tabStripVisibility by PreferenceRepository.tabStripVisibility.collectAsState()
+        val logDrawerBesideSidebar by PreferenceRepository.logDrawerBesideSidebar.collectAsState()
 
         val tabs by workspace.tabs.collectAsState()
         val activeTabKey by workspace.activeTabKey.collectAsState()
@@ -620,6 +621,30 @@ fun App(
                             }
                         }
 
+                        // Widescreen layout (Settings → Appearance): the one LogDrawer renders
+                        // inside the cluster tab the pager shows — under the content, right of
+                        // the sidebar. Setting off, or a tab without a sidebar (All Clusters,
+                        // a terminal): below the pager at full width. Gated on currentPage, not
+                        // activeTabKey, so it stays on the page that is mostly on screen during
+                        // a tab-switch animation (clamped: currentPage can trail a tab close by
+                        // a frame). A move rebuilds the LogDrawer: the log tabs' filters, toggles
+                        // and scroll survive (logPaneStates), as do visibility (drawerState) and
+                        // height (preferences); a resize drag in progress, the tab strip's scroll
+                        // and the app-log/capture panes' scroll do not.
+                        val drawerHostPage: Int? = if (!logDrawerBesideSidebar) {
+                            null
+                        } else {
+                            pagerState.currentPage.coerceAtMost(tabs.lastIndex)
+                                .takeIf { page -> tabs.getOrNull(page) is WorkspaceTab.Cluster }
+                        }
+                        val logDrawer: @Composable () -> Unit = {
+                            LogDrawer(
+                                state = drawerState,
+                                onStateChange = { drawerState = it },
+                                paneStates = logPaneStates,
+                                visibleSessionIds = visibleSessionIds,
+                            )
+                        }
                         HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -651,6 +676,7 @@ fun App(
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,
                                     onTailLogs = onTailLogs,
+                                    bottomSlot = if (page == drawerHostPage) logDrawer else null,
                                 )
 
                                 WorkspaceTab.AllClusters -> AllClustersScreen()
@@ -665,12 +691,7 @@ fun App(
                                 null -> Unit
                             }
                         }
-                        LogDrawer(
-                            state = drawerState,
-                            onStateChange = { drawerState = it },
-                            paneStates = logPaneStates,
-                            visibleSessionIds = visibleSessionIds,
-                        )
+                        if (drawerHostPage == null) logDrawer()
                     }
                 } // end if (showFirstRun) else
 

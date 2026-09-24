@@ -127,4 +127,11 @@ class SettingsIndexTest {
         val results = settingsSearchResults("tab")
         assertEquals(results.size, results.distinct().size)
     }
+
+    @Test
+    fun `widescreen finds the log panel row by keyword`() {
+        val results = settingsSearchResults("widescreen")
+        assertEquals("Log panel beside sidebar", results.first().title)
+        assertEquals("Appearance", results.first().section)
+    }
 }

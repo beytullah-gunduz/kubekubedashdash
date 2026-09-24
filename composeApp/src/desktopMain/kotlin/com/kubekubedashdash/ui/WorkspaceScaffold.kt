@@ -20,14 +20,20 @@ import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -46,6 +52,7 @@ import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
  * [CompositionLocalProvider] routes every `viewModel { … }` lookup, plus
  * any read of [LocalReactiveKubeClient], to *this* page's session — keeping
  * state isolated per cluster.
+ * [bottomSlot] is the window's log drawer when the widescreen layout places it in this tab: rendered under the content, right of the sidebar.
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -58,6 +65,7 @@ internal fun SessionPaneContent(
     onOpenTerminal: (String, String, String) -> Unit,
     onCaptureLogs: (String) -> Unit,
     onTailLogs: (String) -> Unit,
+    bottomSlot: (@Composable () -> Unit)? = null,
 ) {
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
@@ -120,6 +128,14 @@ internal fun SessionPaneContent(
         navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentScreen)
     }
 
+    // Where the bottom slot sits in this page, so the reconnect scrim can leave
+    // the log drawer uncovered. The page's coordinates live in a plain holder
+    // (not state) and are read from the slot's callback; only the resulting
+    // numbers are state, and re-writing an unchanged value invalidates nothing.
+    val pageCoordinates = remember { CoordinatesHolder() }
+    var bottomSlotStartPx by remember { mutableFloatStateOf(0f) }
+    var bottomSlotHeightPx by remember { mutableIntStateOf(0) }
+
     CompositionLocalProvider(
         LocalViewModelStoreOwner provides session,
         LocalReactiveKubeClient provides session.reactiveClient,
@@ -130,7 +146,7 @@ internal fun SessionPaneContent(
         // Box: Compose hit-testing then routes every pointer event to the
         // scrim while it is visible, and AnimatedVisibility composes nothing
         // while it is not.
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { pageCoordinates.value = it }) {
             Row(modifier = Modifier.fillMaxSize()) {
                 ListDetailPaneScaffold(
                     paneExpansionState = expansionState,
@@ -235,6 +251,22 @@ internal fun SessionPaneContent(
                                         )
                                     },
                                 )
+                                if (bottomSlot != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .onGloballyPositioned { slot ->
+                                                val page = pageCoordinates.value
+                                                if (page != null && page.isAttached) {
+                                                    bottomSlotStartPx = page.localPositionOf(slot, Offset.Zero).x
+                                                }
+                                                bottomSlotHeightPx = slot.size.height
+                                            },
+                                    ) {
+                                        bottomSlot()
+                                        DisposableEffect(Unit) { onDispose { bottomSlotHeightPx = 0 } }
+                                    }
+                                }
                             }
                         }
                     },
@@ -249,7 +281,14 @@ internal fun SessionPaneContent(
                 onRetryNow = sessionVm::retryNow,
                 onSwitchCluster = onSelectCluster,
                 modifier = Modifier.fillMaxSize(),
+                cutoutStart = { with(density) { bottomSlotStartPx.toDp() } },
+                cutoutHeight = { with(density) { bottomSlotHeightPx.toDp() } },
             )
         }
     }
+}
+
+/** Non-snapshot holder for the page's layout coordinates (see SessionPaneContent). */
+private class CoordinatesHolder {
+    var value: LayoutCoordinates? = null
 }

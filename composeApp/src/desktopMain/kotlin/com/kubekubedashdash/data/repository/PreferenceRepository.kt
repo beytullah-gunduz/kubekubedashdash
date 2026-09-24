@@ -69,6 +69,7 @@ object PreferenceRepository {
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
+    private val LOG_DRAWER_BESIDE_SIDEBAR by lazy { booleanPreferencesKey("log_drawer_beside_sidebar") }
     private val MASK_SECRET_VALUES by lazy { booleanPreferencesKey("mask_secret_values") }
     private val RESTORE_SESSION_ON_LAUNCH by lazy { booleanPreferencesKey("restore_session_on_launch") }
     private val CAPTURE_DESTINATION_DIR by lazy { stringPreferencesKey("capture_destination_dir") }
@@ -140,6 +141,11 @@ object PreferenceRepository {
 
     private val _logDrawerHeightDp = MutableStateFlow(DEFAULT_LOG_DRAWER_HEIGHT_DP)
     val logDrawerHeightDp: StateFlow<Int> = _logDrawerHeightDp.asStateFlow()
+
+    // Widescreen layout: the log drawer opens to the right of the sidebar,
+    // inside the active cluster tab, instead of spanning the window. Off by default.
+    private val _logDrawerBesideSidebar = MutableStateFlow(false)
+    val logDrawerBesideSidebar: StateFlow<Boolean> = _logDrawerBesideSidebar.asStateFlow()
 
     // Default ON — also the fail-safe initial value: readers (the YAML viewer) see
     // `true` (masked) during the window before the first DataStore emission, so a
@@ -260,6 +266,7 @@ object PreferenceRepository {
                     _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
                     _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
                         .coerceIn(MIN_LOG_DRAWER_HEIGHT_DP, MAX_LOG_DRAWER_HEIGHT_DP)
+                    _logDrawerBesideSidebar.value = p[LOG_DRAWER_BESIDE_SIDEBAR] ?: false
                     _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
                     _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
                     _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
@@ -374,6 +381,11 @@ object PreferenceRepository {
     fun setRestoreSessionOnLaunch(value: Boolean) {
         _restoreSessionOnLaunch.value = value
         ioScope.launch { dataStore.edit { it[RESTORE_SESSION_ON_LAUNCH] = value } }
+    }
+
+    fun setLogDrawerBesideSidebar(value: Boolean) {
+        _logDrawerBesideSidebar.value = value
+        ioScope.launch { dataStore.edit { it[LOG_DRAWER_BESIDE_SIDEBAR] = value } }
     }
 
     fun setCaptureDestinationDir(value: String) {
