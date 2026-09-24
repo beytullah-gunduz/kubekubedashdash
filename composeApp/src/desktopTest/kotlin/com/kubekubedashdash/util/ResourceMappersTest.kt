@@ -309,6 +309,72 @@ class ResourceMappersTest {
         assertEquals("", ResourceMappers.mapEvent(ev)!!.objectUid)
     }
 
+    @Test
+    fun `mapEvent reads an events-v1 series for last seen and count`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").endMetadata()
+            .withNewEventTime("2026-02-02T10:00:00.123456Z")
+            .withNewSeries().withCount(7).withNewLastObservedTime("2026-02-02T10:05:00.654321Z").endSeries()
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T10:05:00Z", info.lastSeenTimestamp)
+        assertEquals(7, info.count)
+    }
+
+    @Test
+    fun `mapEvent falls back to eventTime for a first occurrence`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").withCreationTimestamp("2026-02-02T10:00:01Z").endMetadata()
+            .withNewEventTime("2026-02-02T10:00:00.123456Z")
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T10:00:00Z", info.lastSeenTimestamp)
+        assertEquals(1, info.count)
+    }
+
+    @Test
+    fun `mapEvent prefers the series over the deprecated lastTimestamp`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").endMetadata()
+            .withLastTimestamp("2026-02-02T09:00:00Z")
+            .withCount(3)
+            .withNewSeries().withCount(9).withNewLastObservedTime("2026-02-02T10:05:00Z").endSeries()
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T10:05:00Z", info.lastSeenTimestamp)
+        assertEquals(9, info.count)
+    }
+
+    @Test
+    fun `mapEvent keeps a legacy lastTimestamp when there is no series`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").endMetadata()
+            .withLastTimestamp("2026-02-02T09:00:00Z")
+            .withNewEventTime("2026-02-02T08:00:00.000001Z")
+            .withCount(4)
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T09:00:00Z", info.lastSeenTimestamp)
+        assertEquals(4, info.count)
+    }
+
+    @Test
+    fun `canonicalTimestamp truncates fractions and leaves junk alone`() {
+        assertEquals("2026-02-02T10:00:00Z", ResourceMappers.canonicalTimestamp("2026-02-02T10:00:00.123456Z"))
+        assertEquals("2026-02-02T10:00:00Z", ResourceMappers.canonicalTimestamp("2026-02-02T10:00:00Z"))
+        assertEquals("", ResourceMappers.canonicalTimestamp(""))
+        assertEquals("", ResourceMappers.canonicalTimestamp(null))
+        assertEquals("not-a-time", ResourceMappers.canonicalTimestamp("not-a-time"))
+    }
+
     // ── mapCrd ──────────────────────────────────────────────────────────────
 
     @Test
