@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -94,6 +96,26 @@ internal fun ClusterSummaryCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor,
             )
+
+            // The pods, usage and Errors / Warnings this tab contributes follow
+            // its selected namespace; nodes, namespaces and capacity don't.
+            summary.namespace?.let { namespace ->
+                Spacer(Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = KdInfo.copy(alpha = 0.12f),
+                ) {
+                    Text(
+                        text = "Namespace: $namespace",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KdInfo,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
 
             Spacer(Modifier.height(8.dp))
 

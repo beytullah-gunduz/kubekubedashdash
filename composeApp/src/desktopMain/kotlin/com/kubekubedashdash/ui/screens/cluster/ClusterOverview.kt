@@ -210,7 +210,7 @@ fun ClusterOverviewScreen(
             expanded = statsExpanded,
             onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_CLUSTER, !statsExpanded) },
             onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
-            namespace = namespace,
+            scope = namespace?.let(UsageScope::namespace),
         )
 
         Spacer(Modifier.height(24.dp))
