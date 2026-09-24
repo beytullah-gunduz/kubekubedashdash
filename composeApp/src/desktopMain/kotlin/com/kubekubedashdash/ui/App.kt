@@ -23,6 +23,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -237,6 +238,19 @@ fun App(
         // shared app-log tab always counts toward visibility.
         val visibleSessionIds = remember(tabs) {
             tabs.filterIsInstance<WorkspaceTab.Cluster>().mapTo(mutableSetOf()) { it.session.id.value }
+        }
+        // Cluster badges on the drawer's log tabs: session id → the context that
+        // cluster tab shows now. logTabBadges() returns none below two cluster tabs.
+        val contextsBySession: Map<String, String> = tabs.filterIsInstance<WorkspaceTab.Cluster>().associate { ct ->
+            key(ct.session.id) {
+                val ctx by ct.session.viewModel.selectedContext.collectAsState()
+                ct.session.id.value to ctx
+            }
+        }
+        val clusterBadges = remember(contextsBySession, clusterColorOverrides) {
+            logTabBadges(contextsBySession) { ctx ->
+                ClusterColor.effectiveColor(ctx, clusterColorOverrides).composeColor
+            }
         }
         // Auto-hide the drawer when the user closes its last visible tab.
         // drawerState (visibility) and the registry (tab list) are otherwise
@@ -643,6 +657,7 @@ fun App(
                                 onStateChange = { drawerState = it },
                                 paneStates = logPaneStates,
                                 visibleSessionIds = visibleSessionIds,
+                                clusterBadges = clusterBadges,
                             )
                         }
                         HorizontalPager(
