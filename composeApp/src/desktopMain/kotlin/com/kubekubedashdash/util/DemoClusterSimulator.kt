@@ -108,6 +108,12 @@ class DemoClusterSimulator(
     private val nodeMetricsState = ConcurrentHashMap<String, NodeMetricsBaseline>()
     private val podMetricsState = ConcurrentHashMap<String, PodMetricsBaseline>()
 
+    // Identical events within DEMO_EVENT_FOLD_WINDOW_MS fold into one Event with
+    // a bumped count, like the real recorder, instead of stacking up as rows.
+    private data class DemoEventSeries(val name: String, val count: Int, val firstTs: String, val lastMillis: Long)
+
+    private val eventSeries = ConcurrentHashMap<String, DemoEventSeries>()
+
     private val protectedNodes = setOf("mock-node-1")
     private val protectedPods = setOf(
         "default/frontend-7b9d5c8f4-abc12",
@@ -582,6 +588,17 @@ class DemoClusterSimulator(
                         .withName(app)
                         .withReady(false)
                         .withRestartCount(restartCount)
+                        .withLastState(
+                            ContainerStateBuilder()
+                                .withTerminated(
+                                    ContainerStateTerminatedBuilder()
+                                        .withExitCode(1)
+                                        .withReason("Error")
+                                        .withFinishedAt(now())
+                                        .build(),
+                                )
+                                .build(),
+                        )
                         .withState(
                             ContainerStateBuilder()
                                 .withWaiting(
@@ -915,32 +932,42 @@ class DemoClusterSimulator(
         sourceComponent: String,
     ) {
         val ns = involvedNamespace ?: "default"
-        val nameId = "evt-${System.nanoTime().toString(36)}"
         val ts = now()
-        runCatching {
-            client.v1().events().inNamespace(ns).resource(
-                EventBuilder()
-                    .withNewMetadata()
-                    .withName(nameId)
-                    .withNamespace(ns)
-                    .withCreationTimestamp(ts)
-                    .endMetadata()
-                    .withType(type)
-                    .withReason(reason)
-                    .withMessage(message)
-                    .withCount(1)
-                    .withFirstTimestamp(ts)
-                    .withLastTimestamp(ts)
-                    .withInvolvedObject(
-                        ObjectReferenceBuilder()
-                            .withKind(involvedKind)
-                            .withName(involvedName)
-                            .withNamespace(involvedNamespace)
-                            .build(),
-                    )
-                    .withSource(EventSourceBuilder().withComponent(sourceComponent).build())
+        val nowMillis = System.currentTimeMillis()
+        eventSeries.entries.removeIf { nowMillis - it.value.lastMillis > DEMO_EVENT_FOLD_WINDOW_MS }
+        val key = "$ns|$involvedKind|$involvedName|$type|$reason|$message"
+        val previous = eventSeries[key]
+        val series = previous?.copy(count = previous.count + 1, lastMillis = nowMillis)
+            ?: DemoEventSeries(name = "evt-${System.nanoTime().toString(36)}", count = 1, firstTs = ts, lastMillis = nowMillis)
+        eventSeries[key] = series
+        val event = EventBuilder()
+            .withNewMetadata()
+            .withName(series.name)
+            .withNamespace(ns)
+            .withCreationTimestamp(series.firstTs)
+            .endMetadata()
+            .withType(type)
+            .withReason(reason)
+            .withMessage(message)
+            .withCount(series.count)
+            .withFirstTimestamp(series.firstTs)
+            .withLastTimestamp(ts)
+            .withInvolvedObject(
+                ObjectReferenceBuilder()
+                    .withKind(involvedKind)
+                    .withName(involvedName)
+                    .withNamespace(involvedNamespace)
                     .build(),
-            ).create()
+            )
+            .withSource(EventSourceBuilder().withComponent(sourceComponent).build())
+            .build()
+        runCatching {
+            val events = client.v1().events().inNamespace(ns)
+            if (previous != null) {
+                runCatching { events.resource(event).update() }.getOrElse { events.resource(event).create() }
+            } else {
+                events.resource(event).create()
+            }
         }
     }
 
@@ -966,6 +993,7 @@ class DemoClusterSimulator(
         private const val POD_LOOP_JITTER_MS = 800L
         private const val EVENT_NOISE_MEAN_MS = 5_000L
         private const val EVENT_NOISE_JITTER_MS = 3_500L
+        private const val DEMO_EVENT_FOLD_WINDOW_MS = 10 * 60_000L
         private const val CRASH_RESTART_MIN_MS = 30_000L
         private const val CRASH_RESTART_MAX_MS = 90_001L
 

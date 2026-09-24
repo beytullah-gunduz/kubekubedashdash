@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.CrdScope
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
@@ -148,6 +149,131 @@ class ResourceMappersTest {
         assertEquals(2, info.containers.size)
         assertEquals("Running", info.containers[0].state)
         assertEquals("PodInitializing", info.containers[1].state)
+        assertEquals("", info.containers[0].stateMessage)
+        assertNull(info.containers[0].lastTermination)
+    }
+
+    @Test
+    fun `mapPod carries the waiting message and the last termination`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").withImage("fake.example/app:latest").build())
+            .endSpec()
+            .withNewStatus()
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withNewState()
+                    .withNewWaiting()
+                    .withReason("CrashLoopBackOff")
+                    .withMessage("back-off 5m0s restarting failed container=app")
+                    .endWaiting()
+                    .endState()
+                    .withNewLastState()
+                    .withNewTerminated()
+                    .withReason("OOMKilled")
+                    .withExitCode(137)
+                    .withFinishedAt("2026-01-01T00:05:00Z")
+                    .endTerminated()
+                    .endLastState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val info = ResourceMappers.mapPod(pod)
+
+        assertEquals("back-off 5m0s restarting failed container=app", info.containers[0].stateMessage)
+        assertNull(info.containers[0].exitCode)
+        assertEquals(
+            ContainerTermination("OOMKilled", 137, "2026-01-01T00:05:00Z", ""),
+            info.containers[0].lastTermination,
+        )
+    }
+
+    @Test
+    fun `mapPod carries a terminated container's exit code and message`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").withImage("fake.example/app:latest").build())
+            .endSpec()
+            .withNewStatus()
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withNewState()
+                    .withNewTerminated()
+                    .withReason("Error")
+                    .withExitCode(2)
+                    .withMessage("boom")
+                    .endTerminated()
+                    .endState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val info = ResourceMappers.mapPod(pod)
+
+        assertEquals(2, info.containers[0].exitCode)
+        assertEquals("boom", info.containers[0].stateMessage)
+        assertNull(info.containers[0].lastTermination)
+    }
+
+    @Test
+    fun `mapPod carries the pod-level reason and message`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewStatus()
+            .withPhase("Failed")
+            .withReason("Evicted")
+            .withMessage("The node was low on resource: memory.")
+            .endStatus()
+            .build()
+
+        val info = ResourceMappers.mapPod(pod)
+
+        assertEquals("Evicted", info.statusReason)
+        assertEquals("The node was low on resource: memory.", info.statusMessage)
+    }
+
+    @Test
+    fun `mapPod keeps the PodScheduled message only while it is False`() {
+        val pending = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewStatus()
+            .addNewCondition()
+            .withType("PodScheduled")
+            .withStatus("False")
+            .withMessage("0/3 nodes are available: 3 Insufficient cpu.")
+            .endCondition()
+            .endStatus()
+            .build()
+        // A scheduled pod failing readiness: its False condition is Ready, not
+        // PodScheduled, so its message must not read as a scheduling failure.
+        val scheduled = PodBuilder()
+            .withNewMetadata().withName("app-1").endMetadata()
+            .withNewStatus()
+            .addNewCondition()
+            .withType("PodScheduled")
+            .withStatus("True")
+            .withMessage("scheduled")
+            .endCondition()
+            .addNewCondition()
+            .withType("Ready")
+            .withStatus("False")
+            .withMessage("containers with unready status: [app]")
+            .endCondition()
+            .endStatus()
+            .build()
+
+        assertEquals(
+            "0/3 nodes are available: 3 Insufficient cpu.",
+            ResourceMappers.mapPod(pending).schedulingMessage,
+        )
+        assertEquals("", ResourceMappers.mapPod(scheduled).schedulingMessage)
     }
 
     // ── mapEvent ────────────────────────────────────────────────────────────
@@ -188,6 +314,75 @@ class ResourceMappersTest {
             .build()
 
         assertEquals("", ResourceMappers.mapEvent(ev)!!.objectUid)
+    }
+
+    @Test
+    fun `mapEvent reads an events-v1 series for last seen and count`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").endMetadata()
+            .withNewEventTime("2026-02-02T10:00:00.123456Z")
+            .withNewSeries().withCount(7).withNewLastObservedTime("2026-02-02T10:05:00.654321Z").endSeries()
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T10:05:00Z", info.lastSeenTimestamp)
+        assertEquals(7, info.count)
+    }
+
+    @Test
+    fun `mapEvent falls back to eventTime for a first occurrence`() {
+        // creationTimestamp a month away, so falling back to it for either
+        // timestamp would show in the assertions.
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").withCreationTimestamp("2026-01-01T00:00:00Z").endMetadata()
+            .withNewEventTime("2026-02-02T10:00:00.123456Z")
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T10:00:00Z", info.lastSeenTimestamp)
+        assertEquals(1, info.count)
+        assertEquals(formatAge("2026-02-02T10:00:00.123456Z"), info.firstSeen)
+    }
+
+    @Test
+    fun `mapEvent prefers the series over the deprecated lastTimestamp`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").endMetadata()
+            .withLastTimestamp("2026-02-02T09:00:00Z")
+            .withCount(3)
+            .withNewSeries().withCount(9).withNewLastObservedTime("2026-02-02T10:05:00Z").endSeries()
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T10:05:00Z", info.lastSeenTimestamp)
+        assertEquals(9, info.count)
+    }
+
+    @Test
+    fun `mapEvent keeps a legacy lastTimestamp when there is no series`() {
+        val ev = EventBuilder()
+            .withNewMetadata().withName("e").withNamespace("default").endMetadata()
+            .withLastTimestamp("2026-02-02T09:00:00Z")
+            .withNewEventTime("2026-02-02T08:00:00.000001Z")
+            .withCount(4)
+            .withInvolvedObject(ObjectReferenceBuilder().withKind("Pod").withName("web-0").build())
+            .build()
+
+        val info = ResourceMappers.mapEvent(ev)!!
+        assertEquals("2026-02-02T09:00:00Z", info.lastSeenTimestamp)
+        assertEquals(4, info.count)
+    }
+
+    @Test
+    fun `canonicalTimestamp truncates fractions and leaves junk alone`() {
+        assertEquals("2026-02-02T10:00:00Z", ResourceMappers.canonicalTimestamp("2026-02-02T10:00:00.123456Z"))
+        assertEquals("2026-02-02T10:00:00Z", ResourceMappers.canonicalTimestamp("2026-02-02T10:00:00Z"))
+        assertEquals("", ResourceMappers.canonicalTimestamp(""))
+        assertEquals("", ResourceMappers.canonicalTimestamp(null))
+        assertEquals("not-a-time", ResourceMappers.canonicalTimestamp("not-a-time"))
     }
 
     // ── mapCrd ──────────────────────────────────────────────────────────────

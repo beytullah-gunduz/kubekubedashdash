@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.screens.pods
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,10 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,6 +32,7 @@ import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
@@ -58,6 +62,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ContainerInfo
+import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
@@ -109,6 +114,9 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import java.time.Instant
+
+// How often the panel's relative times ("Last seen 30s", "Finished 5m ago") re-render.
+private const val AGE_TICK_MS = 10_000L
 
 private enum class DetailTab(val label: String, val icon: DrawableResource) {
     Overview("Overview", Res.drawable.info_filled),
@@ -173,11 +181,35 @@ fun PodDetailPanel(
     }.collectAsState(ResourceState.Loading)
     val selectedNamespace by kubeClient.selectedNamespace.collectAsState()
     val eventsInScope = selectedNamespace == null || selectedNamespace == pod.namespace
-    val warningCount = if (eventsInScope) {
-        warningEventCount((podEventsState as? ResourceState.Success)?.data ?: emptyList())
-    } else {
-        0
+    val podEvents = (podEventsState as? ResourceState.Success)?.data.orEmpty()
+    val warningCount = if (eventsInScope) warningEventCount(podEvents) else 0
+
+    // One clock for every relative time in the panel. The informer only
+    // re-emits on change, so "Last seen 30s" or "Finished 5m ago" would
+    // otherwise freeze while a crash-looping pod's panel stays open.
+    val now by produceState(Instant.now()) {
+        while (true) {
+            delay(AGE_TICK_MS)
+            value = Instant.now()
+        }
     }
+
+    // podEventsState keeps the previous pod's list until the new flow emits
+    // (collectAsState's state is not keyed), so re-filter: a pod switch must
+    // never show another pod's warnings for a frame. A no-op in steady state.
+    val currentPodEvents = remember(pod, podEvents) {
+        eventsForObject(podEvents, kind = "Pod", name = pod.name, namespace = pod.namespace, uid = pod.uid)
+    }
+    val calloutEvents = remember(pod, currentPodEvents, now, eventsInScope) {
+        if (eventsInScope) {
+            warningCalloutEvents(pod, currentPodEvents, now).map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) }
+        } else {
+            emptyList()
+        }
+    }
+    // Like every other cross-kind link: land on the Events screen with the
+    // row selected, which opens the detail itself (ClusterOverview does the same).
+    val openEvent: (EventInfo) -> Unit = { ev -> onNavigate(Screen.Main.Events(selectEventUid = ev.uid)) }
 
     // ── Evict dialog state ─────────────────────────────────────────────────────
     var showEvictDialog by remember(pod.uid) { mutableStateOf(false) }
@@ -254,6 +286,15 @@ fun PodDetailPanel(
                             onToggleLabel = onToggleLabel,
                             annotationQuery = annotationQuery,
                             onToggleAnnotation = onToggleAnnotation,
+                            now = now,
+                            warningEvents = calloutEvents,
+                            warningTotal = warningEventCount(currentPodEvents),
+                            eventTotal = currentPodEvents.size,
+                            onShowAllEvents = {
+                                activeTab = DetailTab.Events
+                                scope.launch { pagerState.animateScrollToPage(tabs.indexOf(DetailTab.Events).coerceAtLeast(0)) }
+                            },
+                            onEventClick = openEvent,
                         )
 
                         DetailTab.Events -> PodEventsTab(
@@ -261,10 +302,8 @@ fun PodDetailPanel(
                             inScope = eventsInScope,
                             podNamespace = pod.namespace,
                             onRetry = { restartListFlow(kubeClient.events) },
-                            // Like every other cross-kind link: land on the
-                            // Events screen with the row selected, which opens
-                            // the detail itself (ClusterOverview does the same).
-                            onEventClick = { ev -> onNavigate(Screen.Main.Events(selectEventUid = ev.uid)) },
+                            onEventClick = openEvent,
+                            now = now,
                         )
 
                         DetailTab.Yaml -> GenericYamlTab("Pod", pod.name, pod.namespace)
@@ -459,22 +498,42 @@ private fun OverviewTab(
     onToggleLabel: (String, String) -> Unit,
     annotationQuery: String,
     onToggleAnnotation: (String, String) -> Unit,
+    now: Instant,
+    warningEvents: List<EventInfo>,
+    warningTotal: Int,
+    eventTotal: Int,
+    onShowAllEvents: () -> Unit,
+    onEventClick: (EventInfo) -> Unit,
 ) {
     val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
     val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
+    // The panel outlives a pod switch, so without the key a scroll offset from
+    // the previous pod would carry over and hide this pod's warnings section.
+    // Keyed on the name too: demo pods can carry a blank uid.
+    val scrollState = remember(pod.uid, pod.namespace, pod.name) { ScrollState(0) }
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (warningEvents.isNotEmpty()) {
+            WarningsCallout(warningEvents, warningTotal, eventTotal, onShowAllEvents, onEventClick)
+        }
+
         if (metricsHistory.isNotEmpty()) {
             PodMetricsSection(metricsHistory)
         }
 
         SectionCard("Pod Info") {
             InfoRow("Status", pod.status, statusColor(pod.status))
+            if (pod.statusReason.isNotBlank()) InfoRow("Reason", pod.statusReason, KdError)
+            if (pod.statusMessage.isNotBlank()) DetailMessage(pod.statusMessage)
+            if (pod.schedulingMessage.isNotBlank()) {
+                InfoRow("Scheduled", "No", KdWarning)
+                DetailMessage(pod.schedulingMessage)
+            }
             InfoRow("Namespace", pod.namespace)
             if (pod.node == NONE_PLACEHOLDER) {
                 InfoRow("Node", NONE_PLACEHOLDER)
@@ -488,7 +547,7 @@ private fun OverviewTab(
         }
 
         SectionLabel("Containers (${pod.containers.size})")
-        pod.containers.forEach { container -> ContainerCard(container) }
+        pod.containers.forEach { container -> ContainerCard(container, now) }
 
         if (pod.labels.isNotEmpty()) {
             SectionLabel("Labels")
@@ -512,9 +571,41 @@ private fun OverviewTab(
     }
 }
 
-// ── Events Tab ──────────────────────────────────────────────────────────────────
+/**
+ * The pod's newest warnings, at the top of Overview so they can be read
+ * without switching tabs. Shown only when they need attention (see
+ * warningCalloutEvents); the Events tab keeps the full history.
+ */
+@Composable
+private fun WarningsCallout(
+    events: List<EventInfo>,
+    warningTotal: Int,
+    eventTotal: Int,
+    onShowAllEvents: () -> Unit,
+    onEventClick: (EventInfo) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (warningTotal == 1) "1 warning" else "$warningTotal warnings",
+                style = MaterialTheme.typography.labelLarge,
+                color = KdWarning,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = onShowAllEvents,
+                colors = ButtonDefaults.textButtonColors(contentColor = KdPrimary),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(if (eventTotal == 1) "All 1 event" else "All $eventTotal events", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        events.forEach { ev -> EventListItem(ev, onClick = { onEventClick(ev) }) }
+    }
+}
 
-private const val EVENT_AGE_TICK_MS = 10_000L
+// ── Events Tab ──────────────────────────────────────────────────────────────────
 
 @Composable
 private fun PodEventsTab(
@@ -523,6 +614,7 @@ private fun PodEventsTab(
     podNamespace: String,
     onRetry: () -> Unit,
     onEventClick: (EventInfo) -> Unit,
+    now: Instant,
 ) {
     when {
         !inScope -> CenteredNote(
@@ -542,14 +634,6 @@ private fun PodEventsTab(
         )
 
         state is ResourceState.Success -> {
-            // The informer only re-emits on change, so "Last seen 30s" would
-            // otherwise freeze while a crash-looping pod's panel stays open.
-            val now by produceState(Instant.now()) {
-                while (true) {
-                    delay(EVENT_AGE_TICK_MS)
-                    value = Instant.now()
-                }
-            }
             val events = state.data
             val rows = remember(events, now) { events.map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) } }
             LazyColumn(
@@ -672,7 +756,7 @@ private fun ClickableInfoRow(label: String, value: String, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ContainerCard(container: ContainerInfo) {
+private fun ContainerCard(container: ContainerInfo, now: Instant) {
     Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -695,12 +779,37 @@ private fun ContainerCard(container: ContainerInfo) {
                 Text("State", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                 StatusBadge(container.state)
             }
+            if (container.stateMessage.isNotBlank()) DetailMessage(container.stateMessage)
+            container.exitCode?.let { code -> InfoRow("Exit code", "$code", if (code == 0) null else KdError) }
             InfoRow(
                 "Ready",
                 if (container.ready) "Yes" else "No",
                 if (container.ready) KdSuccess else KdError,
             )
             InfoRow("Restarts", "${container.restartCount}")
+            container.lastTermination?.let { t -> LastTerminationRows(t, now) }
         }
     }
+}
+
+/** The previous run's end: the "why" behind a crash-looping container's restarts. */
+@Composable
+private fun LastTerminationRows(t: ContainerTermination, now: Instant) {
+    val summary = listOfNotNull(t.reason.ifBlank { null }, "exit ${t.exitCode}").joinToString(" · ")
+    InfoRow("Last termination", summary, if (t.exitCode == 0) null else KdError)
+    if (t.finishedAt.isNotBlank()) InfoRow("Finished", "${formatAge(t.finishedAt, now)} ago")
+    if (t.message.isNotBlank()) DetailMessage(t.message)
+}
+
+/** A Kubernetes status or termination message, under the row it explains. Long, so wrapped and capped. */
+@Composable
+private fun DetailMessage(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = KdTextSecondary,
+        maxLines = 4,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp),
+    )
 }

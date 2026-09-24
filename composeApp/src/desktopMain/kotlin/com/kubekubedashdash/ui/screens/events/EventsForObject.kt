@@ -30,11 +30,14 @@ fun eventsForObject(
     .sortedByDescending { it.lastSeenTimestamp }
 
 /**
- * How many of [events] are Warning or Error — the same two types
+ * Whether [event] is a Warning or an Error: the same two types
  * eventTypeSeverity (cluster health) treats as warnings, compared
  * case-insensitively like it and like the row dot colour.
  */
-fun warningEventCount(events: List<EventInfo>): Int = events.count {
-    val type = it.type.lowercase()
-    type == "warning" || type == "error"
+fun isWarningEvent(event: EventInfo): Boolean {
+    val type = event.type.lowercase()
+    return type == "warning" || type == "error"
 }
+
+/** How many of [events] are warnings (see [isWarningEvent]). */
+fun warningEventCount(events: List<EventInfo>): Int = events.count(::isWarningEvent)

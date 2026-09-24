@@ -1,6 +1,7 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ContainerInfo
+import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.CrdColumnSpec
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.CrdScope
@@ -15,6 +16,9 @@ import io.fabric8.kubernetes.api.model.PersistentVolume
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
+import java.time.Instant
+import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 
 /**
  * Pure fabric8-model → domain-model mappers, extracted from
@@ -100,6 +104,21 @@ object ResourceMappers {
                     cs?.state?.terminated != null -> cs.state.terminated.reason ?: "Terminated"
                     else -> "Unknown"
                 },
+                stateMessage = when {
+                    cs?.state?.running != null -> ""
+                    cs?.state?.waiting != null -> cs.state.waiting.message.orEmpty().trim()
+                    cs?.state?.terminated != null -> cs.state.terminated.message.orEmpty().trim()
+                    else -> ""
+                },
+                exitCode = cs?.state?.terminated?.exitCode,
+                lastTermination = cs?.lastState?.terminated?.let { t ->
+                    ContainerTermination(
+                        reason = t.reason.orEmpty(),
+                        exitCode = t.exitCode ?: 0,
+                        finishedAt = t.finishedAt.orEmpty(),
+                        message = t.message.orEmpty().trim(),
+                    )
+                },
             )
         } ?: emptyList()
         return PodInfo(
@@ -118,6 +137,11 @@ object ResourceMappers {
             containers = containers,
             phase = pod.status?.phase ?: "",
             owners = mapOwnerRefs(pod.metadata.ownerReferences),
+            statusReason = pod.status?.reason.orEmpty(),
+            statusMessage = pod.status?.message.orEmpty().trim(),
+            schedulingMessage = pod.status?.conditions
+                ?.firstOrNull { it.type == "PodScheduled" && it.status == "False" }
+                ?.message.orEmpty().trim(),
         )
     }
 
@@ -139,9 +163,37 @@ object ResourceMappers {
         return phase
     }
 
+    /**
+     * [raw] as a whole-second UTC instant (`2026-09-24T10:00:00Z`), "" when
+     * blank, or [raw] unchanged when it does not parse. events.k8s.io/v1
+     * MicroTimes carry microseconds (`…T10:00:00.123456Z`), and several screens
+     * sort `lastSeenTimestamp` as a plain string, where a fraction would sort
+     * wrongly against second-precision core/v1 timestamps.
+     */
+    internal fun canonicalTimestamp(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        return try {
+            Instant.parse(raw).truncatedTo(ChronoUnit.SECONDS).toString()
+        } catch (_: DateTimeParseException) {
+            raw
+        }
+    }
+
     fun mapEvent(ev: Event): EventInfo? {
-        val lastTs = ev.lastTimestamp ?: ev.metadata?.creationTimestamp ?: ""
+        // Writers on the events.k8s.io/v1 API (the scheduler among them) leave
+        // the deprecated core/v1 lastTimestamp/firstTimestamp/count empty: the
+        // last occurrence is series.lastObservedTime, the first is eventTime,
+        // and the count is series.count.
+        val lastTs = canonicalTimestamp(
+            ev.series?.lastObservedTime?.time?.takeIf { it.isNotBlank() }
+                ?: ev.lastTimestamp?.takeIf { it.isNotBlank() }
+                ?: ev.eventTime?.time?.takeIf { it.isNotBlank() }
+                ?: ev.metadata?.creationTimestamp,
+        )
         if (lastTs.isBlank()) return null
+        val firstTs = ev.firstTimestamp?.takeIf { it.isNotBlank() }
+            ?: ev.eventTime?.time?.takeIf { it.isNotBlank() }
+            ?: ev.metadata?.creationTimestamp
         val objKind = ev.involvedObject?.kind ?: ""
         val objName = ev.involvedObject?.name ?: ""
         return EventInfo(
@@ -153,8 +205,8 @@ object ResourceMappers {
             objectName = objName,
             objectUid = ev.involvedObject?.uid ?: "",
             message = ev.message ?: "",
-            count = ev.count ?: 1,
-            firstSeen = formatAge(ev.firstTimestamp ?: ev.metadata?.creationTimestamp),
+            count = ev.series?.count ?: ev.count ?: 1,
+            firstSeen = formatAge(firstTs),
             lastSeen = formatAge(lastTs),
             lastSeenTimestamp = lastTs,
             namespace = ev.metadata?.namespace ?: "",
