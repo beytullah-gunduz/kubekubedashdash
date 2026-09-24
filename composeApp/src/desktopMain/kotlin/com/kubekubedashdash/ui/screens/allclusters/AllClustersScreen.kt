@@ -25,6 +25,7 @@ import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
 import com.kubekubedashdash.ui.screens.cluster.ClusterUsageStatistics
+import com.kubekubedashdash.ui.screens.cluster.UsageScope
 
 @Composable
 fun AllClustersScreen() {
@@ -81,6 +82,7 @@ fun AllClustersScreen() {
                 expanded = statsExpanded,
                 onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_ALL_CLUSTERS, !statsExpanded) },
                 onNodeClick = {},
+                scope = allClustersUsageScope(summariesRaw.map { it.namespace }),
             )
             Spacer(Modifier.height(16.dp))
         }
@@ -141,5 +143,33 @@ fun AllClustersScreen() {
             hasActiveFilters = !filters.isDefault,
             onClearFilters = viewModel::resetFilters,
         )
+    }
+}
+
+/**
+ * Header wording for the All Clusters usage section. A tab with a namespace
+ * selected contributes that namespace's pods and usage but its whole
+ * cluster's capacity; the cards say which namespace each tab follows.
+ * [namespaces] holds one entry per open cluster tab, null for all namespaces.
+ */
+internal fun allClustersUsageScope(namespaces: List<String?>): UsageScope? {
+    val scoped = namespaces.filterNotNull()
+    val total = namespaces.size
+    return when {
+        scoped.isEmpty() -> null
+
+        total == 1 -> UsageScope.namespace(scoped.single())
+
+        else -> {
+            val which = when (scoped.size) {
+                1 -> "1 of $total clusters cover one namespace (see its card)"
+                total -> "all $total clusters cover one namespace each (see their cards)"
+                else -> "${scoped.size} of $total clusters cover one namespace each (see their cards)"
+            }
+            UsageScope(
+                title = "Usage Statistics · namespace-scoped",
+                note = "Pods and usage for $which; capacity is whole-cluster",
+            )
+        }
     }
 }

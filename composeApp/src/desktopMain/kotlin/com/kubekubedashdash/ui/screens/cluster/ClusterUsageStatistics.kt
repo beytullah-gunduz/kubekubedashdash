@@ -51,6 +51,19 @@ import com.kubekubedashdash.util.formatCpuCores
 import com.kubekubedashdash.util.formatMemorySize
 import org.jetbrains.compose.resources.painterResource
 
+/**
+ * Header wording for a usage section whose pod count and usage are narrower
+ * than its capacity (the gauges' denominator), which is always whole-cluster.
+ */
+data class UsageScope(val title: String, val note: String) {
+    companion object {
+        fun namespace(namespace: String) = UsageScope(
+            title = "Usage Statistics · $namespace",
+            note = "This namespace's usage and pods, against whole-cluster capacity",
+        )
+    }
+}
+
 @Composable
 fun ClusterUsageStatistics(
     phaseCounts: PodPhaseCounts?,
@@ -65,9 +78,8 @@ fun ClusterUsageStatistics(
     expanded: Boolean,
     onToggle: () -> Unit,
     onNodeClick: (String) -> Unit,
-    // Non-null when the pod count and usage are scoped to one namespace while
-    // capacity (the gauges' denominator) stays whole-cluster.
-    namespace: String? = null,
+    // Non-null when the pod count and usage don't cover the whole cluster.
+    scope: UsageScope? = null,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -85,14 +97,14 @@ fun ClusterUsageStatistics(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (namespace == null) "Cluster Usage Statistics" else "Usage Statistics · $namespace",
+                        scope?.title ?: "Cluster Usage Statistics",
                         style = MaterialTheme.typography.titleMedium,
                         color = KdTextPrimary,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    if (namespace != null) {
+                    if (scope != null) {
                         Text(
-                            "This namespace's usage and pods, against whole-cluster capacity",
+                            scope.note,
                             style = MaterialTheme.typography.labelSmall,
                             color = KdTextSecondary,
                         )

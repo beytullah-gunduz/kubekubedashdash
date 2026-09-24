@@ -7,6 +7,7 @@ import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.EventInfo
+import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
@@ -19,6 +20,7 @@ import com.kubekubedashdash.ui.screens.allclusters.HeatmapData
 import com.kubekubedashdash.ui.screens.allclusters.TimeWindow
 import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
+import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -42,10 +44,24 @@ import java.time.Instant
 import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-class AllClustersViewModel private constructor() : ViewModel() {
+class AllClustersViewModel internal constructor(
+    /** The open [WorkspaceTab.Cluster] tabs; tests pass their own. */
+    private val clusterTabs: Flow<List<WorkspaceTab.Cluster>>,
+) : ViewModel() {
 
     companion object {
-        val instance: AllClustersViewModel by lazy { AllClustersViewModel() }
+        val instance: AllClustersViewModel by lazy { AllClustersViewModel(workspaceClusterTabs()) }
+
+        /**
+         * Emits the live list of [WorkspaceTab.Cluster] tabs whenever any workspace's
+         * tab list changes (new cluster added, cluster closed, window closed, etc.).
+         */
+        private fun workspaceClusterTabs(): Flow<List<WorkspaceTab.Cluster>> = WorkspaceManager.workspaces.flatMapLatest { workspaceList ->
+            if (workspaceList.isEmpty()) return@flatMapLatest flowOf(emptyList())
+            combine(workspaceList.map { ws -> ws.tabs }) { allTabs ->
+                allTabs.flatMap { it.filterIsInstance<WorkspaceTab.Cluster>() }
+            }
+        }
     }
 
     data class ClusterSummary(
@@ -56,6 +72,9 @@ class AllClustersViewModel private constructor() : ViewModel() {
         val nodeCount: Int,
         val namespaceCount: Int,
         val recentErrorCount: Int,
+        // The tab's selected namespace, which its pods, usage and events follow;
+        // null is all namespaces.
+        val namespace: String? = null,
     )
 
     private data class ClusterSummaryBase(
@@ -64,7 +83,36 @@ class AllClustersViewModel private constructor() : ViewModel() {
         val connected: Boolean,
         val connecting: Boolean,
         val info: ClusterInfo?,
+        val namespace: String?,
     )
+
+    /** One open cluster tab and the namespace it has selected (null = all namespaces). */
+    private data class TabNamespace(val sessionId: SessionId, val namespace: String?)
+
+    /**
+     * A sum over the open cluster tabs (or a series of such sums), with the
+     * tabs it covers and the namespace each covered. A tab whose reading is
+     * loading or failed is in neither.
+     */
+    private data class ScopedSum<T>(val scope: Set<TabNamespace>, val value: T)
+
+    /**
+     * Each tab's successful [read], tagged with the namespace the tab had
+     * selected when the reading arrived. Reading the namespace rather than
+     * combining with it matters: a combine re-emits the old namespace's last
+     * reading under the new namespace the moment the selection changes.
+     */
+    private fun <T> loadedReadings(
+        tabs: List<WorkspaceTab.Cluster>,
+        read: (ReactiveKubeClient) -> Flow<ResourceState<T>>,
+    ): Flow<List<Pair<TabNamespace, T>>> = combine(
+        tabs.map { tab ->
+            val client = tab.session.reactiveClient
+            read(client).map { state ->
+                (state as? ResourceState.Success)?.let { TabNamespace(tab.session.id, client.selectedNamespace.value) to it.data }
+            }
+        },
+    ) { readings -> readings.filterNotNull() }
 
     // 30s tick so the per-cluster error count ages out old events as the
     // selected time window (15m / 1h / 24h) slides, even when no new event arrives.
@@ -75,23 +123,12 @@ class AllClustersViewModel private constructor() : ViewModel() {
         }
     }
 
-    /**
-     * Emits the live list of [WorkspaceTab.Cluster] tabs whenever any workspace's
-     * tab list changes (new cluster added, cluster closed, window closed, etc.).
-     */
-    private fun clusterTabsFlow(): Flow<List<WorkspaceTab.Cluster>> = WorkspaceManager.workspaces.flatMapLatest { workspaceList ->
-        if (workspaceList.isEmpty()) return@flatMapLatest flowOf(emptyList())
-        combine(workspaceList.map { ws -> ws.tabs }) { allTabs ->
-            allTabs.flatMap { it.filterIsInstance<WorkspaceTab.Cluster>() }
-        }
-    }
-
     /** Merged events from all open sessions, each tagged with its source cluster name. */
-    val aggregatedEvents: StateFlow<List<EventInfo>> = clusterTabsFlow()
-        .flatMapLatest { clusterTabs ->
-            if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
+    val aggregatedEvents: StateFlow<List<EventInfo>> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
             combine(
-                clusterTabs.map { tab ->
+                tabs.map { tab ->
                     combine(
                         tab.session.viewModel.selectedContext,
                         tab.session.reactiveClient.events,
@@ -238,24 +275,25 @@ class AllClustersViewModel private constructor() : ViewModel() {
     // ── Cluster summaries ─────────────────────────────────────────────────────────
 
     /** One summary card per open cluster session. */
-    val clusterSummaries: StateFlow<List<ClusterSummary>> = clusterTabsFlow()
-        .flatMapLatest { clusterTabs ->
-            if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
+    val clusterSummaries: StateFlow<List<ClusterSummary>> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
             combine(
-                clusterTabs.map { tab ->
+                tabs.map { tab ->
                     val base = combine(
                         tab.session.viewModel.selectedContext,
                         tab.session.viewModel.isConnected,
                         tab.session.viewModel.isConnecting,
-                        tab.session.reactiveClient.nodes,
                         tab.session.reactiveClient.clusterInfo,
-                    ) { ctx, connected, connecting, _, clusterState ->
+                        tab.session.reactiveClient.selectedNamespace,
+                    ) { ctx, connected, connecting, clusterState, namespace ->
                         ClusterSummaryBase(
                             sessionId = tab.session.id,
                             ctx = ctx,
                             connected = connected,
                             connecting = connecting,
                             info = (clusterState as? ResourceState.Success)?.data,
+                            namespace = namespace,
                         )
                     }
                     combine(base, aggregatedEvents, _filters, timeWindowTicker) { b, events, filters, _ ->
@@ -273,6 +311,7 @@ class AllClustersViewModel private constructor() : ViewModel() {
                             nodeCount = b.info?.nodesCount ?: 0,
                             namespaceCount = b.info?.namespacesCount ?: 0,
                             recentErrorCount = recentErrors,
+                            namespace = b.namespace,
                         )
                     }
                 },
@@ -351,11 +390,15 @@ class AllClustersViewModel private constructor() : ViewModel() {
     private val _memHistory = MutableStateFlow<List<Float>>(emptyList())
     val memHistory: StateFlow<List<Float>> = _memHistory.asStateFlow()
 
+    // The (tab, namespace) set the CPU/memory histories were sampled over.
+    // Touched only from aggregatedUsage's upstream, which has one collector.
+    private var usageHistoryScope: Set<TabNamespace>? = null
+
     /** Summed cluster-level counts across all open sessions. */
-    val aggregatedClusterInfo: StateFlow<ClusterInfo?> = clusterTabsFlow()
-        .flatMapLatest { clusterTabs ->
-            if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(null)
-            combine(clusterTabs.map { tab -> tab.session.reactiveClient.clusterInfo }) { states ->
+    val aggregatedClusterInfo: StateFlow<ClusterInfo?> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(null)
+            combine(tabs.map { tab -> tab.session.reactiveClient.clusterInfo }) { states ->
                 val infos = states.mapNotNull { (it as? ResourceState.Success)?.data }
                 if (infos.isEmpty()) {
                     null
@@ -379,26 +422,42 @@ class AllClustersViewModel private constructor() : ViewModel() {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Summed CPU and memory totals across all open sessions. Updates CPU/mem history as a side-effect. */
-    val aggregatedUsage: StateFlow<ResourceUsageSummary?> = clusterTabsFlow()
-        .flatMapLatest { clusterTabs ->
-            if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(null)
-            combine(clusterTabs.map { tab -> tab.session.reactiveClient.resourceUsage }) { states ->
-                val summaries = states.mapNotNull { (it as? ResourceState.Success)?.data }
-                if (summaries.isEmpty()) {
-                    null
-                } else {
-                    ResourceUsageSummary(
-                        cpuUsedMillis = summaries.sumOf { it.cpuUsedMillis },
-                        cpuCapacityMillis = summaries.sumOf { it.cpuCapacityMillis },
-                        memoryUsedBytes = summaries.sumOf { it.memoryUsedBytes },
-                        memoryCapacityBytes = summaries.sumOf { it.memoryCapacityBytes },
-                        metricsAvailable = summaries.any { it.metricsAvailable },
-                    )
-                }
+    /**
+     * Summed CPU and memory totals across all open sessions. Updates CPU/mem history as a side-effect.
+     *
+     * Used figures follow each tab's selected namespace while capacity is
+     * whole-cluster, so the sum covers a (tab, namespace) set; when that set
+     * changes — a namespace switch, a tab reloading or opening or closing —
+     * the histories start over rather than join two sums into one trend.
+     */
+    val aggregatedUsage: StateFlow<ResourceUsageSummary?> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(ScopedSum(emptySet(), null))
+            loadedReadings(tabs) { it.resourceUsage }.map { readings ->
+                val summaries = readings.map { it.second }
+                ScopedSum(
+                    scope = readings.map { it.first }.toSet(),
+                    value = if (summaries.isEmpty()) {
+                        null
+                    } else {
+                        ResourceUsageSummary(
+                            cpuUsedMillis = summaries.sumOf { it.cpuUsedMillis },
+                            cpuCapacityMillis = summaries.sumOf { it.cpuCapacityMillis },
+                            memoryUsedBytes = summaries.sumOf { it.memoryUsedBytes },
+                            memoryCapacityBytes = summaries.sumOf { it.memoryCapacityBytes },
+                            metricsAvailable = summaries.any { it.metricsAvailable },
+                        )
+                    },
+                )
             }
         }
-        .onEach { usage ->
+        .onEach { sum ->
+            if (sum.scope != usageHistoryScope) {
+                usageHistoryScope = sum.scope
+                _cpuHistory.value = emptyList()
+                _memHistory.value = emptyList()
+            }
+            val usage = sum.value
             if (usage != null && usage.metricsAvailable) {
                 val cpuF = if (usage.cpuCapacityMillis > 0) usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis else 0f
                 val memF = if (usage.memoryCapacityBytes > 0) usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes else 0f
@@ -406,41 +465,64 @@ class AllClustersViewModel private constructor() : ViewModel() {
                 _memHistory.update { (it + memF).takeLast(20) }
             }
         }
+        .map { it.value }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Sum of allocatable pod slots across all nodes in all open sessions. */
-    val aggregatedPodsCapacity: StateFlow<Int> = clusterTabsFlow()
-        .flatMapLatest { clusterTabs ->
-            if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(0)
-            combine(clusterTabs.map { tab -> tab.session.reactiveClient.nodes }) { states ->
-                states.sumOf { state ->
-                    (state as? ResourceState.Success)?.data
-                        ?.sumOf { it.pods.toIntOrNull() ?: 0 } ?: 0
-                }
+    val aggregatedPodsCapacity: StateFlow<Int> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(0)
+            combine(tabs.map { tab -> tab.session.reactiveClient.nodes }) { states ->
+                states.sumOf { state -> podSlots(state) }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
-     * Rolling history (last 20 samples) of cluster-wide pod-count utilisation.
-     * Derived (not a permanent init collector) so the upstream cluster-info and
-     * node informers idle when the All-Clusters UI isn't observed — audit C4.
-     * Declared after [aggregatedClusterInfo]/[aggregatedPodsCapacity] because a
-     * property initializer may only reference properties declared above it.
+     * Rolling history (last 20 samples) of pod-count utilisation across the
+     * open tabs. Derived (not a permanent init collector) so the upstream
+     * cluster-info and node informers idle when the All-Clusters UI isn't
+     * observed — audit C4.
+     *
+     * Pod counts follow each tab's namespace, so like the CPU/memory histories
+     * this starts over whenever the (tab, namespace) set changes. Each tab's
+     * count and capacity are read together, so a tab joins the sum with both
+     * or neither.
      */
-    val podsHistory: StateFlow<List<Float>> =
-        combine(aggregatedClusterInfo, aggregatedPodsCapacity) { info, cap ->
-            val count = info?.podsCount ?: 0
-            if (cap > 0) count.toFloat() / cap else 0f
+    val podsHistory: StateFlow<List<Float>> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(ScopedSum(emptySet(), null))
+            loadedReadings(tabs) { client ->
+                combine(client.clusterInfo, client.nodes) { info, nodes ->
+                    // clusterInfo is Loading until nodes resolve at the source;
+                    // the nodes check covers this combine seeing them later.
+                    if (info is ResourceState.Success && nodes !is ResourceState.Loading) {
+                        ResourceState.Success(info.data.podsCount to podSlots(nodes))
+                    } else {
+                        ResourceState.Loading
+                    }
+                }
+            }.map { readings ->
+                val count = readings.sumOf { it.second.first }
+                val capacity = readings.sumOf { it.second.second }
+                ScopedSum(
+                    scope = readings.map { it.first }.toSet(),
+                    value = if (readings.isNotEmpty() && capacity > 0) count.toFloat() / capacity else null,
+                )
+            }
         }
-            .runningFold(emptyList<Float>()) { acc, frac -> (acc + frac).takeLast(20) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .runningFold(ScopedSum<List<Float>>(emptySet(), emptyList())) { history, sample ->
+            val kept = if (sample.scope == history.scope) history.value else emptyList()
+            ScopedSum(sample.scope, sample.value?.let { (kept + it).takeLast(20) } ?: kept)
+        }
+        .map { it.value }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Top 3 nodes by pressure fraction across all open sessions. */
-    val topNodesAcrossAllClusters: StateFlow<List<NodeResourceUsage>> = clusterTabsFlow()
-        .flatMapLatest { clusterTabs ->
-            if (clusterTabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
-            combine(clusterTabs.map { tab -> tab.session.reactiveClient.nodeUsages }) { usageMaps ->
+    val topNodesAcrossAllClusters: StateFlow<List<NodeResourceUsage>> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
+            combine(tabs.map { tab -> tab.session.reactiveClient.nodeUsages }) { usageMaps ->
                 usageMaps.flatMap { it.values }
                     .sortedByDescending { it.pressureFraction }
                     .take(3)
@@ -457,6 +539,9 @@ class AllClustersViewModel private constructor() : ViewModel() {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────
+
+    /** Allocatable pod slots across [nodes]; 0 until the list has loaded. */
+    private fun podSlots(nodes: ResourceState<List<NodeInfo>>): Int = (nodes as? ResourceState.Success)?.data?.sumOf { it.pods.toIntOrNull() ?: 0 } ?: 0
 
     private fun parseInstantOrNull(ts: String): Instant? = try {
         Instant.parse(ts)
