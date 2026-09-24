@@ -23,4 +23,11 @@ data class PodInfo(
     // display. Tallies in clusterInfo's combine count by raw phase.
     val phase: String = "",
     val owners: List<OwnerRefInfo> = emptyList(),
+    // pod.status.reason / .message: set when the kubelet or the API rejects
+    // or evicts the pod as a whole (Evicted, NodeLost, …).
+    val statusReason: String = "",
+    val statusMessage: String = "",
+    // The PodScheduled condition's message while it is False: the scheduler's
+    // "0/3 nodes are available: …" explanation for a Pending pod.
+    val schedulingMessage: String = "",
 )

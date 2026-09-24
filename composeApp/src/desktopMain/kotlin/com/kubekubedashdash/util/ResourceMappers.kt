@@ -1,6 +1,7 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ContainerInfo
+import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.CrdColumnSpec
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.CrdScope
@@ -100,6 +101,21 @@ object ResourceMappers {
                     cs?.state?.terminated != null -> cs.state.terminated.reason ?: "Terminated"
                     else -> "Unknown"
                 },
+                stateMessage = when {
+                    cs?.state?.running != null -> ""
+                    cs?.state?.waiting != null -> cs.state.waiting.message.orEmpty().trim()
+                    cs?.state?.terminated != null -> cs.state.terminated.message.orEmpty().trim()
+                    else -> ""
+                },
+                exitCode = cs?.state?.terminated?.exitCode,
+                lastTermination = cs?.lastState?.terminated?.let { t ->
+                    ContainerTermination(
+                        reason = t.reason.orEmpty(),
+                        exitCode = t.exitCode ?: 0,
+                        finishedAt = t.finishedAt.orEmpty(),
+                        message = t.message.orEmpty().trim(),
+                    )
+                },
             )
         } ?: emptyList()
         return PodInfo(
@@ -118,6 +134,11 @@ object ResourceMappers {
             containers = containers,
             phase = pod.status?.phase ?: "",
             owners = mapOwnerRefs(pod.metadata.ownerReferences),
+            statusReason = pod.status?.reason.orEmpty(),
+            statusMessage = pod.status?.message.orEmpty().trim(),
+            schedulingMessage = pod.status?.conditions
+                ?.firstOrNull { it.type == "PodScheduled" && it.status == "False" }
+                ?.message.orEmpty().trim(),
         )
     }
 

@@ -98,6 +98,7 @@ Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scorin
 
 - Overview, Events, and YAML views, with a container picker for multi-container pods
 - **Events** tab listing the pod's own Kubernetes events, newest first, with a warning-count badge on the tab; click an event to jump to it on the Events screen
+- Container cards say *why*: the waiting message, the exit code, and the previous run's end (e.g. `OOMKilled · exit 137`, finished 5m ago); a Pending pod shows the scheduler's reason, an evicted pod the eviction message
 - CPU and memory usage gauges when a Metrics Server is installed
 - One-click **View logs** (streamed into the bottom drawer) and **Open shell** (interactive terminal — see below)
 - **Evict**, **Force-Delete**, and **Delete** actions

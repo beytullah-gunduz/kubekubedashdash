@@ -582,6 +582,17 @@ class DemoClusterSimulator(
                         .withName(app)
                         .withReady(false)
                         .withRestartCount(restartCount)
+                        .withLastState(
+                            ContainerStateBuilder()
+                                .withTerminated(
+                                    ContainerStateTerminatedBuilder()
+                                        .withExitCode(1)
+                                        .withReason("Error")
+                                        .withFinishedAt(now())
+                                        .build(),
+                                )
+                                .build(),
+                        )
                         .withState(
                             ContainerStateBuilder()
                                 .withWaiting(

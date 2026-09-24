@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.CrdScope
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
@@ -148,6 +149,124 @@ class ResourceMappersTest {
         assertEquals(2, info.containers.size)
         assertEquals("Running", info.containers[0].state)
         assertEquals("PodInitializing", info.containers[1].state)
+        assertEquals("", info.containers[0].stateMessage)
+        assertNull(info.containers[0].lastTermination)
+    }
+
+    @Test
+    fun `mapPod carries the waiting message and the last termination`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").withImage("fake.example/app:latest").build())
+            .endSpec()
+            .withNewStatus()
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withNewState()
+                    .withNewWaiting()
+                    .withReason("CrashLoopBackOff")
+                    .withMessage("back-off 5m0s restarting failed container=app")
+                    .endWaiting()
+                    .endState()
+                    .withNewLastState()
+                    .withNewTerminated()
+                    .withReason("OOMKilled")
+                    .withExitCode(137)
+                    .withFinishedAt("2026-01-01T00:05:00Z")
+                    .endTerminated()
+                    .endLastState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val info = ResourceMappers.mapPod(pod)
+
+        assertEquals("back-off 5m0s restarting failed container=app", info.containers[0].stateMessage)
+        assertNull(info.containers[0].exitCode)
+        assertEquals(
+            ContainerTermination("OOMKilled", 137, "2026-01-01T00:05:00Z", ""),
+            info.containers[0].lastTermination,
+        )
+    }
+
+    @Test
+    fun `mapPod carries a terminated container's exit code and message`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").withImage("fake.example/app:latest").build())
+            .endSpec()
+            .withNewStatus()
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withNewState()
+                    .withNewTerminated()
+                    .withReason("Error")
+                    .withExitCode(2)
+                    .withMessage("boom")
+                    .endTerminated()
+                    .endState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val info = ResourceMappers.mapPod(pod)
+
+        assertEquals(2, info.containers[0].exitCode)
+        assertEquals("boom", info.containers[0].stateMessage)
+        assertNull(info.containers[0].lastTermination)
+    }
+
+    @Test
+    fun `mapPod carries the pod-level reason and message`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewStatus()
+            .withPhase("Failed")
+            .withReason("Evicted")
+            .withMessage("The node was low on resource: memory.")
+            .endStatus()
+            .build()
+
+        val info = ResourceMappers.mapPod(pod)
+
+        assertEquals("Evicted", info.statusReason)
+        assertEquals("The node was low on resource: memory.", info.statusMessage)
+    }
+
+    @Test
+    fun `mapPod keeps the PodScheduled message only while it is False`() {
+        val pending = PodBuilder()
+            .withNewMetadata().withName("app-0").endMetadata()
+            .withNewStatus()
+            .addNewCondition()
+            .withType("PodScheduled")
+            .withStatus("False")
+            .withMessage("0/3 nodes are available: 3 Insufficient cpu.")
+            .endCondition()
+            .endStatus()
+            .build()
+        val scheduled = PodBuilder()
+            .withNewMetadata().withName("app-1").endMetadata()
+            .withNewStatus()
+            .addNewCondition()
+            .withType("PodScheduled")
+            .withStatus("True")
+            .withMessage("scheduled")
+            .endCondition()
+            .endStatus()
+            .build()
+
+        assertEquals(
+            "0/3 nodes are available: 3 Insufficient cpu.",
+            ResourceMappers.mapPod(pending).schedulingMessage,
+        )
+        assertEquals("", ResourceMappers.mapPod(scheduled).schedulingMessage)
     }
 
     // ── mapEvent ────────────────────────────────────────────────────────────
