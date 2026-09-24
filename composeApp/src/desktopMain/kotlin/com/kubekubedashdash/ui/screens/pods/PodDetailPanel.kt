@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,6 +32,7 @@ import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -178,11 +181,8 @@ fun PodDetailPanel(
     }.collectAsState(ResourceState.Loading)
     val selectedNamespace by kubeClient.selectedNamespace.collectAsState()
     val eventsInScope = selectedNamespace == null || selectedNamespace == pod.namespace
-    val warningCount = if (eventsInScope) {
-        warningEventCount((podEventsState as? ResourceState.Success)?.data ?: emptyList())
-    } else {
-        0
-    }
+    val podEvents = (podEventsState as? ResourceState.Success)?.data.orEmpty()
+    val warningCount = if (eventsInScope) warningEventCount(podEvents) else 0
 
     // One clock for every relative time in the panel. The informer only
     // re-emits on change, so "Last seen 30s" or "Finished 5m ago" would
@@ -193,6 +193,23 @@ fun PodDetailPanel(
             value = Instant.now()
         }
     }
+
+    // podEventsState keeps the previous pod's list until the new flow emits
+    // (collectAsState's state is not keyed), so re-filter: a pod switch must
+    // never show another pod's warnings for a frame. A no-op in steady state.
+    val currentPodEvents = remember(pod, podEvents) {
+        eventsForObject(podEvents, kind = "Pod", name = pod.name, namespace = pod.namespace, uid = pod.uid)
+    }
+    val calloutEvents = remember(pod, currentPodEvents, now, eventsInScope) {
+        if (eventsInScope) {
+            warningCalloutEvents(pod, currentPodEvents, now).map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) }
+        } else {
+            emptyList()
+        }
+    }
+    // Like every other cross-kind link: land on the Events screen with the
+    // row selected, which opens the detail itself (ClusterOverview does the same).
+    val openEvent: (EventInfo) -> Unit = { ev -> onNavigate(Screen.Main.Events(selectEventUid = ev.uid)) }
 
     // ── Evict dialog state ─────────────────────────────────────────────────────
     var showEvictDialog by remember(pod.uid) { mutableStateOf(false) }
@@ -270,6 +287,14 @@ fun PodDetailPanel(
                             annotationQuery = annotationQuery,
                             onToggleAnnotation = onToggleAnnotation,
                             now = now,
+                            warningEvents = calloutEvents,
+                            warningTotal = warningCount,
+                            eventTotal = currentPodEvents.size,
+                            onShowAllEvents = {
+                                activeTab = DetailTab.Events
+                                scope.launch { pagerState.animateScrollToPage(tabs.indexOf(DetailTab.Events).coerceAtLeast(0)) }
+                            },
+                            onEventClick = openEvent,
                         )
 
                         DetailTab.Events -> PodEventsTab(
@@ -277,10 +302,7 @@ fun PodDetailPanel(
                             inScope = eventsInScope,
                             podNamespace = pod.namespace,
                             onRetry = { restartListFlow(kubeClient.events) },
-                            // Like every other cross-kind link: land on the
-                            // Events screen with the row selected, which opens
-                            // the detail itself (ClusterOverview does the same).
-                            onEventClick = { ev -> onNavigate(Screen.Main.Events(selectEventUid = ev.uid)) },
+                            onEventClick = openEvent,
                             now = now,
                         )
 
@@ -477,6 +499,11 @@ private fun OverviewTab(
     annotationQuery: String,
     onToggleAnnotation: (String, String) -> Unit,
     now: Instant,
+    warningEvents: List<EventInfo>,
+    warningTotal: Int,
+    eventTotal: Int,
+    onShowAllEvents: () -> Unit,
+    onEventClick: (EventInfo) -> Unit,
 ) {
     val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
     val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -487,6 +514,10 @@ private fun OverviewTab(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (warningEvents.isNotEmpty()) {
+            WarningsCallout(warningEvents, warningTotal, eventTotal, onShowAllEvents, onEventClick)
+        }
+
         if (metricsHistory.isNotEmpty()) {
             PodMetricsSection(metricsHistory)
         }
@@ -533,6 +564,40 @@ private fun OverviewTab(
         }
 
         RelatedSection(related, onNavigate)
+    }
+}
+
+/**
+ * The pod's newest warnings, at the top of Overview so they can be read
+ * without switching tabs. Shown only when they need attention (see
+ * warningCalloutEvents); the Events tab keeps the full history.
+ */
+@Composable
+private fun WarningsCallout(
+    events: List<EventInfo>,
+    warningTotal: Int,
+    eventTotal: Int,
+    onShowAllEvents: () -> Unit,
+    onEventClick: (EventInfo) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (warningTotal == 1) "1 warning" else "$warningTotal warnings",
+                style = MaterialTheme.typography.labelLarge,
+                color = KdWarning,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = onShowAllEvents,
+                colors = ButtonDefaults.textButtonColors(contentColor = KdPrimary),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(if (eventTotal == 1) "All 1 event" else "All $eventTotal events", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        events.forEach { ev -> EventListItem(ev, onClick = { onEventClick(ev) }) }
     }
 }
 

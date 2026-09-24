@@ -3,6 +3,8 @@ package com.kubekubedashdash.ui.screens.events
 import com.kubekubedashdash.models.EventInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Covers [eventsForObject], the matcher behind the pod panel's Events tab,
@@ -103,5 +105,14 @@ class EventsForObjectTest {
             event("e3", "web-0", type = "normal"),
         )
         assertEquals(2, warningEventCount(events))
+    }
+
+    @Test
+    fun `isWarningEvent accepts Warning and Error in any case and rejects Normal`() {
+        assertTrue(isWarningEvent(event("e1", "web-0", type = "Warning")))
+        assertTrue(isWarningEvent(event("e2", "web-0", type = "warning")))
+        assertTrue(isWarningEvent(event("e3", "web-0", type = "ERROR")))
+        assertFalse(isWarningEvent(event("e4", "web-0", type = "Normal")))
+        assertFalse(isWarningEvent(event("e5", "web-0", type = "")))
     }
 }
