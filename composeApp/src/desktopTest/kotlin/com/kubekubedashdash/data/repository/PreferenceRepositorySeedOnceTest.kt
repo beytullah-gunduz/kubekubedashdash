@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.awaitStoredPreference
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -47,12 +48,12 @@ class PreferenceRepositorySeedOnceTest {
         withTimeout(10_000) { PreferenceRepository.preferencesLoaded.first { it } }
         PreferenceRepository.setThemeMode(ThemeMode.DARK)
         assertEquals(ThemeMode.DARK, PreferenceRepository.themeMode.value)
-        withTimeout(10_000) { dataStorePreferencesInstance.data.first { it[themeKey] == "DARK" } }
+        awaitStoredPreference(themeKey) { it == "DARK" }
 
         // What a racing setter's stale emission looks like: the file says
         // LIGHT while memory says DARK.
         dataStorePreferencesInstance.edit { it[themeKey] = "LIGHT" }
-        withTimeout(10_000) { dataStorePreferencesInstance.data.first { it[themeKey] == "LIGHT" } }
+        awaitStoredPreference(themeKey) { it == "LIGHT" }
         delay(1_000)
         assertEquals(ThemeMode.DARK, PreferenceRepository.themeMode.value, "memory is authoritative after the first seed")
     }

@@ -1,9 +1,9 @@
 package com.kubekubedashdash
 
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.awaitStoredPreference
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -35,9 +35,7 @@ class ThemeManagerSyncTest {
     // show the value before moving on, so no write is still in flight when
     // the next case — or the next test class — touches the same key.
     private fun awaitPersisted(mode: ThemeMode) = runBlocking {
-        withTimeout(10_000) {
-            dataStorePreferencesInstance.data.first { (it[themeKey] ?: ThemeMode.SYSTEM.name) == mode.name }
-        }
+        awaitStoredPreference(themeKey) { (it ?: ThemeMode.SYSTEM.name) == mode.name }
     }
 
     @BeforeTest
