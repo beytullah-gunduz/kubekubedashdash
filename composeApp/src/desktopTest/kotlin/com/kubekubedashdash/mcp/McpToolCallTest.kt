@@ -13,6 +13,7 @@ import io.fabric8.mockwebserver.dsl.HttpMethod
 import io.fabric8.mockwebserver.http.Dispatcher
 import io.fabric8.mockwebserver.http.MockResponse
 import io.fabric8.mockwebserver.http.RecordedRequest
+import io.modelcontextprotocol.kotlin.sdk.server.ClientConnection
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
@@ -25,6 +26,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.lang.reflect.Proxy
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -97,8 +99,15 @@ class McpToolCallTest {
         shutdownCleanly(label = "McpToolCallTest", manager = manager, client = seed, servers = listOf(mock))
     }
 
+    // Tool handlers take the calling ClientConnection as a receiver (MCP SDK
+    // 0.14). None of ours touches it, so every method of this stand-in throws.
+    private val noConnection = Proxy.newProxyInstance(
+        ClientConnection::class.java.classLoader,
+        arrayOf(ClientConnection::class.java),
+    ) { _, method, _ -> throw UnsupportedOperationException("ClientConnection.${method.name} is not available in this test") } as ClientConnection
+
     private fun call(tool: String, arguments: JsonObject): CallToolResult = runBlocking {
-        server.tools.getValue(tool).handler(CallToolRequest(CallToolRequestParams(name = tool, arguments = arguments)))
+        server.tools.getValue(tool).handler(noConnection, CallToolRequest(CallToolRequestParams(name = tool, arguments = arguments)))
     }
 
     private fun texts(result: CallToolResult): List<String> = result.content.map { (it as TextContent).text }
