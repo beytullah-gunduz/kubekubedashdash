@@ -260,7 +260,13 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 
 ## CI
 
-A GitHub Actions workflow runs the desktop test suite and builds distributable packages (DMG, DEB, MSI) on every push and PR to `main`. Pushing a `v*` tag creates a GitHub Release with the built artifacts.
+Every push and PR to `main` checks formatting, compiles, runs the desktop test suite and verifies the release build on Linux. Pushing a `v*` tag runs the same checks on macOS, Linux and Windows, builds the installers (DMG, DEB, MSI) and creates a GitHub Release with them.
+
+The installers ship ProGuard-shrunk jars, which no unit test runs. `verifyReleaseBuild` checks them: a bytecode scan fails on any `invokespecial` of an interface method through an indirect superinterface (the JVM verifier rejects those at class load), and a headless canary boots the shrunk jars — logging, JSONPath, JediTerm, the demo cluster and a full MCP session — once on the full JDK and once limited to the packaged runtime's modules. It runs in a scratch sandbox and never reads your kubeconfig, preferences or logs:
+
+```bash
+./gradlew :composeApp:verifyReleaseBuild
+```
 
 ## macOS packaged app notes
 

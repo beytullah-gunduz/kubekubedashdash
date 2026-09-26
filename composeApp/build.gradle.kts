@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
 import org.jetbrains.compose.desktop.application.tasks.AbstractProguardTask
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -256,4 +257,106 @@ tasks.named<JavaExec>("generateScreenshots") {
     val dataDir = screenshotDataDir
     systemProperty("kkdd.dataDir", dataDir.absolutePath)
     doFirst { dataDir.deleteRecursively() }
+}
+
+// Release-build verification. Nothing else ever runs the ProGuard-shrunk jars before a
+// user does: every test runs unshrunk, and ProGuard itself stays silent about the
+// breakage it causes. Both past outages were green on every other check — stale
+// BouncyCastle signatures (see the signature strip above) killed the demo cluster, and
+// a dropped direct interface made JobSupport fail verification so the app could not
+// start (see the JobSupport keep in proguard-rules.pro). CI runs
+// `verifyReleaseBuild` after the tests and before packaging an installer.
+//
+// The Compose plugin registers proguardReleaseJars and createRuntimeImage in
+// afterEvaluate, so they are looked up inside these tasks' lazy configuration blocks.
+val releaseCheckSources = layout.projectDirectory.dir("src/releaseCheck/java")
+
+val releaseCheckTools = configurations.create("releaseCheckTools")
+dependencies.add(releaseCheckTools.name, libs.asm)
+
+val compileReleaseScan = tasks.register<JavaCompile>("compileReleaseScan") {
+    source(releaseCheckSources.asFileTree.matching { include("**/IndirectSuperCallScan.java") })
+    classpath = releaseCheckTools
+    destinationDirectory.set(layout.buildDirectory.dir("release-check/scan-classes"))
+    options.release.set(21)
+}
+
+val compileReleaseCanary = tasks.register<JavaCompile>("compileReleaseCanary") {
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    source(releaseCheckSources.asFileTree.matching { include("**/ReleaseCanary.java") })
+    // Compiled against the unshrunk app; it runs against the shrunk one.
+    classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
+    destinationDirectory.set(layout.buildDirectory.dir("release-check/canary-classes"))
+    options.release.set(21)
+}
+
+tasks.register<JavaExec>("scanReleaseJars") {
+    group = "verification"
+    description = "Fails if a ProGuard-shrunk release jar calls an interface method with invokespecial through an indirect superinterface, which the JVM verifier rejects."
+    val proguard = tasks.named<AbstractProguardTask>("proguardReleaseJars")
+    dependsOn(proguard)
+    val shrunkJarsDir = proguard.flatMap { it.destinationDir }
+    classpath(compileReleaseScan.flatMap { it.destinationDirectory }, releaseCheckTools)
+    mainClass.set("com.kubekubedashdash.releasecheck.IndirectSuperCallScan")
+    argumentProviders.add(CommandLineArgumentProvider { listOf(shrunkJarsDir.get().asFile.absolutePath) })
+}
+
+val releaseCanaryDir = layout.buildDirectory.dir("release-canary").get().asFile
+
+// Runs ReleaseCanary against the shrunk jars with every state location pointed into a
+// scratch sandbox that is wiped first: it must never read the developer's kubeconfig,
+// preferences store, session file or logs.
+fun JavaExec.runReleaseCanary(sandbox: File) {
+    group = "verification"
+    val proguard = tasks.named<AbstractProguardTask>("proguardReleaseJars")
+    dependsOn(proguard, generateEmptyKubeconfig)
+    // The shrunk jars first, so nothing else on the classpath can stand in for them.
+    classpath(
+        fileTree(proguard.flatMap { it.destinationDir }).matching { include("*.jar") },
+        compileReleaseCanary.flatMap { it.destinationDirectory },
+    )
+    mainClass.set("com.kubekubedashdash.releasecheck.ReleaseCanary")
+    workingDir = sandbox
+    val home = sandbox.resolve("home")
+    // A copy inside the sandbox, so the canary's guard can insist that KUBECONFIG is in there.
+    val generatedKubeconfig = emptyKubeconfig.get().asFile
+    val kubeconfig = sandbox.resolve("kubeconfig.yaml")
+    environment("KUBECONFIG", kubeconfig.absolutePath)
+    environment("HOME", home.absolutePath)
+    systemProperty("kkdd.canary.sandbox", sandbox.absolutePath)
+    systemProperty("user.home", home.absolutePath)
+    systemProperty("java.io.tmpdir", sandbox.resolve("tmp").absolutePath)
+    systemProperty("LOG_DIR", sandbox.resolve("logs").absolutePath)
+    systemProperty("kkdd.dataDir", sandbox.resolve("data").absolutePath)
+    systemProperty("java.awt.headless", "true")
+    doFirst {
+        sandbox.deleteRecursively()
+        listOf("home", "tmp", "logs", "data").forEach { sandbox.resolve(it).mkdirs() }
+        generatedKubeconfig.copyTo(kubeconfig)
+    }
+}
+
+tasks.register<JavaExec>("releaseCanary") {
+    description = "Boots the ProGuard-shrunk release jars headlessly on the full JDK and exercises logging, JSONPath, JediTerm, the demo cluster and an MCP session."
+    runReleaseCanary(releaseCanaryDir.resolve("full-jdk"))
+}
+
+tasks.register<JavaExec>("releaseCanaryLimitedModules") {
+    description = "Runs the release canary with the JDK limited to the modules jlink puts in the packaged app's runtime."
+    runReleaseCanary(releaseCanaryDir.resolve("limited-modules"))
+    val jlink = tasks.named<AbstractJLinkTask>("createRuntimeImage")
+    val modules = jlink.flatMap { it.modules }
+    val includeAllModules = jlink.flatMap { it.includeAllModules }
+    jvmArgumentProviders.add(
+        CommandLineArgumentProvider {
+            check(!includeAllModules.get()) { "includeAllModules is on: the packaged runtime has every module, so there is nothing to limit" }
+            listOf("--limit-modules", modules.get().joinToString(","))
+        },
+    )
+}
+
+tasks.register("verifyReleaseBuild") {
+    group = "verification"
+    description = "Runs every check against the ProGuard-shrunk release jars."
+    dependsOn("scanReleaseJars", "releaseCanary", "releaseCanaryLimitedModules")
 }
