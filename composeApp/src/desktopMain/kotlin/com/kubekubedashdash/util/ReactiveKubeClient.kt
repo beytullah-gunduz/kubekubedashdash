@@ -274,6 +274,7 @@ class ReactiveKubeClient(
                 selector = svc.spec?.selector ?: emptyMap(),
                 labels = svc.metadata.labels ?: emptyMap(),
                 annotations = svc.metadata.annotations ?: emptyMap(),
+                portSpecs = ResourceMappers.mapServicePortSpecs(svc.spec?.ports),
             )
         },
     )
