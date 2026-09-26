@@ -19,23 +19,24 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * A tool call that is still blocking in [McpServerManager.blockingCall] when the
- * server stops must have its worker interrupted once the stop grace period expires,
- * over the real CIO + SSE transport ([mcpModule]). Since MCP SDK 0.15 a tool handler
- * is a job in the SDK's per-connection handler scope, not a child of any Ktor call,
- * so stop() reaches it only by ending the SSE call, which closes the transport and
- * cancels that scope (the other paths are a client dropping its SSE connection,
- * McpDisconnectInterruptsToolTest, and a client's notifications/cancelled); this
- * pins that it still does. Binds an ephemeral loopback port only; no real user
- * state.
+ * A client that drops its SSE connection while a tool call is still blocking in
+ * [McpServerManager.blockingCall] must have that worker interrupted within seconds,
+ * over the real CIO + SSE transport ([mcpModule]), with the server left running. The
+ * tool handler lives in the SDK's per-connection handler scope, which the SDK cancels
+ * only when the SSE call ends; Ktor ends a call on a closed connection only with
+ * HttpRequestLifecycle's cancelCallOnClose, so without it the call would hold its
+ * MCP worker until fabric8 gave up. The SSE stream has its own client so closing it
+ * leaves the POST connections alone. Binds an ephemeral loopback port only; no real
+ * user state.
  */
-class McpStopInterruptsToolTest {
+class McpDisconnectInterruptsToolTest {
 
     @Test
-    fun `stopping the server interrupts a tool call that is still blocking`() {
+    fun `a client dropping its SSE connection interrupts a tool call that is still blocking`() {
         val started = CountDownLatch(1)
         val interrupted = CountDownLatch(1)
         val mcpServer = Server(
@@ -64,10 +65,11 @@ class McpStopInterruptsToolTest {
         val ktor = embeddedServer(CIO, host = "127.0.0.1", port = port) {
             mcpModule(localhostOnly = true, requireAuth = false, port = port, expectedToken = null, mcpServer = mcpServer)
         }.start(wait = false)
+        val sseClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build()
         try {
             val base = URI.create("http://127.0.0.1:$port/")
-            val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
-            val sse = http.send(
+            val http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build()
+            val sse = sseClient.send(
                 HttpRequest.newBuilder(base).header("Accept", "text/event-stream").GET().build(),
                 HttpResponse.BodyHandlers.ofLines(),
             )
@@ -94,9 +96,18 @@ class McpStopInterruptsToolTest {
             send("""{"jsonrpc":"2.0","method":"notifications/initialized"}""")
             send("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hang","arguments":{}}}""")
             assertTrue(started.await(10, TimeUnit.SECONDS), "the tool never started")
+            assertEquals(1, mcpServer.sessions.size)
+
+            sseClient.shutdownNow()
+
+            assertTrue(interrupted.await(5, TimeUnit.SECONDS), "dropping the SSE connection did not interrupt the blocking tool call")
+            // The SDK drops the session right after cancelling its handlers; poll rather than race it.
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (mcpServer.sessions.isNotEmpty() && System.nanoTime() < deadline) Thread.sleep(20)
+            assertEquals(0, mcpServer.sessions.size, "the abandoned session was never released")
         } finally {
+            sseClient.shutdownNow()
             ktor.stop(gracePeriodMillis = 1000, timeoutMillis = 3000)
         }
-        assertTrue(interrupted.await(5, TimeUnit.SECONDS), "stop() did not interrupt the blocking tool call")
     }
 }
