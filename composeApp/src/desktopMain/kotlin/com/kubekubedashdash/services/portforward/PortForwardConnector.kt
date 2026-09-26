@@ -50,16 +50,24 @@ object Fabric8PortForwardConnector : PortForwardConnector {
         }
         val pf = client.pods().inNamespace(namespace).withName(podName).portForward(podPort, eofAwareIn, socket)
         pfRef.set(pf)
-        return object : ForwardedConnection {
-            override val isAlive: Boolean get() = pf.isAlive
-            override val errorMessage: String?
-                get() = (pf.serverThrowables + pf.clientThrowables).firstOrNull()?.let(::describeForwardFailure)
+        return fabric8Connection(pf, socket)
+    }
+}
 
-            override fun close() {
-                runCatching { pf.close() }
-                runCatching { socket.close() }
-            }
-        }
+/**
+ * Wraps a fabric8 [PortForward]. Only SERVER-side throwables count as the connection's error:
+ * fabric8 files local-socket failures (a client that aborts mid-transfer: broken pipe,
+ * connection reset) under clientThrowables, and those say nothing about the tunnel — treating
+ * them as errors would show a misleading "Last error" and drop a healthy service resolution.
+ */
+internal fun fabric8Connection(pf: PortForward, socket: SocketChannel): ForwardedConnection = object : ForwardedConnection {
+    override val isAlive: Boolean get() = pf.isAlive
+    override val errorMessage: String?
+        get() = pf.serverThrowables.firstOrNull()?.let(::describeForwardFailure)
+
+    override fun close() {
+        runCatching { pf.close() }
+        runCatching { socket.close() }
     }
 }
 

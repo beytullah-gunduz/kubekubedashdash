@@ -123,6 +123,9 @@ class PortForwardManager internal constructor(
             val sweep = session.sweep()
             val newStatus = if (current == null) PortForwardStatus.Disconnected else PortForwardStatus.Active
             updateEntry(id) { e ->
+                // An onFatal stop may have landed after this iteration passed the sessions[id]
+                // check: never overwrite a Stopped entry with Active/Disconnected.
+                if (!e.isRunning) return@updateEntry e
                 val reconnected = e.status == PortForwardStatus.Disconnected && newStatus == PortForwardStatus.Active
                 e.copy(
                     status = newStatus,

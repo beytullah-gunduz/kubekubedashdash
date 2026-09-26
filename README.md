@@ -130,7 +130,7 @@ Open an interactive shell into a running container via `kubectl exec` (powered b
 Forward a local port to a pod or a service — **Port forward** in a pod's or service's detail header, or **Port forward…** in its row menu. The dialog offers the ports the pod or service declares and suggests a local port (80 → 8080, 443 → 8443; leave it empty for a random free port).
 
 - Listens on **127.0.0.1 only** — never on your network interfaces. Use the address as shown (`127.0.0.1:<port>`): IPv6 `::1` is not bound, so a client that resolves `localhost` to `::1` without falling back will be refused
-- A service forward goes through one ready pod behind the service, resolving named target ports; if that pod goes away, the next connection picks another
+- A service forward goes through one ready pod behind the service, resolving named target ports; if that pod goes away, the first connection after it fails and the following one picks another ready pod
 - Running forwards are listed in the bottom drawer's **Port forwards** tab (open in browser, copy the address, stop), across every cluster and window
 - A forward survives reconnects of its cluster, stops when its tab closes or switches to another cluster, and is not restored on the next launch
 - Needs `create` on `pods/portforward` in the namespace

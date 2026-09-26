@@ -83,6 +83,7 @@ import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
 import com.kubekubedashdash.ui.components.DrawerPortForwardsPane
 import com.kubekubedashdash.ui.components.LogPaneStateStore
+import kotlinx.coroutines.flow.map
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
 
@@ -129,8 +130,12 @@ fun LogDrawer(
     val tabs = remember(allTabs, visibleSessionIds) {
         allTabs.filterValues { tab -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
     }
-    val forwardEntries by PortForwardRegistry.forwards.collectAsState()
-    val runningForwards = forwardEntries.count { it.isRunning }
+    // Only the running count matters here: collecting the whole list would recompose the
+    // drawer on every accepted connection (connectionsServed changes); an Int state that
+    // didn't change invalidates nothing.
+    val runningForwards by remember {
+        PortForwardRegistry.forwards.map { list -> list.count { it.isRunning } }
+    }.collectAsState(initial = PortForwardRegistry.forwards.value.count { it.isRunning })
     val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
     val density = LocalDensity.current
     var liveHeightDp by remember { mutableFloatStateOf(persistedHeightDp.toFloat()) }

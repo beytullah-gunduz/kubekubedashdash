@@ -11,8 +11,11 @@ import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
 import io.fabric8.kubernetes.api.model.IntOrString
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.ServicePortBuilder
+import io.fabric8.kubernetes.client.PortForward
 import io.fabric8.kubernetes.client.http.WebSocketHandshakeException
 import io.fabric8.kubernetes.client.http.WebSocketUpgradeResponse
+import java.io.IOException
+import java.nio.channels.SocketChannel
 import java.util.concurrent.CompletionException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -292,6 +295,7 @@ class PortForwardTargetsTest {
     @Test
     fun `cleanForwardError handles null, prefix stripping, refusal, multi-line and truncation`() {
         assertEquals("Connection failed", cleanForwardError(null))
+        assertEquals("boom", cleanForwardError("Received an error from the remote socket boom"))
         assertEquals(
             "Connection refused inside the pod — nothing is listening on that port",
             cleanForwardError("Received an error from the remote socket dial tcp4 127.0.0.1:80: connect: connection refused"),
@@ -322,5 +326,40 @@ class PortForwardTargetsTest {
             describeForwardFailure(CompletionException(WebSocketHandshakeException(WebSocketUpgradeResponse(null, 404)))),
         )
         assertEquals("boom", describeForwardFailure(IllegalStateException("boom")))
+    }
+
+    // ── fabric8Connection: only server-side throwables are the tunnel's error ──
+
+    private class FakePortForward(
+        val server: List<Throwable> = emptyList(),
+        val client: List<Throwable> = emptyList(),
+    ) : PortForward {
+        override fun isAlive(): Boolean = false
+        override fun errorOccurred(): Boolean = server.isNotEmpty() || client.isNotEmpty()
+        override fun getClientThrowables(): Collection<Throwable> = client
+        override fun getServerThrowables(): Collection<Throwable> = server
+        override fun close() {}
+    }
+
+    @Test
+    fun `a local client abort is not the connection's error`() {
+        SocketChannel.open().use { socket ->
+            val conn = fabric8Connection(FakePortForward(client = listOf(IOException("Broken pipe"))), socket)
+            assertNull(conn.errorMessage)
+        }
+    }
+
+    @Test
+    fun `a server-side failure is the connection's error`() {
+        SocketChannel.open().use { socket ->
+            val conn = fabric8Connection(
+                FakePortForward(
+                    server = listOf(WebSocketHandshakeException(WebSocketUpgradeResponse(null, 404))),
+                    client = listOf(IOException("Broken pipe")),
+                ),
+                socket,
+            )
+            assertEquals("The pod no longer exists (HTTP 404)", conn.errorMessage)
+        }
     }
 }
