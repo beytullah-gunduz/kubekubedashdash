@@ -1,8 +1,9 @@
 name: Build and Test
 
-# Per-push CI: lint, compile, run tests. Single Linux runner — packaging
-# across macOS/Linux/Windows is exercised by .github/workflows/release.yml
-# on every tag push, so there's no need to repeat it here.
+# Per-push CI: lint, compile, run tests, verify the ProGuard-shrunk release
+# jars. Single Linux runner — packaging across macOS/Linux/Windows is
+# exercised by .github/workflows/release.yml on every tag push, so there's no
+# need to repeat it here.
 
 on:
   push:
@@ -71,5 +72,23 @@ jobs:
           path: |
             composeApp/build/reports/tests/desktopTest/**
             composeApp/build/test-results/desktopTest/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Every step above runs unshrunk code. This one builds the ProGuard-shrunk
+      # release jars and checks them: a bytecode scan for calls the JVM verifier
+      # rejects, and a headless canary (logging, JSONPath, JediTerm, the demo
+      # cluster, an MCP session) on the full JDK and on the packaged runtime's
+      # module set. Both shipped release-only outages were green on every other
+      # step.
+      - name: Verify release build
+        run: ./gradlew :composeApp:verifyReleaseBuild
+
+      - name: Upload release canary logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: release-canary-logs-${{ github.job }}-${{ runner.os }}
+          path: composeApp/build/release-canary/*/logs/**
           retention-days: 7
           if-no-files-found: ignore

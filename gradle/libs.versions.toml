@@ -21,10 +21,14 @@ ktor = "3.6.0"
 jna = "5.19.1"
 jsonpath = "3.0.0"
 jediterm = "3.76"
+# Build-time only: the release-jar bytecode scan (composeApp verifyReleaseBuild).
+# Must parse every class-file version on the runtime classpath.
+asm = "9.10.1"
 
 [libraries]
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version = "1.2.1" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences-core", version = "1.2.1" }
+asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose-multiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }

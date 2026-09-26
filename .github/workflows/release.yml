@@ -105,6 +105,23 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # Checks the ProGuard-shrunk jars before any installer is built: a bytecode
+      # scan for calls the JVM verifier rejects, and a headless canary on the full
+      # JDK and on the packaged runtime's module set. Same -Papp.version as the
+      # packaging step, so proguardReleaseJars is UP-TO-DATE there and the
+      # installer ships exactly the jars verified here.
+      - name: Verify release build
+        run: ./gradlew :composeApp:verifyReleaseBuild -Papp.version=${{ steps.version.outputs.version }}
+
+      - name: Upload release canary logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: release-canary-logs-${{ matrix.artifact-name }}
+          path: composeApp/build/release-canary/*/logs/**
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Build installer
         run: ./gradlew :composeApp:${{ matrix.task }} -Papp.version=${{ steps.version.outputs.version }}
 
