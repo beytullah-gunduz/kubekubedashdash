@@ -189,7 +189,12 @@ object McpServerManager {
             val capturedRequireAuth = _requireAuth
             val ktorServer = embeddedServer(CIO, host = bindHost, port = port) {
                 installMcpAuth(localhostOnly, capturedRequireAuth, port, capturedToken)
-                mcp { mcpServer }
+                // The SDK (0.13+) adds its own Host check that accepts only
+                // localhost/127.0.0.1/[::1]. Localhost-only: a second layer under
+                // installMcpAuth's stricter 127.0.0.1:<port> check. LAN mode: it
+                // would 403 every client that connects by IP or hostname, and the
+                // forced bearer token is the defence there, so it is off.
+                mcp(enableDnsRebindingProtection = localhostOnly) { mcpServer }
             }
             ktorServer.start(wait = false)
             server = ktorServer

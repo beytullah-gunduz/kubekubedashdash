@@ -66,6 +66,9 @@ kotlin {
             implementation(libs.androidx.datastore.core)
             implementation(libs.androidx.datastore.preferences)
 
+            // One Ktor version for every io.ktor module. Without the BOM, modules only
+            // the MCP SDK pulls in (ktor-server-websockets) stay at the SDK's older Ktor.
+            implementation(project.dependencies.platform(libs.ktor.bom))
             implementation(libs.mcp.kotlin.sdk)
             implementation(libs.ktor.server.cio)
             implementation(libs.ktor.server.sse)

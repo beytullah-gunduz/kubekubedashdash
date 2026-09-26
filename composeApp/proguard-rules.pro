@@ -232,6 +232,19 @@
 -keep class io.modelcontextprotocol.** { *; }
 
 # ---------------------------------------------------------------------------
+# kotlinx.coroutines JobSupport — keep the class so ProGuard keeps Job as a
+# DIRECT interface of it. The shrinker rewrites `implements Job, ChildJob,
+# ParentJob` to `implements ChildJob, ParentJob` (both extend Job), but
+# JobSupport.cancel() calls Job's default method with invokespecial, which the
+# verifier only allows on a direct superinterface: VerifyError ("interface
+# method reference is in an indirect superinterface") on the first Job the app
+# creates, so the release build cannot start. Latent until something keeps the
+# no-arg Job.cancel() alive; the Ktor 3.6.0 / MCP SDK 0.14.0 bump does.
+# Class-only keep: its members still shrink.
+# ---------------------------------------------------------------------------
+-keep class kotlinx.coroutines.JobSupport
+
+# ---------------------------------------------------------------------------
 # AndroidX DataStore (used for preferences persistence) + Okio.
 # DataStore's JVM build is backed by `datastore-core-okio`, which is the
 # only consumer of Okio in this app — keep both together.

@@ -250,8 +250,8 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Coroutines | kotlinx-coroutines 1.11.0 (core + swing) |
 | Serialization | kotlinx-serialization 1.11.0 |
 | JSONPath | json-path 3.0.0 (custom-resource column extraction) |
-| MCP server | modelcontextprotocol kotlin-sdk 0.8.3 |
-| Embedded HTTP server | Ktor 3.1.3 (CIO + SSE + content negotiation) |
+| MCP server | modelcontextprotocol kotlin-sdk 0.14.0 |
+| Embedded HTTP server | Ktor 3.6.0 (CIO + SSE + content negotiation) |
 | Native interop | JNA 5.19.1 (macOS shell `PATH` resolution) |
 | Logging | Logback Classic 1.6.3 (via SLF4J) |
 | Code formatting | Spotless 8.10.2 + ktlint |
