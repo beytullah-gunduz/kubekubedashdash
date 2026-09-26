@@ -34,8 +34,8 @@ kotlin {
     }
 
     sourceSets {
-        val desktopMain by getting
-        val desktopTest by getting {
+        val desktopMain = getByName("desktopMain")
+        getByName("desktopTest") {
             dependencies {
                 implementation(libs.ktor.server.test.host)
                 implementation(libs.kotlin.test)
@@ -101,7 +101,7 @@ val appVersion: String =
         ?.removeSuffix("-SNAPSHOT")
         ?: "1.0.0"
 
-val generateVersionProperties by tasks.registering {
+val generateVersionProperties = tasks.register("generateVersionProperties") {
     val outputDir = layout.buildDirectory.dir("generated/resources/version")
     val version = appVersion
     inputs.property("version", version)
@@ -117,7 +117,7 @@ kotlin.sourceSets.named("desktopMain") {
     resources.srcDir(generateVersionProperties.map { it.outputs.files.singleFile })
 }
 
-val generateScreenshots by tasks.registering(JavaExec::class) {
+tasks.register<JavaExec>("generateScreenshots") {
     group = "documentation"
     description = "Drives the live app via WorkspaceManager and captures every Screen.Main + multi-tab + multi-window into docs/screenshots/. Runs on your Mac; the window must stay visible while it runs."
     val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
@@ -219,7 +219,7 @@ tasks.withType<AbstractProguardTask>().configureEach {
 // resolve to nothing instead of to the developer's clusters.
 val emptyKubeconfig = layout.buildDirectory.file("test-kubeconfig/empty.yaml")
 
-val generateEmptyKubeconfig by tasks.registering {
+val generateEmptyKubeconfig = tasks.register("generateEmptyKubeconfig") {
     val output = emptyKubeconfig
     outputs.file(output)
     doLast {
