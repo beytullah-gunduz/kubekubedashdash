@@ -17,8 +17,9 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 /**
- * Ktor CIO runs the MCP tool and resource handlers on Dispatchers.IO, and
- * every fabric8 call they make is blocking I/O: against a dead cluster each
+ * The MCP tool and resource handlers start on Ktor CIO's IO threads (and, since
+ * MCP SDK 0.15, continue on Dispatchers.Default after their first suspension),
+ * and every fabric8 call they make is blocking I/O: against a dead cluster each
  * one parked an IO slot for fabric8's whole retry budget, and enough of them
  * starved the app's own informers, which share the pool. The blocking work
  * now goes through [McpServerManager.blockingCall], which must (1) run on a

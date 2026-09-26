@@ -34,8 +34,8 @@ kotlin {
     }
 
     sourceSets {
-        val desktopMain by getting
-        val desktopTest by getting {
+        val desktopMain = getByName("desktopMain")
+        getByName("desktopTest") {
             dependencies {
                 implementation(libs.ktor.server.test.host)
                 implementation(libs.kotlin.test)
@@ -69,6 +69,9 @@ kotlin {
             // One Ktor version for every io.ktor module. Without the BOM, modules only
             // the MCP SDK pulls in (ktor-server-websockets) stay at the SDK's older Ktor.
             implementation(project.dependencies.platform(libs.ktor.bom))
+            // Likewise one Kotlin version: ktor-server-core would otherwise keep
+            // kotlin-reflect a release behind the stdlib.
+            implementation(project.dependencies.platform(libs.kotlin.bom))
             implementation(libs.mcp.kotlin.sdk)
             implementation(libs.ktor.server.cio)
             implementation(libs.ktor.server.sse)
@@ -76,15 +79,8 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.jna)
             implementation(libs.json.path)
-            // jediterm (3.74 through 3.76) declares kotlin-stdlib 2.4.0 in its Gradle
-            // metadata; without the exclude, highest-wins would raise the
-            // compile+runtime stdlib above the pinned 2.3.21 compiler. Its jars do
-            // contain Kotlin-compiled classes, but every stdlib member they reference
-            // also exists in 2.3.21 — re-check that on every jediterm bump.
-            // (String notation: the KMP dependency handler has no configure-block
-            // overload for catalog accessors, and catalog dependencies are immutable.)
-            implementation("org.jetbrains.jediterm:jediterm-core:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
-            implementation("org.jetbrains.jediterm:jediterm-ui:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
+            implementation(libs.jediterm.core)
+            implementation(libs.jediterm.ui)
         }
     }
 }
@@ -101,7 +97,7 @@ val appVersion: String =
         ?.removeSuffix("-SNAPSHOT")
         ?: "1.0.0"
 
-val generateVersionProperties by tasks.registering {
+val generateVersionProperties = tasks.register("generateVersionProperties") {
     val outputDir = layout.buildDirectory.dir("generated/resources/version")
     val version = appVersion
     inputs.property("version", version)
@@ -117,7 +113,7 @@ kotlin.sourceSets.named("desktopMain") {
     resources.srcDir(generateVersionProperties.map { it.outputs.files.singleFile })
 }
 
-val generateScreenshots by tasks.registering(JavaExec::class) {
+tasks.register<JavaExec>("generateScreenshots") {
     group = "documentation"
     description = "Drives the live app via WorkspaceManager and captures every Screen.Main + multi-tab + multi-window into docs/screenshots/. Runs on your Mac; the window must stay visible while it runs."
     val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
@@ -219,7 +215,7 @@ tasks.withType<AbstractProguardTask>().configureEach {
 // resolve to nothing instead of to the developer's clusters.
 val emptyKubeconfig = layout.buildDirectory.file("test-kubeconfig/empty.yaml")
 
-val generateEmptyKubeconfig by tasks.registering {
+val generateEmptyKubeconfig = tasks.register("generateEmptyKubeconfig") {
     val output = emptyKubeconfig
     outputs.file(output)
     doLast {
