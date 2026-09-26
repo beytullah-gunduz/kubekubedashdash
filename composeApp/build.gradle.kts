@@ -73,9 +73,11 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.jna)
             implementation(libs.json.path)
-            // jediterm 3.74 declares kotlin-stdlib 2.4.0 in its Gradle metadata but its
-            // jars contain zero Kotlin classes; without the exclude, highest-wins would
-            // raise the compile+runtime stdlib above the pinned 2.3.21 compiler.
+            // jediterm (3.74 through 3.76) declares kotlin-stdlib 2.4.0 in its Gradle
+            // metadata; without the exclude, highest-wins would raise the
+            // compile+runtime stdlib above the pinned 2.3.21 compiler. Its jars do
+            // contain Kotlin-compiled classes, but every stdlib member they reference
+            // also exists in 2.3.21 — re-check that on every jediterm bump.
             // (String notation: the KMP dependency handler has no configure-block
             // overload for catalog accessors, and catalog dependencies are immutable.)
             implementation("org.jetbrains.jediterm:jediterm-core:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
@@ -159,6 +161,10 @@ compose.desktop {
             // tcnative, jakarta.servlet, etc.) — the optimizer chokes on
             // missing superclasses even when the code paths are unreachable.
             optimize.set(false)
+            // Pinned rather than inherited from the Compose plugin (1.12.1 defaults
+            // to 7.8.0, which predates ProGuard's Kotlin 2.3 metadata support; 7.10.0
+            // also covers Kotlin 2.4). Bump deliberately alongside Kotlin.
+            version.set("7.10.0")
         }
     }
 }

@@ -107,6 +107,11 @@
 # which we don't ship (logback.xml uses no .xz rollover suffix).
 -dontwarn org.tukaani.xz.**
 
+# logback 1.6.3 adds ch.qos.logback.core.JansiConsoleAppender, backed by the
+# optional org.jline:jansi-core library, which we don't ship (logback.xml
+# uses the plain ConsoleAppender). Scoped to the one referencing class.
+-dontwarn ch.qos.logback.core.JansiConsoleAppender
+
 # Logback-classic also references the legacy log4j 1.x and log4j2 APIs
 # (LoggerFactory bridges). Optional unless those APIs are on the classpath.
 -dontwarn org.apache.log4j.**
@@ -133,8 +138,9 @@
 -dontwarn org.apache.commons.compress.**
 
 # json-path ships pluggable SPI adapters for Gson, Jakarta JSON, Jettison,
-# JSON-Java, and Tapestry5. We use the default JsonSmartJsonProvider
-# (net.minidev:json-smart) and bundle none of these alternative backends.
+# JSON-Java, Tapestry5 and (since 3.0.0) Jackson 3. We use the default
+# JsonSmartJsonProvider (net.minidev:json-smart) and bundle none of these
+# alternative backends.
 # The trailing rule on `jsonpath.spi.json.**` silences follow-on warnings
 # about inherited members in adapter classes whose superclasses are also
 # missing (e.g. JettisonProvider$JettisonTokener extending JSONTokener).
@@ -143,6 +149,9 @@
 -dontwarn org.codehaus.jettison.**
 -dontwarn org.json.**
 -dontwarn org.apache.tapestry5.**
+# Scoped to the referencing class, not tools.jackson.**: fabric8 8.x moves to
+# Jackson 3, and a package-wide rule would then hide real unresolved references.
+-dontwarn com.jayway.jsonpath.spi.mapper.Jackson3MappingProvider
 -dontwarn com.jayway.jsonpath.spi.json.**
 # Keep json-path itself: Configuration.defaultConfiguration() calls
 # EnumSet.noneOf(Option.class) via reflection, which reads $VALUES / values().
