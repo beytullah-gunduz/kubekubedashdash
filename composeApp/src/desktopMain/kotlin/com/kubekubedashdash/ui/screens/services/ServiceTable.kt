@@ -11,11 +11,14 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.ServiceInfo
+import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
+import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.TableRow
+import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
 
 internal fun serviceTypeColor(type: String): Color? = when (type) {
     "LoadBalancer" -> KdPrimary
@@ -49,6 +52,7 @@ internal fun ServiceTable(
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
 ) {
+    val portForward = LocalPortForwardLauncher.current
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = svcColumns.filter { maxWidth >= it.minTableWidth }
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
@@ -58,6 +62,11 @@ internal fun ServiceTable(
                 pinId = "service:${svc.namespace}:${svc.name}",
                 identity = RowIdentity("Service", svc.name, svc.namespace),
                 cells = visible.map { it.cell(svc) },
+                actions = buildList {
+                    if (portForward != null && svc.type != "ExternalName" && svc.selector.isNotEmpty()) {
+                        add(RowAction("Port forward…") { portForward.launch(PortForwardRequest.forService(svc)) })
+                    }
+                },
             )
         }
 

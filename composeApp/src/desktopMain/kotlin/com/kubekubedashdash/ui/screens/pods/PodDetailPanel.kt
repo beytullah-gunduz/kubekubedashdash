@@ -74,7 +74,9 @@ import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.terminal_filled
+import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.EMPTY_DASH
@@ -89,6 +91,7 @@ import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.resourceRef
+import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailActionMenuItem
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
@@ -388,6 +391,7 @@ private fun PanelHeader(
     ownerChain: List<RelatedRef>,
     onOwnerClick: (RelatedRef) -> Unit,
 ) {
+    val portForward = LocalPortForwardLauncher.current
     val containers = pod.containers
     val terminalAction = DetailAction(
         icon = Res.drawable.terminal_filled,
@@ -416,6 +420,15 @@ private fun PanelHeader(
             emptyList()
         },
     )
+    val portForwardAction = portForward?.let { launcher ->
+        DetailAction(
+            icon = Res.drawable.settings_ethernet_filled,
+            label = "Port forward",
+            description = "Forward a local port (127.0.0.1 only) to a port on this pod. Running forwards are listed in the bottom drawer.",
+            enabled = pod.phase == "Running",
+            onClick = { launcher.launch(PortForwardRequest.forPod(pod)) },
+        )
+    }
     val evictAction = DetailAction(
         icon = Res.drawable.clear_all_filled,
         label = "Evict",
@@ -436,7 +449,7 @@ private fun PanelHeader(
         name = pod.name,
         subtitle = pod.namespace,
         status = pod.status,
-        actions = listOf(terminalAction, logsAction, evictAction, forceDeleteAction),
+        actions = listOfNotNull(terminalAction, logsAction, portForwardAction, evictAction, forceDeleteAction),
         onClose = onClose,
         ownerChain = ownerChain,
         onOwnerClick = onOwnerClick,

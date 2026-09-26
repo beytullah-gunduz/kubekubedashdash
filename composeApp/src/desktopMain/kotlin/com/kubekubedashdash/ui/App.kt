@@ -52,6 +52,7 @@ import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.LocalSystemDensity
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
@@ -66,6 +67,7 @@ import com.kubekubedashdash.services.logcapture.DefaultNamespaceLogCaptureGatewa
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureEngine
 import com.kubekubedashdash.services.logtail.DefaultNamespaceTailGateway
 import com.kubekubedashdash.services.logtail.NamespaceTailEngine
+import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.LogPaneStateStore
@@ -77,6 +79,8 @@ import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
 import com.kubekubedashdash.ui.modals.PrerequisitesModal
 import com.kubekubedashdash.ui.palette.PendingVerb
 import com.kubekubedashdash.ui.palette.VerbDialogHost
+import com.kubekubedashdash.ui.portforward.PendingPortForward
+import com.kubekubedashdash.ui.portforward.PortForwardDialogHost
 import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
@@ -301,6 +305,14 @@ fun App(
         // Unlike onOpenLogs this closes over nothing but the remembered
         // MutableState setter, so it needs no keys.
         val onCaptureLogs: (String) -> Unit = remember { { ns -> captureDialogNamespace = ns } }
+
+        // Raised by a Port forward verb (pod/service header or row menu) through
+        // LocalPortForwardLauncher, which binds the request to its own cluster
+        // page's session — not activeSession. Closes over only the state setter.
+        var pendingPortForward by remember { mutableStateOf<PendingPortForward?>(null) }
+        val onPortForward: (ClusterSession, PortForwardRequest) -> Unit = remember {
+            { session, request -> pendingPortForward = PendingPortForward(session, request) }
+        }
 
         // Unlike onCaptureLogs, this closes over activeSession (to reach its
         // scope/reactiveClient), so it must key on it — exactly like onOpenLogs
@@ -693,6 +705,7 @@ fun App(
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,
                                     onTailLogs = onTailLogs,
+                                    onPortForward = onPortForward,
                                     bottomSlot = if (tab.key == drawerHostKey) logDrawer else null,
                                 )
 
@@ -819,6 +832,18 @@ fun App(
 
                 pendingVerb?.let { verb ->
                     VerbDialogHost(pending = verb, onDismiss = { pendingVerb = null })
+                }
+
+                pendingPortForward?.let { pending ->
+                    PortForwardDialogHost(
+                        pending = pending,
+                        onStarted = {
+                            LogStreamRegistry.openOrFocusPortForwards()
+                            if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
+                            pendingPortForward = null
+                        },
+                        onDismiss = { pendingPortForward = null },
+                    )
                 }
             }
         }

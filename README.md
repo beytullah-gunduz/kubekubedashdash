@@ -110,7 +110,8 @@ Beyond browsing, KubeKubeDashDash can perform a focused set of write operations:
 
 | Resource | Actions |
 |----------|---------|
-| Pods | View logs, Open shell (exec), Evict, Force-Delete, Delete |
+| Pods | View logs, Open shell (exec), Port forward, Evict, Force-Delete, Delete |
+| Services | Port forward |
 | Nodes | Cordon, Uncordon, Drain |
 | Deployments, StatefulSets, ReplicaSets | Scale |
 | Deployments, StatefulSets, DaemonSets | Rollout Restart |
@@ -123,6 +124,16 @@ Delete is available both from a resource's detail-panel header and from a right-
 ### Pod shell (terminal)
 
 Open an interactive shell into a running container via `kubectl exec` (powered by JediTerm). The shell auto-selects `bash`, falling back to `sh`. The session — including its scrollback — **persists across tab switches**, so navigating away and back does not drop your shell.
+
+### Port forwarding
+
+Forward a local port to a pod or a service — **Port forward** in a pod's or service's detail header, or **Port forward…** in its row menu. The dialog offers the ports the pod or service declares and suggests a local port (80 → 8080, 443 → 8443; leave it empty for a random free port).
+
+- Listens on **127.0.0.1 only** — never on your network interfaces. Use the address as shown (`127.0.0.1:<port>`): IPv6 `::1` is not bound, so a client that resolves `localhost` to `::1` without falling back will be refused
+- A service forward goes through one ready pod behind the service, resolving named target ports; if that pod goes away, the next connection picks another
+- Running forwards are listed in the bottom drawer's **Port forwards** tab (open in browser, copy the address, stop), across every cluster and window
+- A forward survives reconnects of its cluster, stops when its tab closes or switches to another cluster, and is not restored on the next launch
+- Needs `create` on `pods/portforward` in the namespace
 
 ### Logs
 

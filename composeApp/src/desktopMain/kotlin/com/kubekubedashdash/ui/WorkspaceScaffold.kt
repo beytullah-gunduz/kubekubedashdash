@@ -39,9 +39,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.DetailHost
 import com.kubekubedashdash.ui.components.ReconnectOverlay
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
+import com.kubekubedashdash.ui.portforward.PortForwardLauncher
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
 
 /**
@@ -66,6 +69,7 @@ internal fun SessionPaneContent(
     onOpenTerminal: (String, String, String) -> Unit,
     onCaptureLogs: (String) -> Unit,
     onTailLogs: (String) -> Unit,
+    onPortForward: ((ClusterSession, PortForwardRequest) -> Unit)? = null,
     bottomSlot: (@Composable () -> Unit)? = null,
 ) {
     val sessionVm = session.viewModel
@@ -137,11 +141,16 @@ internal fun SessionPaneContent(
     var bottomSlotStartPx by remember { mutableFloatStateOf(0f) }
     var bottomSlotHeightPx by remember { mutableIntStateOf(0) }
 
+    val portForwardLauncher = remember(session, onPortForward) {
+        onPortForward?.let { cb -> PortForwardLauncher { req -> cb(session, req) } }
+    }
+
     CompositionLocalProvider(
         LocalViewModelStoreOwner provides session,
         LocalReactiveKubeClient provides session.reactiveClient,
         LocalIsConnected provides sessionIsConnected,
         LocalConnectionError provides sessionConnectionError,
+        LocalPortForwardLauncher provides portForwardLauncher,
     ) {
         // The overlay must be a later sibling of the session Row inside one
         // Box: Compose hit-testing then routes every pointer event to the
