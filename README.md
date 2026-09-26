@@ -240,7 +240,7 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 
 | Component | Library / Version |
 |-----------|-------------------|
-| Language | Kotlin 2.3.21 |
+| Language | Kotlin 2.4.20 |
 | UI framework | Compose Multiplatform 1.12.1 |
 | Material 3 | compose-material3 1.12.0-alpha03, material3-adaptive 1.3.0-rc01 (ListDetailPaneScaffold) |
 | ViewModel / lifecycle | androidx.lifecycle 2.11.0 (multiplatform) |
@@ -250,12 +250,12 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Coroutines | kotlinx-coroutines 1.11.0 (core + swing) |
 | Serialization | kotlinx-serialization 1.11.0 |
 | JSONPath | json-path 3.0.0 (custom-resource column extraction) |
-| MCP server | modelcontextprotocol kotlin-sdk 0.14.0 |
+| MCP server | modelcontextprotocol kotlin-sdk 0.15.0 |
 | Embedded HTTP server | Ktor 3.6.0 (CIO + SSE + content negotiation) |
 | Native interop | JNA 5.19.1 (macOS shell `PATH` resolution) |
 | Logging | Logback Classic 1.6.3 (via SLF4J) |
 | Code formatting | Spotless 8.10.2 + ktlint |
-| Build tool | Gradle 9.3.0, JDK 21 |
+| Build tool | Gradle 9.7.1, JDK 21 |
 | Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
 
 ## CI

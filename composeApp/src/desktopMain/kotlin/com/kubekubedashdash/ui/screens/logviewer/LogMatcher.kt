@@ -6,7 +6,7 @@ package com.kubekubedashdash.ui.screens.logviewer
  * parameters — the compiled pattern lives in a private body val, never a
  * constructor property: a [Regex] in the constructor would join this data
  * class's `equals`/`hashCode`, and `kotlin.text.Regex` has no [equals]
- * override (stdlib 2.3.21 — identity comparison), so every
+ * override (stdlib 2.4.20 — identity comparison), so every
  * `remember(…, matcher)` key would miss and the whole viewport would
  * re-highlight on every recomposition. Compiling inside [matches]/[ranges]
  * instead of once here would recompile the pattern once per line, up to

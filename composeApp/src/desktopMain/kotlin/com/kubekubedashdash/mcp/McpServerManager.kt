@@ -74,26 +74,34 @@ object McpServerManager {
 
     internal fun tailCapNotice(raw: String): String = "Output limited to the last $MAX_TAIL_LINES lines (${raw.take(32)} requested)."
 
-    // Ktor CIO runs the application pipeline — and so every tool and resource
-    // handler — on Dispatchers.IO already. A blocking fabric8 call here never
-    // stalled an event loop; it held one of IO's 64 permits for as long as
+    // Since MCP SDK 0.15 each tool and resource handler is a job in the SDK's
+    // per-connection handler scope (at most 64 running per connection), not a
+    // child of a Ktor call: it starts inside the POST that delivered it and
+    // moves to Dispatchers.Default at its first suspension. A blocking fabric8
+    // call made there directly would hold that POST's Ktor thread (an IO
+    // permit) or, after a suspension, pin a Default thread, for as long as
     // fabric8 kept retrying (10 s request timeout × 11 attempts on its default
-    // budget; the app now caps it at 5 retries, see withBoundedRetries),
-    // and enough of them starved the app's own informers and polls, which
-    // share those permits. Two guards. The calls run on a limitedParallelism
-    // view of IO: such a view delegates to the UNLIMITED scheduler, so its
-    // MCP_WORKERS permits are granted in addition to IO's cap and MCP load can
-    // no longer take the informers' permits at all; beyond MCP_WORKERS, calls
-    // queue (suspended, holding no thread) until a permit frees — the cost is
-    // latency on a burst against a dead cluster, which the cap on fabric8's
-    // retry budget (F10) now bounds at about a minute. And runInterruptible rather than
-    // withContext, so when the call is cancelled — Ktor cancels a connection's
-    // calls on an abrupt client disconnect, and stop()'s EmbeddedServer.stop
-    // cancels every call once its 1 s grace expires, on an enable/disable
-    // toggle or the shutdown hook — the worker is freed at once instead of
-    // parking for the fabric8 timeout. (The HTTP request itself is not
-    // aborted: fabric8's OperationSupport.waitForResult never cancels the
-    // future; the response arrives and is discarded.)
+    // budget; the app now caps it at 5 retries, see withBoundedRetries); enough
+    // held IO permits starved the app's own informers and polls, which share
+    // IO's 64. Two guards. The calls run on a limitedParallelism view of IO:
+    // such a view delegates to the UNLIMITED scheduler, so its MCP_WORKERS
+    // permits are granted in addition to IO's cap and MCP load can neither
+    // take the informers' permits nor pin Default threads; beyond MCP_WORKERS,
+    // calls queue (suspended, holding no thread) until a permit frees — the
+    // cost is latency on a burst against a dead cluster, which the cap on
+    // fabric8's retry budget (F10) now bounds at about a minute. And
+    // runInterruptible rather than withContext, so a cancelled call frees its
+    // worker at once instead of parking for the fabric8 timeout. Two things
+    // cancel one: stop()'s EmbeddedServer.stop, which cancels every SSE call
+    // once its 1 s grace expires (on an enable/disable toggle or the shutdown
+    // hook), whereupon the SDK closes the transport and cancels that
+    // connection's handlers (McpStopInterruptsToolTest); and a client's
+    // notifications/cancelled, which cancels that one call. A client that just
+    // disconnects cancels nothing: without HttpRequestLifecycle's
+    // cancelCallOnClose, Ktor keeps the abandoned SSE call open, so its calls
+    // run until fabric8 gives up. (The HTTP request itself is not aborted:
+    // fabric8's OperationSupport.waitForResult never cancels the future; the
+    // response arrives and is discarded.)
     private val mcpWorkers = Dispatchers.IO.limitedParallelism(MCP_WORKERS, "mcp-workers")
 
     internal suspend fun <T> blockingCall(block: () -> T): T = runInterruptible(mcpWorkers, block)

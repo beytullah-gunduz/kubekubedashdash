@@ -69,6 +69,9 @@ kotlin {
             // One Ktor version for every io.ktor module. Without the BOM, modules only
             // the MCP SDK pulls in (ktor-server-websockets) stay at the SDK's older Ktor.
             implementation(project.dependencies.platform(libs.ktor.bom))
+            // Likewise one Kotlin version: ktor-server-core would otherwise keep
+            // kotlin-reflect a release behind the stdlib.
+            implementation(project.dependencies.platform(libs.kotlin.bom))
             implementation(libs.mcp.kotlin.sdk)
             implementation(libs.ktor.server.cio)
             implementation(libs.ktor.server.sse)
@@ -76,15 +79,8 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.jna)
             implementation(libs.json.path)
-            // jediterm (3.74 through 3.76) declares kotlin-stdlib 2.4.0 in its Gradle
-            // metadata; without the exclude, highest-wins would raise the
-            // compile+runtime stdlib above the pinned 2.3.21 compiler. Its jars do
-            // contain Kotlin-compiled classes, but every stdlib member they reference
-            // also exists in 2.3.21 — re-check that on every jediterm bump.
-            // (String notation: the KMP dependency handler has no configure-block
-            // overload for catalog accessors, and catalog dependencies are immutable.)
-            implementation("org.jetbrains.jediterm:jediterm-core:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
-            implementation("org.jetbrains.jediterm:jediterm-ui:${libs.versions.jediterm.get()}") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
+            implementation(libs.jediterm.core)
+            implementation(libs.jediterm.ui)
         }
     }
 }
