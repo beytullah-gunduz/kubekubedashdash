@@ -4,9 +4,11 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.util.isInterruption
 import io.fabric8.kubernetes.client.KubernetesClientException
 import io.ktor.server.application.Application
+import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.http.HttpRequestLifecycle
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.mcp
@@ -91,15 +93,16 @@ object McpServerManager {
     // cost is latency on a burst against a dead cluster, which the cap on
     // fabric8's retry budget (F10) now bounds at about a minute. And
     // runInterruptible rather than withContext, so a cancelled call frees its
-    // worker at once instead of parking for the fabric8 timeout. Two things
-    // cancel one: stop()'s EmbeddedServer.stop, which cancels every SSE call
-    // once its 1 s grace expires (on an enable/disable toggle or the shutdown
-    // hook), whereupon the SDK closes the transport and cancels that
-    // connection's handlers (McpStopInterruptsToolTest); and a client's
-    // notifications/cancelled, which cancels that one call. A client that just
-    // disconnects cancels nothing: without HttpRequestLifecycle's
-    // cancelCallOnClose, Ktor keeps the abandoned SSE call open, so its calls
-    // run until fabric8 gives up. (The HTTP request itself is not aborted:
+    // worker at once instead of parking for the fabric8 timeout. Three things
+    // cancel one. A client closing its SSE connection ends that SSE call
+    // (mcpModule's cancelCallOnClose), whereupon the SDK closes the transport
+    // and cancels that connection's handlers (McpDisconnectInterruptsToolTest);
+    // a client that vanishes without closing (a sleeping laptop) sends no FIN,
+    // so its calls still run until fabric8 gives up. stop()'s
+    // EmbeddedServer.stop ends every SSE call the same way once its 1 s grace
+    // expires (on an enable/disable toggle or the shutdown hook;
+    // McpStopInterruptsToolTest). And a client's notifications/cancelled
+    // cancels that one call. (The HTTP request itself is not aborted:
     // fabric8's OperationSupport.waitForResult never cancels the future; the
     // response arrives and is discarded.)
     private val mcpWorkers = Dispatchers.IO.limitedParallelism(MCP_WORKERS, "mcp-workers")
@@ -117,10 +120,10 @@ object McpServerManager {
      * carrying the API's message, logged once at WARN without a trace — a 403
      * is not an app bug. An interrupted fabric8 call is a cancellation, not an
      * error: `blockingCall` interrupts the worker when the request is cancelled
-     * (stop()'s grace period), fabric8 launders the InterruptedException into a
-     * KubernetesClientException, and runInterruptible passes that through
-     * unchanged even though the job is cancelled — so the cancelled job is
-     * checked first, then the cause chain.
+     * (a dropped SSE connection, stop()'s grace period), fabric8 launders the
+     * InterruptedException into a KubernetesClientException, and
+     * runInterruptible passes that through unchanged even though the job is
+     * cancelled — so the cancelled job is checked first, then the cause chain.
      */
     internal suspend fun toolCall(tool: String, block: suspend () -> CallToolResult): CallToolResult = try {
         block()
@@ -533,6 +536,16 @@ internal fun Application.mcpModule(
     expectedToken: String?,
     mcpServer: Server,
 ) {
+    // A client that drops its SSE connection must end that SSE call: the SDK
+    // closes the transport and cancels the connection's tool handlers (which
+    // interrupts their blockingCall workers) only when the call completes, and
+    // Ktor keeps processing a call after its connection closes unless
+    // cancelCallOnClose is on (McpDisconnectInterruptsToolTest). CIO notices
+    // the close while it waits for the connection's next request, so not after
+    // a request that said `Connection: close`. POSTs are affected too but only
+    // while they last: after initialization a handler runs in the SDK's scope,
+    // not the POST's, so a POST dropped mid-flight cancels no tool call.
+    install(HttpRequestLifecycle) { cancelCallOnClose = true }
     installMcpAuth(localhostOnly, requireAuth, port, expectedToken)
     // The SDK (0.13+) adds its own Host/Origin check that accepts only
     // localhost/127.0.0.1/[::1]. Localhost-only: a second layer under
