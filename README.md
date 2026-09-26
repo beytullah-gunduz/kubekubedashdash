@@ -241,21 +241,20 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Component | Library / Version |
 |-----------|-------------------|
 | Language | Kotlin 2.3.21 |
-| UI framework | Compose Multiplatform 1.11.1 |
-| Material 3 | compose-material3 1.11.0-alpha07, material3-adaptive 1.3.0-alpha07 (ListDetailPaneScaffold) |
-| ViewModel / lifecycle | androidx.lifecycle 2.11.0-beta01 (multiplatform) |
-| Persistence | androidx.datastore-preferences 1.1.7 |
-| Kubernetes client | fabric8 kubernetes-client + kubernetes-server-mock 7.5.2 |
-| Terminal | JediTerm 3.64 (interactive pod exec) |
-| Coroutines | kotlinx-coroutines 1.10.1 (core + swing) |
-| Serialization | kotlinx-serialization 1.8.0 |
-| Date/time | kotlinx-datetime 0.7.0 |
-| JSONPath | json-path 2.9.0 (custom-resource column extraction) |
+| UI framework | Compose Multiplatform 1.12.1 |
+| Material 3 | compose-material3 1.12.0-alpha03, material3-adaptive 1.3.0-rc01 (ListDetailPaneScaffold) |
+| ViewModel / lifecycle | androidx.lifecycle 2.11.0 (multiplatform) |
+| Persistence | androidx.datastore-preferences 1.2.1 |
+| Kubernetes client | fabric8 kubernetes-client + kubernetes-server-mock 7.7.0 |
+| Terminal | JediTerm 3.76 (interactive pod exec) |
+| Coroutines | kotlinx-coroutines 1.11.0 (core + swing) |
+| Serialization | kotlinx-serialization 1.11.0 |
+| JSONPath | json-path 3.0.0 (custom-resource column extraction) |
 | MCP server | modelcontextprotocol kotlin-sdk 0.8.3 |
 | Embedded HTTP server | Ktor 3.1.3 (CIO + SSE + content negotiation) |
-| Native interop | JNA 5.15 (macOS shell `PATH` resolution) |
-| Logging | Logback Classic 1.5.15 (via SLF4J) |
-| Code formatting | Spotless 8.7.0 + ktlint |
+| Native interop | JNA 5.19.1 (macOS shell `PATH` resolution) |
+| Logging | Logback Classic 1.6.3 (via SLF4J) |
+| Code formatting | Spotless 8.10.2 + ktlint |
 | Build tool | Gradle 9.3.0, JDK 21 |
 | Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
 
