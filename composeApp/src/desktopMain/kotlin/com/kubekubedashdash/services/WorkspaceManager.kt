@@ -9,6 +9,7 @@ import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.services.session.SessionPersistence
 import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
 import com.kubekubedashdash.util.toPosition
@@ -184,6 +185,7 @@ object WorkspaceManager {
                 // when reactivated).
                 LogStreamRegistry.closeAllForSession(removed.session.id)
                 TerminalSessionRegistry.closeAllForSession(removed.session.id)
+                PortForwardRegistry.stopAllForSession(removed.session.id)
                 workspace.tabs.value
                     .filterIsInstance<WorkspaceTab.Terminal>()
                     .filter { it.session.clusterSession.id == removed.session.id }
@@ -215,6 +217,7 @@ object WorkspaceManager {
         closeTab(workspace, key)
         LogStreamRegistry.closeAllForSession(sessionId)
         TerminalSessionRegistry.closeAllForSession(sessionId)
+        PortForwardRegistry.stopAllForSession(sessionId)
     }
 
     /**
@@ -293,6 +296,7 @@ object WorkspaceManager {
                 is WorkspaceTab.Cluster -> {
                     LogStreamRegistry.closeAllForSession(tab.session.id)
                     TerminalSessionRegistry.closeAllForSession(tab.session.id)
+                    PortForwardRegistry.stopAllForSession(tab.session.id)
                     tab.session.close()
                 }
 

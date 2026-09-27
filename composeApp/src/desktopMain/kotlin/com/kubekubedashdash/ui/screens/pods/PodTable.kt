@@ -10,6 +10,7 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
@@ -19,6 +20,7 @@ import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.components.restartCountColor
+import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthSeverity
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.podStatusSeverity
 
@@ -64,6 +66,7 @@ internal fun PodTable(
     onSelectionChange: ((Set<String>) -> Unit)? = null,
     onEvict: ((PodInfo) -> Unit)? = null,
 ) {
+    val portForward = LocalPortForwardLauncher.current
     val copyToClipboard = rememberCopyToClipboard()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = podColumns.filter { maxWidth >= it.minTableWidth }
@@ -99,6 +102,7 @@ internal fun PodTable(
                     add(RowAction("Copy kubectl logs") { copyToClipboard("kubectl logs ${pod.name} -n ${pod.namespace}", "Copied command") })
                     if (onViewLogs != null) add(RowAction("View logs") { onViewLogs(pod) })
                     if (onOpenTerminal != null) add(RowAction("Open terminal") { onOpenTerminal(pod) })
+                    if (portForward != null && !isStale && pod.phase == "Running") add(RowAction("Port forward…") { portForward.launch(PortForwardRequest.forPod(pod)) })
                     if (onEvict != null && !isStale) add(RowAction("Evict") { onEvict(pod) })
                     if (onDelete != null) add(RowAction("Delete") { onDelete(pod) })
                 },

@@ -102,7 +102,7 @@ class KubeConnectionManager(
     // Set by close() under connectLock. A connect* that starts afterwards must
     // fail without building or keeping anything — the session that owned this
     // manager is gone, so a client published now would never be closed.
-    private var closed = false
+    @Volatile private var closed = false
 
     // The highest sequenced attempt that has claimed this manager (F7). The
     // session numbers its attempts and drops a superseded outcome, but a
@@ -349,6 +349,27 @@ class KubeConnectionManager(
     }
 
     fun getClusterServer(): String = _client?.configuration?.masterUrl ?: ""
+
+    /** True once [close] ran: the owning cluster tab is gone. Lock-free, for polling. */
+    val isClosed: Boolean get() = closed
+
+    /**
+     * The context of the live connection, or null while disconnected or closed.
+     * Lock-free, for polling (the port-forward sweep). Unlike [getCurrentContext]
+     * there is no kubeconfig fallback: null means "no live cluster".
+     */
+    fun connectedContextOrNull(): String? = if (_client != null) _connectedContext else null
+
+    /**
+     * The live client, but only while this manager is connected to [context].
+     * Reads client and context as one pair under [connectLock], so a port
+     * forward pinned to one cluster is never handed another cluster's client
+     * after an in-place switch. Blocks while a connect is in flight — call off
+     * the EDT only.
+     */
+    fun clientIfConnectedTo(context: String): KubernetesClient? = synchronized(connectLock) {
+        if (!closed && _connectedContext == context) _client else null
+    }
 
     // ── Closeable ───────────────────────────────────────────────────────────────
 

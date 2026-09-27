@@ -20,6 +20,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.ui.App
 import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
@@ -57,11 +58,13 @@ fun main() {
     Runtime.getRuntime().addShutdownHook(
         Thread({
             val shutdownLog = LoggerFactory.getLogger("Shutdown")
-            shutdownLog.info("Shutdown hook: stopping MCP server and log streams")
+            shutdownLog.info("Shutdown hook: stopping MCP server, log streams and port forwards")
             runCatching { McpServerManager.stop() }
                 .onFailure { shutdownLog.warn("MCP server stop failed: {}", it.message) }
             runCatching { LogStreamRegistry.clearAll() }
                 .onFailure { shutdownLog.warn("Log stream teardown failed: {}", it.message) }
+            runCatching { PortForwardRegistry.stopAll() }
+                .onFailure { shutdownLog.warn("Port forward teardown failed: {}", it.message) }
         }, "app-shutdown"),
     )
 

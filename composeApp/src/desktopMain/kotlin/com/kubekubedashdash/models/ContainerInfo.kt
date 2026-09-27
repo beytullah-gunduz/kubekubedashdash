@@ -17,6 +17,8 @@ data class ContainerInfo(
     // How the previous run ended (`lastState.terminated`): what killed a
     // crash-looping container. Null when the container never restarted.
     val lastTermination: ContainerTermination? = null,
+    // Declared container ports (spec.containers[].ports); offered by the port-forward dialog.
+    val ports: List<ContainerPortInfo> = emptyList(),
 )
 
 /** How a container run ended: `ContainerStateTerminated`, reduced to what the pod panel shows. */
@@ -26,4 +28,12 @@ data class ContainerTermination(
     val exitCode: Int = 0,
     val finishedAt: String = "",
     val message: String = "",
+)
+
+/** One `spec.containers[].ports` entry. [protocol] defaults to TCP, as in Kubernetes. */
+@Serializable
+data class ContainerPortInfo(
+    val name: String = "",
+    val containerPort: Int,
+    val protocol: String = "TCP",
 )

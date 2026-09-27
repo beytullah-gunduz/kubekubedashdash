@@ -71,15 +71,19 @@ import com.kubekubedashdash.services.ActiveAppLog
 import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.ActiveLogStream
 import com.kubekubedashdash.services.ActiveNamespaceTail
+import com.kubekubedashdash.services.ActivePortForwards
 import com.kubekubedashdash.services.DrawerLogTab
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.logcapture.CapturePhase
+import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.ui.components.ActionTooltip
 import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerCapturePane
 import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
+import com.kubekubedashdash.ui.components.DrawerPortForwardsPane
 import com.kubekubedashdash.ui.components.LogPaneStateStore
+import kotlinx.coroutines.flow.map
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
 
@@ -126,6 +130,12 @@ fun LogDrawer(
     val tabs = remember(allTabs, visibleSessionIds) {
         allTabs.filterValues { tab -> tab.sessionId == null || tab.sessionId in visibleSessionIds }
     }
+    // Only the running count matters here: collecting the whole list would recompose the
+    // drawer on every accepted connection (connectionsServed changes); an Int state that
+    // didn't change invalidates nothing.
+    val runningForwards by remember {
+        PortForwardRegistry.forwards.map { list -> list.count { it.isRunning } }
+    }.collectAsState(initial = PortForwardRegistry.forwards.value.count { it.isRunning })
     val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
     val density = LocalDensity.current
     var liveHeightDp by remember { mutableFloatStateOf(persistedHeightDp.toFloat()) }
@@ -195,19 +205,21 @@ fun LogDrawer(
                                                     overflow = TextOverflow.Ellipsis,
                                                     style = MaterialTheme.typography.labelMedium,
                                                 )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(16.dp)
-                                                        .pointerInput(tab.key) {
-                                                            detectTapGestures(onTap = { LogStreamRegistry.close(tab.key) })
-                                                        },
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    Icon(
-                                                        painter = painterResource(Res.drawable.close_filled),
-                                                        contentDescription = "Close ${tab.displayLabel}",
-                                                        modifier = Modifier.size(10.dp),
-                                                    )
+                                                if (tab !is ActivePortForwards || runningForwards == 0) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(16.dp)
+                                                            .pointerInput(tab.key) {
+                                                                detectTapGestures(onTap = { LogStreamRegistry.close(tab.key) })
+                                                            },
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Icon(
+                                                            painter = painterResource(Res.drawable.close_filled),
+                                                            contentDescription = "Close ${tab.displayLabel}",
+                                                            modifier = Modifier.size(10.dp),
+                                                        )
+                                                    }
                                                 }
                                             }
                                         },
@@ -302,6 +314,11 @@ fun LogDrawer(
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
+                                is ActivePortForwards -> DrawerPortForwardsPane(
+                                    clusterBadges = clusterBadges,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
                                 null -> Unit
                             }
                         }
@@ -344,12 +361,18 @@ private fun drawerTabLabel(tab: DrawerLogTab): String = when (tab) {
         "${tab.displayLabel} (${s.attachedPods.size})"
     }
 
+    is ActivePortForwards -> {
+        val entries by PortForwardRegistry.forwards.collectAsState()
+        val n = entries.count { it.isRunning }
+        if (n > 0) "${tab.displayLabel} ($n)" else tab.displayLabel
+    }
+
     else -> tab.displayLabel
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LogTabClusterBadge(badge: LogTabBadge) {
+internal fun LogTabClusterBadge(badge: LogTabBadge) {
     TooltipArea(
         tooltip = { ActionTooltip(badge.context, null) },
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),

@@ -76,6 +76,21 @@ data class ActiveAppLog(
 }
 
 /**
+ * Singleton drawer tab listing every port forward (all clusters, all windows).
+ * No streaming job: the pane reads PortForwardRegistry.forwards directly.
+ */
+data class ActivePortForwards(
+    override val openedAt: Long,
+) : DrawerLogTab {
+    override val key: String = PORT_FORWARDS_KEY
+    override val displayLabel: String = "Port forwards"
+
+    companion object {
+        const val PORT_FORWARDS_KEY = "__portforwards__"
+    }
+}
+
+/**
  * Drawer tab backed by a live [NamespaceLogCaptureTask]. Unlike [ActiveLogStream]
  * this tab is scoped to a specific session (namespace log captures only make
  * sense within the cluster they were taken from), so [sessionId] is non-null.
@@ -301,6 +316,24 @@ object LogStreamRegistry {
         }
         _tabs.update {
             it + (key to ActiveAppLog(openedAt = System.currentTimeMillis()))
+        }
+        _focusedKey.value = key
+    }
+
+    /**
+     * Open the singleton "Port forwards" drawer tab, or focus it if already
+     * open. Has no streaming job — the pane reads [com.kubekubedashdash.services.portforward.PortForwardRegistry]
+     * directly — so closing this tab does not need to cancel anything.
+     */
+    @Synchronized
+    fun openOrFocusPortForwards() {
+        val key = ActivePortForwards.PORT_FORWARDS_KEY
+        if (key in _tabs.value) {
+            _focusedKey.value = key
+            return
+        }
+        _tabs.update {
+            it + (key to ActivePortForwards(openedAt = System.currentTimeMillis()))
         }
         _focusedKey.value = key
     }

@@ -1,6 +1,7 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ContainerInfo
+import com.kubekubedashdash.models.ContainerPortInfo
 import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.CrdColumnSpec
 import com.kubekubedashdash.models.CrdInfo
@@ -9,12 +10,14 @@ import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.ServicePortInfo
 import io.fabric8.kubernetes.api.model.Event
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.OwnerReference
 import io.fabric8.kubernetes.api.model.PersistentVolume
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.ServicePort
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -119,6 +122,9 @@ object ResourceMappers {
                         message = t.message.orEmpty().trim(),
                     )
                 },
+                ports = c.ports.orEmpty().mapNotNull { p ->
+                    p.containerPort?.let { ContainerPortInfo(name = p.name.orEmpty(), containerPort = it, protocol = p.protocol ?: "TCP") }
+                },
             )
         } ?: emptyList()
         return PodInfo(
@@ -143,6 +149,17 @@ object ResourceMappers {
                 ?.firstOrNull { it.type == "PodScheduled" && it.status == "False" }
                 ?.message.orEmpty().trim(),
         )
+    }
+
+    fun mapServicePortSpecs(ports: List<ServicePort>?): List<ServicePortInfo> = ports.orEmpty().mapNotNull { p ->
+        p.port?.let {
+            ServicePortInfo(
+                name = p.name.orEmpty(),
+                port = it,
+                targetPort = p.targetPort?.let { t -> t.intVal?.toString() ?: t.strVal }.orEmpty(),
+                protocol = p.protocol ?: "TCP",
+            )
+        }
     }
 
     fun effectivePodStatus(pod: Pod): String {
