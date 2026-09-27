@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
+import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.resources.Res
@@ -65,7 +66,7 @@ fun DrawerPortForwardsPane(clusterBadges: Map<String, LogTabBadge>, modifier: Mo
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("$running running", style = MaterialTheme.typography.labelMedium)
+            Text("$running running", style = MaterialTheme.typography.labelMedium, color = KdTextBright)
             Spacer(modifier = Modifier.weight(1f))
             TextButton(
                 onClick = { entries.filter { it.isRunning }.forEach { PortForwardRegistry.stop(it.id) } },
@@ -100,21 +101,29 @@ private fun PortForwardRow(e: PortForwardEntry, clusterBadges: Map<String, LogTa
         )
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val badge = clusterBadges[e.sessionId]
-                if (badge != null) {
+                // Badges exist only while 2+ clusters are open (logTabBadges); the context
+                // name itself always sits at the end of the status line below.
+                clusterBadges[e.sessionId]?.let { badge ->
                     LogTabClusterBadge(badge)
-                } else {
-                    Text(e.context, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                    Spacer(modifier = Modifier.size(6.dp))
                 }
-                Spacer(modifier = Modifier.size(6.dp))
+                // Explicit colour: the drawer provides no content colour, so an uncoloured
+                // Text renders near-black on the dark background (same as the other panes).
                 Text(
                     portForwardRouteText(e),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = KdTextBright,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(portForwardStatusText(e), style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+            Text(
+                "${portForwardStatusText(e)} · ${e.context}",
+                style = MaterialTheme.typography.bodySmall,
+                color = KdTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             e.lastError?.let {
                 Text("Last error: $it", style = MaterialTheme.typography.bodySmall, color = KdError, maxLines = 2)
             }
