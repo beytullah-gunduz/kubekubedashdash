@@ -84,6 +84,7 @@ import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.GkeClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryStep
@@ -103,6 +104,7 @@ fun GkeDiscoveryModal(
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
+    crtGhost: CrtGhost? = null,
 ) {
     val viewModel: GkeDiscoveryViewModel = viewModel { GkeDiscoveryViewModel() }
     LaunchedEffect(Unit) { viewModel.reset() }
@@ -161,7 +163,7 @@ fun GkeDiscoveryModal(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(),
+            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

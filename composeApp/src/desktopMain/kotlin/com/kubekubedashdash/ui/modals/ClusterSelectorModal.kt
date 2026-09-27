@@ -75,6 +75,7 @@ import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ContextBinding
 import com.kubekubedashdash.util.DemoContext
@@ -160,6 +161,7 @@ fun ClusterSelectorModal(
     dismissable: Boolean = true,
     canAddTab: Boolean = false,
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
+    crtGhost: CrtGhost? = null,
 ) {
     var bindings by remember { mutableStateOf(emptyMap<String, ContextBinding>()) }
     LaunchedEffect(contexts) {
@@ -206,7 +208,7 @@ fun ClusterSelectorModal(
                     indication = null,
                     onClick = {},
                 )
-                .crtCardReveal(),
+                .crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

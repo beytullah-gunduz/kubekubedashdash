@@ -16,7 +16,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.ThemeManager
@@ -88,8 +92,11 @@ private val edgeRuleBands = listOf(12.dp to 0.10f, 6.dp to 0.25f, 2.dp to 1.0f)
  * Clamps its own inputs, so callers can pass [crtFrameFor] values straight through. At
  * ignite = open = glow = 1 the output is pixel-identical to no modifier at all — the resting
  * identity CrtRestingIdentityTest pins.
+ *
+ * [content] draws whatever the frame reveals: a node's own live content (the `ContentDrawScope`
+ * overload below), or a recorded `GraphicsLayer` snapshot (WS6 `crtCardReveal`, `CrtGhostExit`).
  */
-internal fun ContentDrawScope.drawCrtFrame(ignite: Float, open: Float, glow: Float, look: CrtLook) {
+internal fun DrawScope.drawCrtFrame(ignite: Float, open: Float, glow: Float, look: CrtLook, content: DrawScope.() -> Unit) {
     val ignite = ignite.coerceIn(0f, 1f)
     val open = open.coerceIn(0f, 1f)
     val glow = glow.coerceIn(0f, 1f)
@@ -102,13 +109,11 @@ internal fun ContentDrawScope.drawCrtFrame(ignite: Float, open: Float, glow: Flo
     // (a revealed dialog card, the router's resident child after a power-on), and a
     // full-bounds clip would still cut anything drawn outside the node, such as a Surface's
     // shadow layer.
-    // clipRect's block receiver is a plain DrawScope, which does not declare drawContent() —
-    // a DslMarker boundary blocks the implicit outer receiver here, so it must be explicit.
     if (open >= 1f) {
-        drawContent()
+        content()
     } else {
         clipRect(left = 0f, top = cy - half, right = size.width, bottom = cy + half) {
-            this@drawCrtFrame.drawContent()
+            content()
         }
     }
 
@@ -165,12 +170,29 @@ internal fun ContentDrawScope.drawCrtFrame(ignite: Float, open: Float, glow: Flo
 }
 
 /**
+ * Existing entry point for a node's own live content (WS3): delegates to the [content]-taking
+ * overload above, passing the node's `drawContent()` as the content lambda. The trailing lambda
+ * below is itself an argument to a call named `drawCrtFrame`, so its own implicit `DrawScope`
+ * receiver shadows this function's `this@drawCrtFrame` label — `contentScope` captures the outer
+ * `ContentDrawScope` receiver as a plain local so `drawContent()` still resolves against it.
+ */
+internal fun ContentDrawScope.drawCrtFrame(ignite: Float, open: Float, glow: Float, look: CrtLook) {
+    val contentScope = this
+    drawCrtFrame(ignite, open, glow, look) { contentScope.drawContent() }
+}
+
+/**
  * Card-scale reveal for AlertDialogs and in-tree modal cards (WS3 step 3.3). Entrance only
  * (D6) — dismissal, Esc and Cancel all stay instant. Born at 0 only in Retro, so there is no
  * first-frame flash of the settled card in Default.
+ *
+ * [ghost], when non-null, turns on the WS6 snapshot path: the card records itself into
+ * [CrtGhost.layer] on every draw, so a sibling [CrtGhostExit] can play its collapse after the
+ * card has left composition. Recording is retro-only, exactly like the reveal itself — Default
+ * never touches the ghost.
  */
 @Composable
-fun Modifier.crtCardReveal(): Modifier {
+fun Modifier.crtCardReveal(ghost: CrtGhost? = null): Modifier {
     val retro = ThemeManager.isRetro
     val reveal = remember { Animatable(if (retro) 0f else 1f) }
     LaunchedEffect(Unit) {
@@ -178,9 +200,28 @@ fun Modifier.crtCardReveal(): Modifier {
     }
     if (!retro) return this
     val look = crtLook(CrtScale.CARD, ThemeManager.isDarkTheme, KdPrimary)
-    return this.drawWithContent {
+    val positioned = if (ghost != null) {
+        this.onGloballyPositioned {
+            ghost.cardTopLeftInRoot = it.positionInRoot()
+            ghost.cardSize = it.size
+        }
+    } else {
+        this
+    }
+    return positioned.drawWithContent {
         val r = reveal.value
-        drawCrtFrame(ignite = 1f, open = LinearOutSlowInEasing.transform(r), glow = r, look = look)
+        if (ghost != null) {
+            // Record on each draw — not once — so the snapshot always matches the card's
+            // current content; draws only happen on invalidation (D7), so this is not a
+            // per-frame cost beyond what the card would already pay.
+            ghost.layer.record { this@drawWithContent.drawContent() }
+            ghost.hasSnapshot = true
+            drawCrtFrame(ignite = 1f, open = LinearOutSlowInEasing.transform(r), glow = r, look = look) {
+                drawLayer(ghost.layer)
+            }
+        } else {
+            drawCrtFrame(ignite = 1f, open = LinearOutSlowInEasing.transform(r), glow = r, look = look)
+        }
     }
 }
 

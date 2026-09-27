@@ -48,6 +48,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.NativeWindowDrag
+import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import org.jetbrains.compose.resources.painterResource
 
@@ -176,7 +177,7 @@ fun ShortcutGroups(
  * takes focus via [FocusRequester] and does not give it back on dismiss.
  */
 @Composable
-fun ShortcutSheet(onDismiss: () -> Unit) {
+fun ShortcutSheet(onDismiss: () -> Unit, crtGhost: CrtGhost? = null) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val groups = remember { appShortcuts(NativeWindowDrag.isMacOS) }
@@ -213,7 +214,7 @@ fun ShortcutSheet(onDismiss: () -> Unit) {
                     indication = null,
                     onClick = {},
                 )
-                .crtCardReveal(),
+                .crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

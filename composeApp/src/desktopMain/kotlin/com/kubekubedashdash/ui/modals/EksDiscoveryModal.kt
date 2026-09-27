@@ -80,6 +80,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.hourglass_empty_filled
+import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryStep
@@ -98,6 +99,7 @@ fun EksDiscoveryModal(
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
+    crtGhost: CrtGhost? = null,
 ) {
     val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel() }
     LaunchedEffect(Unit) { viewModel.reset() }
@@ -156,7 +158,7 @@ fun EksDiscoveryModal(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(),
+            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
