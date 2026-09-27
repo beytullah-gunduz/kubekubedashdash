@@ -89,10 +89,18 @@ internal fun ContentDrawScope.drawCrtFrame(ignite: Float, open: Float, glow: Flo
     val half = max(1.dp.toPx(), open * cy)
 
     // 1. Aperture. The aperture never fully closes; a 1 dp sliver is the scanline itself.
+    // Fully open means no clip at all, not a full-bounds clip: the frame stays attached at rest
+    // (a revealed dialog card, the router's resident child after a power-on), and a
+    // full-bounds clip would still cut anything drawn outside the node, such as a Surface's
+    // shadow layer.
     // clipRect's block receiver is a plain DrawScope, which does not declare drawContent() —
     // a DslMarker boundary blocks the implicit outer receiver here, so it must be explicit.
-    clipRect(left = 0f, top = cy - half, right = size.width, bottom = cy + half) {
-        this@drawCrtFrame.drawContent()
+    if (open >= 1f) {
+        drawContent()
+    } else {
+        clipRect(left = 0f, top = cy - half, right = size.width, bottom = cy + half) {
+            this@drawCrtFrame.drawContent()
+        }
     }
 
     // 2. Tube glass, painted only outside the aperture — never under the content, so it

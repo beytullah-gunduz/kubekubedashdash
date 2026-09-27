@@ -178,7 +178,7 @@ Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> 
 
 - **Appearance** — Light, Dark, or System (follows OS) theme
 - **Style** — Default or Retro (pixel headings, squared corners; CRT power-on effects)
-- **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default)
+- **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default; does not cover dialogs, menus, tooltips or the terminal)
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
 - **Tab behaviour** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and choose whether the tab strip shows always or only with multiple tabs
 - **Integrations → MCP server** — enable/disable the embedded MCP server, set its port (default 3001), restrict it to localhost, require authentication, and copy the generated bearer token
