@@ -54,12 +54,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdOnError
+import com.kubekubedashdash.KdOnPrimary
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
@@ -98,7 +101,7 @@ fun PrerequisitesModal(
     ) {
         Surface(
             modifier = Modifier.widthIn(max = 780.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
             shadowElevation = 16.dp,
@@ -184,7 +187,7 @@ fun PrerequisitesModal(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                                 ) {
-                                    Text("Close", color = Color.White)
+                                    Text("Close", color = KdOnPrimary)
                                 }
                             }
                         }
@@ -225,10 +228,10 @@ fun PrerequisitesModal(
                                         painterResource(Res.drawable.cloud_filled),
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
-                                        tint = Color.White,
+                                        tint = if (awsCliAvailable) KdOnPrimary else Color.White,
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Discover EKS Clusters", color = Color.White)
+                                    Text("Discover EKS Clusters", color = if (awsCliAvailable) KdOnPrimary else Color.White)
                                 }
                                 if (!awsCliAvailable) {
                                     Spacer(Modifier.width(8.dp))
@@ -249,10 +252,10 @@ fun PrerequisitesModal(
                                         painterResource(Res.drawable.cloud_filled),
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
-                                        tint = Color.White,
+                                        tint = if (gcloudCliAvailable) KdOnPrimary else Color.White,
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Discover GKE Clusters", color = Color.White)
+                                    Text("Discover GKE Clusters", color = if (gcloudCliAvailable) KdOnPrimary else Color.White)
                                 }
                                 if (!gcloudCliAvailable) {
                                     Spacer(Modifier.width(8.dp))
@@ -276,7 +279,7 @@ fun PrerequisitesModal(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = KdError),
                                 ) {
-                                    Text("Quit", color = Color.White)
+                                    Text("Quit", color = KdOnError)
                                 }
                             }
                         }

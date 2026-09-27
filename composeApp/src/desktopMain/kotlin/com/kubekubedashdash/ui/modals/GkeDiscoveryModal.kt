@@ -65,6 +65,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
+import com.kubekubedashdash.KdOnPrimary
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSuccess
@@ -73,6 +74,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -159,7 +161,7 @@ fun GkeDiscoveryModal(
     ) {
         Surface(
             modifier = Modifier.widthIn(min = 640.dp, max = 820.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
             shadowElevation = 24.dp,
@@ -989,12 +991,15 @@ private fun Footer(
         Spacer(Modifier.width(8.dp))
 
         when (step) {
-            GkeDiscoveryStep.PICK_PROJECTS -> Button(
-                onClick = { viewModel.startScan() },
-                enabled = selectedProjects.isNotEmpty() && !exceedsCap,
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-            ) { Text("Scan", color = Color.White) }
+            GkeDiscoveryStep.PICK_PROJECTS -> {
+                val scanEnabled = selectedProjects.isNotEmpty() && !exceedsCap
+                Button(
+                    onClick = { viewModel.startScan() },
+                    enabled = scanEnabled,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                ) { Text("Scan", color = if (scanEnabled) KdOnPrimary else Color.White) }
+            }
 
             GkeDiscoveryStep.SCANNING -> Button(
                 onClick = {},
@@ -1009,12 +1014,18 @@ private fun Footer(
 
             GkeDiscoveryStep.PICK_CLUSTERS -> {
                 val selected = candidates.count { it.selected }
+                val importEnabled = selected > 0
                 Button(
                     onClick = { viewModel.startImport() },
-                    enabled = selected > 0,
+                    enabled = importEnabled,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-                ) { Text(if (selected == 0) "Import" else "Import $selected", color = Color.White) }
+                ) {
+                    Text(
+                        if (selected == 0) "Import" else "Import $selected",
+                        color = if (importEnabled) KdOnPrimary else Color.White,
+                    )
+                }
             }
 
             GkeDiscoveryStep.IMPORTING -> Button(
@@ -1037,9 +1048,9 @@ private fun Footer(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
-                    Icon(painterResource(Res.drawable.cloud_filled), null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Icon(painterResource(Res.drawable.cloud_filled), null, tint = KdOnPrimary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = Color.White)
+                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = KdOnPrimary)
                 }
             }
         }

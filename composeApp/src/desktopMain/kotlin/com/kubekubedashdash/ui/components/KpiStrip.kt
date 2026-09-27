@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +41,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceUsageSummary
@@ -223,7 +223,7 @@ private fun KpiChip(
     onClick: () -> Unit,
 ) {
     var hovered by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(6.dp)
+    val shape = 6.dp.kdCorner
     val contentColor = when {
         active -> KdPrimary
         kpi.tone == KpiTone.Muted -> KdTextSecondary

@@ -86,9 +86,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.AppVersion
+import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
@@ -103,6 +105,7 @@ import com.kubekubedashdash.data.datastore.summary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
 import com.kubekubedashdash.data.repository.formatTopologyRefresh
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
@@ -111,6 +114,7 @@ import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.SidebarSearchBox
@@ -216,12 +220,13 @@ private fun SettingsSection(
     ) {
         Text(
             title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleSmall.retroChrome(10.sp),
+            // Value-identical to today's colorScheme.primary in Default (D11).
+            color = KdAccent,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
         )
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = 12.dp.kdCorner,
             color = MaterialTheme.colorScheme.surfaceContainer,
             border = BorderStroke(1.dp, KdBorder),
             modifier = Modifier.fillMaxWidth(),
@@ -1309,9 +1314,10 @@ fun SettingsScreen(
                                     Column {
                                         Text(
                                             "KubeKubeDashDash",
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = MaterialTheme.typography.headlineSmall
+                                                .copy(fontWeight = FontWeight.SemiBold)
+                                                .retroChrome(13.sp),
                                             color = KdTextPrimary,
-                                            fontWeight = FontWeight.SemiBold,
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(

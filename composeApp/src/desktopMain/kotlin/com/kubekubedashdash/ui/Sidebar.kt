@@ -87,6 +87,7 @@ import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
 import com.kubekubedashdash.util.DemoContext
@@ -452,10 +453,10 @@ private fun MoreGroupLabel(title: String) {
     ) {
         Text(
             title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall
+                .copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                .retroChrome(8.sp),
             color = KdTextSecondary,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp,
         )
     }
 }
@@ -797,10 +798,10 @@ fun SidebarSection(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     title.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall
+                        .copy(fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        .retroChrome(8.sp),
                     color = KdTextSecondary,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
                 )
             }
         }

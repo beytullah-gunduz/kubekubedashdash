@@ -50,6 +50,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdPrimary
@@ -62,6 +63,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.palette.PALETTE_VERBS
 import com.kubekubedashdash.ui.palette.PaletteVerb
 import com.kubekubedashdash.ui.palette.PendingVerb
@@ -504,7 +506,7 @@ private fun PrefixChip(prefix: String) {
 private fun CategoryHeader(category: String) {
     Text(
         text = category.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.labelSmall.retroChrome(8.sp),
         color = KdTextSecondary,
         modifier = Modifier
             .fillMaxWidth()

@@ -80,6 +80,7 @@ import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
@@ -585,7 +586,7 @@ internal fun GenericYamlTab(
                             lines.forEachIndexed { i, line ->
                                 val ranges = matchesByLine[i]
                                 val curRange = cur?.takeIf { it.line == i }?.range
-                                val text = remember(line, ranges, curRange) {
+                                val text = remember(line, ranges, curRange, ThemeManager.paletteKey) {
                                     buildAnnotatedString {
                                         append(highlightYamlLine(line))
                                         // highlightYamlLine rebuilds a line whose indent
