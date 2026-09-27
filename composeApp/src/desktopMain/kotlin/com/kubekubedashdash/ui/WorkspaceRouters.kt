@@ -25,11 +25,11 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.ui.components.EmptyState
-import com.kubekubedashdash.ui.crt.CrtScale
 import com.kubekubedashdash.ui.crt.SwapStyle
 import com.kubekubedashdash.ui.crt.crtFrameFor
 import com.kubekubedashdash.ui.crt.crtLook
 import com.kubekubedashdash.ui.crt.crtSwapStyle
+import com.kubekubedashdash.ui.crt.crtSwapTiming
 import com.kubekubedashdash.ui.crt.drawCrtFrame
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
@@ -125,21 +125,13 @@ fun ContentRouter(
             if (!ThemeManager.isRetro) {
                 fadeIn() togetherWith fadeOut()
             } else {
-                when (crtSwapStyle(initialState, targetState)) {
-                    SwapStyle.CUT ->
-                        fadeIn(tween(100, delayMillis = 50, easing = LinearEasing)) togetherWith
-                            fadeOut(tween(60, easing = LinearEasing)) using null
-
-                    SwapStyle.COMPRESSED_ON ->
-                        fadeIn(tween(40, delayMillis = 60, easing = LinearEasing)) togetherWith
-                            fadeOut(tween(60, easing = LinearEasing)) using null
-
-                    SwapStyle.POWER_OFF_CUT ->
-                        fadeIn(tween(100, delayMillis = 160, easing = LinearEasing)) togetherWith
-                            fadeOut(tween(140, easing = LinearEasing)) using null
-
-                    SwapStyle.NONE ->
-                        fadeIn(snap()) togetherWith fadeOut(snap()) using null
+                val style = crtSwapStyle(initialState, targetState)
+                val t = crtSwapTiming(style)
+                if (style == SwapStyle.NONE) {
+                    fadeIn(snap()) togetherWith fadeOut(snap()) using null
+                } else {
+                    fadeIn(tween(t.fadeInMs, delayMillis = t.fadeInDelayMs, easing = LinearEasing)) togetherWith
+                        fadeOut(tween(t.fadeOutMs, easing = LinearEasing)) using null
                 }
             }
         },
@@ -148,22 +140,23 @@ fun ContentRouter(
         // content lambda does not share transitionSpec's Segment receiver.
         val crtModifierOrEmpty = if (ThemeManager.isRetro) {
             val style = crtSwapStyle(routerTransition.segment.initialState, routerTransition.segment.targetState)
+            val t = crtSwapTiming(style)
             val entering = transition.targetState != EnterExitState.PostExit
-            val useCrt = if (entering) style == SwapStyle.COMPRESSED_ON else style == SwapStyle.POWER_OFF_CUT
+            val useCrt = if (entering) t.crtOnEnter else t.crtOnExit
             if (useCrt) {
                 val master = transition.animateFloat(
                     transitionSpec = {
                         if (EnterExitState.PreEnter isTransitioningTo EnterExitState.Visible) {
-                            tween(260, delayMillis = 60, easing = LinearEasing)
+                            tween(t.crtEnterMs, delayMillis = t.crtEnterDelayMs, easing = LinearEasing)
                         } else {
-                            tween(140, easing = LinearEasing)
+                            tween(t.crtExitMs, easing = LinearEasing)
                         }
                     },
                 ) { if (it == EnterExitState.Visible) 1f else 0f }
-                val look = crtLook(CrtScale.SCREEN, ThemeManager.isDarkTheme, KdPrimary)
+                val look = crtLook(t.scale, ThemeManager.isDarkTheme, KdPrimary)
                 Modifier.drawWithContent {
                     val entering2 = transition.targetState != EnterExitState.PostExit
-                    val frame = crtFrameFor(master.value, entering = entering2, igniteFraction = 80f / 260f)
+                    val frame = crtFrameFor(master.value, entering = entering2, igniteFraction = t.igniteFraction)
                     drawCrtFrame(frame.ignite, frame.open, frame.glow, look)
                 }
             } else {

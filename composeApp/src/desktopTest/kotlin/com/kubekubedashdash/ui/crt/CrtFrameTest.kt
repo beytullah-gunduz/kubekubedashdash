@@ -131,6 +131,18 @@ class CrtFrameTest {
         assertEquals(SwapStyle.NONE, crtSwapStyle(screen, screen))
     }
 
+    @Test
+    fun `a status change between connection screens is not a swap`() {
+        assertEquals(
+            SwapStyle.NONE,
+            crtSwapStyle(Screen.Main.Connecting, Screen.Main.ConnectionError("e", 10)),
+        )
+        assertEquals(
+            SwapStyle.NONE,
+            crtSwapStyle(Screen.Main.ConnectionError("e", 3), Screen.Main.Connecting),
+        )
+    }
+
     // --- crtLook ---
 
     @Test
@@ -157,5 +169,113 @@ class CrtFrameTest {
         assertEquals(Color(0xFFFFF4DC), screenLight.line)
         assertEquals(Color(0xFF1F1B14), screenLight.glass)
         assertEquals(0f, screenLight.washCap)
+    }
+
+    @Test
+    fun `crtLook CUT matches the screen-switch look`() {
+        val retroDarkPrimary = Color(0xFF7FD8EA)
+        val retroLightPrimary = Color(0xFF00606B)
+
+        val cutDark = crtLook(CrtScale.CUT, dark = true, primary = retroDarkPrimary)
+        assertEquals(Color(0xFFD9F3F9), cutDark.line)
+        assertNull(cutDark.glass)
+        assertEquals(0.15f, cutDark.washCap)
+
+        val cutLight = crtLook(CrtScale.CUT, dark = false, primary = retroLightPrimary)
+        assertEquals(retroLightPrimary, cutLight.line)
+        assertNull(cutLight.glass)
+        assertEquals(0f, cutLight.washCap)
+    }
+
+    // --- crtSwapTiming ---
+
+    @Test
+    fun `crtSwapTiming CUT matches the table`() {
+        assertEquals(
+            CrtSwapTiming(
+                fadeOutMs = 70,
+                fadeInMs = 40,
+                fadeInDelayMs = 70,
+                crtOnExit = true,
+                crtExitMs = 70,
+                crtOnEnter = true,
+                crtEnterMs = 110,
+                crtEnterDelayMs = 70,
+                igniteFraction = 0f,
+                scale = CrtScale.CUT,
+            ),
+            crtSwapTiming(SwapStyle.CUT),
+        )
+    }
+
+    @Test
+    fun `crtSwapTiming COMPRESSED_ON matches the table`() {
+        assertEquals(
+            CrtSwapTiming(
+                fadeOutMs = 60,
+                fadeInMs = 40,
+                fadeInDelayMs = 60,
+                crtOnExit = false,
+                crtExitMs = 0,
+                crtOnEnter = true,
+                crtEnterMs = 260,
+                crtEnterDelayMs = 60,
+                igniteFraction = 80f / 260f,
+                scale = CrtScale.SCREEN,
+            ),
+            crtSwapTiming(SwapStyle.COMPRESSED_ON),
+        )
+    }
+
+    @Test
+    fun `crtSwapTiming POWER_OFF_CUT matches the table`() {
+        assertEquals(
+            CrtSwapTiming(
+                fadeOutMs = 140,
+                fadeInMs = 100,
+                fadeInDelayMs = 160,
+                crtOnExit = true,
+                crtExitMs = 140,
+                crtOnEnter = false,
+                crtEnterMs = 0,
+                crtEnterDelayMs = 0,
+                igniteFraction = 0f,
+                scale = CrtScale.SCREEN,
+            ),
+            crtSwapTiming(SwapStyle.POWER_OFF_CUT),
+        )
+    }
+
+    @Test
+    fun `crtSwapTiming NONE matches the table`() {
+        assertEquals(
+            CrtSwapTiming(
+                fadeOutMs = 0,
+                fadeInMs = 0,
+                fadeInDelayMs = 0,
+                crtOnExit = false,
+                crtExitMs = 0,
+                crtOnEnter = false,
+                crtEnterMs = 0,
+                crtEnterDelayMs = 0,
+                igniteFraction = 0f,
+                scale = CrtScale.SCREEN,
+            ),
+            crtSwapTiming(SwapStyle.NONE),
+        )
+    }
+
+    @Test
+    fun `CUT never lets the new screen overlap the collapsing one`() {
+        val cut = crtSwapTiming(SwapStyle.CUT)
+        assertTrue(cut.fadeInDelayMs >= cut.fadeOutMs)
+        assertEquals(cut.crtExitMs, cut.crtEnterDelayMs)
+    }
+
+    @Test
+    fun `CUT settles well before COMPRESSED_ON`() {
+        val cut = crtSwapTiming(SwapStyle.CUT)
+        val compressedOn = crtSwapTiming(SwapStyle.COMPRESSED_ON)
+        assertTrue(cut.crtEnterDelayMs + cut.crtEnterMs < compressedOn.crtEnterDelayMs + compressedOn.crtEnterMs)
     }
 }

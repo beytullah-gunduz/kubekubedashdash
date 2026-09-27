@@ -43,7 +43,7 @@ internal fun crtFrameFor(progress: Float, entering: Boolean, igniteFraction: Flo
 /** Per-mode CRT look (D4): the line colour, the tube-glass colour (screen scale only), and the additive-bloom cap. */
 internal data class CrtLook(val line: Color, val glass: Color?, val washCap: Float)
 
-internal enum class CrtScale { CARD, SCREEN }
+internal enum class CrtScale { CARD, SCREEN, CUT }
 
 // Literal colours (§"Per-mode look"). Never derived via lerp(Color, Color, Float) — it
 // interpolates in Oklab (ui-graphics Color.kt:518-521), so it would not produce the sRGB mix.
@@ -56,6 +56,9 @@ private val RetroLightGlass = Color(0xFF1F1B14)
  * Pure — takes [primary] and [dark] as parameters so it can be tested without composition.
  * Callers pass [KdPrimary] and `ThemeManager.isDarkTheme`. No bloom in retro-light at either
  * scale: additive light on the cream background clips straight to white (D4, R11/m5).
+ *
+ * Screen-switch look (D15): no glass, so the router's background shows around the aperture;
+ * weak bloom in dark, none in light.
  */
 internal fun crtLook(scale: CrtScale, dark: Boolean, primary: Color): CrtLook = when (scale) {
     CrtScale.CARD -> if (dark) {
@@ -68,6 +71,12 @@ internal fun crtLook(scale: CrtScale, dark: Boolean, primary: Color): CrtLook = 
         CrtLook(line = RetroDarkCrtLine, glass = RetroDarkGlass, washCap = 0.35f)
     } else {
         CrtLook(line = RetroLightScreenCrtLine, glass = RetroLightGlass, washCap = 0f)
+    }
+
+    CrtScale.CUT -> if (dark) {
+        CrtLook(line = RetroDarkCrtLine, glass = null, washCap = 0.15f)
+    } else {
+        CrtLook(line = primary, glass = null, washCap = 0f)
     }
 }
 

@@ -73,7 +73,7 @@ internal fun SessionPaneContent(
     bottomSlot: (@Composable () -> Unit)? = null,
 ) {
     val sessionVm = session.viewModel
-    val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
+    val currentScreen by sessionVm.currentScreen.collectAsState()
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
     val canGoBack by sessionVm.canGoBack.collectAsState()
     val canGoForward by sessionVm.canGoForward.collectAsState()
