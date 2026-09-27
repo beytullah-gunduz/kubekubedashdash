@@ -36,6 +36,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.services.logcapture.CaptureOptions
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureGateway
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.DirectoryPicker
 import java.io.File
 
@@ -91,6 +92,7 @@ fun CaptureNamespaceLogsDialog(
     val canStart = startEnabled(pods, destinationWritable)
 
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = onDismiss,
         title = { Text("Capture Namespace Logs") },
         text = {

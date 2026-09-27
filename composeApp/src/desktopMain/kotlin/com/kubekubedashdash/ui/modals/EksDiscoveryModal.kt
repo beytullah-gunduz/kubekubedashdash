@@ -80,6 +80,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.hourglass_empty_filled
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryStep
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryViewModel
@@ -155,7 +156,7 @@ fun EksDiscoveryModal(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp),
+            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

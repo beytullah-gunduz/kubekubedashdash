@@ -71,6 +71,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.rocket_filled
 import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.CheckStatus
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.GkeClusterDiscoverer
@@ -100,7 +101,7 @@ fun PrerequisitesModal(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.widthIn(max = 780.dp),
+            modifier = Modifier.widthIn(max = 780.dp).crtCardReveal(),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

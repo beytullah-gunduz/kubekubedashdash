@@ -48,6 +48,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.NativeWindowDrag
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import org.jetbrains.compose.resources.painterResource
 
 /** One row of the shortcut sheet. [keys] is already platform-rendered. */
@@ -211,7 +212,8 @@ fun ShortcutSheet(onDismiss: () -> Unit) {
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
-                ),
+                )
+                .crtCardReveal(),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

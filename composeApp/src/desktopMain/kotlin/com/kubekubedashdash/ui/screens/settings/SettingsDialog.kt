@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.ui.crt.crtCardReveal
 
 @Composable
 fun SettingsDialog(
@@ -79,7 +80,8 @@ fun SettingsDialog(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
-                ),
+                )
+                .crtCardReveal(),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

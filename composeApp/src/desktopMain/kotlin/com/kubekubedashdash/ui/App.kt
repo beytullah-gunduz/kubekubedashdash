@@ -73,6 +73,8 @@ import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.components.stepUiScale
+import com.kubekubedashdash.ui.crt.crtScreenPowerOn
+import com.kubekubedashdash.ui.crt.rememberCrtScreenPowerOn
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
@@ -376,10 +378,12 @@ fun App(
         // Provide the title session's locals at App scope for modals and the
         // title bar. SessionPaneContent re-provides per-page locals so each
         // cluster page sees its own session.
+        val crtPowerOn = rememberCrtScreenPowerOn()
         MaybeProvideSessionLocals(titleSession) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .crtScreenPowerOn(crtPowerOn)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         val metaOrCtrl = event.isMetaPressed || event.isCtrlPressed

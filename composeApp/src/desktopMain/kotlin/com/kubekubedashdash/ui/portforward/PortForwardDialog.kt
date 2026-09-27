@@ -23,6 +23,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.services.portforward.PortForwardKind
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.services.portforward.defaultLocalPort
+import com.kubekubedashdash.ui.crt.crtCardReveal
 
 /**
  * The dialog's form content, hoisted apart from [PortForwardDialog] because a
@@ -123,6 +124,7 @@ fun PortForwardDialog(
     val canStart = !inFlight && remoteInput is PortInput.Valid && localInput !is PortInput.Invalid
 
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = { if (!inFlight) onDismiss() },
         title = { Text("Port forward") },
         text = {

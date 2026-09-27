@@ -1,6 +1,12 @@
 package com.kubekubedashdash.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -10,12 +16,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.ui.components.EmptyState
+import com.kubekubedashdash.ui.crt.CrtScale
+import com.kubekubedashdash.ui.crt.SwapStyle
+import com.kubekubedashdash.ui.crt.crtFrameFor
+import com.kubekubedashdash.ui.crt.crtLook
+import com.kubekubedashdash.ui.crt.crtSwapStyle
+import com.kubekubedashdash.ui.crt.drawCrtFrame
 import com.kubekubedashdash.ui.screens.ConnectingScreen
 import com.kubekubedashdash.ui.screens.ConnectionErrorScreen
 import com.kubekubedashdash.ui.screens.LiveDetailPane
@@ -103,198 +118,249 @@ fun ContentRouter(
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
 
-    AnimatedContent(
-        targetState = screen,
-        transitionSpec = { fadeIn() togetherWith fadeOut() },
+    val routerTransition = updateTransition(screen, label = "contentRouter")
+    routerTransition.AnimatedContent(
         modifier = Modifier.fillMaxSize(),
-    ) { target ->
-        when (target) {
-            is Screen.Main.Connecting -> ConnectingScreen()
+        transitionSpec = {
+            if (!ThemeManager.isRetro) {
+                fadeIn() togetherWith fadeOut()
+            } else {
+                when (crtSwapStyle(initialState, targetState)) {
+                    SwapStyle.CUT ->
+                        fadeIn(tween(100, delayMillis = 50, easing = LinearEasing)) togetherWith
+                            fadeOut(tween(60, easing = LinearEasing)) using null
 
-            is Screen.Main.ConnectionError -> ConnectionErrorScreen(
-                error = target.error,
-                retryCountdown = target.retryCountdown,
-                onRetryNow = onRetryNow,
-                onSwitchCluster = onSelectCluster,
-            )
+                    SwapStyle.COMPRESSED_ON ->
+                        fadeIn(tween(40, delayMillis = 60, easing = LinearEasing)) togetherWith
+                            fadeOut(tween(60, easing = LinearEasing)) using null
 
-            is Screen.Main.ClusterOverview -> ClusterOverviewScreen(
-                onNavigate = onNavigate,
-                clusterHealth = clusterHealth,
-            )
+                    SwapStyle.POWER_OFF_CUT ->
+                        fadeIn(tween(100, delayMillis = 160, easing = LinearEasing)) togetherWith
+                            fadeOut(tween(140, easing = LinearEasing)) using null
 
-            is Screen.Main.ClusterTopology -> ClusterTopologyScreen(onNavigate)
-
-            is Screen.Main.Nodes -> NodesScreen(
-                searchQuery = searchQuery,
-                labelQuery = labelQuery,
-                onLabelQueryChange = onLabelQueryChange,
-                annotationQuery = annotationQuery,
-                onAnnotationQueryChange = onAnnotationQueryChange,
-                pulseLabelsOnEntry = pulseLabelsOnEntry,
-                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                onNavigate = onNavigate,
-                selectNodeName = target.selectNodeName,
-                initialStatusFilter = target.statusFilter,
-                initialPressureOnly = target.pressureOnly,
-                initialSelectedUid = paneSelectionUid,
-            )
-
-            is Screen.Main.Namespaces -> NamespacesScreen(
-                searchQuery = searchQuery,
-                labelQuery = labelQuery,
-                onLabelQueryChange = onLabelQueryChange,
-                annotationQuery = annotationQuery,
-                onAnnotationQueryChange = onAnnotationQueryChange,
-                pulseLabelsOnEntry = pulseLabelsOnEntry,
-                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                onNavigate = onNavigate,
-                onCaptureLogs = onCaptureLogs,
-                onTailLogs = onTailLogs,
-                initialSelectedUid = paneSelectionUid,
-            )
-
-            is Screen.Main.Events -> EventsScreen(
-                searchQuery = searchQuery,
-                onNavigate = onNavigate,
-                selectEventUid = target.selectEventUid,
-                initialTypeFilter = target.typeFilter,
-                initialSelectedUid = paneSelectionUid,
-            )
-
-            is Screen.Main.Pods -> PodsScreen(
-                searchQuery = searchQuery,
-                labelQuery = labelQuery,
-                onLabelQueryChange = onLabelQueryChange,
-                annotationQuery = annotationQuery,
-                onAnnotationQueryChange = onAnnotationQueryChange,
-                pulseLabelsOnEntry = pulseLabelsOnEntry,
-                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                onNavigate = onNavigate,
-                onOpenLogs = onOpenLogs,
-                onOpenTerminal = onOpenTerminal,
-                selectPodUid = target.selectPodUid,
-                initialStatusFilter = target.statusFilter,
-                initialSelectedUid = paneSelectionUid,
-            )
-
-            is Screen.Main.Deployments -> DeploymentsScreen(
-                searchQuery = searchQuery,
-                labelQuery = labelQuery,
-                onLabelQueryChange = onLabelQueryChange,
-                annotationQuery = annotationQuery,
-                onAnnotationQueryChange = onAnnotationQueryChange,
-                pulseLabelsOnEntry = pulseLabelsOnEntry,
-                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                onNavigate = onNavigate,
-                initialDegradedOnly = target.degradedOnly,
-                initialSelectedUid = paneSelectionUid,
-            )
-
-            is Screen.Main.Services -> ServicesScreen(
-                searchQuery = searchQuery,
-                labelQuery = labelQuery,
-                onLabelQueryChange = onLabelQueryChange,
-                annotationQuery = annotationQuery,
-                onAnnotationQueryChange = onAnnotationQueryChange,
-                pulseLabelsOnEntry = pulseLabelsOnEntry,
-                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                onNavigate = onNavigate,
-                initialSelectedUid = paneSelectionUid,
-            )
-
-            is Screen.Main.StatefulSets -> genericKind("StatefulSet", reactiveClient.statefulSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.DaemonSets -> genericKind("DaemonSet", reactiveClient.daemonSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate, onOpenLogs = onOpenLogs)
-
-            is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.Secrets -> genericKind("Secret", reactiveClient.secrets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.Ingresses -> genericKind("Ingress", reactiveClient.ingresses, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.Endpoints -> genericKind("Endpoint", reactiveClient.endpoints, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.NetworkPolicies -> genericKind("NetworkPolicy", reactiveClient.networkPolicies, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.PersistentVolumes -> genericKind("PersistentVolume", reactiveClient.persistentVolumes, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.PersistentVolumeClaims -> genericKind("PersistentVolumeClaim", reactiveClient.persistentVolumeClaims, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ServiceAccounts -> genericKind("ServiceAccount", reactiveClient.serviceAccounts, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.Roles -> genericKind("Role", reactiveClient.roles, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ClusterRoles -> genericKind("ClusterRole", reactiveClient.clusterRoles, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.RoleBindings -> genericKind("RoleBinding", reactiveClient.roleBindings, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ClusterRoleBindings -> genericKind("ClusterRoleBinding", reactiveClient.clusterRoleBindings, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.HorizontalPodAutoscalers -> genericKind("HorizontalPodAutoscaler", reactiveClient.horizontalPodAutoscalers, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.PodDisruptionBudgets -> genericKind("PodDisruptionBudget", reactiveClient.podDisruptionBudgets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ResourceQuotas -> genericKind("ResourceQuota", reactiveClient.resourceQuotas, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.LimitRanges -> genericKind("LimitRange", reactiveClient.limitRanges, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.PriorityClasses -> genericKind("PriorityClass", reactiveClient.priorityClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.ValidatingWebhookConfigurations -> genericKind("ValidatingWebhookConfiguration", reactiveClient.validatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.MutatingWebhookConfigurations -> genericKind("MutatingWebhookConfiguration", reactiveClient.mutatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.IngressClasses -> genericKind("IngressClass", reactiveClient.ingressClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.EndpointSlices -> genericKind("EndpointSlice", reactiveClient.endpointSlices, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.CSIDrivers -> genericKind("CSIDriver", reactiveClient.csiDrivers, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.CertificateSigningRequests -> genericKind("CertificateSigningRequest", reactiveClient.certificateSigningRequests, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
-
-            is Screen.Main.CustomResource -> {
-                val crdState by reactiveClient.crds.collectAsState()
-                when (val route = crdRoute(crdState, target)) {
-                    CrdRoute.Loading -> ConnectingScreen()
-
-                    is CrdRoute.Missing -> EmptyState(
-                        icon = Res.drawable.extension_filled,
-                        kind = "${target.kind} not available",
-                        subtitle = route.reason,
-                    )
-
-                    is CrdRoute.Found -> {
-                        val crd = route.crd
-                        genericKind(
-                            kind = crd.kind,
-                            sourceFlow = reactiveClient.customResourceInstances(crd),
-                            namespacedKind = crd.namespaced,
-                            searchQuery = searchQuery,
-                            labelQuery = labelQuery,
-                            onLabelQueryChange = onLabelQueryChange,
-                            annotationQuery = annotationQuery,
-                            onAnnotationQueryChange = onAnnotationQueryChange,
-                            pulseLabelsOnEntry = pulseLabelsOnEntry,
-                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                            apiGroup = crd.group,
-                            apiVersion = crd.version,
-                            plural = crd.plural,
-                            onNavigate = onNavigate,
-                        )
-                    }
+                    SwapStyle.NONE ->
+                        fadeIn(snap()) togetherWith fadeOut(snap()) using null
                 }
             }
+        },
+    ) { target ->
+        // CRT master (Retro only). Re-derived from routerTransition.segment because this
+        // content lambda does not share transitionSpec's Segment receiver.
+        val crtModifierOrEmpty = if (ThemeManager.isRetro) {
+            val style = crtSwapStyle(routerTransition.segment.initialState, routerTransition.segment.targetState)
+            val entering = transition.targetState != EnterExitState.PostExit
+            val useCrt = if (entering) style == SwapStyle.COMPRESSED_ON else style == SwapStyle.POWER_OFF_CUT
+            if (useCrt) {
+                val master = transition.animateFloat(
+                    transitionSpec = {
+                        if (EnterExitState.PreEnter isTransitioningTo EnterExitState.Visible) {
+                            tween(260, delayMillis = 60, easing = LinearEasing)
+                        } else {
+                            tween(140, easing = LinearEasing)
+                        }
+                    },
+                ) { if (it == EnterExitState.Visible) 1f else 0f }
+                val look = crtLook(CrtScale.SCREEN, ThemeManager.isDarkTheme, KdPrimary)
+                Modifier.drawWithContent {
+                    val entering2 = transition.targetState != EnterExitState.PostExit
+                    val frame = crtFrameFor(master.value, entering = entering2, igniteFraction = 80f / 260f)
+                    drawCrtFrame(frame.ignite, frame.open, frame.glow, look)
+                }
+            } else {
+                Modifier
+            }
+        } else {
+            Modifier
+        }
+        Box(Modifier.fillMaxSize().then(crtModifierOrEmpty), propagateMinConstraints = true) {
+            when (target) {
+                is Screen.Main.Connecting -> ConnectingScreen()
 
-            else -> {}
+                is Screen.Main.ConnectionError -> ConnectionErrorScreen(
+                    error = target.error,
+                    retryCountdown = target.retryCountdown,
+                    onRetryNow = onRetryNow,
+                    onSwitchCluster = onSelectCluster,
+                )
+
+                is Screen.Main.ClusterOverview -> ClusterOverviewScreen(
+                    onNavigate = onNavigate,
+                    clusterHealth = clusterHealth,
+                )
+
+                is Screen.Main.ClusterTopology -> ClusterTopologyScreen(onNavigate)
+
+                is Screen.Main.Nodes -> NodesScreen(
+                    searchQuery = searchQuery,
+                    labelQuery = labelQuery,
+                    onLabelQueryChange = onLabelQueryChange,
+                    annotationQuery = annotationQuery,
+                    onAnnotationQueryChange = onAnnotationQueryChange,
+                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                    onNavigate = onNavigate,
+                    selectNodeName = target.selectNodeName,
+                    initialStatusFilter = target.statusFilter,
+                    initialPressureOnly = target.pressureOnly,
+                    initialSelectedUid = paneSelectionUid,
+                )
+
+                is Screen.Main.Namespaces -> NamespacesScreen(
+                    searchQuery = searchQuery,
+                    labelQuery = labelQuery,
+                    onLabelQueryChange = onLabelQueryChange,
+                    annotationQuery = annotationQuery,
+                    onAnnotationQueryChange = onAnnotationQueryChange,
+                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                    onNavigate = onNavigate,
+                    onCaptureLogs = onCaptureLogs,
+                    onTailLogs = onTailLogs,
+                    initialSelectedUid = paneSelectionUid,
+                )
+
+                is Screen.Main.Events -> EventsScreen(
+                    searchQuery = searchQuery,
+                    onNavigate = onNavigate,
+                    selectEventUid = target.selectEventUid,
+                    initialTypeFilter = target.typeFilter,
+                    initialSelectedUid = paneSelectionUid,
+                )
+
+                is Screen.Main.Pods -> PodsScreen(
+                    searchQuery = searchQuery,
+                    labelQuery = labelQuery,
+                    onLabelQueryChange = onLabelQueryChange,
+                    annotationQuery = annotationQuery,
+                    onAnnotationQueryChange = onAnnotationQueryChange,
+                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                    onNavigate = onNavigate,
+                    onOpenLogs = onOpenLogs,
+                    onOpenTerminal = onOpenTerminal,
+                    selectPodUid = target.selectPodUid,
+                    initialStatusFilter = target.statusFilter,
+                    initialSelectedUid = paneSelectionUid,
+                )
+
+                is Screen.Main.Deployments -> DeploymentsScreen(
+                    searchQuery = searchQuery,
+                    labelQuery = labelQuery,
+                    onLabelQueryChange = onLabelQueryChange,
+                    annotationQuery = annotationQuery,
+                    onAnnotationQueryChange = onAnnotationQueryChange,
+                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                    onNavigate = onNavigate,
+                    initialDegradedOnly = target.degradedOnly,
+                    initialSelectedUid = paneSelectionUid,
+                )
+
+                is Screen.Main.Services -> ServicesScreen(
+                    searchQuery = searchQuery,
+                    labelQuery = labelQuery,
+                    onLabelQueryChange = onLabelQueryChange,
+                    annotationQuery = annotationQuery,
+                    onAnnotationQueryChange = onAnnotationQueryChange,
+                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                    onNavigate = onNavigate,
+                    initialSelectedUid = paneSelectionUid,
+                )
+
+                is Screen.Main.StatefulSets -> genericKind("StatefulSet", reactiveClient.statefulSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.DaemonSets -> genericKind("DaemonSet", reactiveClient.daemonSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ReplicaSets -> genericKind("ReplicaSet", reactiveClient.replicaSets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.Jobs -> genericKind("Job", reactiveClient.jobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate, onOpenLogs = onOpenLogs)
+
+                is Screen.Main.CronJobs -> genericKind("CronJob", reactiveClient.cronJobs, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.Secrets -> genericKind("Secret", reactiveClient.secrets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.Ingresses -> genericKind("Ingress", reactiveClient.ingresses, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.Endpoints -> genericKind("Endpoint", reactiveClient.endpoints, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.NetworkPolicies -> genericKind("NetworkPolicy", reactiveClient.networkPolicies, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.PersistentVolumes -> genericKind("PersistentVolume", reactiveClient.persistentVolumes, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.PersistentVolumeClaims -> genericKind("PersistentVolumeClaim", reactiveClient.persistentVolumeClaims, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.StorageClasses -> genericKind("StorageClass", reactiveClient.storageClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ServiceAccounts -> genericKind("ServiceAccount", reactiveClient.serviceAccounts, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.Roles -> genericKind("Role", reactiveClient.roles, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ClusterRoles -> genericKind("ClusterRole", reactiveClient.clusterRoles, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.RoleBindings -> genericKind("RoleBinding", reactiveClient.roleBindings, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ClusterRoleBindings -> genericKind("ClusterRoleBinding", reactiveClient.clusterRoleBindings, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.HorizontalPodAutoscalers -> genericKind("HorizontalPodAutoscaler", reactiveClient.horizontalPodAutoscalers, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.PodDisruptionBudgets -> genericKind("PodDisruptionBudget", reactiveClient.podDisruptionBudgets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ResourceQuotas -> genericKind("ResourceQuota", reactiveClient.resourceQuotas, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.LimitRanges -> genericKind("LimitRange", reactiveClient.limitRanges, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.PriorityClasses -> genericKind("PriorityClass", reactiveClient.priorityClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.ValidatingWebhookConfigurations -> genericKind("ValidatingWebhookConfiguration", reactiveClient.validatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.MutatingWebhookConfigurations -> genericKind("MutatingWebhookConfiguration", reactiveClient.mutatingWebhookConfigurations, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.IngressClasses -> genericKind("IngressClass", reactiveClient.ingressClasses, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.EndpointSlices -> genericKind("EndpointSlice", reactiveClient.endpointSlices, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.CSIDrivers -> genericKind("CSIDriver", reactiveClient.csiDrivers, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.CertificateSigningRequests -> genericKind("CertificateSigningRequest", reactiveClient.certificateSigningRequests, false, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.CustomResource -> {
+                    val crdState by reactiveClient.crds.collectAsState()
+                    when (val route = crdRoute(crdState, target)) {
+                        CrdRoute.Loading -> ConnectingScreen()
+
+                        is CrdRoute.Missing -> EmptyState(
+                            icon = Res.drawable.extension_filled,
+                            kind = "${target.kind} not available",
+                            subtitle = route.reason,
+                        )
+
+                        is CrdRoute.Found -> {
+                            val crd = route.crd
+                            genericKind(
+                                kind = crd.kind,
+                                sourceFlow = reactiveClient.customResourceInstances(crd),
+                                namespacedKind = crd.namespaced,
+                                searchQuery = searchQuery,
+                                labelQuery = labelQuery,
+                                onLabelQueryChange = onLabelQueryChange,
+                                annotationQuery = annotationQuery,
+                                onAnnotationQueryChange = onAnnotationQueryChange,
+                                pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                apiGroup = crd.group,
+                                apiVersion = crd.version,
+                                plural = crd.plural,
+                                onNavigate = onNavigate,
+                            )
+                        }
+                    }
+                }
+
+                else -> {}
+            }
         }
     }
 }

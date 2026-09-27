@@ -75,6 +75,7 @@ import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ContextBinding
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -204,7 +205,8 @@ fun ClusterSelectorModal(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
-                ),
+                )
+                .crtCardReveal(),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

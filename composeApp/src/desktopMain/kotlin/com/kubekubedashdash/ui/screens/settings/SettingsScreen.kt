@@ -124,6 +124,7 @@ import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -376,6 +377,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
 
         if (showStopAllDialog) {
             AlertDialog(
+                modifier = Modifier.crtCardReveal(),
                 onDismissRequest = { showStopAllDialog = false },
                 title = { Text("Reset the demo cluster to its baseline?") },
                 text = {
@@ -403,6 +405,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
 
         if (showKillServerDialog) {
             AlertDialog(
+                modifier = Modifier.crtCardReveal(),
                 onDismissRequest = { showKillServerDialog = false },
                 title = { Text("Kill mock server?") },
                 text = {

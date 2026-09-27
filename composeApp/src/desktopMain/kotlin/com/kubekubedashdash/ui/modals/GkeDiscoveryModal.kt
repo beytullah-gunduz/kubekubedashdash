@@ -84,6 +84,7 @@ import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.GkeClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryStep
 import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryViewModel
@@ -160,7 +161,7 @@ fun GkeDiscoveryModal(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp),
+            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(),
             shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),

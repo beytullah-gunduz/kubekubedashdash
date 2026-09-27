@@ -25,6 +25,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add_filled
 import com.kubekubedashdash.resources.remove_filled
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -54,6 +55,7 @@ fun ScaleDialog(
     val canConfirm = !inFlight && isValid && !isUnchanged
 
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = { if (!inFlight) onDismiss() },
         title = { Text("Scale") },
         text = {
