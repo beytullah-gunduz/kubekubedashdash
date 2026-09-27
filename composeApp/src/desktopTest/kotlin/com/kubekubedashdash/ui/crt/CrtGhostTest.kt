@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +33,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -204,6 +207,46 @@ class CrtGhostTest {
                 baseAlone,
                 captureToImage().toPixelMap()[150, 100],
                 "Default must show no ghost and record no snapshot",
+            )
+            assertFalse(ghost.hasSnapshot, "Default must never record a snapshot (D3)")
+        }
+    }
+
+    // The real modals are Material Surfaces: their shadow and shape clip are child layers that
+    // are released when the card leaves composition. The ghost still has to draw their content.
+    @Test
+    fun `case 5 - a real Material Surface card still ghosts after it leaves`() {
+        runSkikoComposeUiTest(size = HostSize, density = Density(1f)) {
+            ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+            ThemeManager.syncFromPreferences(ThemeMode.DARK)
+            mainClock.autoAdvance = false
+            var visible by mutableStateOf(true)
+            lateinit var ghost: CrtGhost
+            setContent {
+                ghost = rememberCrtGhost()
+                Box(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize().background(Color.White))
+                    if (visible) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.Center).size(120.dp, 80.dp).crtCardReveal(ghost),
+                            shape = RoundedCornerShape(8.dp),
+                            color = CardColor,
+                            shadowElevation = 4.dp,
+                        ) {}
+                    }
+                    CrtGhostExit(visible, ghost, 0.45f)
+                }
+            }
+            mainClock.advanceTimeBy(200)
+            waitForIdle()
+
+            visible = false
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            assertEquals(
+                CardColor,
+                captureToImage().toPixelMap()[150, 100],
+                "the ghost of a Surface card must still draw its body after the card's layers are released",
             )
         }
     }

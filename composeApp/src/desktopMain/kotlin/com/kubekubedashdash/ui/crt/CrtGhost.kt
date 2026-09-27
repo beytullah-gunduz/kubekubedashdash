@@ -56,6 +56,10 @@ fun rememberCrtGhost(): CrtGhost {
  */
 @Composable
 fun CrtGhostExit(visible: Boolean, ghost: CrtGhost, scrimAlpha: Float) {
+    // Default never ghosts, so it must not pay for the transition either: without this early
+    // return every Default modal close would still run a 140 ms frame loop nobody reads.
+    // Switching to Retro while a modal is open is safe — the fresh transition starts settled.
+    if (!ThemeManager.isRetro) return
     val transition = updateTransition(targetState = visible, label = "crtGhost")
     // true→false is the 140 ms collapse; false→true snaps, so re-opening animates nothing.
     val progress by transition.animateFloat(
@@ -64,7 +68,11 @@ fun CrtGhostExit(visible: Boolean, ghost: CrtGhost, scrimAlpha: Float) {
     ) { if (it) 1f else 0f }
     // Same frame as the card leaving: currentState is still true while targetState is false.
     val exiting = transition.currentState && !transition.targetState
-    if (!exiting || !ThemeManager.isRetro || !ghost.hasSnapshot) return
+    if (!exiting || !ghost.hasSnapshot) return
+    // Seeded at zero: onGloballyPositioned only reports after the first placement, so the first
+    // ghost frame assumes this host sits at the root origin. True today (the App root Box fills
+    // the window from (0, 0)); if an offset ancestor is ever added above it, the ghost would
+    // sit misplaced for exactly one frame.
     var hostTopLeftInRoot by remember { mutableStateOf(Offset.Zero) }
     val look = crtLook(CrtScale.CARD, ThemeManager.isDarkTheme, KdPrimary)
     val density = LocalDensity.current
