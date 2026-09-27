@@ -721,6 +721,33 @@ fun SettingsScreen(
 
                                 Spacer(Modifier.height(20.dp))
 
+                                val crtScanlines by PreferenceRepository.crtScanlines.collectAsState()
+                                SettingsRowTitle("CRT scanlines")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Faint scanlines and darkened corners over the whole window. Retro style only.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = crtScanlines,
+                                        onCheckedChange = { PreferenceRepository.setCrtScanlines(it) },
+                                        enabled = ThemeManager.isRetro,
+                                    )
+                                    Text(
+                                        if (crtScanlines) "Scanlines on" else "Scanlines off",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (crtScanlines && ThemeManager.isRetro) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
                                 val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
 
                                 SettingsRowTitle("UI zoom")

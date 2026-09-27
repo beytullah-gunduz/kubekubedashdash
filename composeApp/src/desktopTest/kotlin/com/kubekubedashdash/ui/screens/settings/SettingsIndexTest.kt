@@ -146,4 +146,10 @@ class SettingsIndexTest {
         val results = settingsSearchResults("crt")
         assertTrue(results.any { it.title == "Style" })
     }
+
+    @Test
+    fun `scanlines finds CRT scanlines`() {
+        val results = settingsSearchResults("scanlines")
+        assertTrue(results.any { it.title == "CRT scanlines" })
+    }
 }

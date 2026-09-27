@@ -51,6 +51,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.LocalSystemDensity
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.TabStripVisibility
@@ -73,6 +74,7 @@ import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.components.stepUiScale
+import com.kubekubedashdash.ui.crt.crtScanlines
 import com.kubekubedashdash.ui.crt.crtScreenPowerOn
 import com.kubekubedashdash.ui.crt.rememberCrtScreenPowerOn
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
@@ -379,10 +381,12 @@ fun App(
         // title bar. SessionPaneContent re-provides per-page locals so each
         // cluster page sees its own session.
         val crtPowerOn = rememberCrtScreenPowerOn()
+        val scanlines by PreferenceRepository.crtScanlines.collectAsState()
         MaybeProvideSessionLocals(titleSession) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .crtScanlines { ThemeManager.isRetro && scanlines }
                     .crtScreenPowerOn(crtPowerOn)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
