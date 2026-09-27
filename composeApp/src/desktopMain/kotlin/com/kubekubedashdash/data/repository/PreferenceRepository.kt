@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
@@ -49,6 +50,7 @@ object PreferenceRepository {
 
     // ── Preference keys ───────────────────────────────────────────────────────
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
+    private val THEME_STYLE by lazy { stringPreferencesKey("theme_style") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val MCP_LOCALHOST_ONLY by lazy { booleanPreferencesKey("mcp_localhost_only") }
@@ -84,6 +86,10 @@ object PreferenceRepository {
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    // Orthogonal to themeMode (D1): the retro look layers over either dark or light.
+    private val _themeStyle = MutableStateFlow(ThemeStyle.DEFAULT)
+    val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
 
     private val _mcpServerEnabled = MutableStateFlow(false)
     val mcpServerEnabled: StateFlow<Boolean> = _mcpServerEnabled.asStateFlow()
@@ -239,6 +245,9 @@ object PreferenceRepository {
                     _themeMode.value = p[THEME_MODE]
                         ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                         ?: ThemeMode.SYSTEM
+                    _themeStyle.value = p[THEME_STYLE]
+                        ?.let { runCatching { ThemeStyle.valueOf(it) }.getOrNull() }
+                        ?: ThemeStyle.DEFAULT
                     _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
                     _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
                     _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
@@ -298,6 +307,11 @@ object PreferenceRepository {
     fun setThemeMode(value: ThemeMode) {
         _themeMode.value = value
         ioScope.launch { dataStore.edit { it[THEME_MODE] = value.name } }
+    }
+
+    fun setThemeStyle(value: ThemeStyle) {
+        _themeStyle.value = value
+        ioScope.launch { dataStore.edit { it[THEME_STYLE] = value.name } }
     }
 
     fun setMcpServerEnabled(value: Boolean) {

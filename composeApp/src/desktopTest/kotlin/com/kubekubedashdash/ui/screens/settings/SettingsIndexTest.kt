@@ -134,4 +134,16 @@ class SettingsIndexTest {
         assertEquals("Log panel beside sidebar", results.first().title)
         assertEquals("Appearance", results.first().section)
     }
+
+    @Test
+    fun `retro finds Style`() {
+        val results = settingsSearchResults("retro")
+        assertTrue(results.any { it.title == "Style" })
+    }
+
+    @Test
+    fun `crt finds Style`() {
+        val results = settingsSearchResults("crt")
+        assertTrue(results.any { it.title == "Style" })
+    }
 }

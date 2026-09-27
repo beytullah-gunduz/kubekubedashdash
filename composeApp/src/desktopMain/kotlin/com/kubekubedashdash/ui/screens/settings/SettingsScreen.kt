@@ -96,7 +96,9 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.summary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
@@ -658,21 +660,54 @@ fun SettingsScreen(
                                     ThemePreviewCard(
                                         label = "Dark",
                                         selected = viewModel.themeMode == ThemeMode.DARK,
-                                        primaryColors = DarkPreviewColors,
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = true),
+                                        squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
                                     )
                                     ThemePreviewCard(
                                         label = "Light",
                                         selected = viewModel.themeMode == ThemeMode.LIGHT,
-                                        primaryColors = LightPreviewColors,
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = false),
+                                        squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
                                     )
                                     ThemePreviewCard(
                                         label = "System",
                                         selected = viewModel.themeMode == ThemeMode.SYSTEM,
-                                        primaryColors = DarkPreviewColors,
-                                        secondaryColors = LightPreviewColors,
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = true),
+                                        secondaryColors = previewColorsFor(viewModel.themeStyle, dark = false),
+                                        squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                SettingsRowTitle("Style")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Default, or a retro arcade look with pixel headings and CRT effects.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.CenterHorizontally)) {
+                                    val currentModeIsDark = viewModel.themeMode != ThemeMode.LIGHT
+                                    val currentModeIsSystem = viewModel.themeMode == ThemeMode.SYSTEM
+                                    ThemePreviewCard(
+                                        label = "Default",
+                                        selected = viewModel.themeStyle == ThemeStyle.DEFAULT,
+                                        primaryColors = previewColorsFor(ThemeStyle.DEFAULT, dark = currentModeIsDark),
+                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.DEFAULT, dark = false) else null,
+                                        onClick = { viewModel.setThemeStyle(ThemeStyle.DEFAULT) },
+                                    )
+                                    ThemePreviewCard(
+                                        label = "Retro",
+                                        selected = viewModel.themeStyle == ThemeStyle.RETRO,
+                                        primaryColors = previewColorsFor(ThemeStyle.RETRO, dark = currentModeIsDark),
+                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.RETRO, dark = false) else null,
+                                        squared = true,
+                                        onClick = { viewModel.setThemeStyle(ThemeStyle.RETRO) },
                                     )
                                 }
 
