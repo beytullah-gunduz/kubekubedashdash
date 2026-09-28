@@ -106,11 +106,9 @@ class CrtContentCutTest {
             color = ColorB
             mainClock.advanceTimeByFrame()
             waitForIdle()
-            assertNotEquals(
-                ColorB,
-                captureToImage().toPixelMap()[150, 50],
-                "the new content must be drawn closed on the frame the key changes",
-            )
+            val closedFrame = captureToImage().toPixelMap()[150, 50]
+            assertNotEquals(ColorB, closedFrame, "the new content must be drawn closed on the frame the key changes")
+            assertNotEquals(ColorA, closedFrame, "the old content is replaced at once, not collapsed (D25)")
 
             mainClock.advanceTimeBy(150)
             waitForIdle()
@@ -208,6 +206,43 @@ class CrtContentCutTest {
                 ColorB,
                 captureToImage().toPixelMap()[150, 50],
                 "Default never plays the cut (D3)",
+            )
+        }
+    }
+
+    // A pane that closes fully is disposed (DetailHost's AnimatedVisibility), so reopening it on
+    // another resource is a first composition: D21 plays its open, and D25 must not cut on top.
+    @Test
+    fun `case 6 - reopening after the slot was disposed never cuts, even on a new key`() {
+        runSkikoComposeUiTest(size = HostSize, density = Density(1f)) {
+            ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+            ThemeManager.syncFromPreferences(ThemeMode.DARK)
+            mainClock.autoAdvance = false
+            var shown by mutableStateOf(true)
+            var key by mutableStateOf<Any?>("a")
+            var color by mutableStateOf(ColorA)
+            setContent {
+                if (shown) {
+                    Box(Modifier.fillMaxSize().crtContentCut(key)) {
+                        Box(Modifier.fillMaxSize().background(color))
+                    }
+                }
+            }
+            waitForIdle()
+
+            shown = false
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+
+            shown = true
+            key = "b"
+            color = ColorB
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            assertEquals(
+                ColorB,
+                captureToImage().toPixelMap()[150, 50],
+                "a slot composed afresh is a first composition: no cut on a new key",
             )
         }
     }
