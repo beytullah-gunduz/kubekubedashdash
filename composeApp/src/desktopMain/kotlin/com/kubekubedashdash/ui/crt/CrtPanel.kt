@@ -31,7 +31,9 @@ internal fun AnimatedVisibilityScope.crtPanelFrame(): Modifier {
     if (!ThemeManager.isRetro) return Modifier
     val master = transition.animateFloat(
         transitionSpec = {
-            if (EnterExitState.PreEnter isTransitioningTo EnterExitState.Visible) {
+            // Keyed on the target, not on PreEnter → Visible: a reopen mid-collapse
+            // (PostExit → Visible) must open at the opening pace, not the collapse's.
+            if (targetState == EnterExitState.Visible) {
                 tween(CrtPanelTiming.OPEN_MS, easing = LinearEasing)
             } else {
                 tween(CrtPanelTiming.CLOSE_MS, easing = LinearEasing)

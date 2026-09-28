@@ -120,6 +120,9 @@ class CrtTabCutTest {
             waitForIdle()
 
             assertEquals(1, cut.cuts, "a real page change must count exactly one cut")
+            // Pin the jump first, so the closed-pixel check below cannot pass on a pager that
+            // simply has not moved yet.
+            assertEquals(1, state.currentPage, "the jump must land on the frame it is asked for")
             assertNotEquals(
                 PageColors[1],
                 captureToImage().toPixelMap()[150, 50],
@@ -133,6 +136,46 @@ class CrtTabCutTest {
                 captureToImage().toPixelMap()[150, 50],
                 "the aperture must be fully open once the 110 ms cut settles",
             )
+        }
+    }
+
+    @Test
+    fun `case 2b - a second cut inside 110 ms restarts the aperture closed on the new page`() {
+        runSkikoComposeUiTest(size = HostSize, density = Density(1f)) {
+            ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+            ThemeManager.syncFromPreferences(ThemeMode.DARK)
+            mainClock.autoAdvance = false
+            lateinit var state: PagerState
+            lateinit var cut: CrtTabCut
+            lateinit var scope: CoroutineScope
+            setContent {
+                state = rememberPagerState(pageCount = { PageColors.size })
+                cut = rememberCrtTabCut()
+                scope = rememberCoroutineScope()
+                ThreePagePager(state, cut)
+            }
+            waitForIdle()
+
+            scope.launch { state.goToTab(1, cut) }
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            mainClock.advanceTimeBy(50) // mid-aperture on page 1
+            waitForIdle()
+
+            scope.launch { state.goToTab(2, cut) }
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            assertEquals(2, cut.cuts, "each real page change counts its own cut")
+            assertEquals(2, state.currentPage)
+            assertNotEquals(
+                PageColors[2],
+                captureToImage().toPixelMap()[150, 50],
+                "the second cut must restart the aperture closed, not carry the first one's progress",
+            )
+
+            mainClock.advanceTimeBy(150)
+            waitForIdle()
+            assertEquals(PageColors[2], captureToImage().toPixelMap()[150, 50])
         }
     }
 

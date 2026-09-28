@@ -205,6 +205,16 @@ class DetailHostCrtTest {
             mainClock.advanceTimeByFrame()
             waitForIdle()
             assertEquals("a", latched, "Retro keeps the last non-null value while it is null")
+
+            // A later pane replaces the latch: the next close must collapse the new content.
+            value = "b"
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            assertEquals("b", latched)
+            value = null
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            assertEquals("b", latched, "the latch must follow the most recent pane, not the first")
         }
         runSkikoComposeUiTest(size = HostSize, density = Density(1f)) {
             ThemeManager.syncStyleFromPreferences(ThemeStyle.DEFAULT)
