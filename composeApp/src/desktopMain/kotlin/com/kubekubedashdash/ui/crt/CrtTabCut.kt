@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.crt
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.pager.PagerState
@@ -52,6 +53,11 @@ internal fun Modifier.crtTabCut(cut: CrtTabCut): Modifier {
     LaunchedEffect(reveal) {
         if (reveal.value < 1f) reveal.animateTo(1f, tween(CrtPanelTiming.TAB_CUT_MS, easing = LinearEasing))
     }
+    return crtAperture(reveal)
+}
+
+@Composable
+private fun Modifier.crtAperture(reveal: Animatable<Float, AnimationVector1D>): Modifier {
     if (!ThemeManager.isRetro) return this
     val look = crtLook(CrtScale.CUT, ThemeManager.isDarkTheme, KdPrimary)
     return this.drawWithContent {
@@ -63,4 +69,26 @@ internal fun Modifier.crtTabCut(cut: CrtTabCut): Modifier {
             drawCrtFrame(f.ignite, f.open, f.glow, look)
         }
     }
+}
+
+/**
+ * Retro row-to-row cut in the detail pane (D25): an enter-only [CrtPanelTiming.TAB_CUT_MS]
+ * aperture whenever [key], the identity of the resource shown, changes. Key on identity,
+ * never on the object: live updates re-emit the same resource as a new object every tick,
+ * and a re-click of the open row carries the same key, so neither replays. The first
+ * composition never plays (an opening pane plays D21's tube instead); a new key inside a
+ * running cut restarts it closed. Default: this modifier is returned unchanged.
+ */
+@Composable
+internal fun Modifier.crtContentCut(key: Any?): Modifier {
+    val firstUse = remember { BooleanArray(1) { true } }
+    val reveal = remember(key) {
+        val born = if (firstUse[0] || !ThemeManager.isRetro) 1f else 0f
+        firstUse[0] = false
+        Animatable(born)
+    }
+    LaunchedEffect(reveal) {
+        if (reveal.value < 1f) reveal.animateTo(1f, tween(CrtPanelTiming.TAB_CUT_MS, easing = LinearEasing))
+    }
+    return crtAperture(reveal)
 }

@@ -26,6 +26,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.crt.SwapStyle
+import com.kubekubedashdash.ui.crt.crtContentCut
 import com.kubekubedashdash.ui.crt.crtFrameFor
 import com.kubekubedashdash.ui.crt.crtLook
 import com.kubekubedashdash.ui.crt.crtSwapStyle
@@ -67,6 +68,22 @@ internal fun Screen?.paneSelectionUid(): String? = when (this) {
     is Screen.Detail.ServiceDetail -> service.uid
     is Screen.Detail.NamespaceDetail -> namespace.uid
     is Screen.Detail.EventDetail -> event.uid
+    else -> null
+}
+
+/**
+ * Identity of the resource a pane shows, for Retro's row-to-row cut (D25). Never the object:
+ * snapshots of the same resource differ (Back/Forward, a re-click after a tick) but share
+ * this key. The uid first; namespace/name when a mapper left the uid blank.
+ */
+internal fun Screen?.paneContentKey(): String? = when (this) {
+    is Screen.Detail.PodDetail -> "Pod/" + pod.uid.ifBlank { "${pod.namespace}/${pod.name}" }
+    is Screen.Detail.NodeDetail -> "Node/" + node.uid.ifBlank { node.name }
+    is Screen.Detail.DeploymentDetail -> "Deployment/" + deployment.uid.ifBlank { "${deployment.namespace}/${deployment.name}" }
+    is Screen.Detail.ServiceDetail -> "Service/" + service.uid.ifBlank { "${service.namespace}/${service.name}" }
+    is Screen.Detail.NamespaceDetail -> "Namespace/" + namespace.uid.ifBlank { namespace.name }
+    is Screen.Detail.EventDetail -> "Event/" + event.uid.ifBlank { "${event.namespace}/${event.objectRef}/${event.reason}" }
+    is Screen.Detail.ResourceDetail -> "$kind/${namespace.orEmpty()}/$name"
     else -> null
 }
 
@@ -413,7 +430,7 @@ fun ExtraPaneRouter(
     // null == "All Namespaces". Authoritative scope the list flows below are
     // built from, so detail panels re-resolve against exactly the same data.
     val selectedNamespace by reactiveClient.selectedNamespace.collectAsState()
-    Box(modifier = modifier) {
+    Box(modifier = modifier.crtContentCut(screen.paneContentKey())) {
         when (screen) {
             is Screen.Detail.EventDetail -> EventDetailScreen(screen.event, onNavigate, onOpenLogs, onClose)
 
