@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
@@ -41,6 +41,8 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
@@ -49,6 +51,8 @@ import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
+import com.kubekubedashdash.retroCaps
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.screens.ExtraTab
@@ -151,7 +155,7 @@ private fun resourceQuotaUsageTab(
     when {
         rows == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
             }
         }
 
@@ -172,11 +176,11 @@ private fun resourceQuotaUsageTab(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "Resource Usage",
-                    style = MaterialTheme.typography.labelLarge,
+                    "Resource Usage".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                 )
-                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                     Column(
                         modifier =
                         Modifier
@@ -213,7 +217,7 @@ private fun policyRulesTab(
     when {
         rules == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
             }
         }
 
@@ -234,8 +238,8 @@ private fun policyRulesTab(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "Policy Rules",
-                    style = MaterialTheme.typography.labelLarge,
+                    "Policy Rules".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                 )
                 rules!!.forEachIndexed { idx, rule ->
@@ -270,7 +274,7 @@ private fun roleBindingTab(
     when {
         !loaded -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
             }
         }
 
@@ -293,11 +297,11 @@ private fun roleBindingTab(
             ) {
                 // Role reference section
                 Text(
-                    "Role Reference",
-                    style = MaterialTheme.typography.labelLarge,
+                    "Role Reference".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                 )
-                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                     Column(
                         modifier =
                         Modifier
@@ -311,11 +315,11 @@ private fun roleBindingTab(
                 // Subjects section
                 if (d.subjects.isNotEmpty()) {
                     Text(
-                        "Subjects",
-                        style = MaterialTheme.typography.labelLarge,
+                        "Subjects".retroCaps(),
+                        style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                         color = KdTextPrimary,
                     )
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                         Column(
                             modifier =
                             Modifier
@@ -337,12 +341,12 @@ private fun roleBindingTab(
 
                 // Resolved permissions section
                 Text(
-                    "Resolved Permissions",
-                    style = MaterialTheme.typography.labelLarge,
+                    "Resolved Permissions".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                 )
                 if (!d.resolvedRoleFound) {
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                         Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                             Text(
                                 "Referenced role not found",
@@ -352,7 +356,7 @@ private fun roleBindingTab(
                         }
                     }
                 } else if (d.resolvedRules.isEmpty()) {
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                         Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                             Text(
                                 "Role exists but has no rules",
@@ -399,7 +403,7 @@ private fun endpointSliceTab(
     when {
         !loaded -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
             }
         }
 
@@ -422,11 +426,11 @@ private fun endpointSliceTab(
             ) {
                 // ── Summary section ─────────────────────────────────────────
                 Text(
-                    "Summary",
-                    style = MaterialTheme.typography.labelLarge,
+                    "Summary".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                 )
-                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                     Column(
                         modifier =
                         Modifier
@@ -474,11 +478,11 @@ private fun endpointSliceTab(
                 // ── Endpoints section ───────────────────────────────────────
                 if (d.endpoints.isNotEmpty()) {
                     Text(
-                        "Endpoints",
-                        style = MaterialTheme.typography.labelLarge,
+                        "Endpoints".retroCaps(),
+                        style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                         color = KdTextPrimary,
                     )
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                         Column(
                             modifier =
                             Modifier
@@ -499,7 +503,7 @@ private fun endpointSliceTab(
                                         color = KdTextPrimary,
                                     )
                                     Surface(
-                                        shape = RoundedCornerShape(4.dp),
+                                        shape = 4.dp.kdCorner,
                                         color = if (ep.ready) KdSuccess.copy(alpha = 0.15f) else KdError.copy(alpha = 0.15f),
                                     ) {
                                         Text(
@@ -524,11 +528,11 @@ private fun endpointSliceTab(
                 // ── Ports section ───────────────────────────────────────────
                 if (d.ports.isNotEmpty()) {
                     Text(
-                        "Ports",
-                        style = MaterialTheme.typography.labelLarge,
+                        "Ports".retroCaps(),
+                        style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                         color = KdTextPrimary,
                     )
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                         Column(
                             modifier =
                             Modifier
@@ -578,8 +582,8 @@ private fun podsOverviewSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Pods",
-                style = MaterialTheme.typography.labelLarge,
+                "Pods".retroCaps(),
+                style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                 color = KdTextPrimary,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -593,12 +597,12 @@ private fun podsOverviewSection(
         when {
             snapshot == null -> {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
                 }
             }
 
             snapshot.isFailure -> {
-                Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                     Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                         Text(
                             "Could not load pods",
@@ -630,7 +634,7 @@ private fun PolicyRuleCard(
     rule: PolicyRuleRow,
     index: Int,
 ) {
-    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
         Column(
             modifier =
             Modifier
@@ -686,7 +690,7 @@ private fun LabeledLine(
 private fun OwnedPodItem(pod: PodInfo, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurfaceVariant,
     ) {
         Row(
@@ -707,7 +711,7 @@ private fun OwnedPodItem(pod: PodInfo, onClick: () -> Unit) {
                     StatusBadge(pod.status)
                     val role = pod.labels["spark-role"]
                     if (role != null) {
-                        Surface(shape = RoundedCornerShape(4.dp), color = KdTextSecondary.copy(alpha = 0.15f)) {
+                        Surface(shape = 4.dp.kdCorner, color = KdTextSecondary.copy(alpha = 0.15f)) {
                             Text(
                                 role,
                                 style = MaterialTheme.typography.labelSmall,
@@ -765,9 +769,10 @@ fun UsageBarRow(row: QuotaUsageRow) {
         // in the same colour was invisible and only Material's stop dot showed.
         LinearProgressIndicator(
             progress = { row.fraction },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(4.dp.kdCorner),
             color = barColor,
             trackColor = KdBorder,
+            strokeCap = kdStrokeCap,
             gapSize = 0.dp,
             drawStopIndicator = {},
         )

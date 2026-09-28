@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,7 +29,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +41,8 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdStrokeCap
 
 @Composable
 fun PodStatusBar(running: Int, pending: Int, failed: Int, succeeded: Int) {
@@ -53,7 +53,7 @@ fun PodStatusBar(running: Int, pending: Int, failed: Int, succeeded: Int) {
         modifier = Modifier
             .fillMaxWidth()
             .height(6.dp)
-            .clip(RoundedCornerShape(3.dp)),
+            .clip(3.dp.kdCorner),
     ) {
         if (running > 0) {
             Box(
@@ -130,7 +130,7 @@ fun CircularUsageIndicator(
                     useCenter = false,
                     topLeft = topLeft,
                     size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                 )
                 if (animatedFraction > 0f) {
                     drawArc(
@@ -140,7 +140,7 @@ fun CircularUsageIndicator(
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                        style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                     )
                 }
             }
@@ -207,7 +207,7 @@ fun HalfCircularUsageIndicator(
                     useCenter = false,
                     topLeft = topLeft,
                     size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                 )
                 if (animatedFraction > 0f) {
                     drawArc(
@@ -217,7 +217,7 @@ fun HalfCircularUsageIndicator(
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                        style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                     )
                 }
             }
@@ -251,7 +251,7 @@ fun UsageHistoryBar(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(4.dp.kdCorner)
             .background(KdSurfaceVariant.copy(alpha = 0.4f))
             .padding(horizontal = 4.dp, vertical = 3.dp),
     ) {
@@ -302,7 +302,7 @@ fun MetricsLineChart(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         color = KdSurfaceVariant,
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -373,7 +373,7 @@ fun MetricsLineChart(
                         color = lineColor,
                         style = Stroke(
                             width = 2.dp.toPx(),
-                            cap = StrokeCap.Round,
+                            cap = kdStrokeCap,
                             join = StrokeJoin.Round,
                         ),
                     )

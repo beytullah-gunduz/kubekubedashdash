@@ -5,6 +5,7 @@ import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -612,6 +616,19 @@ private val DefaultShapes = Shapes()
 
 /** Squares in Retro (D5's corner sweep, WS2); a plain [RoundedCornerShape] of this radius in Default. */
 val Dp.kdCorner: RoundedCornerShape get() = RoundedCornerShape(if (ThemeManager.isRetro) 0.dp else this)
+
+/** Status-dot shape (D24): a square pixel in Retro, a circle in Default. */
+val kdDotShape: Shape get() = if (ThemeManager.isRetro) RectangleShape else CircleShape
+
+/**
+ * Line-end cap for charts and progress indicators (D24): flat in Retro, round in Default —
+ * M3's own default for every progress indicator (ProgressIndicatorDefaults, material3
+ * 1.12.0-alpha03 ProgressIndicator.kt:849-855), so Default call sites are value-identical.
+ */
+val kdStrokeCap: StrokeCap get() = if (ThemeManager.isRetro) StrokeCap.Butt else StrokeCap.Round
+
+/** Fixed chrome in caps in Retro, like the column headers (D19, D24); unchanged in Default. */
+fun String.retroCaps(): String = if (ThemeManager.isRetro) uppercase() else this
 
 @Composable
 fun KubeDashTheme(content: @Composable () -> Unit) {

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,7 +35,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
@@ -44,6 +45,9 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
@@ -56,6 +60,8 @@ import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.lock_filled
 import com.kubekubedashdash.resources.view_list_filled
+import com.kubekubedashdash.retroCaps
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
@@ -227,7 +233,13 @@ internal fun NodeDetailPanel(
                             Row(modifier = Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                                 Spacer(Modifier.width(5.dp))
-                                Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    tab.label.retroCaps(),
+                                    style = MaterialTheme.typography.labelMedium.retroChrome(8.sp),
+                                    // Retro: one line with an ellipsis. Default keeps Text's own defaults (wrap, Clip) — D3.
+                                    maxLines = if (ThemeManager.isRetro) 1 else Int.MAX_VALUE,
+                                    overflow = if (ThemeManager.isRetro) TextOverflow.Ellipsis else TextOverflow.Clip,
+                                )
                             }
                         }
                     }
@@ -392,7 +404,7 @@ private fun NodeOverviewCombinedTab(
     ) {
         // ── Details ─────────────────────────────────────────────────────────
         item {
-            Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text("Details".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         }
         item {
             DetailFieldsCard(fields = fields)
@@ -402,7 +414,7 @@ private fun NodeOverviewCombinedTab(
         if (node.labels.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Labels".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
                 KeyValueChipFlow(
@@ -417,7 +429,7 @@ private fun NodeOverviewCombinedTab(
         if (node.annotations.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Annotations".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
                 KeyValueChipFlow(
@@ -432,7 +444,7 @@ private fun NodeOverviewCombinedTab(
         item {
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Pods", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Pods".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
                 if (!podsLoading) {
                     Text("${pods.size}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
                 }
@@ -441,7 +453,7 @@ private fun NodeOverviewCombinedTab(
         if (podsLoading) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
                 }
             }
         } else if (pods.isEmpty()) {
@@ -454,7 +466,7 @@ private fun NodeOverviewCombinedTab(
         item {
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Events", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Events".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
                 if (!eventsLoading) {
                     Text("${events.size}", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
                 }
@@ -463,7 +475,7 @@ private fun NodeOverviewCombinedTab(
         if (eventsLoading) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
                 }
             }
         } else if (events.isEmpty()) {
@@ -506,7 +518,7 @@ private fun NodeDetailsOnlyTab(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         item {
-            Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text("Details".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         }
         item {
             DetailFieldsCard(fields = fields)
@@ -515,7 +527,7 @@ private fun NodeDetailsOnlyTab(
         if (node.labels.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Labels".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
                 KeyValueChipFlow(
@@ -529,7 +541,7 @@ private fun NodeDetailsOnlyTab(
         if (node.annotations.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Annotations".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
                 KeyValueChipFlow(
@@ -548,7 +560,7 @@ private fun NodeDetailsOnlyTab(
 private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (PodInfo) -> Unit) {
     if (podsLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
         }
     } else if (pods.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
@@ -561,8 +573,8 @@ private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (
         ) {
             item {
                 Text(
-                    "${pods.size} Pods",
-                    style = MaterialTheme.typography.labelLarge,
+                    "${pods.size} Pods".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -576,7 +588,7 @@ private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (
 private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
     if (eventsLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
         }
     } else if (events.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
@@ -589,8 +601,8 @@ private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
         ) {
             item {
                 Text(
-                    "${events.size} Events",
-                    style = MaterialTheme.typography.labelLarge,
+                    "${events.size} Events".retroCaps(),
+                    style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
                     color = KdTextPrimary,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -604,7 +616,7 @@ private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
 private fun NodePodItem(pod: PodInfo, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurfaceVariant,
     ) {
         Row(

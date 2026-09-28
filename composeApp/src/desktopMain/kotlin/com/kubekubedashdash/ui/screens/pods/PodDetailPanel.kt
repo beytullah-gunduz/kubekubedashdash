@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
@@ -61,6 +61,10 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdDotShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.EventInfo
@@ -76,6 +80,8 @@ import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.terminal_filled
+import com.kubekubedashdash.retroCaps
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
@@ -483,10 +489,16 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount:
                 ) {
                     Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        tab.label.retroCaps(),
+                        style = MaterialTheme.typography.labelMedium.retroChrome(8.sp),
+                        // Retro: one line with an ellipsis. Default keeps Text's own defaults (wrap, Clip) — D3.
+                        maxLines = if (ThemeManager.isRetro) 1 else Int.MAX_VALUE,
+                        overflow = if (ThemeManager.isRetro) TextOverflow.Ellipsis else TextOverflow.Clip,
+                    )
                     if (tab == DetailTab.Events && warningCount > 0) {
                         Spacer(Modifier.width(6.dp))
-                        Surface(shape = RoundedCornerShape(8.dp), color = KdWarning.copy(alpha = 0.18f)) {
+                        Surface(shape = 8.dp.kdCorner, color = KdWarning.copy(alpha = 0.18f)) {
                             Text(
                                 "$warningCount",
                                 style = MaterialTheme.typography.labelSmall,
@@ -640,7 +652,7 @@ private fun PodEventsTab(
         )
 
         state is ResourceState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
         }
 
         state is ResourceState.Error -> ResourceErrorMessage(state.message, onRetry = onRetry)
@@ -703,7 +715,7 @@ private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
                 label = "Memory",
                 currentText = if (memValues.isNotEmpty()) formatMemorySize(memValues.last()) else "\u2014",
                 formatValue = ::formatMemorySize,
-                lineColor = KdMemoryColor,
+                lineColor = if (ThemeManager.isRetro) KdAccent else KdMemoryColor,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -714,7 +726,7 @@ private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         SectionLabel(title)
-        Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+        Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
             Column(modifier = Modifier.padding(12.dp).fillMaxWidth(), content = content)
         }
     }
@@ -723,8 +735,8 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
 @Composable
 private fun SectionLabel(title: String) {
     Text(
-        title,
-        style = MaterialTheme.typography.labelLarge,
+        title.retroCaps(),
+        style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),
         color = KdTextPrimary,
         fontWeight = FontWeight.SemiBold,
     )
@@ -739,7 +751,7 @@ private fun InfoRow(label: String, value: String, valueColor: Color? = null) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
         if (valueColor != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(valueColor))
+                Box(Modifier.size(6.dp).clip(kdDotShape).background(valueColor))
                 Spacer(Modifier.width(5.dp))
                 Text(value, style = MaterialTheme.typography.bodySmall, color = valueColor, fontWeight = FontWeight.Medium)
             }
@@ -774,7 +786,7 @@ private fun ClickableInfoRow(label: String, value: String, onClick: () -> Unit) 
 
 @Composable
 private fun ContainerCard(container: ContainerInfo, now: Instant) {
-    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusBadge(container.state)
