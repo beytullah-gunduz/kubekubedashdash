@@ -74,7 +74,9 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -335,7 +337,8 @@ private fun NotSignedIn(viewModel: GkeDiscoveryViewModel) {
     Text(
         "gcloud auth login",
         color = KdTextPrimary,
-        fontFamily = FontFamily.Monospace,
+        // Default keeps the system monospace it has always had (D3); Retro follows the code face (D18).
+        fontFamily = if (ThemeManager.isRetro) kdMonoFamily() else FontFamily.Monospace,
         style = MaterialTheme.typography.bodySmall,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))

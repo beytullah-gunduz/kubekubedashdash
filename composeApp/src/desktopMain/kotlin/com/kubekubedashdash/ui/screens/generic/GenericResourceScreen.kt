@@ -177,6 +177,7 @@ fun GenericResourceScreen(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    isCustomResource: Boolean = false,
     onOpenLogs: ((String, String, String?) -> Unit)? = null,
     onNavigate: (Screen) -> Unit = {},
 ) {
@@ -304,6 +305,7 @@ fun GenericResourceScreen(
                             ResourceCountHeader(
                                 count = filtered.size,
                                 kind = pluralizeKind(kind),
+                                pixelTitle = !isCustomResource,
                                 liveDot = {
                                     LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                                 },

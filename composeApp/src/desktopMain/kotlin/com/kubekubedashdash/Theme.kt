@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.departure_mono_regular
 import com.kubekubedashdash.resources.inter_medium
 import com.kubekubedashdash.resources.inter_regular
 import com.kubekubedashdash.resources.inter_semibold
@@ -382,13 +384,34 @@ fun kdSansFamily(): FontFamily {
 }
 
 /**
- * Bundled monospace font: JetBrains Mono Regular. OFL 1.1, see
- * `composeResources/font/jetbrains-mono-OFL.txt`. Pair with [kdSansFamily]
- * for code-shaped surfaces (YAML pane, log viewer, prerequisites modal).
+ * The code-surface face (YAML pane, log viewer, prerequisites modal, …): JetBrains Mono in
+ * Default, Departure Mono in Retro (D18). Reads [ThemeManager.isRetro], so every caller
+ * recomposes onto the right face when the style flips.
  */
 @Composable
-fun kdMonoFamily(): FontFamily {
+fun kdMonoFamily(): FontFamily = if (ThemeManager.isRetro) kdRetroFamily() else kdJetBrainsMonoFamily()
+
+/**
+ * Bundled monospace font: JetBrains Mono Regular. OFL 1.1, see
+ * `composeResources/font/jetbrains-mono-OFL.txt`. Default's code face; callers go through
+ * [kdMonoFamily]. Internal only so tests can compare against it.
+ */
+@Composable
+internal fun kdJetBrainsMonoFamily(): FontFamily {
     val regular = Font(Res.font.jetbrains_mono_regular, weight = FontWeight.Normal, style = FontStyle.Normal)
+    return remember(regular) { FontFamily(regular) }
+}
+
+/**
+ * Bundled retro reading font: Departure Mono Regular (v1.500). OFL 1.1, see
+ * `composeResources/font/departure-mono-OFL.txt`. Retro's voice for everything that is not
+ * Sixtyfour chrome — body text, data, table cells, buttons, fields, and code through
+ * [kdMonoFamily] (D17, D18). Single weight: Compose desktop never synthesizes bold, so heavier
+ * weight requests render Regular.
+ */
+@Composable
+fun kdRetroFamily(): FontFamily {
+    val regular = Font(Res.font.departure_mono_regular, weight = FontWeight.Normal, style = FontStyle.Normal)
     return remember(regular) { FontFamily(regular) }
 }
 
@@ -397,8 +420,8 @@ fun kdMonoFamily(): FontFamily {
  * `composeResources/font/sixtyfour-OFL.txt`. Sixtyfour is a variable font
  * (axes SCAN and BLED); this loads the default instance — both axes at 0,
  * the plain C64-style 8×8 pixel face — with no variation settings applied.
- * Retro fixed-chrome headings only (D5) — never cluster/resource data, body
- * text, tables, logs or YAML.
+ * Retro fixed chrome only (D5, D19): headings, section labels and table column headers — never
+ * cluster/resource data, body text, table cells, logs or YAML, which use [kdRetroFamily] (D17).
  */
 @Composable
 fun kdPixelFamily(): FontFamily {
@@ -417,7 +440,7 @@ const val RETRO_TYPE_SCALE = 0.72f
 /**
  * Chrome-only pixel voice (D5): unchanged outside retro; in retro swaps in the pixel face at
  * [size] (or [RETRO_TYPE_SCALE] × the base size), Normal weight, zero tracking. Line height is kept
- * so rows never shift. Never use on cluster/resource data, body text, tables, logs or YAML.
+ * so rows never shift. Never use on cluster/resource data, body text, table cells, logs or YAML.
  */
 @Composable
 fun TextStyle.retroChrome(size: TextUnit = TextUnit.Unspecified): TextStyle {
@@ -514,6 +537,54 @@ private fun appTypography(sans: FontFamily): Typography = Typography(
 )
 
 /**
+ * The app's typography for the current style. Default is exactly [appTypography] over Inter (D3).
+ * Retro (D17): all 30 slots move to [kdRetroFamily] with font synthesis off, except
+ * headlineLarge/Medium, which take the Sixtyfour chrome voice (D5). headlineSmall stays on the
+ * reading face on purpose: ResourceDetail.kt renders a resource *name* in it. Sizes and line
+ * heights are unchanged — the two faces share cap and x-height, so rows never shift.
+ */
+@Composable
+internal fun kdTypography(): Typography {
+    val base = appTypography(sans = kdSansFamily())
+    if (!ThemeManager.isRetro) return base
+    val readingFace = kdRetroFamily()
+    val pixel = kdPixelFamily()
+    fun TextStyle.reading() = copy(fontFamily = readingFace, fontSynthesis = FontSynthesis.None)
+    return base.copy(
+        displayLarge = base.displayLarge.reading(),
+        displayMedium = base.displayMedium.reading(),
+        displaySmall = base.displaySmall.reading(),
+        headlineLarge = base.headlineLarge.copy(fontFamily = pixel, fontSize = 20.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.sp, fontSynthesis = FontSynthesis.None),
+        headlineMedium = base.headlineMedium.copy(fontFamily = pixel, fontSize = 16.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.sp, fontSynthesis = FontSynthesis.None),
+        headlineSmall = base.headlineSmall.reading(),
+        titleLarge = base.titleLarge.reading(),
+        titleMedium = base.titleMedium.reading(),
+        titleSmall = base.titleSmall.reading(),
+        bodyLarge = base.bodyLarge.reading(),
+        bodyMedium = base.bodyMedium.reading(),
+        bodySmall = base.bodySmall.reading(),
+        labelLarge = base.labelLarge.reading(),
+        labelMedium = base.labelMedium.reading(),
+        labelSmall = base.labelSmall.reading(),
+        displayLargeEmphasized = base.displayLargeEmphasized.reading(),
+        displayMediumEmphasized = base.displayMediumEmphasized.reading(),
+        displaySmallEmphasized = base.displaySmallEmphasized.reading(),
+        headlineLargeEmphasized = base.headlineLargeEmphasized.reading(),
+        headlineMediumEmphasized = base.headlineMediumEmphasized.reading(),
+        headlineSmallEmphasized = base.headlineSmallEmphasized.reading(),
+        titleLargeEmphasized = base.titleLargeEmphasized.reading(),
+        titleMediumEmphasized = base.titleMediumEmphasized.reading(),
+        titleSmallEmphasized = base.titleSmallEmphasized.reading(),
+        bodyLargeEmphasized = base.bodyLargeEmphasized.reading(),
+        bodyMediumEmphasized = base.bodyMediumEmphasized.reading(),
+        bodySmallEmphasized = base.bodySmallEmphasized.reading(),
+        labelLargeEmphasized = base.labelLargeEmphasized.reading(),
+        labelMediumEmphasized = base.labelMediumEmphasized.reading(),
+        labelSmallEmphasized = base.labelSmallEmphasized.reading(),
+    )
+}
+
+/**
  * The system (unscaled) density, unaffected by UI zoom. `ui/App.kt` reads
  * this — not `LocalDensity.current` — when it converts Compose window
  * coordinates into AWT screen points for cluster-chip drag-to-merge hit
@@ -563,28 +634,7 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
     } else {
         if (ThemeManager.isDarkTheme) DarkColorScheme else LightColorScheme
     }
-    val baseTypography = appTypography(sans = kdSansFamily())
-    val typography = if (ThemeManager.isRetro) {
-        // Chrome-only pixel voice (D5): headlineSmall stays Inter on purpose —
-        // ResourceDetail.kt:108-110 renders a resource *name* in it.
-        val pixel = kdPixelFamily()
-        baseTypography.copy(
-            headlineLarge = baseTypography.headlineLarge.copy(
-                fontFamily = pixel,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Normal,
-                letterSpacing = 0.sp,
-            ),
-            headlineMedium = baseTypography.headlineMedium.copy(
-                fontFamily = pixel,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                letterSpacing = 0.sp,
-            ),
-        )
-    } else {
-        baseTypography
-    }
+    val typography = kdTypography()
     // Theme the right-click ContextMenuArea popup. Compose's default uses
     // its own foundation colors and clashes with the Kd palette — give it
     // KdSurface / KdTextPrimary / KdHover so it visually matches the

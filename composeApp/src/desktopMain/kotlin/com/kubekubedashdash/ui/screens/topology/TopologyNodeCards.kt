@@ -32,6 +32,8 @@ import com.kubekubedashdash.KdBackground
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
@@ -95,7 +97,8 @@ internal fun GraphNodeCard(
                         Text(
                             node.name,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
+                                // Default keeps the system monospace it has always had (D3); Retro follows the code face (D18).
+                                fontFamily = if (ThemeManager.isRetro) kdMonoFamily() else FontFamily.Monospace,
                                 fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             ),
                             color = KdTextPrimary.copy(alpha = alpha),

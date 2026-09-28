@@ -346,6 +346,7 @@ fun ContentRouter(
                                 apiGroup = crd.group,
                                 apiVersion = crd.version,
                                 plural = crd.plural,
+                                isCustomResource = true,
                                 onNavigate = onNavigate,
                             )
                         }
@@ -373,6 +374,7 @@ private fun genericKind(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    isCustomResource: Boolean = false,
     onNavigate: (Screen) -> Unit,
     onOpenLogs: ((String, String, String?) -> Unit)? = null,
 ) = GenericResourceScreen(
@@ -389,6 +391,7 @@ private fun genericKind(
     apiGroup = apiGroup,
     apiVersion = apiVersion,
     plural = plural,
+    isCustomResource = isCustomResource,
     onOpenLogs = onOpenLogs,
     onNavigate = onNavigate,
 )

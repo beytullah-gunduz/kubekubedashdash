@@ -86,6 +86,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
@@ -95,6 +96,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
@@ -102,6 +104,7 @@ import com.kubekubedashdash.resources.arrow_upward_filled
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.star_filled
 import com.kubekubedashdash.resources.star_outline
+import com.kubekubedashdash.retroChrome
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -304,9 +307,11 @@ fun ResourceTable(
                         },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // Fixed chrome: in Retro, the pixel voice in 8 sp caps like the sidebar's
+                    // section labels (D19). Sorting still keys on col.header as written.
                     Text(
-                        col.header,
-                        style = MaterialTheme.typography.labelMedium,
+                        if (ThemeManager.isRetro) col.header.uppercase() else col.header,
+                        style = MaterialTheme.typography.labelMedium.retroChrome(8.sp),
                         color = KdTextSecondary,
                         maxLines = 1,
                     )
@@ -959,12 +964,15 @@ private fun OverflowTooltipText(
  * Page-list header: kind title + count chip, optionally with trailing
  * actions on the right (filters, refresh, etc.). Lives directly above
  * the resource table.
+ *
+ * @param pixelTitle false when [kind] is cluster data (a CRD kind): keeps it off the Sixtyfour chrome voice (D5, D19).
  */
 @Composable
 fun ResourceCountHeader(
     count: Int,
     kind: String,
     liveDot: @Composable () -> Unit = {},
+    pixelTitle: Boolean = true,
     actions: (@Composable RowScope.(compact: Boolean) -> Unit)? = null,
 ) {
     Column {
@@ -978,7 +986,7 @@ fun ResourceCountHeader(
             ) {
                 Text(
                     kind,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (pixelTitle) MaterialTheme.typography.titleMedium.retroChrome(10.sp) else MaterialTheme.typography.titleMedium,
                     color = KdTextPrimary,
                 )
                 liveDot()
