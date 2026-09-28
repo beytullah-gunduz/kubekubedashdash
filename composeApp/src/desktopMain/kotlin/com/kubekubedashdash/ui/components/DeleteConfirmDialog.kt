@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ui.crt.crtCardReveal
 
 /**
  * Destructive-action confirmation dialog for resource deletes.
@@ -51,6 +52,7 @@ fun DeleteConfirmDialog(
     val defaultBody = "Delete $kind \"$name\"$nsLabel? This cannot be undone."
 
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = { if (!inFlight) onDismiss() },
         title = { Text("Delete $kind?") },
         text = {

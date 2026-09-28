@@ -1,6 +1,8 @@
 package com.kubekubedashdash.ui.screens.events
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,8 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
@@ -59,7 +60,11 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.resources.Res
@@ -68,11 +73,16 @@ import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.fit_screen_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.retroCaps
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.LocalDetailHostControls
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.crt.crtTabCut
+import com.kubekubedashdash.ui.crt.goToTab
+import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -151,6 +161,7 @@ fun EventDetailScreen(
 
     val tabs = EventDetailTab.entries.toList()
     val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val tabCut = rememberCrtTabCut()
 
     LaunchedEffect(event.uid) {
         activeTab = 0
@@ -227,7 +238,7 @@ fun EventDetailScreen(
                         selected = index == activeTab,
                         onClick = {
                             activeTab = index
-                            scope.launch { pagerState.animateScrollToPage(index) }
+                            scope.launch { pagerState.goToTab(index, tabCut) }
                         },
                         selectedContentColor = KdPrimary,
                         unselectedContentColor = KdTextSecondary,
@@ -238,7 +249,13 @@ fun EventDetailScreen(
                         ) {
                             Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                             Spacer(Modifier.width(5.dp))
-                            Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                tab.label.retroCaps(),
+                                style = MaterialTheme.typography.labelMedium.retroChrome(8.sp),
+                                // Retro: one line with an ellipsis. Default keeps Text's own defaults (wrap, Clip) — D3.
+                                maxLines = if (ThemeManager.isRetro) 1 else Int.MAX_VALUE,
+                                overflow = if (ThemeManager.isRetro) TextOverflow.Ellipsis else TextOverflow.Clip,
+                            )
                         }
                     }
                 }
@@ -246,7 +263,7 @@ fun EventDetailScreen(
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().crtTabCut(tabCut),
             ) { page ->
                 when (page) {
                     0 -> EventOverviewTab(
@@ -288,10 +305,10 @@ private fun EventOverviewTab(
     ) {
         // ── Event Details ────────────────────────────────────────────────
         item {
-            Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text("Details".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         }
         item {
-            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+            Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                 Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                     DetailRow("Type", event.type, typeColor)
                     DetailRow("Reason", event.reason)
@@ -309,11 +326,11 @@ private fun EventOverviewTab(
         if (event.node.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                Text("Node", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Node".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             item {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     color = KdSurfaceVariant,
                     onClick = { onNavigate(Screen.Main.Nodes(selectNodeName = event.node)) },
                 ) {
@@ -321,7 +338,7 @@ private fun EventOverviewTab(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(KdPrimary))
+                        Box(Modifier.size(8.dp).clip(kdDotShape).background(KdPrimary))
                         Spacer(Modifier.width(10.dp))
                         Text(
                             event.node,
@@ -341,7 +358,7 @@ private fun EventOverviewTab(
                 ) {
                     if (nodeEventsLoading) {
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
                         }
                     } else if (nodeEvents.isEmpty()) {
                         Text("No events for this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
@@ -358,18 +375,18 @@ private fun EventOverviewTab(
         if (event.objectKind == "Pod" && event.objectName.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                Text("Affected Pod", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Affected Pod".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             }
             if (podInfoLoading) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
                     }
                 }
             } else if (podInfo != null) {
                 item {
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = 8.dp.kdCorner,
                         color = KdSurfaceVariant,
                         onClick = { onNavigate(Screen.Main.Pods(selectPodUid = podInfo.uid)) },
                     ) {
@@ -407,7 +424,7 @@ private fun EventOverviewTab(
                 }
             } else {
                 item {
-                    Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                    Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -439,11 +456,11 @@ private fun EventOverviewTab(
                 ) {
                     if (podLogsLoading) {
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
                         }
                     } else if (podLogs != null && podLogs.isNotBlank()) {
                         Column {
-                            Surface(shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+                            Surface(shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
                                 Column(modifier = Modifier.padding(8.dp).fillMaxWidth()) {
                                     podLogs.lines().take(50).forEach { line ->
                                         Text(
@@ -513,7 +530,7 @@ private fun CollapsibleSection(
 
     Column {
         Surface(
-            shape = RoundedCornerShape(8.dp),
+            shape = 8.dp.kdCorner,
             color = KdSurfaceVariant.copy(alpha = 0.5f),
             onClick = { expanded = !expanded },
         ) {
@@ -530,7 +547,7 @@ private fun CollapsibleSection(
                     tint = KdTextSecondary,
                 )
                 Spacer(Modifier.width(6.dp))
-                Text(title, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+                Text(title.retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
                 if (count != null) {
                     Spacer(Modifier.width(6.dp))
                     Text("$count", style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
@@ -543,8 +560,9 @@ private fun CollapsibleSection(
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
+            // Retro: a cut, not a Material expand (D24); Default unchanged.
+            enter = if (ThemeManager.isRetro) EnterTransition.None else expandVertically() + fadeIn(),
+            exit = if (ThemeManager.isRetro) ExitTransition.None else shrinkVertically() + fadeOut(),
         ) {
             Column(modifier = Modifier.padding(top = 6.dp)) {
                 content()
@@ -562,7 +580,7 @@ private fun NodeEventItem(event: EventInfo) {
     }
 
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurfaceVariant,
     ) {
         Row(
@@ -573,7 +591,7 @@ private fun NodeEventItem(event: EventInfo) {
                 Modifier
                     .padding(top = 4.dp)
                     .size(8.dp)
-                    .clip(CircleShape)
+                    .clip(kdDotShape)
                     .background(evTypeColor),
             )
             Spacer(Modifier.width(10.dp))

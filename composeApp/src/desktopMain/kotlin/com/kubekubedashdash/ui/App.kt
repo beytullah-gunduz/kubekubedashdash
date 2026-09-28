@@ -51,6 +51,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.LocalSystemDensity
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.TabStripVisibility
@@ -73,6 +74,11 @@ import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.components.stepUiScale
+import com.kubekubedashdash.ui.crt.CrtGhostExit
+import com.kubekubedashdash.ui.crt.crtScanlines
+import com.kubekubedashdash.ui.crt.crtScreenPowerOn
+import com.kubekubedashdash.ui.crt.rememberCrtGhost
+import com.kubekubedashdash.ui.crt.rememberCrtScreenPowerOn
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
@@ -376,10 +382,20 @@ fun App(
         // Provide the title session's locals at App scope for modals and the
         // title bar. SessionPaneContent re-provides per-page locals so each
         // cluster page sees its own session.
+        val crtPowerOn = rememberCrtScreenPowerOn()
+        val prereqGhost = rememberCrtGhost()
+        val selectorGhost = rememberCrtGhost()
+        val eksGhost = rememberCrtGhost()
+        val gkeGhost = rememberCrtGhost()
+        val settingsGhost = rememberCrtGhost()
+        val shortcutsGhost = rememberCrtGhost()
+        val scanlines by PreferenceRepository.crtScanlines.collectAsState()
         MaybeProvideSessionLocals(titleSession) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .crtScanlines { ThemeManager.isRetro && scanlines }
+                    .crtScreenPowerOn(crtPowerOn)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         val metaOrCtrl = event.isMetaPressed || event.isCtrlPressed
@@ -737,6 +753,7 @@ fun App(
                         onIgnore = { appViewModel.dismissPrerequisites() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
                         onDiscoverGke = { workspace.showGkeDiscovery() },
+                        crtGhost = prereqGhost,
                     )
                 } else if (showClusterSelector) {
                     val clusterSelectorDefault by workspace.clusterSelectorDefaultTarget.collectAsState()
@@ -753,8 +770,15 @@ fun App(
                         onDiscoverEks = { workspace.showEksDiscovery() },
                         onDiscoverGke = { workspace.showGkeDiscovery() },
                         dismissable = selectedContext.isNotBlank(),
+                        crtGhost = selectorGhost,
                     )
                 }
+                CrtGhostExit(visible = showPrerequisites && prereqSnapshot != null, ghost = prereqGhost, scrimAlpha = 0.45f)
+                CrtGhostExit(
+                    visible = !(showPrerequisites && prereqSnapshot != null) && showClusterSelector,
+                    ghost = selectorGhost,
+                    scrimAlpha = 0.45f,
+                )
 
                 if (showEksDiscovery) {
                     EksDiscoveryModal(
@@ -764,8 +788,10 @@ fun App(
                             appViewModel.onEksImportComplete()
                         },
                         launchedFromClusterSelector = showClusterSelector,
+                        crtGhost = eksGhost,
                     )
                 }
+                CrtGhostExit(visible = showEksDiscovery, ghost = eksGhost, scrimAlpha = 0.55f)
 
                 if (showGkeDiscovery) {
                     GkeDiscoveryModal(
@@ -775,8 +801,10 @@ fun App(
                             appViewModel.onEksImportComplete()
                         },
                         launchedFromClusterSelector = showClusterSelector,
+                        crtGhost = gkeGhost,
                     )
                 }
+                CrtGhostExit(visible = showGkeDiscovery, ghost = gkeGhost, scrimAlpha = 0.55f)
 
                 if (settingsOpen) {
                     SettingsDialog(
@@ -796,8 +824,10 @@ fun App(
                                 drawerState = LogDrawerState.EXPANDED
                             }
                         },
+                        crtGhost = settingsGhost,
                     )
                 }
+                CrtGhostExit(visible = settingsOpen, ghost = settingsGhost, scrimAlpha = 0.45f)
 
                 if (paletteOpen) {
                     CommandPalette(
@@ -809,8 +839,9 @@ fun App(
                 }
 
                 if (shortcutsOpen) {
-                    ShortcutSheet(onDismiss = { shortcutsOpen = false })
+                    ShortcutSheet(onDismiss = { shortcutsOpen = false }, crtGhost = shortcutsGhost)
                 }
+                CrtGhostExit(visible = shortcutsOpen, ghost = shortcutsGhost, scrimAlpha = 0.45f)
 
                 captureDialogNamespace?.let { ns ->
                     activeSession?.let { session ->

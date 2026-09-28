@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,6 +34,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.error_filled
@@ -81,7 +81,7 @@ fun statusColor(status: String): Color = statusVisual(status).color
 fun StatusBadge(status: String, color: Color = statusColor(status)) {
     val visual = statusVisual(status)
     Surface(
-        shape = RoundedCornerShape(4.dp),
+        shape = 4.dp.kdCorner,
         color = color.copy(alpha = 0.12f),
     ) {
         Row(
@@ -157,7 +157,7 @@ fun LabelChip(
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         Surface(
-            shape = RoundedCornerShape(4.dp),
+            shape = 4.dp.kdCorner,
             color = background,
             modifier = baseModifier.widthIn(max = 360.dp),
         ) {
@@ -192,7 +192,7 @@ fun LabelChip(
 @Composable
 private fun LabelChipTooltip(key: String, value: String) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurface,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp,

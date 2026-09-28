@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,12 +23,15 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.retroChrome
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -53,7 +55,7 @@ fun SummaryCard(
         ),
         onClick = onClick ?: {},
         enabled = onClick != null,
-        shape = RoundedCornerShape(10.dp),
+        shape = 10.dp.kdCorner,
         color = KdSurface,
         border = ButtonDefaults.outlinedButtonBorder(true).copy(
             brush = SolidColor(KdBorder),
@@ -66,7 +68,7 @@ fun SummaryCard(
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(10.dp.kdCorner)
                     .background(color.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -80,9 +82,10 @@ fun SummaryCard(
             Column(modifier = columnModifier) {
                 Text(
                     value,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineSmall
+                        .copy(fontWeight = FontWeight.SemiBold)
+                        .retroChrome(14.sp),
                     color = KdTextPrimary,
-                    fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     title,

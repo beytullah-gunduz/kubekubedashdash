@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
 
@@ -60,6 +61,7 @@ internal fun <T> BulkActionDialog(
     val shownVerb = runState?.verb ?: verb
     val shownCount = runState?.total ?: items.size
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = { if (runState !is BulkRunState.Running) onDismiss() },
         title = { Text("${shownVerb.actionLabel} $shownCount ${if (shownCount == 1) kindSingular else kindPlural}") },
         text = {

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +45,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
@@ -115,7 +115,7 @@ fun ResourceDetailScreen(
             if (kind.lowercase() == "pod" && namespace != null) {
                 OutlinedButton(
                     onClick = { onOpenLogs(name, namespace, null) },
-                    shape = RoundedCornerShape(6.dp),
+                    shape = 6.dp.kdCorner,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
                     border = ButtonDefaults.outlinedButtonBorder(true).copy(
                         brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
@@ -130,7 +130,7 @@ fun ResourceDetailScreen(
 
             OutlinedButton(
                 onClick = { yaml?.let { copyToClipboard(it) } },
-                shape = RoundedCornerShape(6.dp),
+                shape = 6.dp.kdCorner,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
                 border = ButtonDefaults.outlinedButtonBorder(true).copy(
                     brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
@@ -157,7 +157,7 @@ fun ResourceDetailScreen(
         } else {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 color = KdBackground,
                 border = ButtonDefaults.outlinedButtonBorder(true).copy(
                     brush = androidx.compose.ui.graphics.SolidColor(KdBorder),

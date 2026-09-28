@@ -177,6 +177,8 @@ If `~/.kube/config` does not exist, the directory and file are created on demand
 Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd>:
 
 - **Appearance** — Light, Dark, or System (follows OS) theme
+- **Style** — Default or Retro (pixel headings, a retro terminal font, squared corners; CRT power-on effects)
+- **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default; does not cover dialogs, menus, tooltips or the terminal)
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
 - **Tab behaviour** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and choose whether the tab strip shows always or only with multiple tabs
 - **Integrations → MCP server** — enable/disable the embedded MCP server, set its port (default 3001), restrict it to localhost, require authentication, and copy the generated bearer token
@@ -196,7 +198,8 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 ### UI
 
 - Light, Dark, and System (follows OS) themes (Material 3)
-- Bundled **Inter** and **JetBrains Mono** fonts for consistent rendering across platforms
+- Retro style (opt-in) — pixel headings, a retro terminal font for text and code, squared corners, and CRT power-on / channel-cut motion in both its dark and light variants; optional scanline overlay
+- Bundled **Inter**, **JetBrains Mono**, **Sixtyfour** (retro headings) and **Departure Mono** (retro text) fonts for consistent rendering across platforms
 - Status badges paired with a glyph so state is legible without relying on color
 - Collapsible sidebar — toggle from the title bar; state is persisted across sessions
 - macOS window tiling — supports half-screen and other Sonoma tiling arrangements

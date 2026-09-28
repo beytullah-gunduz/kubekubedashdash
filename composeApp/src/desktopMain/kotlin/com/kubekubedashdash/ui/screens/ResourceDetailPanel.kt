@@ -23,8 +23,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -69,6 +67,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
@@ -80,8 +79,12 @@ import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
@@ -91,6 +94,8 @@ import com.kubekubedashdash.resources.keyboard_arrow_up_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.swap_horiz_filled
+import com.kubekubedashdash.retroCaps
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.EMPTY_DASH
@@ -99,6 +104,9 @@ import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.crt.crtTabCut
+import com.kubekubedashdash.ui.crt.goToTab
+import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.SecretYamlMasking
 import kotlinx.coroutines.Dispatchers
@@ -200,6 +208,7 @@ fun ResourceDetailPanel(
     }
     val yamlIndex = tabs.lastIndex
     val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val tabCut = rememberCrtTabCut()
 
     LaunchedEffect(name, namespace) {
         activeTab = 0
@@ -254,7 +263,7 @@ fun ResourceDetailPanel(
                         selected = index == activeTab,
                         onClick = {
                             activeTab = index
-                            scope.launch { pagerState.animateScrollToPage(index) }
+                            scope.launch { pagerState.goToTab(index, tabCut) }
                         },
                         selectedContentColor = KdPrimary,
                         unselectedContentColor = KdTextSecondary,
@@ -265,21 +274,40 @@ fun ResourceDetailPanel(
                         ) {
                             Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                             Spacer(Modifier.width(5.dp))
-                            Text(tab.label, style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                tab.label.retroCaps(),
+                                style = MaterialTheme.typography.labelMedium.retroChrome(8.sp),
+                                // Retro: one line with an ellipsis. Default keeps Text's own defaults (wrap, Clip) — D3.
+                                maxLines = if (ThemeManager.isRetro) 1 else Int.MAX_VALUE,
+                                overflow = if (ThemeManager.isRetro) TextOverflow.Ellipsis else TextOverflow.Clip,
+                            )
                             if (tab.isLoading) {
                                 Spacer(Modifier.width(6.dp))
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(10.dp),
                                     strokeWidth = 1.5.dp,
                                     color = KdTextSecondary,
+                                    strokeCap = kdStrokeCap,
                                 )
                             } else if (tab.badgeCount != null && tab.badgeCount > 0) {
                                 Spacer(Modifier.width(4.dp))
-                                Badge {
-                                    Text(
-                                        tab.badgeCount.toString(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
+                                if (ThemeManager.isRetro) {
+                                    // M3's Badge is always a circle (BadgeTokens.LargeShape =
+                                    // CornerFull); Retro gets a square pill in the same colours (D24).
+                                    Surface(color = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError) {
+                                        Text(
+                                            tab.badgeCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(horizontal = 4.dp),
+                                        )
+                                    }
+                                } else {
+                                    Badge {
+                                        Text(
+                                            tab.badgeCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -289,7 +317,7 @@ fun ResourceDetailPanel(
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().crtTabCut(tabCut),
             ) { page ->
                 when {
                     page == 0 -> GenericOverviewTab(
@@ -316,7 +344,7 @@ fun ResourceDetailPanel(
 
 @Composable
 fun DetailFieldsCard(fields: List<DetailField>, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(8.dp), color = KdSurfaceVariant) {
+    Surface(modifier = modifier, shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
             fields.forEach { f ->
                 Row(
@@ -326,7 +354,7 @@ fun DetailFieldsCard(fields: List<DetailField>, modifier: Modifier = Modifier) {
                     Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                     if (f.valueColor != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(6.dp).clip(CircleShape).background(f.valueColor))
+                            Box(Modifier.size(6.dp).clip(kdDotShape).background(f.valueColor))
                             Spacer(Modifier.width(5.dp))
                             Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
                         }
@@ -368,12 +396,12 @@ private fun GenericOverviewTab(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (fields.isNotEmpty()) {
-            Text("Details", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text("Details".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             DetailFieldsCard(fields = fields)
         }
 
         if (labels.isNotEmpty()) {
-            Text("Labels", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text("Labels".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             KeyValueChipFlow(
                 entries = labels,
                 activeFilter = activeLabels,
@@ -382,7 +410,7 @@ private fun GenericOverviewTab(
         }
 
         if (annotations.isNotEmpty()) {
-            Text("Annotations", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text("Annotations".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             KeyValueChipFlow(
                 entries = annotations,
                 activeFilter = activeAnnotations,
@@ -585,7 +613,7 @@ internal fun GenericYamlTab(
                             lines.forEachIndexed { i, line ->
                                 val ranges = matchesByLine[i]
                                 val curRange = cur?.takeIf { it.line == i }?.range
-                                val text = remember(line, ranges, curRange) {
+                                val text = remember(line, ranges, curRange, ThemeManager.paletteKey) {
                                     buildAnnotatedString {
                                         append(highlightYamlLine(line))
                                         // highlightYamlLine rebuilds a line whose indent
@@ -689,7 +717,7 @@ private fun YamlSearchField(
                         isError = false,
                         interactionSource = interactionSource,
                         colors = colors,
-                        shape = RoundedCornerShape(6.dp),
+                        shape = 6.dp.kdCorner,
                     )
                 },
             )

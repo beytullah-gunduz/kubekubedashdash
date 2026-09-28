@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -56,6 +55,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.delete_filled
@@ -346,7 +346,7 @@ private fun VerbButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.height(28.dp),
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         contentPadding = PaddingValues(horizontal = 8.dp),
         colors = ButtonDefaults.textButtonColors(
             contentColor = tint,
@@ -382,7 +382,7 @@ private fun ActionsOverflowButton(overflowed: List<DetailAction>) {
         TextButton(
             onClick = { menuOpen = true },
             modifier = Modifier.height(28.dp),
-            shape = RoundedCornerShape(6.dp),
+            shape = 6.dp.kdCorner,
             contentPadding = PaddingValues(horizontal = 8.dp),
             colors = ButtonDefaults.textButtonColors(contentColor = KdTextPrimary),
         ) {

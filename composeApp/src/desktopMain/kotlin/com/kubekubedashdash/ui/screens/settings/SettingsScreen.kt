@@ -86,9 +86,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.AppVersion
+import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
@@ -96,11 +98,14 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.summary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
 import com.kubekubedashdash.data.repository.formatTopologyRefresh
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.resources.Res
@@ -109,6 +114,7 @@ import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.info_filled
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.SidebarSearchBox
@@ -118,6 +124,7 @@ import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -214,12 +221,13 @@ private fun SettingsSection(
     ) {
         Text(
             title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleSmall.retroChrome(10.sp),
+            // Value-identical to today's colorScheme.primary in Default (D11).
+            color = KdAccent,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
         )
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = 12.dp.kdCorner,
             color = MaterialTheme.colorScheme.surfaceContainer,
             border = BorderStroke(1.dp, KdBorder),
             modifier = Modifier.fillMaxWidth(),
@@ -369,6 +377,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
 
         if (showStopAllDialog) {
             AlertDialog(
+                modifier = Modifier.crtCardReveal(),
                 onDismissRequest = { showStopAllDialog = false },
                 title = { Text("Reset the demo cluster to its baseline?") },
                 text = {
@@ -396,6 +405,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
 
         if (showKillServerDialog) {
             AlertDialog(
+                modifier = Modifier.crtCardReveal(),
                 onDismissRequest = { showKillServerDialog = false },
                 title = { Text("Kill mock server?") },
                 text = {
@@ -658,21 +668,81 @@ fun SettingsScreen(
                                     ThemePreviewCard(
                                         label = "Dark",
                                         selected = viewModel.themeMode == ThemeMode.DARK,
-                                        primaryColors = DarkPreviewColors,
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = true),
+                                        squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
                                     )
                                     ThemePreviewCard(
                                         label = "Light",
                                         selected = viewModel.themeMode == ThemeMode.LIGHT,
-                                        primaryColors = LightPreviewColors,
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = false),
+                                        squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
                                     )
                                     ThemePreviewCard(
                                         label = "System",
                                         selected = viewModel.themeMode == ThemeMode.SYSTEM,
-                                        primaryColors = DarkPreviewColors,
-                                        secondaryColors = LightPreviewColors,
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = true),
+                                        secondaryColors = previewColorsFor(viewModel.themeStyle, dark = false),
+                                        squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                SettingsRowTitle("Style")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Default, or a retro arcade look with pixel headings and CRT effects.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.CenterHorizontally)) {
+                                    val currentModeIsDark = viewModel.themeMode != ThemeMode.LIGHT
+                                    val currentModeIsSystem = viewModel.themeMode == ThemeMode.SYSTEM
+                                    ThemePreviewCard(
+                                        label = "Default",
+                                        selected = viewModel.themeStyle == ThemeStyle.DEFAULT,
+                                        primaryColors = previewColorsFor(ThemeStyle.DEFAULT, dark = currentModeIsDark),
+                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.DEFAULT, dark = false) else null,
+                                        onClick = { viewModel.setThemeStyle(ThemeStyle.DEFAULT) },
+                                    )
+                                    ThemePreviewCard(
+                                        label = "Retro",
+                                        selected = viewModel.themeStyle == ThemeStyle.RETRO,
+                                        primaryColors = previewColorsFor(ThemeStyle.RETRO, dark = currentModeIsDark),
+                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.RETRO, dark = false) else null,
+                                        squared = true,
+                                        onClick = { viewModel.setThemeStyle(ThemeStyle.RETRO) },
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
+                                val crtScanlines by PreferenceRepository.crtScanlines.collectAsState()
+                                SettingsRowTitle("CRT scanlines")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Faint scanlines and darkened corners over the whole window. Retro style only.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = crtScanlines,
+                                        onCheckedChange = { PreferenceRepository.setCrtScanlines(it) },
+                                        enabled = ThemeManager.isRetro,
+                                    )
+                                    Text(
+                                        if (crtScanlines) "Scanlines on" else "Scanlines off",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (crtScanlines && ThemeManager.isRetro) MaterialTheme.colorScheme.primary else KdTextSecondary,
                                     )
                                 }
 
@@ -1274,9 +1344,10 @@ fun SettingsScreen(
                                     Column {
                                         Text(
                                             "KubeKubeDashDash",
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = MaterialTheme.typography.headlineSmall
+                                                .copy(fontWeight = FontWeight.SemiBold)
+                                                .retroChrome(13.sp),
                                             color = KdTextPrimary,
-                                            fontWeight = FontWeight.SemiBold,
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(

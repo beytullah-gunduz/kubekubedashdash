@@ -18,6 +18,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
@@ -137,10 +138,14 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
     // the theme follows the flow, would revert the dark baseline forced below.
     withTimeoutOrNull(5_000) { PreferenceRepository.preferencesLoaded.first { it } }
     val originalTheme = ThemeManager.mode
+    val originalStyle = ThemeManager.style
     try {
         // Force a deterministic dark baseline so every shot looks the same regardless
         // of the user's OS appearance setting. The original mode is restored in finally.
         ThemeManager.setMode(ThemeMode.DARK)
+        // A user with Retro enabled must not regenerate the docs-site screenshots in
+        // retro; the original style is restored in finally.
+        ThemeManager.setStyle(ThemeStyle.DEFAULT)
 
         log.info("Waiting for bootstrap workspace + window")
         val initialWorkspace = WorkspaceManager.workspaces.first { it.isNotEmpty() }.first()
@@ -508,9 +513,11 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         log.info("captured + composited multi-window")
     } finally {
         watchdogs.forEach { it.cancel() }
-        // Restore the prior theme. setMode persists, but the task runs with its own
-        // data directory (build.gradle.kts), so nothing reaches the developer's store.
+        // Restore the prior theme. setMode/setStyle persist, but the task runs with
+        // its own data directory (build.gradle.kts), so nothing reaches the
+        // developer's store.
         ThemeManager.setMode(originalTheme)
+        ThemeManager.setStyle(originalStyle)
     }
 }
 

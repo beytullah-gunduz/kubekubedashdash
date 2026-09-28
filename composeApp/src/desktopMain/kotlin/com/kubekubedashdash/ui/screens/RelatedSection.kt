@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -19,15 +18,19 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.retroCaps
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.RelatedResources
@@ -173,7 +176,7 @@ private fun <T> StateFlow<ResourceState<List<T>>>.successOrEmpty(): List<T> {
 fun RelatedSection(related: RelatedResources, onNavigate: (Screen) -> Unit) {
     if (related.isEmpty) return
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Related", style = MaterialTheme.typography.labelLarge, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
+        Text("Related".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         if (related.owners.isNotEmpty()) {
             RelatedGroup(label = "Owners", refs = related.owners, onNavigate = onNavigate)
         }
@@ -241,7 +244,7 @@ private fun RelatedRefChip(ref: RelatedRef, onNavigate: (Screen) -> Unit) {
 @Composable
 private fun RelatedChip(text: String, onClick: (() -> Unit)?) {
     Surface(
-        shape = RoundedCornerShape(4.dp),
+        shape = 4.dp.kdCorner,
         color = KdSurfaceVariant,
         modifier = if (onClick != null) {
             Modifier.pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick)

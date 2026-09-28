@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,14 +37,19 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.NativeWindowDrag
+import com.kubekubedashdash.ui.crt.CrtGhost
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import org.jetbrains.compose.resources.painterResource
 
 /** One row of the shortcut sheet. [keys] is already platform-rendered. */
@@ -173,7 +177,7 @@ fun ShortcutGroups(
  * takes focus via [FocusRequester] and does not give it back on dismiss.
  */
 @Composable
-fun ShortcutSheet(onDismiss: () -> Unit) {
+fun ShortcutSheet(onDismiss: () -> Unit, crtGhost: CrtGhost? = null) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val groups = remember { appShortcuts(NativeWindowDrag.isMacOS) }
@@ -209,8 +213,9 @@ fun ShortcutSheet(onDismiss: () -> Unit) {
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
-                ),
-            shape = RoundedCornerShape(12.dp),
+                )
+                .crtCardReveal(crtGhost),
+            shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
             shadowElevation = 16.dp,
@@ -223,7 +228,7 @@ fun ShortcutSheet(onDismiss: () -> Unit) {
                 ) {
                     Text(
                         text = "Keyboard shortcuts",
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineSmall.retroChrome(13.sp),
                         color = KdTextPrimary,
                     )
                     IconButton(onClick = onDismiss) {

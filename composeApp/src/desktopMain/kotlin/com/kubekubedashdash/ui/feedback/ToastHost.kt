@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +47,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.close_filled
@@ -148,7 +148,7 @@ private fun ToastCard(toast: Toast, onUndo: () -> Unit, onDismiss: () -> Unit) {
                     }
                 }
             },
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         color = KdSurface,
         border = BorderStroke(1.dp, KdBorder),
         shadowElevation = 6.dp,

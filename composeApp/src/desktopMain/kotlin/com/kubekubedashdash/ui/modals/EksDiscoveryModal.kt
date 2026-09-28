@@ -64,6 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
+import com.kubekubedashdash.KdOnPrimary
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSuccess
@@ -71,6 +72,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -78,6 +80,8 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.hourglass_empty_filled
+import com.kubekubedashdash.ui.crt.CrtGhost
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryStep
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryViewModel
@@ -95,6 +99,7 @@ fun EksDiscoveryModal(
     onDismiss: () -> Unit,
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
+    crtGhost: CrtGhost? = null,
 ) {
     val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel() }
     LaunchedEffect(Unit) { viewModel.reset() }
@@ -153,8 +158,8 @@ fun EksDiscoveryModal(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp),
-            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(crtGhost),
+            shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
             shadowElevation = 24.dp,
@@ -948,18 +953,21 @@ private fun Footer(
         Spacer(Modifier.width(8.dp))
 
         when (step) {
-            EksDiscoveryStep.PICK_PROFILE -> Button(
-                onClick = { viewModel.proceedFromProfile() },
-                enabled = selectedProfiles.isNotEmpty(),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-            ) { Text("Next", color = Color.White) }
+            EksDiscoveryStep.PICK_PROFILE -> {
+                val nextEnabled = selectedProfiles.isNotEmpty()
+                Button(
+                    onClick = { viewModel.proceedFromProfile() },
+                    enabled = nextEnabled,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                ) { Text("Next", color = if (nextEnabled) KdOnPrimary else Color.White) }
+            }
 
             EksDiscoveryStep.PICK_REGIONS -> Button(
                 onClick = { viewModel.startDiscovery() },
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-            ) { Text("Scan", color = Color.White) }
+            ) { Text("Scan", color = KdOnPrimary) }
 
             EksDiscoveryStep.SCANNING -> Button(
                 onClick = {},
@@ -974,12 +982,18 @@ private fun Footer(
 
             EksDiscoveryStep.PICK_CLUSTERS -> {
                 val selected = candidates.count { it.selected }
+                val importEnabled = selected > 0
                 Button(
                     onClick = { viewModel.startImport() },
-                    enabled = selected > 0,
+                    enabled = importEnabled,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-                ) { Text(if (selected == 0) "Import" else "Import $selected", color = Color.White) }
+                ) {
+                    Text(
+                        if (selected == 0) "Import" else "Import $selected",
+                        color = if (importEnabled) KdOnPrimary else Color.White,
+                    )
+                }
             }
 
             EksDiscoveryStep.IMPORTING -> Button(
@@ -1002,9 +1016,9 @@ private fun Footer(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
-                    Icon(painterResource(Res.drawable.cloud_filled), null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Icon(painterResource(Res.drawable.cloud_filled), null, tint = KdOnPrimary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = Color.White)
+                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = KdOnPrimary)
                 }
             }
         }

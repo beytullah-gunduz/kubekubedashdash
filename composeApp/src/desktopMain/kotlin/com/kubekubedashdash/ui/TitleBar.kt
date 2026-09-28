@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,13 +44,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
+import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
 import com.kubekubedashdash.resources.settings_filled
+import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.painterResource
 
@@ -146,9 +150,10 @@ fun WindowScope.TitleBar(
             } else {
                 Text(
                     text = title,
-                    color = KdTextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal,
+                    color = if (ThemeManager.isRetro) KdAccent else KdTextSecondary,
+                    style = LocalTextStyle.current
+                        .copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
+                        .retroChrome(9.sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

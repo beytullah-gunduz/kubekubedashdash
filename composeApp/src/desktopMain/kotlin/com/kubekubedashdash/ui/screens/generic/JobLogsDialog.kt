@@ -36,6 +36,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.delay
 
@@ -164,6 +165,7 @@ private fun JobLogsAlertDialog(
     body: @Composable () -> Unit,
 ) {
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = onDismiss,
         containerColor = KdSurface,
         title = {

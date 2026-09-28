@@ -65,6 +65,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
@@ -74,6 +75,8 @@ import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.ui.crt.CrtGhost
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ContextBinding
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.EksClusterDiscoverer
@@ -158,6 +161,7 @@ fun ClusterSelectorModal(
     dismissable: Boolean = true,
     canAddTab: Boolean = false,
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
+    crtGhost: CrtGhost? = null,
 ) {
     var bindings by remember { mutableStateOf(emptyMap<String, ContextBinding>()) }
     LaunchedEffect(contexts) {
@@ -203,8 +207,9 @@ fun ClusterSelectorModal(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
-                ),
-            shape = RoundedCornerShape(12.dp),
+                )
+                .crtCardReveal(crtGhost),
+            shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
             shadowElevation = 16.dp,

@@ -27,8 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
+import com.kubekubedashdash.KdOnPrimary
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import org.jetbrains.compose.resources.painterResource
@@ -54,35 +56,59 @@ internal val LightPreviewColors = ThemePreviewColors(
     text = Color(0xFF1E293B),
 )
 
+internal val RetroDarkPreviewColors = ThemePreviewColors(
+    sidebar = Color(0xFF0A0B1A),
+    background = Color(0xFF12142B),
+    surface = Color(0xFF1E2240),
+    text = Color(0xFFE3E6F5),
+)
+
+internal val RetroLightPreviewColors = ThemePreviewColors(
+    sidebar = Color(0xFFE6DCC3),
+    background = Color(0xFFEFE7D2),
+    surface = Color(0xFFF8F2E3),
+    text = Color(0xFF2B2418),
+)
+
+/** Resolves the four preview palettes (D10): [ThemeStyle] × dark/light. */
+internal fun previewColorsFor(style: ThemeStyle, dark: Boolean): ThemePreviewColors = when (style) {
+    ThemeStyle.DEFAULT -> if (dark) DarkPreviewColors else LightPreviewColors
+    ThemeStyle.RETRO -> if (dark) RetroDarkPreviewColors else RetroLightPreviewColors
+}
+
 @Composable
 internal fun ThemePreviewCard(
     label: String,
     selected: Boolean,
     primaryColors: ThemePreviewColors,
     secondaryColors: ThemePreviewColors? = null,
+    squared: Boolean = false,
     onClick: () -> Unit,
 ) {
     val borderColor = if (selected) KdPrimary else KdBorder
     val borderWidth = if (selected) 2.dp else 1.dp
+    val frameShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(10.dp)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(width = 160.dp, height = 110.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
+                .clip(frameShape)
+                .border(borderWidth, borderColor, frameShape)
                 .clickable(onClick = onClick),
         ) {
             if (secondaryColors == null) {
-                ThemeMockup(primaryColors, modifier = Modifier.fillMaxSize())
+                ThemeMockup(primaryColors, squared = squared, modifier = Modifier.fillMaxSize())
             } else {
                 Row(modifier = Modifier.fillMaxSize()) {
                     ThemeMockup(
                         primaryColors,
+                        squared = squared,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                     ThemeMockup(
                         secondaryColors,
+                        squared = squared,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -106,7 +132,7 @@ internal fun ThemePreviewCard(
                     Icon(
                         painterResource(Res.drawable.check_filled),
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = KdOnPrimary,
                         modifier = Modifier.size(12.dp),
                     )
                 }
@@ -131,8 +157,11 @@ internal fun ThemePreviewCard(
 @Composable
 private fun ThemeMockup(
     colors: ThemePreviewColors,
+    squared: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val thinBarShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(3.dp)
+    val wideBarShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(4.dp)
     Row(modifier = modifier) {
         Column(
             modifier = Modifier
@@ -147,7 +176,7 @@ private fun ThemeMockup(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(thinBarShape)
                         .background(colors.text.copy(alpha = if (it == 0) 0.3f else 0.12f)),
                 )
             }
@@ -165,7 +194,7 @@ private fun ThemeMockup(
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
                     .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(wideBarShape)
                     .background(colors.text.copy(alpha = 0.25f)),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -174,7 +203,7 @@ private fun ThemeMockup(
                         modifier = Modifier
                             .weight(1f)
                             .height(20.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(wideBarShape)
                             .background(colors.surface),
                     )
                 }
@@ -184,7 +213,7 @@ private fun ThemeMockup(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(thinBarShape)
                         .background(colors.text.copy(alpha = 0.10f)),
                 )
             }

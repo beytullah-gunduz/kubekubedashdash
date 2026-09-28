@@ -53,8 +53,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
@@ -63,6 +65,7 @@ import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_back_filled
 import com.kubekubedashdash.resources.arrow_forward_filled
@@ -71,6 +74,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.search_filled
+import com.kubekubedashdash.retroChrome
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -124,10 +128,13 @@ internal fun SessionContentHeader(
             HistoryNavButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
             // Page title. The cluster name already lives in the tab chip and
             // title bar; repeating it here left the screen itself unnamed.
+            // CustomResource titles are the CRD kind — cluster data, so they
+            // stay off the pixel voice and accent colour (D5).
+            val isCrdTitle = screen is Screen.Main.CustomResource
             Text(
                 text = screen.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = KdTextPrimary,
+                style = if (isCrdTitle) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleMedium.retroChrome(10.sp),
+                color = if (ThemeManager.isRetro && !isCrdTitle) KdAccent else KdTextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.PreferenceStorageHealth
 import com.kubekubedashdash.data.datastore.PreferenceStorageState
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -25,6 +26,13 @@ class SettingsScreenViewModel : ViewModel() {
 
     fun setThemeMode(mode: ThemeMode) {
         ThemeManager.setMode(mode)
+    }
+
+    val themeStyle: ThemeStyle
+        get() = ThemeManager.style
+
+    fun setThemeStyle(style: ThemeStyle) {
+        ThemeManager.setStyle(style)
     }
 
     // Audit A5: single source of truth. PreferenceRepository already exposes

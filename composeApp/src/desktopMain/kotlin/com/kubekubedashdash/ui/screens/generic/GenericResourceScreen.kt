@@ -82,6 +82,8 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.crt.crtContentCut
+import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.feedback.replicaCount
@@ -177,6 +179,7 @@ fun GenericResourceScreen(
     apiGroup: String? = null,
     apiVersion: String? = null,
     plural: String? = null,
+    isCustomResource: Boolean = false,
     onOpenLogs: ((String, String, String?) -> Unit)? = null,
     onNavigate: (Screen) -> Unit = {},
 ) {
@@ -304,6 +307,7 @@ fun GenericResourceScreen(
                             ResourceCountHeader(
                                 count = filtered.size,
                                 kind = pluralizeKind(kind),
+                                pixelTitle = !isCustomResource,
                                 liveDot = {
                                     LiveDataDot(LocalIsConnected.current, LocalConnectionError.current, Modifier.padding(start = 4.dp))
                                 },
@@ -413,7 +417,8 @@ fun GenericResourceScreen(
                         }
                     },
                     detail = {
-                        selected?.let { res ->
+                        // Retro keeps the closing pane's content for its CRT collapse (D22).
+                        retroLatched(selected)?.let { res ->
                             // D4: computed once here, from the flows this screen
                             // already collects — feeds both the overview
                             // section below and the header's owner breadcrumb.
@@ -583,7 +588,9 @@ fun GenericResourceScreen(
                                 labels = res.labels,
                                 annotations = res.annotations,
                                 onClose = { viewModel.clearSelection() },
-                                modifier = Modifier.fillMaxSize(),
+                                // Retro: a new resource opens through the row cut (D25); keyed on identity,
+                                // because `selected` re-emits the same resource as a new object every tick.
+                                modifier = Modifier.fillMaxSize().crtContentCut("$kind/" + res.uid.ifBlank { "${res.namespace.orEmpty()}/${res.name}" }),
                                 extraTabs = kindExtraTabs(kind, res, client, onNavigate, group = apiGroup),
                                 overviewSections = kindOverviewSections(kind, res, client, related, onNavigate, group = apiGroup),
                                 labelQuery = labelQuery,

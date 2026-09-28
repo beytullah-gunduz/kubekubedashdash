@@ -43,6 +43,7 @@ import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.DetailHost
 import com.kubekubedashdash.ui.components.ReconnectOverlay
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
 import com.kubekubedashdash.ui.portforward.PortForwardLauncher
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
@@ -73,7 +74,7 @@ internal fun SessionPaneContent(
     bottomSlot: (@Composable () -> Unit)? = null,
 ) {
     val sessionVm = session.viewModel
-    val currentScreen by sessionVm.currentScreen.collectAsState(Screen.Main.Connecting)
+    val currentScreen by sessionVm.currentScreen.collectAsState()
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
     val canGoBack by sessionVm.canGoBack.collectAsState()
     val canGoForward by sessionVm.canGoForward.collectAsState()
@@ -207,9 +208,11 @@ internal fun SessionPaneContent(
                                 // One host for list + detail: the sidebar keeps its width and
                                 // the two share the content area (split, overlay below
                                 // 1200 dp, or the detail expanded over the list).
+                                // Retro keeps the closing pane's content and width key for its CRT collapse (D22).
+                                val paneScreen = retroLatched(extraPaneScreen)
                                 DetailHost(
                                     visible = extraPaneScreen != null,
-                                    kindKey = extraPaneScreen.detailKindKey(),
+                                    kindKey = paneScreen.detailKindKey(),
                                     onWidthChange = sessionVm::setExtraPaneWidth,
                                     expanded = extraPaneExpanded,
                                     onExpandedChange = sessionVm::setExtraPaneExpanded,
@@ -239,7 +242,7 @@ internal fun SessionPaneContent(
                                     },
                                     detail = {
                                         ExtraPaneRouter(
-                                            screen = extraPaneScreen,
+                                            screen = paneScreen,
                                             onNavigate = sessionVm::navigate,
                                             onClose = { sessionVm.closeExtraPane() },
                                             modifier = Modifier.fillMaxSize(),

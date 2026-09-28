@@ -28,6 +28,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.view_in_ar_filled
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -45,6 +46,7 @@ fun TerminalContainerPickerDialog(
     title: String = "Open terminal in container",
 ) {
     AlertDialog(
+        modifier = Modifier.crtCardReveal(),
         onDismissRequest = onDismiss,
         containerColor = KdSurface,
         title = {

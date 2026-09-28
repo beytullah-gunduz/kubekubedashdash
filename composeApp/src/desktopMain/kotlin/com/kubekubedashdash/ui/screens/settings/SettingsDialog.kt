@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +31,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.ui.crt.CrtGhost
+import com.kubekubedashdash.ui.crt.crtCardReveal
 
 @Composable
 fun SettingsDialog(
@@ -39,6 +41,7 @@ fun SettingsDialog(
     onDiscoverEks: () -> Unit,
     onDiscoverGke: () -> Unit = {},
     onShowAppLogs: () -> Unit,
+    crtGhost: CrtGhost? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -79,8 +82,9 @@ fun SettingsDialog(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
-                ),
-            shape = RoundedCornerShape(12.dp),
+                )
+                .crtCardReveal(crtGhost),
+            shape = 12.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(1.dp, KdBorder),
             shadowElevation = 16.dp,
