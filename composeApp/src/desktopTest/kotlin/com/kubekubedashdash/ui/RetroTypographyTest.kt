@@ -146,16 +146,23 @@ class RetroTypographyTest {
         var retroSlots: List<Pair<String, TextStyle>> = emptyList()
         var retroFamily: FontFamily? = null
         var pixelFamily: FontFamily? = null
+        var sansFamily: FontFamily? = null
         runComposeUiTest {
             ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
             setContent {
                 retroSlots = kdTypography().slots()
                 retroFamily = kdRetroFamily()
                 pixelFamily = kdPixelFamily()
+                sansFamily = kdSansFamily()
             }
             waitForIdle()
         }
         val retroMap = retroSlots.toMap()
+
+        // The slot checks below compare against kdRetroFamily() itself, so pin that it is
+        // a face of its own: it would still pass if kdRetroFamily loaded Inter or Sixtyfour.
+        assertNotEquals(sansFamily, retroFamily, "the reading face must not be Inter")
+        assertNotEquals(pixelFamily, retroFamily, "the reading face must not be Sixtyfour")
 
         val pixelNames = setOf("headlineLarge", "headlineMedium")
         for ((name, style) in retroSlots) {
