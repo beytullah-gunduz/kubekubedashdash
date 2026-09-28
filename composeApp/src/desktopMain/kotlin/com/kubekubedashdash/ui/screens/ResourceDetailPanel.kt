@@ -100,6 +100,9 @@ import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.crt.crtTabCut
+import com.kubekubedashdash.ui.crt.goToTab
+import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.SecretYamlMasking
 import kotlinx.coroutines.Dispatchers
@@ -201,6 +204,7 @@ fun ResourceDetailPanel(
     }
     val yamlIndex = tabs.lastIndex
     val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val tabCut = rememberCrtTabCut()
 
     LaunchedEffect(name, namespace) {
         activeTab = 0
@@ -255,7 +259,7 @@ fun ResourceDetailPanel(
                         selected = index == activeTab,
                         onClick = {
                             activeTab = index
-                            scope.launch { pagerState.animateScrollToPage(index) }
+                            scope.launch { pagerState.goToTab(index, tabCut) }
                         },
                         selectedContentColor = KdPrimary,
                         unselectedContentColor = KdTextSecondary,
@@ -290,7 +294,7 @@ fun ResourceDetailPanel(
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().crtTabCut(tabCut),
             ) { page ->
                 when {
                     page == 0 -> GenericOverviewTab(

@@ -65,6 +65,9 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.crt.crtTabCut
+import com.kubekubedashdash.ui.crt.goToTab
+import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.screens.DetailAction
@@ -148,6 +151,7 @@ internal fun NodeDetailPanel(
             val isTall = maxHeight >= 1000.dp
             val tabs = if (isTall) nodeTallTabs else nodeCompactTabs
             val pagerState = rememberPagerState(pageCount = { tabs.size })
+            val tabCut = rememberCrtTabCut()
 
             LaunchedEffect(node.uid) {
                 activeTab = NodeDetailTab.Overview
@@ -214,7 +218,7 @@ internal fun NodeDetailPanel(
                             onClick = {
                                 activeTab = tab
                                 scope.launch {
-                                    pagerState.animateScrollToPage(tabs.indexOf(tab).coerceAtLeast(0))
+                                    pagerState.goToTab(tabs.indexOf(tab).coerceAtLeast(0), tabCut)
                                 }
                             },
                             selectedContentColor = KdPrimary,
@@ -231,7 +235,7 @@ internal fun NodeDetailPanel(
 
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().crtTabCut(tabCut),
                 ) { page ->
                     when (tabs[page]) {
                         NodeDetailTab.Overview -> {

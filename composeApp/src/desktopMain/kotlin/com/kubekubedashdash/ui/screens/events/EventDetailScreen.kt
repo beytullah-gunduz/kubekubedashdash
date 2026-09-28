@@ -73,6 +73,9 @@ import com.kubekubedashdash.ui.components.LocalDetailHostControls
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.crt.crtTabCut
+import com.kubekubedashdash.ui.crt.goToTab
+import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -151,6 +154,7 @@ fun EventDetailScreen(
 
     val tabs = EventDetailTab.entries.toList()
     val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val tabCut = rememberCrtTabCut()
 
     LaunchedEffect(event.uid) {
         activeTab = 0
@@ -227,7 +231,7 @@ fun EventDetailScreen(
                         selected = index == activeTab,
                         onClick = {
                             activeTab = index
-                            scope.launch { pagerState.animateScrollToPage(index) }
+                            scope.launch { pagerState.goToTab(index, tabCut) }
                         },
                         selectedContentColor = KdPrimary,
                         unselectedContentColor = KdTextSecondary,
@@ -246,7 +250,7 @@ fun EventDetailScreen(
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().crtTabCut(tabCut),
             ) { page ->
                 when (page) {
                     0 -> EventOverviewTab(

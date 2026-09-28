@@ -89,6 +89,9 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.components.statusColor
+import com.kubekubedashdash.ui.crt.crtTabCut
+import com.kubekubedashdash.ui.crt.goToTab
+import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
@@ -238,6 +241,7 @@ fun PodDetailPanel(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val tabs = detailTabs
             val pagerState = rememberPagerState(pageCount = { tabs.size })
+            val tabCut = rememberCrtTabCut()
 
             LaunchedEffect(pod.uid) {
                 activeTab = DetailTab.Overview
@@ -271,12 +275,12 @@ fun PodDetailPanel(
                 PanelTabs(activeTab, tabs, warningCount) { newTab ->
                     activeTab = newTab
                     scope.launch {
-                        pagerState.animateScrollToPage(tabs.indexOf(newTab).coerceAtLeast(0))
+                        pagerState.goToTab(tabs.indexOf(newTab).coerceAtLeast(0), tabCut)
                     }
                 }
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().crtTabCut(tabCut),
                 ) { page ->
                     when (tabs[page]) {
                         DetailTab.Overview -> OverviewTab(
@@ -295,7 +299,7 @@ fun PodDetailPanel(
                             eventTotal = currentPodEvents.size,
                             onShowAllEvents = {
                                 activeTab = DetailTab.Events
-                                scope.launch { pagerState.animateScrollToPage(tabs.indexOf(DetailTab.Events).coerceAtLeast(0)) }
+                                scope.launch { pagerState.goToTab(tabs.indexOf(DetailTab.Events).coerceAtLeast(0), tabCut) }
                             },
                             onEventClick = openEvent,
                         )
