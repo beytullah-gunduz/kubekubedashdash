@@ -1,6 +1,8 @@
 package com.kubekubedashdash.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -9,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -37,9 +40,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.screenshots.ScreenshotHooks
+import com.kubekubedashdash.ui.crt.CrtPanelTiming
+import com.kubekubedashdash.ui.crt.crtPanelFrame
 
 /** How the host lays out list and detail for the measured content width. */
 enum class DetailLayout { Split, Overlay }
@@ -130,6 +137,9 @@ private fun Modifier.blockFallThrough(): Modifier = pointerInput(Unit) {
  * else 42 % of the content width. A drag runs against a live value and is
  * committed once on release: to the memory (when [kindKey] is non-null) and
  * to [onWidthChange].
+ *
+ * In Retro the pane opens and collapses like a CRT (D21, `crtPanelFrame`) instead of fading or
+ * sliding.
  */
 @Composable
 fun DetailHost(
@@ -164,6 +174,7 @@ fun DetailHost(
     val expandedLayer = if (visible) expanded else lastExpanded
 
     BoxWithConstraints(modifier = modifier) {
+        val retro = ThemeManager.isRetro
         val contentWidth = maxWidth.value
         val split = !expandedLayer && detailLayoutFor(contentWidth) == DetailLayout.Split
         // The handle reports deltas faster than a preference write can round-trip
@@ -182,23 +193,35 @@ fun DetailHost(
         val listEndTarget = if (split && visible) (splitWidth + DetailHostDefaults.HANDLE_DP).dp else 0.dp
         val listEndPadding by animateDpAsState(
             targetValue = listEndTarget,
-            animationSpec = if (dragging) snap() else tween(150),
+            animationSpec = when {
+                dragging -> snap()
+
+                // Retro (D21): the list re-flows in one step — as the pane opens, and again
+                // once its 70 ms collapse has finished, so it never slides under the collapse.
+                retro -> if (visible) snap() else snap(delayMillis = CrtPanelTiming.CLOSE_MS)
+
+                else -> tween(150)
+            },
             label = "detailHostListEnd",
         )
         Box(modifier = Modifier.fillMaxSize().padding(end = listEndPadding)) { list() }
 
         when {
-            expandedLayer -> AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
-                Box(modifier = Modifier.fillMaxSize().blockFallThrough()) { detailWithControls() }
+            expandedLayer -> AnimatedVisibility(
+                visible = visible,
+                enter = if (retro) EnterTransition.None else fadeIn(),
+                exit = if (retro) ExitTransition.None else fadeOut(),
+            ) {
+                Box(modifier = crtPanelFrame().fillMaxSize().blockFallThrough()) { detailWithControls() }
             }
 
             split -> AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(150)),
+                enter = if (retro) EnterTransition.None else fadeIn(tween(150)),
+                exit = if (retro) ExitTransition.None else fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.CenterEnd),
             ) {
-                Row(modifier = Modifier.fillMaxHeight()) {
+                Row(modifier = crtPanelFrame().fillMaxHeight()) {
                     ResizeHandle(
                         onDragStopped = {
                             dragging = false
@@ -215,7 +238,11 @@ fun DetailHost(
 
             else -> {
                 val sheetWidth = overlayWidthFor(contentWidth, remembered)
-                AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = if (retro) EnterTransition.None else fadeIn(),
+                    exit = if (retro) fadeOut(snap(delayMillis = CrtPanelTiming.CLOSE_MS)) else fadeOut(),
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -229,15 +256,16 @@ fun DetailHost(
                 }
                 AnimatedVisibility(
                     visible = visible,
-                    enter = slideInHorizontally { it } + fadeIn(),
-                    exit = slideOutHorizontally { it } + fadeOut(),
+                    enter = if (retro) EnterTransition.None else slideInHorizontally { it } + fadeIn(),
+                    exit = if (retro) ExitTransition.None else slideOutHorizontally { it } + fadeOut(),
                     modifier = Modifier.align(Alignment.CenterEnd),
                 ) {
                     Box(
-                        modifier = Modifier
+                        modifier = crtPanelFrame()
                             .width(sheetWidth.dp)
                             .fillMaxHeight()
-                            .shadow(12.dp)
+                            // Retro (D21): a hairline edge, not a soft Material shadow.
+                            .then(if (retro) Modifier.border(1.dp, KdBorder) else Modifier.shadow(12.dp))
                             .background(KdSurface)
                             .blockFallThrough(),
                     ) { detailWithControls() }

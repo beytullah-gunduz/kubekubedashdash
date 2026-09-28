@@ -87,3 +87,10 @@ internal fun crtSwapTiming(style: SwapStyle): CrtSwapTiming = when (style) {
         scale = CrtScale.SCREEN,
     )
 }
+
+/** Retro detail-pane and tab timings (D21, D23), pinned to the channel cut's in CrtFrameTest. */
+internal object CrtPanelTiming {
+    const val OPEN_MS = 140
+    const val CLOSE_MS = 70
+    const val TAB_CUT_MS = 110
+}

@@ -82,6 +82,7 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.feedback.replicaCount
@@ -415,7 +416,8 @@ fun GenericResourceScreen(
                         }
                     },
                     detail = {
-                        selected?.let { res ->
+                        // Retro keeps the closing pane's content for its CRT collapse (D22).
+                        retroLatched(selected)?.let { res ->
                             // D4: computed once here, from the flows this screen
                             // already collects — feeds both the overview
                             // section below and the header's owner breadcrumb.

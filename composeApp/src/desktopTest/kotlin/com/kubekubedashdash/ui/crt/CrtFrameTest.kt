@@ -278,4 +278,14 @@ class CrtFrameTest {
         val compressedOn = crtSwapTiming(SwapStyle.COMPRESSED_ON)
         assertTrue(cut.crtEnterDelayMs + cut.crtEnterMs < compressedOn.crtEnterDelayMs + compressedOn.crtEnterMs)
     }
+
+    // --- CrtPanelTiming (D21, D23) ---
+
+    @Test
+    fun `panel timings are pinned to the channel cut`() {
+        val cut = crtSwapTiming(SwapStyle.CUT)
+        assertEquals(cut.crtExitMs, CrtPanelTiming.CLOSE_MS)
+        assertEquals(cut.crtEnterMs, CrtPanelTiming.TAB_CUT_MS)
+        assertEquals(140, CrtPanelTiming.OPEN_MS)
+    }
 }
