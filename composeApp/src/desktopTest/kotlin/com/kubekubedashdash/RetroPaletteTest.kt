@@ -2,10 +2,8 @@ package com.kubekubedashdash
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import com.kubekubedashdash.ui.screens.settings.DarkPreviewColors
-import com.kubekubedashdash.ui.screens.settings.LightPreviewColors
-import com.kubekubedashdash.ui.screens.settings.RetroDarkPreviewColors
-import com.kubekubedashdash.ui.screens.settings.RetroLightPreviewColors
+import com.kubekubedashdash.theme.kdPaletteSpec
+import com.kubekubedashdash.ui.screens.settings.ThemePreviewColors
 import com.kubekubedashdash.ui.screens.settings.previewColorsFor
 import com.kubekubedashdash.util.SystemDirectories
 import kotlin.test.AfterTest
@@ -17,18 +15,20 @@ import kotlin.test.assertTrue
 /**
  * Pins the retro token table (plan §3.1) two ways: (a) a regression lock on
  * every Default value (D3), and (b) an exact match on every Retro value. (c)
- * then checks the WCAG floors §3.2 depends on, and (d) checks the Settings
- * preview-card resolver (D10). Every switch goes through
+ * then checks the WCAG floors §3.2 depends on, and (d) checks that the Settings
+ * preview-card resolver (D10) reads the palette table. Every switch goes through
  * [ThemeManager.syncFromPreferences] / [ThemeManager.syncStyleFromPreferences]
  * — never a `set*` — so nothing here ever persists. Runs only against the
- * Gradle test-data store; the manager's prior mode and style are restored
- * after each case.
+ * Gradle test-data store; the manager's prior mode, style, palette and
+ * colour-blind switch are restored after each case.
  */
 class RetroPaletteTest {
 
     private lateinit var originalStyle: ThemeStyle
     private lateinit var originalMode: ThemeMode
     private var originalDark = true
+    private lateinit var originalPalette: ThemePalette
+    private var originalCvd = false
 
     @BeforeTest
     fun setUp() {
@@ -39,6 +39,10 @@ class RetroPaletteTest {
         originalStyle = ThemeManager.style
         originalMode = ThemeManager.mode
         originalDark = ThemeManager.isDarkTheme
+        originalPalette = ThemeManager.palette
+        originalCvd = ThemeManager.cvdSafeStatus
+        ThemeManager.syncPaletteFromPreferences(ThemePalette.STYLE)
+        ThemeManager.syncCvdFromPreferences(false)
     }
 
     @AfterTest
@@ -48,6 +52,8 @@ class RetroPaletteTest {
         // mode put it, so restore the flag first through the matching explicit mode.
         ThemeManager.syncFromPreferences(if (originalDark) ThemeMode.DARK else ThemeMode.LIGHT)
         ThemeManager.syncFromPreferences(originalMode)
+        ThemeManager.syncPaletteFromPreferences(originalPalette)
+        ThemeManager.syncCvdFromPreferences(originalCvd)
     }
 
     private class TokenExpectation(
@@ -160,10 +166,16 @@ class RetroPaletteTest {
     }
 
     @Test
-    fun `previewColorsFor resolves the four Settings preview palettes`() {
-        assertEquals(DarkPreviewColors, previewColorsFor(ThemeStyle.DEFAULT, dark = true))
-        assertEquals(LightPreviewColors, previewColorsFor(ThemeStyle.DEFAULT, dark = false))
-        assertEquals(RetroDarkPreviewColors, previewColorsFor(ThemeStyle.RETRO, dark = true))
-        assertEquals(RetroLightPreviewColors, previewColorsFor(ThemeStyle.RETRO, dark = false))
+    fun `previewColorsFor reads the palette table for both styles and both modes`() {
+        listOf(ThemeStyle.DEFAULT, ThemeStyle.RETRO).forEach { style ->
+            listOf(true, false).forEach { dark ->
+                val c = kdPaletteSpec(style, ThemePalette.STYLE).variant(dark).colors
+                assertEquals(
+                    ThemePreviewColors(c.sidebarBg, c.background, c.surface, c.textPrimary, c.border, c.primary),
+                    previewColorsFor(style, ThemePalette.STYLE, dark),
+                    "previewColorsFor($style, STYLE, dark = $dark)",
+                )
+            }
+        }
     }
 }

@@ -7,13 +7,11 @@ import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RippleDefaults
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +45,10 @@ import com.kubekubedashdash.resources.inter_regular
 import com.kubekubedashdash.resources.inter_semibold
 import com.kubekubedashdash.resources.jetbrains_mono_regular
 import com.kubekubedashdash.resources.sixtyfour_regular
+import com.kubekubedashdash.theme.KdColors
+import com.kubekubedashdash.theme.KdPaletteSpec
+import com.kubekubedashdash.theme.KdPaletteVariant
+import com.kubekubedashdash.theme.kdPaletteSpec
 import com.kubekubedashdash.ui.components.CopyFeedbackHost
 import com.kubekubedashdash.ui.feedback.ActionFeedbackHost
 import org.jetbrains.compose.resources.Font
@@ -60,10 +62,21 @@ enum class ThemeMode { LIGHT, DARK, SYSTEM }
  */
 enum class ThemeStyle { DEFAULT, RETRO }
 
+/**
+ * Orthogonal to [ThemeMode] and [ThemeStyle] (D1): which colours. STYLE is "the style's own
+ * palette" — Default's under Default, Retro's under Retro. Every other entry swaps colours only;
+ * the style still owns fonts, corners and motion.
+ */
+enum class ThemePalette(val label: String) {
+    STYLE(""), // the Settings card shows the current style's name instead
+}
+
 object ThemeManager {
     private var _mode by mutableStateOf(PreferenceRepository.themeMode.value)
     private var _isDarkTheme by mutableStateOf(_mode != ThemeMode.LIGHT)
     private var _style by mutableStateOf(PreferenceRepository.themeStyle.value)
+    private var _palette by mutableStateOf(ThemePalette.STYLE) // WS4 seeds it from PreferenceRepository
+    private var _cvd by mutableStateOf(false) // WS6 seeds it from PreferenceRepository
 
     val mode: ThemeMode get() = _mode
 
@@ -75,6 +88,24 @@ object ThemeManager {
 
     /** True only for [ThemeStyle.RETRO], independent of [mode]. */
     val isRetro: Boolean get() = _style == ThemeStyle.RETRO
+
+    /** Orthogonal to [mode] and [style] (D1) — see [ThemePalette]. */
+    val palette: ThemePalette get() = _palette
+
+    /** The colour-blind-safe status switch (D5). */
+    val cvdSafeStatus: Boolean get() = _cvd
+
+    /** The active palette in both modes (D9). */
+    val spec: KdPaletteSpec get() = kdPaletteSpec(_style, _palette)
+
+    /** The active palette in the active mode. */
+    val variant: KdPaletteVariant get() = spec.variant(_isDarkTheme)
+
+    /** Every Kd* getter reads this (D9, D10). */
+    val colors: KdColors get() = variant.let { if (_cvd) it.cvdColors else it.colors }
+
+    /** The M3 scheme KubeDashTheme installs. */
+    val scheme: ColorScheme get() = variant.let { if (_cvd) it.cvdScheme else it.scheme }
 
     fun setMode(newMode: ThemeMode) {
         _mode = newMode
@@ -125,246 +156,87 @@ object ThemeManager {
         _style = persisted
     }
 
+    /** Applies the persisted palette without writing it back (the F11 shape of [syncStyleFromPreferences]). */
+    internal fun syncPaletteFromPreferences(persisted: ThemePalette) {
+        if (_palette == persisted) return
+        _palette = persisted
+    }
+
+    /** Applies the persisted colour-blind switch without writing it back. */
+    internal fun syncCvdFromPreferences(persisted: Boolean) {
+        if (_cvd == persisted) return
+        _cvd = persisted
+    }
+
     /** Key any `remember` that computes colours on this — it changes exactly when a computed `Kd*` value would. */
-    val paletteKey: Any get() = _style to _isDarkTheme
+    val paletteKey: Any get() = PaletteKey(_style, _palette, _isDarkTheme, _cvd)
 }
 
-private val KdBackgroundDark = Color(0xFF1E2124)
-private val KdSidebarBgDark = Color(0xFF161819)
+private data class PaletteKey(val style: ThemeStyle, val palette: ThemePalette, val dark: Boolean, val cvd: Boolean)
 
-// KdSurfaceDark sits on top of KdBackgroundDark (e.g. cards on the cluster
-// overview). The previous #252A31 was only ~7 lightness units above the
-// background, making cards almost float; #2A3038 widens the gap so Surface,
-// SurfaceVariant, and Background each have a visible step.
-private val KdSurfaceDark = Color(0xFF2A3038)
-private val KdSurfaceVariantDark = Color(0xFF323845)
-private val KdTextPrimaryDark = Color(0xFFC8D1DC)
-private val KdTextSecondaryDark = Color(0xFF8B95A1)
+val KdBackground: Color get() = ThemeManager.colors.background
+val KdSidebarBg: Color get() = ThemeManager.colors.sidebarBg
 
-// Brighter than KdTextSecondary so placeholder/hint text stays readable
-// against KdSurface and KdSurfaceVariant. Light value matches secondary
-// because light-mode contrast is already sufficient.
-private val KdTextPlaceholderDark = Color(0xFF94A3B8)
-
-// Maximum-contrast body text for dense readouts on KdSurface — the drawer's
-// capture pane, where KdTextPrimary's 8.6:1 tested as legible but read as
-// washed out at labelSmall sizes. Light value matches primary, which is
-// already 14.6:1 on white.
-private val KdTextBrightDark = Color(0xFFFFFFFF)
-
-// More visible border on dark — the old #2E3440 was indistinguishable from
-// the surface so card outlines never registered. #3A4150 shows a soft
-// hairline without competing with the content.
-private val KdBorderDark = Color(0xFF3A4150)
-private val KdHoverDark = Color(0xFF333944)
-private val KdSelectedDark = Color(0xFF1A3A5C)
-
-private val KdBackgroundLight = Color(0xFFF8FAFC)
-private val KdSidebarBgLight = Color(0xFFFFFFFF)
-private val KdSurfaceLight = Color(0xFFFFFFFF)
-private val KdSurfaceVariantLight = Color(0xFFF1F5F9)
-private val KdTextPrimaryLight = Color(0xFF1E293B)
-private val KdTextSecondaryLight = Color(0xFF64748B)
-private val KdTextPlaceholderLight = Color(0xFF64748B)
-private val KdBorderLight = Color(0xFFE2E8F0)
-private val KdHoverLight = Color(0xFFF1F5F9)
-private val KdSelectedLight = Color(0xFFDBEAFE)
-
-// Retro-dark (§3.1): CRT arcade — deep blue-black tube, cyan phosphor
-// primary, coin-gold heading accent (KdAccent, below).
-private val KdBackgroundRetroDark = Color(0xFF12142B)
-private val KdSidebarBgRetroDark = Color(0xFF0A0B1A)
-private val KdSurfaceRetroDark = Color(0xFF1E2240)
-private val KdSurfaceVariantRetroDark = Color(0xFF272C50)
-private val KdTextPrimaryRetroDark = Color(0xFFE3E6F5)
-private val KdTextSecondaryRetroDark = Color(0xFFADB3D6)
-private val KdTextPlaceholderRetroDark = Color(0xFFADB3D6)
-private val KdTextBrightRetroDark = Color(0xFFFFFFFF)
-private val KdBorderRetroDark = Color(0xFF3B4275)
-private val KdHoverRetroDark = Color(0xFF2E3460)
-private val KdSelectedRetroDark = Color(0xFF1E4A56)
-
-// Retro-light (§3.1): "paper terminal" — cream field, dark-brown ink,
-// deep-teal primary, plum accent. Rejected the reference's Game Boy
-// pea-green LCD because it erases "green = healthy" (D12).
-private val KdBackgroundRetroLight = Color(0xFFEFE7D2)
-private val KdSidebarBgRetroLight = Color(0xFFE6DCC3)
-private val KdSurfaceRetroLight = Color(0xFFF8F2E3)
-private val KdSurfaceVariantRetroLight = Color(0xFFE8DEC6)
-private val KdTextPrimaryRetroLight = Color(0xFF2B2418)
-private val KdTextSecondaryRetroLight = Color(0xFF5A4F3C)
-private val KdTextPlaceholderRetroLight = Color(0xFF5A4F3C)
-private val KdTextBrightRetroLight = Color(0xFF2B2418)
-private val KdBorderRetroLight = Color(0xFFCBBE9E)
-private val KdHoverRetroLight = Color(0xFFE3D8BC)
-private val KdSelectedRetroLight = Color(0xFFCFE3E0)
-
-/**
- * Every `Kd*` getter branches through this: Retro first, then dark/light.
- * `ThemeManager.isRetro` and `isDarkTheme` are the same two reads every
- * getter already made, just factored once (D2, D3).
- */
-private fun pick(dark: Color, light: Color, retroDark: Color, retroLight: Color): Color = if (ThemeManager.isRetro) {
-    if (ThemeManager.isDarkTheme) retroDark else retroLight
-} else {
-    if (ThemeManager.isDarkTheme) dark else light
-}
-
-val KdBackground: Color get() = pick(KdBackgroundDark, KdBackgroundLight, KdBackgroundRetroDark, KdBackgroundRetroLight)
-val KdSidebarBg: Color get() = pick(KdSidebarBgDark, KdSidebarBgLight, KdSidebarBgRetroDark, KdSidebarBgRetroLight)
-val KdSurface: Color get() = pick(KdSurfaceDark, KdSurfaceLight, KdSurfaceRetroDark, KdSurfaceRetroLight)
-val KdSurfaceVariant: Color get() = pick(KdSurfaceVariantDark, KdSurfaceVariantLight, KdSurfaceVariantRetroDark, KdSurfaceVariantRetroLight)
+// KdSurface sits on top of KdBackground (e.g. cards on the cluster overview);
+// Surface, SurfaceVariant and Background each keep a visible step.
+val KdSurface: Color get() = ThemeManager.colors.surface
+val KdSurfaceVariant: Color get() = ThemeManager.colors.surfaceVariant
 
 // Default primary/accent are identical (§3.1: KdAccent == KdPrimary in
 // Default); Retro splits them so gold headings don't read as KdWarning amber
 // next to a cyan-primary UI (D11).
-private val KdPrimaryDefault = Color(0xFF3D90CE)
-private val KdPrimaryRetroDark = Color(0xFF7FD8EA)
-private val KdPrimaryRetroLight = Color(0xFF00606B)
-private val KdOnPrimaryRetroDark = Color(0xFF00363F)
-private val KdAccentRetroDark = Color(0xFFFFD23E)
-private val KdAccentRetroLight = Color(0xFF6B2F5B)
-private val KdOnErrorRetroDark = Color(0xFF3B0010)
-
-val KdPrimary: Color get() = pick(KdPrimaryDefault, KdPrimaryDefault, KdPrimaryRetroDark, KdPrimaryRetroLight)
-val KdOnPrimary: Color get() = pick(Color.White, Color.White, KdOnPrimaryRetroDark, Color.White)
+val KdPrimary: Color get() = ThemeManager.colors.primary
+val KdOnPrimary: Color get() = ThemeManager.colors.onPrimary
 
 /** Heading-only arcade accent (D5, D11). Value-identical to [KdPrimary] in Default. */
-val KdAccent: Color get() = pick(KdPrimaryDefault, KdPrimaryDefault, KdAccentRetroDark, KdAccentRetroLight)
+val KdAccent: Color get() = ThemeManager.colors.accent
 
-/** Content colour for a [KdError]-filled surface. Value-identical to white in Default. */
-val KdOnError: Color get() = pick(Color.White, Color.White, KdOnErrorRetroDark, Color.White)
+/** Content colour for a [KdError]-filled surface. */
+val KdOnError: Color get() = ThemeManager.colors.onError
 
-val KdTextPrimary: Color get() = pick(KdTextPrimaryDark, KdTextPrimaryLight, KdTextPrimaryRetroDark, KdTextPrimaryRetroLight)
-val KdTextSecondary: Color get() = pick(KdTextSecondaryDark, KdTextSecondaryLight, KdTextSecondaryRetroDark, KdTextSecondaryRetroLight)
-val KdTextPlaceholder: Color get() = pick(KdTextPlaceholderDark, KdTextPlaceholderLight, KdTextPlaceholderRetroDark, KdTextPlaceholderRetroLight)
-val KdTextBright: Color get() = pick(KdTextBrightDark, KdTextPrimaryLight, KdTextBrightRetroDark, KdTextBrightRetroLight)
+val KdTextPrimary: Color get() = ThemeManager.colors.textPrimary
+val KdTextSecondary: Color get() = ThemeManager.colors.textSecondary
+
+// Brighter than KdTextSecondary in dark so placeholder/hint text stays readable
+// against KdSurface and KdSurfaceVariant.
+val KdTextPlaceholder: Color get() = ThemeManager.colors.textPlaceholder
+
+// Maximum-contrast body text for dense readouts on KdSurface — the drawer's
+// capture pane, where KdTextPrimary tested as legible but read as washed out
+// at labelSmall sizes.
+val KdTextBright: Color get() = ThemeManager.colors.textBright
 
 // Status colors. The dark variants stay vivid (good contrast on near-black);
 // the light variants are darkened so they still meet WCAG AA on white card
-// backgrounds. The previous single value (e.g. KdSuccess #48C744) on
-// KdSurfaceLight #FFFFFF only reached ~2.4:1, well below the 4.5:1 bar for
-// normal text.
-private val KdSuccessDark = Color(0xFF48C744)
-private val KdSuccessLight = Color(0xFF2E7D32)
-private val KdWarningDark = Color(0xFFE8A030)
-private val KdWarningLight = Color(0xFFB26A00)
-private val KdErrorDark = Color(0xFFE54343)
-private val KdErrorLight = Color(0xFFC62828)
-private val KdInfoDark = Color(0xFF3D90CE)
-private val KdInfoLight = Color(0xFF1E73B8)
+// backgrounds.
+val KdSuccess: Color get() = ThemeManager.colors.success
+val KdWarning: Color get() = ThemeManager.colors.warning
+val KdError: Color get() = ThemeManager.colors.error
+val KdInfo: Color get() = ThemeManager.colors.info
 
-// Retro status colours (§3.1). Status meaning is kept in both variants (D8).
-private val KdSuccessRetroDark = Color(0xFF3CE66B)
-private val KdSuccessRetroLight = Color(0xFF2E6B2F)
-private val KdWarningRetroDark = Color(0xFFFFA300)
-private val KdWarningRetroLight = Color(0xFF8F5300)
-private val KdErrorRetroDark = Color(0xFFFF5C7A)
-private val KdErrorRetroLight = Color(0xFFA8231C)
-private val KdInfoRetroDark = Color(0xFF5CBDFF)
-private val KdInfoRetroLight = Color(0xFF1D5A9E)
+// A visible hairline that shows against KdSurface without competing with content.
+val KdBorder: Color get() = ThemeManager.colors.border
+val KdHover: Color get() = ThemeManager.colors.hover
+val KdSelected: Color get() = ThemeManager.colors.selected
 
-val KdSuccess: Color get() = pick(KdSuccessDark, KdSuccessLight, KdSuccessRetroDark, KdSuccessRetroLight)
-val KdWarning: Color get() = pick(KdWarningDark, KdWarningLight, KdWarningRetroDark, KdWarningRetroLight)
-val KdError: Color get() = pick(KdErrorDark, KdErrorLight, KdErrorRetroDark, KdErrorRetroLight)
-val KdInfo: Color get() = pick(KdInfoDark, KdInfoLight, KdInfoRetroDark, KdInfoRetroLight)
-val KdBorder: Color get() = pick(KdBorderDark, KdBorderLight, KdBorderRetroDark, KdBorderRetroLight)
-val KdHover: Color get() = pick(KdHoverDark, KdHoverLight, KdHoverRetroDark, KdHoverRetroLight)
-val KdSelected: Color get() = pick(KdSelectedDark, KdSelectedLight, KdSelectedRetroDark, KdSelectedRetroLight)
+// Tokens the palette model added (D9), beyond the original 19.
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF3D90CE),
-    onPrimary = Color.White,
-    secondary = Color(0xFF3D90CE),
-    background = KdBackgroundDark,
-    surface = KdSurfaceDark,
-    surfaceVariant = KdSurfaceVariantDark,
-    onBackground = KdTextPrimaryDark,
-    onSurface = KdTextPrimaryDark,
-    onSurfaceVariant = KdTextSecondaryDark,
-    error = KdErrorDark,
-    outline = KdBorderDark,
-    outlineVariant = KdBorderDark,
-)
+/** The memory series in charts and usage bars. */
+val KdSeriesMemory: Color get() = ThemeManager.colors.seriesMemory
 
-private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF3D90CE),
-    onPrimary = Color.White,
-    secondary = Color(0xFF3D90CE),
-    background = KdBackgroundLight,
-    surface = KdSurfaceLight,
-    surfaceVariant = KdSurfaceVariantLight,
-    onBackground = KdTextPrimaryLight,
-    onSurface = KdTextPrimaryLight,
-    onSurfaceVariant = KdTextSecondaryLight,
-    error = KdErrorLight,
-    outline = KdBorderLight,
-    outlineVariant = KdBorderLight,
-)
+/** Topology and deployment-graph edges. */
+val KdGraphEdge: Color get() = ThemeManager.colors.graphEdge
 
-// Retro-dark M3 roles (§3.1, M3 role table). Unlike the default schemes,
-// this sets the full surfaceContainer ramp because SettingsSection reads
-// `surfaceContainer` (SettingsScreen.kt:223).
-private val RetroDarkColorScheme = darkColorScheme(
-    primary = KdPrimaryRetroDark,
-    onPrimary = KdOnPrimaryRetroDark,
-    primaryContainer = Color(0xFF1E4A56),
-    onPrimaryContainer = Color(0xFFBDEBF7),
-    secondary = KdAccentRetroDark,
-    onSecondary = Color(0xFF241A00),
-    secondaryContainer = Color(0xFF5C4A00),
-    onSecondaryContainer = Color(0xFFFFE99C),
-    tertiary = Color(0xFFFF77A8),
-    onTertiary = Color(0xFF54082C),
-    background = KdBackgroundRetroDark,
-    surface = KdSurfaceRetroDark,
-    surfaceVariant = KdSurfaceVariantRetroDark,
-    onBackground = KdTextPrimaryRetroDark,
-    onSurface = KdTextPrimaryRetroDark,
-    onSurfaceVariant = KdTextSecondaryRetroDark,
-    error = KdErrorRetroDark,
-    onError = KdOnErrorRetroDark,
-    outline = KdBorderRetroDark,
-    outlineVariant = KdBorderRetroDark,
-    surfaceContainerLowest = Color(0xFF0A0B1A),
-    surfaceContainerLow = Color(0xFF191C38),
-    surfaceContainer = Color(0xFF1E2240),
-    surfaceContainerHigh = Color(0xFF272C50),
-    surfaceContainerHighest = Color(0xFF313763),
-    surfaceDim = Color(0xFF12142B),
-    surfaceBright = Color(0xFF313763),
-)
+/** YAML highlighter: keys, strings, numbers, booleans and comments (D14). */
+val KdSyntaxKey: Color get() = ThemeManager.colors.syntaxKey
+val KdSyntaxString: Color get() = ThemeManager.colors.syntaxString
+val KdSyntaxNumber: Color get() = ThemeManager.colors.syntaxNumber
+val KdSyntaxBool: Color get() = ThemeManager.colors.syntaxBool
+val KdSyntaxComment: Color get() = ThemeManager.colors.syntaxComment
 
-// Retro-light M3 roles (§3.1).
-private val RetroLightColorScheme = lightColorScheme(
-    primary = KdPrimaryRetroLight,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFCFE3E0),
-    onPrimaryContainer = Color(0xFF00363B),
-    secondary = KdAccentRetroLight,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEBD6E3),
-    onSecondaryContainer = Color(0xFF2E0F27),
-    tertiary = Color(0xFF6B4F1D),
-    onTertiary = Color.White,
-    background = KdBackgroundRetroLight,
-    surface = KdSurfaceRetroLight,
-    surfaceVariant = KdSurfaceVariantRetroLight,
-    onBackground = KdTextPrimaryRetroLight,
-    onSurface = KdTextPrimaryRetroLight,
-    onSurfaceVariant = KdTextSecondaryRetroLight,
-    error = KdErrorRetroLight,
-    onError = Color.White,
-    outline = KdBorderRetroLight,
-    outlineVariant = KdBorderRetroLight,
-    surfaceContainerLowest = Color(0xFFFFFBF2),
-    surfaceContainerLow = Color(0xFFF8F2E3),
-    surfaceContainer = Color(0xFFF2EAD6),
-    surfaceContainerHigh = Color(0xFFEBE2CB),
-    surfaceContainerHighest = Color(0xFFE3D8BC),
-    surfaceDim = Color(0xFFE6DCC3),
-    surfaceBright = Color(0xFFFFFBF2),
-)
+/** The embedded terminal's default foreground and background (D13). */
+val KdTerminalFg: Color get() = ThemeManager.colors.terminalFg
+val KdTerminalBg: Color get() = ThemeManager.colors.terminalBg
 
 // "tnum" = OpenType tabular-numerals feature. Forces digits to a fixed
 // advance width so columns of CPU / Memory / Pods / IPs / ports / ages
@@ -646,11 +518,7 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
     LaunchedEffect(systemIsDark, ThemeManager.mode) {
         ThemeManager.applySystemDarkTheme(systemIsDark)
     }
-    val colorScheme = if (ThemeManager.isRetro) {
-        if (ThemeManager.isDarkTheme) RetroDarkColorScheme else RetroLightColorScheme
-    } else {
-        if (ThemeManager.isDarkTheme) DarkColorScheme else LightColorScheme
-    }
+    val colorScheme = ThemeManager.scheme
     val typography = kdTypography()
     // Theme the right-click ContextMenuArea popup. Compose's default uses
     // its own foundation colors and clashes with the Kd palette — give it
@@ -709,7 +577,7 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
             // the bare clickables only by REPLACING their ripple, losing press
             // and hover feedback across the app to gain what this line already
             // gives them.
-            LocalRippleThemeConfiguration provides RippleDefaults.InsetFocusRingRippleThemeConfiguration,
+            LocalRippleThemeConfiguration provides ThemeManager.spec.focusRing,
         ) {
             CopyFeedbackHost { ActionFeedbackHost { content() } }
         }
