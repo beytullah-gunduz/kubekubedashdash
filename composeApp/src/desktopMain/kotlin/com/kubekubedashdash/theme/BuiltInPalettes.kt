@@ -153,8 +153,8 @@ internal val RetroLightColors = KdColors(
 internal val RetroLightCvd = KdStatusColors(success = Color(0xFF1E61AF), warning = Color(0xFF775E03), error = Color(0xFF80011D), info = Color(0xFF974375), onError = Color(0xFFFFFFFF))
 
 // Retro-dark M3 roles (Retro plan §3.1, M3 role table). This sets the full
-// surfaceContainer ramp because SettingsSection reads
-// `surfaceContainer` (SettingsScreen.kt:231).
+// surfaceContainer ramp because SettingsSection's Surface reads
+// `surfaceContainer` (SettingsScreen.kt).
 private val RetroDarkColorScheme = darkColorScheme(
     primary = RetroDarkColors.primary,
     onPrimary = RetroDarkColors.onPrimary,
