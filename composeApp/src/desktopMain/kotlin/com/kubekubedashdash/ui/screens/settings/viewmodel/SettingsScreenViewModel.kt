@@ -43,6 +43,13 @@ class SettingsScreenViewModel : ViewModel() {
         ThemeManager.setPalette(value)
     }
 
+    val cvdSafeStatus: Boolean
+        get() = ThemeManager.cvdSafeStatus
+
+    fun setCvdSafeStatus(value: Boolean) {
+        ThemeManager.setCvdSafeStatus(value)
+    }
+
     // Audit A5: single source of truth. PreferenceRepository already exposes
     // these as DataStore-backed StateFlows; the VM previously held Compose
     // `mutableStateOf` copies seeded once in init, which made the VM

@@ -759,6 +759,31 @@ fun SettingsScreen(
 
                                 Spacer(Modifier.height(20.dp))
 
+                                SettingsRowTitle("Colour-blind-safe status colours")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Blue, gold and crimson instead of green, amber and red for healthy, warning and failed states, tuned to stay distinct with red-green or blue-yellow colour blindness. Works with every palette.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = viewModel.cvdSafeStatus,
+                                        onCheckedChange = { viewModel.setCvdSafeStatus(it) },
+                                    )
+                                    Text(
+                                        if (viewModel.cvdSafeStatus) "On" else "Off",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (viewModel.cvdSafeStatus) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp))
+
                                 val crtScanlines by PreferenceRepository.crtScanlines.collectAsState()
                                 SettingsRowTitle("CRT scanlines")
                                 Spacer(Modifier.height(4.dp))

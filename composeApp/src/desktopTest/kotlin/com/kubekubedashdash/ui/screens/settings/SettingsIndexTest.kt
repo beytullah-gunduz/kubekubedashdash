@@ -172,6 +172,18 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `color blind finds Colour-blind-safe status colours`() {
+        val results = settingsSearchResults("color blind")
+        assertTrue(results.any { it.title == "Colour-blind-safe status colours" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `deuteranopia finds Colour-blind-safe status colours`() {
+        val results = settingsSearchResults("deuteranopia")
+        assertTrue(results.any { it.title == "Colour-blind-safe status colours" && it.section == "Appearance" })
+    }
+
+    @Test
     fun `scanlines finds CRT scanlines`() {
         val results = settingsSearchResults("scanlines")
         assertTrue(results.any { it.title == "CRT scanlines" })

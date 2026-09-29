@@ -38,6 +38,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Appearance", "Theme", listOf("dark", "light", "system")),
     SettingsEntry("Appearance", "Style", listOf("retro", "crt", "arcade", "pixel", "8-bit", "default", "standard")),
     SettingsEntry("Appearance", "Palette", listOf("palette", "colours", "colors", "high contrast", "contrast", "accessibility", "a11y", "monochrome", "grey", "gray", "solarized", "gruvbox", "catppuccin", "latte", "mocha", "nord", "dracula", "alucard", "editor")),
+    SettingsEntry("Appearance", "Colour-blind-safe status colours", listOf("colour blind", "color blind", "colorblind", "cvd", "deuteranopia", "protanopia", "tritanopia", "accessibility", "a11y", "status colours", "status colors")),
     SettingsEntry("Appearance", "CRT scanlines", listOf("scanlines", "crt", "vignette", "retro")),
     SettingsEntry("Appearance", "UI zoom", listOf("font", "size", "scale", "bigger")),
     SettingsEntry("Appearance", "Table density", listOf("rows", "compact", "comfortable", "spacing")),

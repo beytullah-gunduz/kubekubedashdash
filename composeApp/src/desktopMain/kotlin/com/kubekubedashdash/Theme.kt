@@ -83,7 +83,7 @@ object ThemeManager {
     private var _isDarkTheme by mutableStateOf(_mode != ThemeMode.LIGHT)
     private var _style by mutableStateOf(PreferenceRepository.themeStyle.value)
     private var _palette by mutableStateOf(PreferenceRepository.themePalette.value)
-    private var _cvd by mutableStateOf(false) // WS6 seeds it from PreferenceRepository
+    private var _cvd by mutableStateOf(PreferenceRepository.cvdSafeStatus.value)
 
     val mode: ThemeMode get() = _mode
 
@@ -132,6 +132,11 @@ object ThemeManager {
     fun setPalette(newPalette: ThemePalette) {
         _palette = newPalette
         PreferenceRepository.setThemePalette(newPalette)
+    }
+
+    fun setCvdSafeStatus(enabled: Boolean) {
+        _cvd = enabled
+        PreferenceRepository.setCvdSafeStatus(enabled)
     }
 
     internal fun applySystemDarkTheme(systemIsDark: Boolean) {
@@ -532,6 +537,10 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
     val persistedPalette by PreferenceRepository.themePalette.collectAsState()
     LaunchedEffect(persistedPalette) {
         ThemeManager.syncPaletteFromPreferences(persistedPalette)
+    }
+    val persistedCvd by PreferenceRepository.cvdSafeStatus.collectAsState()
+    LaunchedEffect(persistedCvd) {
+        ThemeManager.syncCvdFromPreferences(persistedCvd)
     }
     val systemIsDark = isSystemInDarkTheme()
     LaunchedEffect(systemIsDark, ThemeManager.mode) {

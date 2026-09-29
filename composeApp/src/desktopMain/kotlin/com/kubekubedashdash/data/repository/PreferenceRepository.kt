@@ -53,6 +53,7 @@ object PreferenceRepository {
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val THEME_STYLE by lazy { stringPreferencesKey("theme_style") }
     private val THEME_PALETTE by lazy { stringPreferencesKey("theme_palette") }
+    private val CVD_SAFE_STATUS by lazy { booleanPreferencesKey("cvd_safe_status") }
     private val CRT_SCANLINES by lazy { booleanPreferencesKey("crt_scanlines") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
@@ -97,6 +98,11 @@ object PreferenceRepository {
     // Orthogonal to themeMode and themeStyle (D1): which colours. STYLE = the style's own palette.
     private val _themePalette = MutableStateFlow(ThemePalette.STYLE)
     val themePalette: StateFlow<ThemePalette> = _themePalette.asStateFlow()
+
+    // The colour-blind-safe status switch (D5): blue/gold/crimson status colours in every palette.
+    // Off by default; independent of style, palette and mode.
+    private val _cvdSafeStatus = MutableStateFlow(false)
+    val cvdSafeStatus: StateFlow<Boolean> = _cvdSafeStatus.asStateFlow()
 
     // The "CRT scanlines" switch (D13): a static scanline + vignette overlay, Retro only. Off
     // by default — it is the most recognisable "CRT" cue, but it dims dense small text.
@@ -263,6 +269,7 @@ object PreferenceRepository {
                     _themePalette.value = p[THEME_PALETTE]
                         ?.let { runCatching { ThemePalette.valueOf(it) }.getOrNull() }
                         ?: ThemePalette.STYLE
+                    _cvdSafeStatus.value = p[CVD_SAFE_STATUS] ?: false
                     _crtScanlines.value = p[CRT_SCANLINES] ?: false
                     _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
                     _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
@@ -333,6 +340,11 @@ object PreferenceRepository {
     fun setThemePalette(value: ThemePalette) {
         _themePalette.value = value
         ioScope.launch { dataStore.edit { it[THEME_PALETTE] = value.name } }
+    }
+
+    fun setCvdSafeStatus(value: Boolean) {
+        _cvdSafeStatus.value = value
+        ioScope.launch { dataStore.edit { it[CVD_SAFE_STATUS] = value } }
     }
 
     fun setCrtScanlines(value: Boolean) {
