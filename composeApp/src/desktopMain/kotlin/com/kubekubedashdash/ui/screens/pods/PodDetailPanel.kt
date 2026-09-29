@@ -71,6 +71,7 @@ import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.clear_all_filled
@@ -485,7 +486,7 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount:
                 unselectedContentColor = KdTextSecondary,
             ) {
                 Row(
-                    modifier = Modifier.padding(vertical = 10.dp),
+                    modifier = Modifier.padding(vertical = 10.dp.orCompact(6.dp)),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
@@ -556,7 +557,7 @@ private fun OverviewTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(14.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (warningEvents.isNotEmpty()) {
@@ -678,7 +679,7 @@ private fun PodEventsTab(
             val events = state.data
             val rows = remember(events, now) { events.map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) } }
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(14.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 item { SectionLabel("${rows.size} Events") }
@@ -691,7 +692,7 @@ private fun PodEventsTab(
 @Composable
 private fun CenteredNote(title: String, body: String) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(14.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

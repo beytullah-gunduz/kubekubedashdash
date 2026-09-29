@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import org.jetbrains.compose.resources.DrawableResource
@@ -44,7 +45,7 @@ fun BulkSelectionBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(KdPrimary.copy(alpha = 0.08f))
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp.orCompact(2.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("$selectedCount $kind selected", style = MaterialTheme.typography.labelMedium, color = KdTextPrimary)

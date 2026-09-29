@@ -1,12 +1,13 @@
 package com.kubekubedashdash.ui.components
 
+import com.kubekubedashdash.LayoutDensity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
 /**
  * Tests for the pure table-controls model in TableOptions.kt:
- * [TableDensity.fromKey]'s key round-trip, [sortTableRows]'
+ * [LayoutDensity.fromKey]'s key round-trip, [sortTableRows]'
  * pin-first / header-based / identity-tiebreak ordering (D5-D8), and the
  * column-picker helpers [tableColumnKey], [visibleColumnIndices] and
  * [isLastVisibleColumn] exercised by the ResourceTable options menu (WS2).
@@ -22,18 +23,18 @@ class TableOptionsTest {
         pinId = pinId,
     )
 
-    // ── TableDensity ─────────────────────────────────────────────────────────
+    // ── LayoutDensity ────────────────────────────────────────────────────────
 
     @Test
     fun `fromKey resolves both known keys`() {
-        assertEquals(TableDensity.Comfortable, TableDensity.fromKey("comfortable"))
-        assertEquals(TableDensity.Compact, TableDensity.fromKey("compact"))
+        assertEquals(LayoutDensity.COMFORTABLE, LayoutDensity.fromKey("comfortable"))
+        assertEquals(LayoutDensity.COMPACT, LayoutDensity.fromKey("compact"))
     }
 
     @Test
     fun `fromKey falls back to Comfortable for an unknown key or null`() {
-        assertEquals(TableDensity.Comfortable, TableDensity.fromKey("spacious"))
-        assertEquals(TableDensity.Comfortable, TableDensity.fromKey(null))
+        assertEquals(LayoutDensity.COMFORTABLE, LayoutDensity.fromKey("spacious"))
+        assertEquals(LayoutDensity.COMFORTABLE, LayoutDensity.fromKey(null))
     }
 
     // ── sortTableRows: primary key ──────────────────────────────────────────

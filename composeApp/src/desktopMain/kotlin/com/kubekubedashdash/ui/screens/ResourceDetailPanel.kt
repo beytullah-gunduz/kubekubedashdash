@@ -85,6 +85,7 @@ import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdStrokeCap
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
@@ -269,7 +270,7 @@ fun ResourceDetailPanel(
                         unselectedContentColor = KdTextSecondary,
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 10.dp),
+                            modifier = Modifier.padding(vertical = 10.dp.orCompact(6.dp)),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
@@ -345,10 +346,10 @@ fun ResourceDetailPanel(
 @Composable
 fun DetailFieldsCard(fields: List<DetailField>, modifier: Modifier = Modifier) {
     Surface(modifier = modifier, shape = 8.dp.kdCorner, color = KdSurfaceVariant) {
-        Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp.orCompact(8.dp)).fillMaxWidth()) {
             fields.forEach { f ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp.orCompact(1.dp)),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
@@ -392,8 +393,8 @@ private fun GenericOverviewTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
+        verticalArrangement = Arrangement.spacedBy(14.dp.orCompact(10.dp)),
     ) {
         if (fields.isNotEmpty()) {
             Text("Details".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)

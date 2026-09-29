@@ -50,6 +50,7 @@ import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
@@ -88,7 +89,7 @@ fun WindowScope.TitleBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (isMacOS) 38.dp else 42.dp)
+                .height(if (isMacOS) 38.dp.orCompact(34.dp) else 42.dp.orCompact(38.dp))
                 .background(KdSurface)
                 .pointerInput(Unit) {
                     var lastPressTime = 0L

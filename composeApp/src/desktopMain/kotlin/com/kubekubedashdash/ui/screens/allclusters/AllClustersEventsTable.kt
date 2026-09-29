@@ -50,6 +50,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.EventInfo
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.ui.components.CellData
@@ -140,7 +141,7 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
             modifier = Modifier
                 .fillMaxWidth()
                 .background(KdSurfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp.orCompact(4.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Chevron spacer (matches the 16dp icon in GroupHeaderRow so column
@@ -256,7 +257,7 @@ private fun GroupHeaderRow(
             .fillMaxWidth()
             .background(bg ?: androidx.compose.ui.graphics.Color.Transparent)
             .let { if (isSingleMember) it else it.clickable(onClick = onClick) }
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+            .padding(horizontal = 16.dp, vertical = 7.dp.orCompact(3.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (isSingleMember) {
@@ -328,7 +329,7 @@ private fun MemberRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg ?: androidx.compose.ui.graphics.Color.Transparent)
-            .padding(horizontal = 16.dp, vertical = 5.dp),
+            .padding(horizontal = 16.dp, vertical = 5.dp.orCompact(2.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Mirror GroupHeaderRow's column layout exactly (gating, widths, weights

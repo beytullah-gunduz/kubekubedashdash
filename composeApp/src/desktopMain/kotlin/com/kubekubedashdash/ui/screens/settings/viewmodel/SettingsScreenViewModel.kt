@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.settings.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.ThemePalette
@@ -12,7 +13,6 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
-import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
@@ -140,10 +140,10 @@ class SettingsScreenViewModel : ViewModel() {
         PreferenceRepository.setLogDrawerBesideSidebar(value)
     }
 
-    val tableDensity: StateFlow<TableDensity> = PreferenceRepository.tableDensity
+    val layoutDensity: LayoutDensity get() = ThemeManager.layoutDensity
 
-    fun setTableDensity(value: TableDensity) {
-        PreferenceRepository.setTableDensity(value)
+    fun setLayoutDensity(value: LayoutDensity) {
+        ThemeManager.setLayoutDensity(value)
     }
 
     val topologyRefreshIntervalSec: StateFlow<Int> = PreferenceRepository.topologyRefreshIntervalSec

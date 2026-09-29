@@ -100,6 +100,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.ThemePalette
@@ -112,6 +113,7 @@ import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
@@ -125,7 +127,6 @@ import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.SidebarSearchBox
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.components.ShortcutGroups
-import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
@@ -237,7 +238,7 @@ private fun SettingsSection(
             border = BorderStroke(kdOutlineWidth, KdBorder),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(20.dp), content = content)
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp.orCompact(14.dp)), content = content)
         }
     }
 }
@@ -310,7 +311,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         SettingsRowTitle("Pod range")
         Spacer(Modifier.height(4.dp))
@@ -354,11 +355,11 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         RangeControls()
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         SettingsRowTitle("Chaos")
         Spacer(Modifier.height(8.dp))
@@ -450,7 +451,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             color = KdTextSecondary,
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         RangeControls()
     }
@@ -694,7 +695,7 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Style")
                                 Spacer(Modifier.height(4.dp))
@@ -724,7 +725,7 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Palette")
                                 Spacer(Modifier.height(4.dp))
@@ -757,7 +758,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Colour-blind-safe status colours")
                                 Spacer(Modifier.height(4.dp))
@@ -782,7 +783,7 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val crtScanlines by PreferenceRepository.crtScanlines.collectAsState()
                                 SettingsRowTitle("CRT scanlines")
@@ -809,7 +810,7 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
 
@@ -837,27 +838,25 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
-                                val tableDensity by viewModel.tableDensity.collectAsState()
-
-                                SettingsRowTitle("Table density")
+                                SettingsRowTitle("Density")
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Row height in every resource list. Also in each table's options menu.",
+                                    "Spacing across the app — rows, headers, panels, the palette and Settings. Text size never changes. Also in each table's options menu.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = KdTextSecondary,
                                 )
                                 Spacer(Modifier.height(12.dp))
 
                                 FullWidthSingleChoiceSegmentedButtonRow {
-                                    TableDensity.entries.forEachIndexed { index, option ->
+                                    LayoutDensity.entries.forEachIndexed { index, option ->
                                         SegmentedButton(
-                                            selected = tableDensity == option,
-                                            onClick = { viewModel.setTableDensity(option) },
+                                            selected = viewModel.layoutDensity == option,
+                                            onClick = { viewModel.setLayoutDensity(option) },
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
-                                                count = TableDensity.entries.size,
+                                                count = LayoutDensity.entries.size,
                                             ),
                                         ) {
                                             Text(
@@ -869,7 +868,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val logDrawerBesideSidebar by viewModel.logDrawerBesideSidebar.collectAsState()
                                 SettingsRowTitle("Log panel beside sidebar")
@@ -961,7 +960,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val tabStripVisibility by viewModel.tabStripVisibility.collectAsState()
 
@@ -1295,7 +1294,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Google Cloud GKE")
                                 Spacer(Modifier.height(4.dp))
@@ -1369,7 +1368,7 @@ fun SettingsScreen(
                                     Text("Open application logs", color = KdTextPrimary)
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Preferences storage")
                                 Spacer(Modifier.height(4.dp))

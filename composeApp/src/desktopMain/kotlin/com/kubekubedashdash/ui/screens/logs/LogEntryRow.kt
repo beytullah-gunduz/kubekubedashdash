@@ -18,13 +18,14 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.logging.AppLogEntry
+import com.kubekubedashdash.orCompact
 
 @Composable
 internal fun LogEntryRow(entry: AppLogEntry) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .padding(horizontal = 8.dp, vertical = 3.dp.orCompact(1.dp)),
         verticalAlignment = Alignment.Top,
     ) {
         Text(

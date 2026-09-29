@@ -46,6 +46,7 @@ import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceUsageSummary
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.errorPodStatuses
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.pendingPodStatuses
 import java.util.Locale
@@ -190,7 +191,7 @@ fun KpiStrip(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 6.dp.orCompact(3.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         kpis.forEachIndexed { index, kpi ->

@@ -23,6 +23,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.orCompact
 
 @Composable
 internal fun LogLine(line: String, matcher: LogMatcher, wrap: Boolean) {
@@ -41,7 +42,7 @@ internal fun LogLine(line: String, matcher: LogMatcher, wrap: Boolean) {
         maxLines = if (wrap) Int.MAX_VALUE else 1,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 1.dp)
+            .padding(vertical = 1.dp.orCompact(0.dp))
             .then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
     )
 }

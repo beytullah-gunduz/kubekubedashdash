@@ -56,6 +56,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.delete_filled
@@ -182,7 +183,7 @@ fun DetailPanelHeader(
         val hasVerbContent = shownSafe.isNotEmpty() || shownDanger.isNotEmpty() || overflowed.isNotEmpty()
 
         Row(
-            modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp.orCompact(6.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {

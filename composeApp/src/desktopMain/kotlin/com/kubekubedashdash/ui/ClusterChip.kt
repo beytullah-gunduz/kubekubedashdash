@@ -68,6 +68,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.theme.kdInkOn
@@ -242,7 +243,7 @@ fun ClusterChip(
                     }
                 }
                 .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp.orCompact(2.dp)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {

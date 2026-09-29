@@ -83,6 +83,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.expand_more_filled
@@ -198,7 +199,7 @@ fun Sidebar(
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 4.dp),
+                .padding(vertical = 4.dp.orCompact(2.dp)),
         ) {
             if (searchActive) {
                 val builtInMatches = NavSections.flatMap { section ->
@@ -427,14 +428,14 @@ private fun SidebarTierDivider(collapsed: Boolean) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 6.dp),
+                .padding(vertical = 6.dp.orCompact(3.dp)),
             contentAlignment = Alignment.Center,
         ) {
             HorizontalDivider(modifier = Modifier.width(24.dp), color = KdBorder, thickness = 1.dp)
         }
     } else {
         HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp.orCompact(3.dp)),
             color = KdBorder,
             thickness = 1.dp,
         )
@@ -451,7 +452,7 @@ private fun MoreGroupLabel(title: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 4.dp),
+            .padding(horizontal = 18.dp, vertical = 4.dp.orCompact(2.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -601,7 +602,7 @@ fun SidebarItem(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp)
+                .height(32.dp.orCompact(26.dp))
                 .padding(horizontal = if (collapsed) 4.dp else 8.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(bg)
@@ -801,7 +802,7 @@ fun SidebarSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { PreferenceRepository.setSidebarSectionExpanded(title, !expanded) }
-                    .padding(horizontal = 18.dp, vertical = 6.dp),
+                    .padding(horizontal = 18.dp, vertical = 6.dp.orCompact(3.dp)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(

@@ -181,6 +181,7 @@ Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> 
 - **Palette** — the style's own colours, High contrast (AAA text, thicker outlines and focus ring), Monochrome, or an editor palette: Solarized, Gruvbox, Catppuccin, Nord or Dracula
 - **Colour-blind-safe status colours** — blue / gold / crimson status colours for every palette, tuned against protanopia, deuteranopia and tritanopia simulations
 - **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default; does not cover dialogs, menus, tooltips or the terminal)
+- **Density** — Comfortable or Compact spacing across the app (rows, headers, panels, palette); text size is unchanged
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
 - **Tab behaviour** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and choose whether the tab strip shows always or only with multiple tabs
 - **Integrations → MCP server** — enable/disable the embedded MCP server, set its port (default 3001), restrict it to localhost, require authentication, and copy the generated bearer token

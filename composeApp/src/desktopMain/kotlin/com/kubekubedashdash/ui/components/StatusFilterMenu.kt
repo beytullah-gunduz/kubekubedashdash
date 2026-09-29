@@ -38,6 +38,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.filter_list_filled
@@ -107,7 +108,7 @@ fun StatusFilterMenu(
                 )
                 .background(bgColor)
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .padding(horizontal = 10.dp, vertical = 5.dp.orCompact(3.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(

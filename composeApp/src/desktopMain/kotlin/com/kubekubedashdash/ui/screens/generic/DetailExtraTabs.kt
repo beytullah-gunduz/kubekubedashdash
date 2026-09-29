@@ -45,6 +45,7 @@ import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
@@ -174,7 +175,7 @@ private fun resourceQuotaUsageTab(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
@@ -236,7 +237,7 @@ private fun policyRulesTab(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
@@ -294,7 +295,7 @@ private fun roleBindingTab(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 // Role reference section
@@ -423,7 +424,7 @@ private fun endpointSliceTab(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 // ── Summary section ─────────────────────────────────────────

@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -78,12 +79,28 @@ enum class ThemePalette(val label: String) {
     DRACULA("Dracula"),
 }
 
+/**
+ * App-wide layout density (D6). Stored under the historical key "table_density" with the same
+ * values, so a table choice made before density went app-wide carries over.
+ */
+enum class LayoutDensity(val key: String, val label: String) {
+    COMFORTABLE("comfortable", "Comfortable"),
+    COMPACT("compact", "Compact"),
+    ;
+
+    companion object {
+        /** Unknown or absent [key] (including null) falls back to COMFORTABLE. */
+        fun fromKey(key: String?): LayoutDensity = entries.firstOrNull { it.key == key } ?: COMFORTABLE
+    }
+}
+
 object ThemeManager {
     private var _mode by mutableStateOf(PreferenceRepository.themeMode.value)
     private var _isDarkTheme by mutableStateOf(_mode != ThemeMode.LIGHT)
     private var _style by mutableStateOf(PreferenceRepository.themeStyle.value)
     private var _palette by mutableStateOf(PreferenceRepository.themePalette.value)
     private var _cvd by mutableStateOf(PreferenceRepository.cvdSafeStatus.value)
+    private var _layoutDensity by mutableStateOf(PreferenceRepository.layoutDensity.value)
 
     val mode: ThemeMode get() = _mode
 
@@ -101,6 +118,12 @@ object ThemeManager {
 
     /** The colour-blind-safe status switch (D5). */
     val cvdSafeStatus: Boolean get() = _cvd
+
+    /** App-wide spacing (D6) — see [LayoutDensity]. */
+    val layoutDensity: LayoutDensity get() = _layoutDensity
+
+    /** True only for [LayoutDensity.COMPACT]. */
+    val isCompact: Boolean get() = _layoutDensity == LayoutDensity.COMPACT
 
     /** The active palette in both modes (D9). */
     val spec: KdPaletteSpec get() = kdPaletteSpec(_style, _palette)
@@ -137,6 +160,11 @@ object ThemeManager {
     fun setCvdSafeStatus(enabled: Boolean) {
         _cvd = enabled
         PreferenceRepository.setCvdSafeStatus(enabled)
+    }
+
+    fun setLayoutDensity(value: LayoutDensity) {
+        _layoutDensity = value
+        PreferenceRepository.setLayoutDensity(value)
     }
 
     internal fun applySystemDarkTheme(systemIsDark: Boolean) {
@@ -183,6 +211,12 @@ object ThemeManager {
     internal fun syncCvdFromPreferences(persisted: Boolean) {
         if (_cvd == persisted) return
         _cvd = persisted
+    }
+
+    /** Applies the persisted density without writing it back (the F11 shape of [syncStyleFromPreferences]). */
+    internal fun syncLayoutDensityFromPreferences(persisted: LayoutDensity) {
+        if (_layoutDensity == persisted) return
+        _layoutDensity = persisted
     }
 
     /** Key any `remember` that computes colours on this — it changes exactly when a computed `Kd*` value would. */
@@ -509,6 +543,9 @@ val Dp.kdCorner: RoundedCornerShape get() = RoundedCornerShape(if (ThemeManager.
 /** Width of every card and field outline (D2): 1 dp, 2 dp in High Contrast. */
 val kdOutlineWidth: Dp get() = ThemeManager.spec.outlineWidth
 
+/** This value in Comfortable, [compact] in Compact (D6). Reads ThemeManager state, so it recomposes on a switch. */
+fun Dp.orCompact(compact: Dp): Dp = if (ThemeManager.isCompact) compact else this
+
 /** Status-dot shape (D24): a square pixel in Retro, a circle in Default. */
 val kdDotShape: Shape get() = if (ThemeManager.isRetro) RectangleShape else CircleShape
 
@@ -541,6 +578,10 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
     val persistedCvd by PreferenceRepository.cvdSafeStatus.collectAsState()
     LaunchedEffect(persistedCvd) {
         ThemeManager.syncCvdFromPreferences(persistedCvd)
+    }
+    val persistedDensity by PreferenceRepository.layoutDensity.collectAsState()
+    LaunchedEffect(persistedDensity) {
+        ThemeManager.syncLayoutDensityFromPreferences(persistedDensity)
     }
     val systemIsDark = isSystemInDarkTheme()
     LaunchedEffect(systemIsDark, ThemeManager.mode) {
@@ -592,6 +633,9 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
             LocalScrollbarStyle provides scrollbarStyle,
             LocalDensity provides Density(base.density * scale, base.fontScale),
             LocalSystemDensity provides base,
+            // Compact drops Material's 48 dp touch floor (D6); Comfortable keeps material3's own default
+            // (InteractiveComponentSize.kt).
+            LocalMinimumInteractiveComponentSize provides if (ThemeManager.isCompact) Dp.Unspecified else 48.dp,
             // A visible keyboard focus ring app-wide, from one line.
             //
             // MaterialTheme itself provides `ripple()` as LocalIndication, so

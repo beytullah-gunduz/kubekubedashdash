@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import org.jetbrains.compose.resources.painterResource
@@ -150,7 +151,7 @@ fun WindowTabStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(targetBg)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp.orCompact(2.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -170,7 +169,7 @@ internal fun SessionPaneContent(
                             VerticalDragHandle(
                                 modifier = Modifier.paneExpansionDraggable(
                                     state,
-                                    LocalMinimumInteractiveComponentSize.current,
+                                    48.dp, // fixed: Compact drops the local's floor, and the handle's touch size must not collapse to 0
                                     interactionSource,
                                 ),
                                 interactionSource = interactionSource,

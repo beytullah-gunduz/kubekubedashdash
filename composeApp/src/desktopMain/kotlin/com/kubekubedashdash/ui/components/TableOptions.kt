@@ -1,24 +1,5 @@
 package com.kubekubedashdash.ui.components
 
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-
-/**
- * Global row-density preference for every [ResourceTable]. `Comfortable` is
- * the historical fixed padding; `Compact` tightens it. Nothing else about a
- * table changes with density — same type scale, same horizontal padding.
- */
-enum class TableDensity(val key: String, val rowPadding: Dp, val label: String) {
-    Comfortable("comfortable", 7.dp, "Comfortable"),
-    Compact("compact", 3.dp, "Compact"),
-    ;
-
-    companion object {
-        /** Unknown or absent [key] (including null) falls back to [Comfortable]. */
-        fun fromKey(key: String?): TableDensity = entries.firstOrNull { it.key == key } ?: Comfortable
-    }
-}
-
 /**
  * Preference entry key for one column of one table. Duplicate headers are
  * disambiguated by index — [com.kubekubedashdash.ui.screens.generic.GenericTable]

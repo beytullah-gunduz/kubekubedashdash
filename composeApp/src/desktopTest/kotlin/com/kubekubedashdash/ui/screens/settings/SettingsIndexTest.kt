@@ -73,9 +73,15 @@ class SettingsIndexTest {
     }
 
     @Test
-    fun `density finds Table density`() {
+    fun `density finds Density`() {
         val results = settingsSearchResults("density")
-        assertTrue(results.any { it.title == "Table density" })
+        assertTrue(results.any { it.title == "Density" })
+    }
+
+    @Test
+    fun `dense finds Density`() {
+        val results = settingsSearchResults("dense")
+        assertTrue(results.any { it.title == "Density" })
     }
 
     @Test

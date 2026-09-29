@@ -67,6 +67,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_back_filled
 import com.kubekubedashdash.resources.arrow_forward_filled
@@ -121,7 +122,7 @@ internal fun SessionContentHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp.orCompact(3.dp)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
