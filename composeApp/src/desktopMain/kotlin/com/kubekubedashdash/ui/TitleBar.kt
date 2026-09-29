@@ -46,6 +46,7 @@ import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
+import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeManager
@@ -64,7 +65,6 @@ private val MacMinimize = Color(0xFFFEBC2E)
 private val MacMaximize = Color(0xFF28C840)
 private val MacSymbolColor = Color(0x80000000)
 private val WinCloseHover = Color(0xFFE81123)
-private val WinButtonHover = Color(0xFF3A3A3C)
 
 @Composable
 fun WindowScope.TitleBar(
@@ -339,10 +339,10 @@ private fun WindowsControls(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.fillMaxHeight()) {
-        WinButton(WinButtonSymbol.MINIMIZE, WinButtonHover, KdTextSecondary, onMinimize)
+        WinButton(WinButtonSymbol.MINIMIZE, KdHover, KdTextSecondary, onMinimize)
         WinButton(
             if (isMaximized) WinButtonSymbol.RESTORE else WinButtonSymbol.MAXIMIZE,
-            WinButtonHover,
+            KdHover,
             KdTextSecondary,
             onMaximize,
         )

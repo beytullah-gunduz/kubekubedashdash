@@ -57,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -71,6 +70,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdGraphEdge
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -475,7 +475,7 @@ private fun TopologyGraphContent(
                 }
             },
     ) {
-        val defaultEdgeColor = Color(0xFF505A68)
+        val defaultEdgeColor = KdGraphEdge
         val dimmedEdgeColor = defaultEdgeColor.copy(alpha = 0.15f)
         val hasSelection = selectedNodeId != null
 
@@ -508,8 +508,8 @@ private fun TopologyGraphContent(
                     .onGloballyPositioned { boxCoords = it },
             ) {
                 // Grid background
-                val gridColorMinor = Color(0xFF505A68).copy(alpha = 0.04f)
-                val gridColorMajor = Color(0xFF505A68).copy(alpha = 0.07f)
+                val gridColorMinor = KdGraphEdge.copy(alpha = 0.04f)
+                val gridColorMajor = KdGraphEdge.copy(alpha = 0.07f)
                 val gridSpacingMinor = 20f
                 var x = 0f
                 while (x <= size.width) {

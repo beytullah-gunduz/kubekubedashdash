@@ -94,6 +94,7 @@ import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
+import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
@@ -115,6 +116,7 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.theme.kdInkOn
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.SidebarSearchBox
@@ -330,7 +332,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
 
     if (mockRunning) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("●", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+            Text("●", color = KdSuccess, style = MaterialTheme.typography.bodyMedium)
             Text(
                 "Running — $connectedTabs ${if (connectedTabs == 1) "tab" else "tabs"} connected",
                 style = MaterialTheme.typography.bodyMedium,
@@ -1425,7 +1427,7 @@ private fun ClusterColorsSection(
                 Text(
                     clusterInitial(ctx),
                     style = MaterialTheme.typography.labelSmall,
-                    color = androidx.compose.ui.graphics.Color.White,
+                    color = kdInkOn(effectiveColor.composeColor),
                 )
             }
             Spacer(Modifier.width(10.dp))

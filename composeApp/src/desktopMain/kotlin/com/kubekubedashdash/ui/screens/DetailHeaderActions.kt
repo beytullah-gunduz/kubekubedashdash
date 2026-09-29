@@ -210,7 +210,7 @@ fun DetailPanelHeader(
 
             // Dp.Unspecified drops the 48 dp touch-target minimum — this is a
             // pointer-driven desktop header, not a touch UI (precedent:
-            // ui/components/ResourceTable.kt:237-241). Without it every button
+            // ui/components/ResourceTable.kt:277-280). Without it every button
             // below renders wider than its budgeted width and Close can be
             // squeezed off the end of the row entirely.
             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {

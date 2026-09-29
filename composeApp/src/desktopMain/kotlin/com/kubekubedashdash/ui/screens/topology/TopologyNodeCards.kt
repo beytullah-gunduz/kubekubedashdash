@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,7 +31,6 @@ import com.kubekubedashdash.KdBackground
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
-import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.ui.components.kindColor
@@ -79,13 +77,13 @@ internal fun GraphNodeCard(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
+                Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text(
                         node.kind,
                         style = MaterialTheme.typography.labelSmall,
-                        color = color.copy(alpha = alpha),
+                        color = KdTextSecondary.copy(alpha = alpha),
                         fontWeight = FontWeight.SemiBold,
                     )
                     if (node.kind == "External") {
@@ -97,8 +95,7 @@ internal fun GraphNodeCard(
                         Text(
                             node.name,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                // Default keeps the system monospace it has always had (D3); Retro follows the code face (D18).
-                                fontFamily = if (ThemeManager.isRetro) kdMonoFamily() else FontFamily.Monospace,
+                                fontFamily = kdMonoFamily(),
                                 fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             ),
                             color = KdTextPrimary.copy(alpha = alpha),
@@ -197,13 +194,13 @@ internal fun WorkloadGroupCard(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
+                    Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             node.subKind ?: node.kind,
                             style = MaterialTheme.typography.labelSmall,
-                            color = color.copy(alpha = alpha),
+                            color = KdTextSecondary.copy(alpha = alpha),
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
@@ -250,7 +247,7 @@ internal fun WorkloadGroupCard(
                         Text(
                             text = if (expanded) "▾ $podCount pods" else "▸ $podCount pods",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (canExpand) color.copy(alpha = alpha) else KdTextSecondary.copy(alpha = alpha),
+                            color = if (canExpand) KdTextPrimary.copy(alpha = alpha) else KdTextSecondary.copy(alpha = alpha),
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         )
                     }

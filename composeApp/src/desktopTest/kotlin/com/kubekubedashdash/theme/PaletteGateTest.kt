@@ -32,8 +32,8 @@ class PaletteGateTest {
             .forEach { add(it.name to kdPaletteSpec(ThemeStyle.DEFAULT, it)) }
     }
 
-    /** Palettes whose Default-era values WS2 fixes. WS2 empties this set; it must stay empty after. */
-    private val pendingWs2 = setOf("DEFAULT")
+    /** Palettes exempt from the gate. WS2 fixed Default's values, so this stays empty. */
+    private val pendingWs2 = emptySet<String>()
 
     private fun gateFailures(name: String, dark: Boolean, cvd: Boolean, c: KdColors): List<String> {
         val t = if (name == "HIGH_CONTRAST") 7f else 4.5f
@@ -148,9 +148,7 @@ class PaletteGateTest {
     }
 
     @Test
-    fun `the pending set only names palettes that exist`() {
-        val names = palettes().map { it.first }.toSet()
-        val unknown = pendingWs2 - names
-        assertTrue(unknown.isEmpty(), "pendingWs2 names palettes that do not exist: $unknown")
+    fun `no palette is exempt from the contrast gate`() {
+        assertTrue(pendingWs2.isEmpty(), "pendingWs2 must stay empty, but names: $pendingWs2")
     }
 }

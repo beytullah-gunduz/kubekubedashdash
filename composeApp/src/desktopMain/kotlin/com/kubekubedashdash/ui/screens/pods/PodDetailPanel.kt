@@ -50,10 +50,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdSeriesMemory
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
@@ -689,8 +689,6 @@ private fun CenteredNote(title: String, body: String) {
     }
 }
 
-private val KdMemoryColor = Color(0xFF8B5CF6)
-
 @Composable
 private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -715,7 +713,7 @@ private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
                 label = "Memory",
                 currentText = if (memValues.isNotEmpty()) formatMemorySize(memValues.last()) else "\u2014",
                 formatValue = ::formatMemorySize,
-                lineColor = if (ThemeManager.isRetro) KdAccent else KdMemoryColor,
+                lineColor = KdSeriesMemory,
                 modifier = Modifier.weight(1f),
             )
         }

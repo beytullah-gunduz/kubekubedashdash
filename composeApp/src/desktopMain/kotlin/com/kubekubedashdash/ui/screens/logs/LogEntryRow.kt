@@ -42,7 +42,7 @@ internal fun LogEntryRow(entry: AppLogEntry) {
 private fun levelColor(level: String): Color = when (level) {
     "ERROR" -> KdError
     "WARN" -> KdWarning
-    "DEBUG" -> Color(0xFF8B8B8B)
+    "DEBUG" -> KdTextSecondary
     "INFO" -> KdInfo
     else -> KdTextSecondary
 }

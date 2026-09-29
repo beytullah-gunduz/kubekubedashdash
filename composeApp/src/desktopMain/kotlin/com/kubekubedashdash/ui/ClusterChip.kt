@@ -69,6 +69,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
+import com.kubekubedashdash.theme.kdInkOn
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import java.awt.MouseInfo
@@ -435,7 +436,7 @@ private fun ClusterAvatar(
         )
         Text(
             text = initial,
-            color = Color.White,
+            color = kdInkOn(color),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
         )

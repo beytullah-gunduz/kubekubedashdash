@@ -6,9 +6,10 @@ import androidx.compose.ui.graphics.Color
 import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 
-// Default and Retro palettes (D9, D11). The *Colors / *Cvd vals come first, then the
-// hand-written M3 schemes that read them, then the specs: Kotlin initialises a file's
-// top-level vals in textual order, so a forward reference would read null.
+// Default and Retro palettes (D9, D11). The *Colors / *Cvd vals come first, then Retro's
+// hand-written M3 schemes that read them (Default derives its scheme), then the specs:
+// Kotlin initialises a file's top-level vals in textual order, so a forward reference
+// would read null.
 
 internal val DefaultDarkColors = KdColors(
     background = Color(0xFF1E2124),
@@ -16,22 +17,22 @@ internal val DefaultDarkColors = KdColors(
     surface = Color(0xFF2A3038),
     surfaceVariant = Color(0xFF323845),
     textPrimary = Color(0xFFC8D1DC),
-    textSecondary = Color(0xFF8B95A1),
+    textSecondary = Color(0xFF9BA5B1),
     textPlaceholder = Color(0xFF94A3B8),
     textBright = Color(0xFFFFFFFF),
     border = Color(0xFF3A4150),
     hover = Color(0xFF333944),
     selected = Color(0xFF1A3A5C),
-    primary = Color(0xFF3D90CE),
-    onPrimary = Color(0xFFFFFFFF),
-    accent = Color(0xFF3D90CE),
-    onError = Color(0xFFFFFFFF),
+    primary = Color(0xFF4D9FDE),
+    onPrimary = Color(0xFF0B1B2B),
+    accent = Color(0xFF4D9FDE),
+    onError = Color(0xFF2B0000),
     success = Color(0xFF48C744),
     warning = Color(0xFFE8A030),
-    error = Color(0xFFE54343),
-    info = Color(0xFF3D90CE),
-    focus = Color(0xFF3D90CE),
-    onFocus = Color(0xFF332D41),
+    error = Color(0xFFFF7971),
+    info = Color(0xFF57A9E9),
+    focus = Color(0xFF4D9FDE),
+    onFocus = Color(0xFF0B1B2B),
     seriesMemory = Color(0xFF8B5CF6),
     graphEdge = Color(0xFF636E7C),
     syntaxKey = Color(0xFF4D9FDE),
@@ -50,21 +51,21 @@ internal val DefaultLightColors = KdColors(
     surface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFFF1F5F9),
     textPrimary = Color(0xFF1E293B),
-    textSecondary = Color(0xFF64748B),
-    textPlaceholder = Color(0xFF64748B),
+    textSecondary = Color(0xFF59687F),
+    textPlaceholder = Color(0xFF607087),
     textBright = Color(0xFF1E293B),
     border = Color(0xFFE2E8F0),
     hover = Color(0xFFF1F5F9),
     selected = Color(0xFFDBEAFE),
-    primary = Color(0xFF3D90CE),
+    primary = Color(0xFF2077B4),
     onPrimary = Color(0xFFFFFFFF),
-    accent = Color(0xFF3D90CE),
+    accent = Color(0xFF2077B4),
     onError = Color(0xFFFFFFFF),
     success = Color(0xFF2E7D32),
-    warning = Color(0xFFB26A00),
+    warning = Color(0xFFA05F00),
     error = Color(0xFFC62828),
     info = Color(0xFF1E73B8),
-    focus = Color(0xFF3D90CE),
+    focus = Color(0xFF2077B4),
     onFocus = Color(0xFFFFFFFF),
     seriesMemory = Color(0xFF8B5CF6),
     graphEdge = Color(0xFF505A68),
@@ -151,38 +152,8 @@ internal val RetroLightColors = KdColors(
 )
 internal val RetroLightCvd = KdStatusColors(success = Color(0xFF1E61AF), warning = Color(0xFF775E03), error = Color(0xFF80011D), info = Color(0xFF974375), onError = Color(0xFFFFFFFF))
 
-private val DefaultDarkColorScheme = darkColorScheme(
-    primary = Color(0xFF3D90CE),
-    onPrimary = Color.White,
-    secondary = Color(0xFF3D90CE),
-    background = DefaultDarkColors.background,
-    surface = DefaultDarkColors.surface,
-    surfaceVariant = DefaultDarkColors.surfaceVariant,
-    onBackground = DefaultDarkColors.textPrimary,
-    onSurface = DefaultDarkColors.textPrimary,
-    onSurfaceVariant = DefaultDarkColors.textSecondary,
-    error = DefaultDarkColors.error,
-    outline = DefaultDarkColors.border,
-    outlineVariant = DefaultDarkColors.border,
-)
-
-private val DefaultLightColorScheme = lightColorScheme(
-    primary = Color(0xFF3D90CE),
-    onPrimary = Color.White,
-    secondary = Color(0xFF3D90CE),
-    background = DefaultLightColors.background,
-    surface = DefaultLightColors.surface,
-    surfaceVariant = DefaultLightColors.surfaceVariant,
-    onBackground = DefaultLightColors.textPrimary,
-    onSurface = DefaultLightColors.textPrimary,
-    onSurfaceVariant = DefaultLightColors.textSecondary,
-    error = DefaultLightColors.error,
-    outline = DefaultLightColors.border,
-    outlineVariant = DefaultLightColors.border,
-)
-
-// Retro-dark M3 roles (Retro plan §3.1, M3 role table). Unlike the default schemes,
-// this sets the full surfaceContainer ramp because SettingsSection reads
+// Retro-dark M3 roles (Retro plan §3.1, M3 role table). This sets the full
+// surfaceContainer ramp because SettingsSection reads
 // `surfaceContainer` (SettingsScreen.kt:231).
 private val RetroDarkColorScheme = darkColorScheme(
     primary = RetroDarkColors.primary,
@@ -246,8 +217,8 @@ private val RetroLightColorScheme = lightColorScheme(
 )
 
 internal val DefaultPalette = KdPaletteSpec(
-    dark = KdPaletteVariant(DefaultDarkColors, DefaultDarkCvd, isDark = true, schemeOverride = DefaultDarkColorScheme),
-    light = KdPaletteVariant(DefaultLightColors, DefaultLightCvd, isDark = false, schemeOverride = DefaultLightColorScheme),
+    dark = KdPaletteVariant(DefaultDarkColors, DefaultDarkCvd, isDark = true),
+    light = KdPaletteVariant(DefaultLightColors, DefaultLightCvd, isDark = false),
 )
 
 internal val RetroPalette = KdPaletteSpec(

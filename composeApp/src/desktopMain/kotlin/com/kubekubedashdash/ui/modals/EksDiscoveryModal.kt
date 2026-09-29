@@ -34,6 +34,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -960,7 +961,7 @@ private fun Footer(
                     enabled = nextEnabled,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-                ) { Text("Next", color = if (nextEnabled) KdOnPrimary else Color.White) }
+                ) { Text("Next", color = if (nextEnabled) KdOnPrimary else Color.Unspecified) }
             }
 
             EksDiscoveryStep.PICK_REGIONS -> Button(
@@ -975,9 +976,9 @@ private fun Footer(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Scanning…", color = Color.White)
+                Text("Scanning…")
             }
 
             EksDiscoveryStep.PICK_CLUSTERS -> {
@@ -991,7 +992,7 @@ private fun Footer(
                 ) {
                     Text(
                         if (selected == 0) "Import" else "Import $selected",
-                        color = if (importEnabled) KdOnPrimary else Color.White,
+                        color = if (importEnabled) KdOnPrimary else Color.Unspecified,
                     )
                 }
             }
@@ -1002,9 +1003,9 @@ private fun Footer(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Importing…", color = Color.White)
+                Text("Importing…")
             }
 
             EksDiscoveryStep.DONE -> if (!hideOpenClustersButton) {

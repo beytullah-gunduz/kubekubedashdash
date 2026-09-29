@@ -46,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -60,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdGraphEdge
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdMonoFamily
@@ -192,13 +192,13 @@ private fun ResourceGraphContent(graph: ResourceGraph, namespace: String) {
                     .fillMaxWidth()
                     .onGloballyPositioned { boxCoords = it },
             ) {
-                val defaultEdgeColor = Color(0xFF505A68)
+                val defaultEdgeColor = KdGraphEdge
                 val dimmedEdgeColor = defaultEdgeColor.copy(alpha = 0.15f)
                 val hasSelection = selectedNodeId != null
 
                 Canvas(modifier = Modifier.matchParentSize()) {
-                    val gridColorMinor = Color(0xFF505A68).copy(alpha = 0.04f)
-                    val gridColorMajor = Color(0xFF505A68).copy(alpha = 0.07f)
+                    val gridColorMinor = KdGraphEdge.copy(alpha = 0.04f)
+                    val gridColorMajor = KdGraphEdge.copy(alpha = 0.07f)
                     val gridSpacingMinor = 20f
                     var x = 0f
                     while (x <= size.width) {
@@ -366,13 +366,13 @@ private fun GraphNodeCard(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: color).copy(alpha = alpha)))
+            Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
             Spacer(Modifier.width(8.dp))
             Column {
                 Text(
                     node.kind,
                     style = MaterialTheme.typography.labelSmall,
-                    color = color.copy(alpha = alpha),
+                    color = KdTextSecondary.copy(alpha = alpha),
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
