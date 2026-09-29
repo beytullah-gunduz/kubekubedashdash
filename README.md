@@ -178,7 +178,7 @@ Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> 
 
 - **Appearance** — Light, Dark, or System (follows OS) theme
 - **Style** — Default or Retro (pixel headings, a retro terminal font, squared corners; CRT power-on effects)
-- **Palette** — the style's own colours, High contrast (AAA text, thicker outlines and focus ring) or Monochrome
+- **Palette** — the style's own colours, High contrast (AAA text, thicker outlines and focus ring), Monochrome, or an editor palette: Solarized, Gruvbox, Catppuccin, Nord or Dracula
 - **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default; does not cover dialogs, menus, tooltips or the terminal)
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
 - **Tab behaviour** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and choose whether the tab strip shows always or only with multiple tabs
@@ -200,7 +200,7 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 
 - Light, Dark, and System (follows OS) themes (Material 3)
 - Retro style (opt-in) — pixel headings, a retro terminal font for text and code, squared corners, and CRT power-on / channel-cut motion in both its dark and light variants; optional scanline overlay
-- High contrast and Monochrome palettes, orthogonal to the Default/Retro style
+- High contrast, Monochrome and five editor palettes (Solarized, Gruvbox, Catppuccin, Nord, Dracula), orthogonal to the Default/Retro style
 - Bundled **Inter**, **JetBrains Mono**, **Sixtyfour** (retro headings) and **Departure Mono** (retro text) fonts for consistent rendering across platforms
 - Status badges paired with a glyph so state is legible without relying on color
 - Collapsible sidebar — toggle from the title bar; state is persisted across sessions
@@ -295,6 +295,17 @@ When launched from a DMG-installed `.app` bundle, macOS GUI apps inherit a minim
 - No blanket resource creation or free-form YAML editing — YAML is read-only, and writes are limited to the targeted actions listed above
 - Metrics require a running Metrics Server in the cluster
 - Log streaming relies on fabric8's `watchLog` and may not handle all edge cases (e.g., very large log volumes)
+
+## Colour palette credits
+
+The editor palettes are adapted from their public specifications. Colours whose contrast fell below WCAG AA
+were lightness-adjusted, so they are not official ports.
+
+- **Solarized** — Ethan Schoonover, MIT — https://github.com/altercation/solarized
+- **Gruvbox** — Pavel Pertsev (morhetz), MIT/X11 — https://github.com/morhetz/gruvbox
+- **Catppuccin** (Mocha, Latte) — Catppuccin, MIT — https://github.com/catppuccin/palette
+- **Nord** — Sven Greb, MIT — https://github.com/nordtheme/nord (the light variant is kkdd's own, built from Nord's Snow Storm colours)
+- **Dracula / Alucard** — Dracula Theme, MIT — https://github.com/dracula/dracula-theme
 
 ## License
 

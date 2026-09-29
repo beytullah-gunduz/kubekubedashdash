@@ -71,6 +71,11 @@ enum class ThemePalette(val label: String) {
     STYLE(""), // the Settings card shows the current style's name instead
     HIGH_CONTRAST("High contrast"),
     MONOCHROME("Monochrome"),
+    SOLARIZED("Solarized"),
+    GRUVBOX("Gruvbox"),
+    CATPPUCCIN("Catppuccin"),
+    NORD("Nord"),
+    DRACULA("Dracula"),
 }
 
 object ThemeManager {

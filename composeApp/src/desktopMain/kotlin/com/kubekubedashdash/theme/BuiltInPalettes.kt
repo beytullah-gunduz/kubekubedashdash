@@ -235,4 +235,14 @@ internal fun kdPaletteSpec(style: ThemeStyle, palette: ThemePalette): KdPaletteS
     ThemePalette.HIGH_CONTRAST -> HighContrastPalette
 
     ThemePalette.MONOCHROME -> MonochromePalette
+
+    ThemePalette.SOLARIZED -> SolarizedPalette
+
+    ThemePalette.GRUVBOX -> GruvboxPalette
+
+    ThemePalette.CATPPUCCIN -> CatppuccinPalette
+
+    ThemePalette.NORD -> NordPalette
+
+    ThemePalette.DRACULA -> DraculaPalette
 }

@@ -160,6 +160,18 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `nord finds Palette`() {
+        val results = settingsSearchResults("nord")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `dracula finds Palette`() {
+        val results = settingsSearchResults("dracula")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
     fun `scanlines finds CRT scanlines`() {
         val results = settingsSearchResults("scanlines")
         assertTrue(results.any { it.title == "CRT scanlines" })
