@@ -44,6 +44,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.retroChrome
@@ -217,7 +218,7 @@ fun ShortcutSheet(onDismiss: () -> Unit, crtGhost: CrtGhost? = null) {
                 .crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             Column(modifier = Modifier.padding(24.dp)) {

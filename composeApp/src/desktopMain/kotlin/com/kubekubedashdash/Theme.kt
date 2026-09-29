@@ -69,13 +69,15 @@ enum class ThemeStyle { DEFAULT, RETRO }
  */
 enum class ThemePalette(val label: String) {
     STYLE(""), // the Settings card shows the current style's name instead
+    HIGH_CONTRAST("High contrast"),
+    MONOCHROME("Monochrome"),
 }
 
 object ThemeManager {
     private var _mode by mutableStateOf(PreferenceRepository.themeMode.value)
     private var _isDarkTheme by mutableStateOf(_mode != ThemeMode.LIGHT)
     private var _style by mutableStateOf(PreferenceRepository.themeStyle.value)
-    private var _palette by mutableStateOf(ThemePalette.STYLE) // WS4 seeds it from PreferenceRepository
+    private var _palette by mutableStateOf(PreferenceRepository.themePalette.value)
     private var _cvd by mutableStateOf(false) // WS6 seeds it from PreferenceRepository
 
     val mode: ThemeMode get() = _mode
@@ -120,6 +122,11 @@ object ThemeManager {
     fun setStyle(newStyle: ThemeStyle) {
         _style = newStyle
         PreferenceRepository.setThemeStyle(newStyle)
+    }
+
+    fun setPalette(newPalette: ThemePalette) {
+        _palette = newPalette
+        PreferenceRepository.setThemePalette(newPalette)
     }
 
     internal fun applySystemDarkTheme(systemIsDark: Boolean) {
@@ -489,6 +496,9 @@ private val DefaultShapes = Shapes()
 /** Squares in Retro (D5's corner sweep, WS2); a plain [RoundedCornerShape] of this radius in Default. */
 val Dp.kdCorner: RoundedCornerShape get() = RoundedCornerShape(if (ThemeManager.isRetro) 0.dp else this)
 
+/** Width of every card and field outline (D2): 1 dp, 2 dp in High Contrast. */
+val kdOutlineWidth: Dp get() = ThemeManager.spec.outlineWidth
+
 /** Status-dot shape (D24): a square pixel in Retro, a circle in Default. */
 val kdDotShape: Shape get() = if (ThemeManager.isRetro) RectangleShape else CircleShape
 
@@ -513,6 +523,10 @@ fun KubeDashTheme(content: @Composable () -> Unit) {
     val persistedStyle by PreferenceRepository.themeStyle.collectAsState()
     LaunchedEffect(persistedStyle) {
         ThemeManager.syncStyleFromPreferences(persistedStyle)
+    }
+    val persistedPalette by PreferenceRepository.themePalette.collectAsState()
+    LaunchedEffect(persistedPalette) {
+        ThemeManager.syncPaletteFromPreferences(persistedPalette)
     }
     val systemIsDark = isSystemInDarkTheme()
     LaunchedEffect(systemIsDark, ThemeManager.mode) {

@@ -80,8 +80,16 @@ class PaletteModelTest {
     }
 
     @Test
+    fun `an explicit palette ignores the style`() {
+        ThemeStyle.entries.forEach { style ->
+            assertSame(HighContrastPalette, kdPaletteSpec(style, ThemePalette.HIGH_CONTRAST), "HIGH_CONTRAST under $style")
+            assertSame(MonochromePalette, kdPaletteSpec(style, ThemePalette.MONOCHROME), "MONOCHROME under $style")
+        }
+    }
+
+    @Test
     fun `cvd swaps exactly the status quartet and onError`() {
-        listOf(DefaultPalette, RetroPalette).forEach { spec ->
+        listOf(DefaultPalette, RetroPalette, HighContrastPalette, MonochromePalette).forEach { spec ->
             listOf(spec.dark, spec.light).forEach { v ->
                 assertEquals(
                     v.colors,
@@ -135,7 +143,9 @@ class PaletteModelTest {
         val k3 = ThemeManager.paletteKey
         assertNotEquals(k2, k3, "cvd")
 
-        // palette axis: WS4 adds HIGH_CONTRAST here
+        ThemeManager.syncPaletteFromPreferences(ThemePalette.HIGH_CONTRAST)
+        val k4 = ThemeManager.paletteKey
+        assertNotEquals(k3, k4, "palette")
     }
 
     @Test
@@ -152,6 +162,17 @@ class PaletteModelTest {
         assertEquals(Color.Black, kdInkOn(Color(0xFFFDD835)), "ink on #FDD835")
         assertEquals(Color.Black, kdInkOn(Color(0xFF1E88E5)), "ink on #1E88E5")
         assertEquals(Color.Black, kdInkOn(Color(0xFFE53935)), "ink on #E53935")
+    }
+
+    @Test
+    fun `kdGreyOf keeps the luminance and drops the hue`() {
+        assertNear(Color(0xFFAFAFAF), kdGreyOf(Color(0xFF48C744)), "kdGreyOf(#48C744)")
+        assertNear(Color(0xFF8A8A8A), kdGreyOf(Color(0xFF3D90CE)), "kdGreyOf(#3D90CE)")
+        assertNear(Color(0xFFC9C9C9), kdGreyOf(Color(0xFFFBC02D)), "kdGreyOf(#FBC02D)")
+
+        listOf(Color.Black, Color.White, Color(0xFF808080)).forEach {
+            assertNear(it, kdGreyOf(it), "kdGreyOf leaves the grey $it alone")
+        }
     }
 
     @Test

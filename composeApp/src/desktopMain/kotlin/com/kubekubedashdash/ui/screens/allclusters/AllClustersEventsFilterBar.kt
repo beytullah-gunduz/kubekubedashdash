@@ -44,6 +44,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.list_filled
@@ -308,7 +309,7 @@ private fun FilterChip(
         Row(
             modifier = Modifier
                 .border(
-                    width = 1.dp,
+                    width = kdOutlineWidth,
                     color = if (active) KdPrimary else KdBorder,
                     shape = RoundedCornerShape(4.dp),
                 )
@@ -337,7 +338,7 @@ private fun TimeWindowSelector(
 ) {
     Row(
         modifier = Modifier
-            .border(1.dp, KdBorder, RoundedCornerShape(4.dp)),
+            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TimeWindow.entries.forEachIndexed { i, tw ->
@@ -376,7 +377,7 @@ private fun ViewModeToggle(
 ) {
     Row(
         modifier = Modifier
-            .border(1.dp, KdBorder, RoundedCornerShape(4.dp))
+            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp))
             .clickable(onClick = onToggle)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -409,7 +410,7 @@ private fun HeatmapToggle(
             modifier = Modifier
                 .then(if (!enabled) Modifier.alpha(0.38f) else Modifier)
                 .border(
-                    width = 1.dp,
+                    width = kdOutlineWidth,
                     color = if (active) KdPrimary else KdBorder,
                     shape = RoundedCornerShape(4.dp),
                 )

@@ -148,6 +148,18 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `contrast finds Palette`() {
+        val results = settingsSearchResults("contrast")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `monochrome finds Palette`() {
+        val results = settingsSearchResults("monochrome")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
     fun `scanlines finds CRT scanlines`() {
         val results = settingsSearchResults("scanlines")
         assertTrue(results.any { it.title == "CRT scanlines" })

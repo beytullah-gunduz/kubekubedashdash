@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -124,6 +125,13 @@ fun kdInkOn(fill: Color): Color {
     val black = (l + 0.05f) / 0.05f
     val white = 1.05f / (l + 0.05f)
     return if (black >= white) Color.Black else Color.White
+}
+
+/** A grey with the same WCAG relative luminance as [c] (Monochrome kind colours, D15). */
+fun kdGreyOf(c: Color): Color {
+    val y = c.luminance()
+    val v = if (y <= 0.0031308f) 12.92f * y else 1.055f * y.pow(1f / 2.4f) - 0.055f
+    return Color(v, v, v)
 }
 
 /**

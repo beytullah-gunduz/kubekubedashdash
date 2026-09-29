@@ -231,4 +231,8 @@ internal fun kdPaletteSpec(style: ThemeStyle, palette: ThemePalette): KdPaletteS
         ThemeStyle.DEFAULT -> DefaultPalette
         ThemeStyle.RETRO -> RetroPalette
     }
+
+    ThemePalette.HIGH_CONTRAST -> HighContrastPalette
+
+    ThemePalette.MONOCHROME -> MonochromePalette
 }

@@ -60,6 +60,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.search_filled
@@ -385,7 +386,7 @@ fun CommandPalette(
                 ),
             shape = RoundedCornerShape(10.dp),
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             Column {
@@ -606,7 +607,7 @@ private fun HintKey(label: String) {
     Surface(
         shape = RoundedCornerShape(3.dp),
         color = KdSurface,
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
         modifier = Modifier.height(16.dp),
     ) {
         Box(

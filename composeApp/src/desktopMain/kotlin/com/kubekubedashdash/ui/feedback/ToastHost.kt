@@ -48,6 +48,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.close_filled
@@ -150,7 +151,7 @@ private fun ToastCard(toast: Toast, onUndo: () -> Unit, onDismiss: () -> Unit) {
             },
         shape = 8.dp.kdCorner,
         color = KdSurface,
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
         shadowElevation = 6.dp,
     ) {
         Row(

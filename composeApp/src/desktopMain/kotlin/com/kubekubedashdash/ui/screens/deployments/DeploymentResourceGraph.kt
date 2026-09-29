@@ -63,6 +63,7 @@ import com.kubekubedashdash.KdGraphEdge
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
@@ -409,7 +410,7 @@ private fun GraphYamlPanel(
         modifier = modifier,
         color = kindCol.copy(alpha = 0.06f),
         shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
-        border = BorderStroke(1.dp, kindCol.copy(alpha = 0.2f)),
+        border = BorderStroke(kdOutlineWidth, kindCol.copy(alpha = 0.2f)),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(

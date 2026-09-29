@@ -76,6 +76,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -167,7 +168,7 @@ fun GkeDiscoveryModal(
             modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 24.dp,
         ) {
             Column {
@@ -290,7 +291,7 @@ private fun GcloudMissing(onDismiss: () -> Unit) {
             OutlinedButton(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, KdBorder),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Close", color = KdTextPrimary) }
         }
     }
@@ -347,7 +348,7 @@ private fun NotSignedIn(viewModel: GkeDiscoveryViewModel) {
     OutlinedButton(
         onClick = { viewModel.retryLoad() },
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Try again", color = KdTextPrimary) }
 }
 
@@ -364,7 +365,7 @@ private fun LoadFailed(message: String, viewModel: GkeDiscoveryViewModel) {
     OutlinedButton(
         onClick = { viewModel.retryLoad() },
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Try again", color = KdTextPrimary) }
 }
 
@@ -953,7 +954,7 @@ private fun Footer(
                     viewModel.goToStep(GkeDiscoveryStep.PICK_PROJECTS)
                 },
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, KdBorder),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Back", color = KdTextPrimary) }
             Spacer(Modifier.width(8.dp))
         }
@@ -978,7 +979,7 @@ private fun Footer(
                 }
             },
             shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             enabled = if (step == GkeDiscoveryStep.IMPORTING) {
                 !cancelRequested
             } else {

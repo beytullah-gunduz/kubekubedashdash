@@ -33,6 +33,7 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.services.logcapture.CaptureOptions
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureGateway
@@ -136,7 +137,7 @@ fun CaptureNamespaceLogsDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .border(1.dp, KdBorder, RoundedCornerShape(4.dp))
+                                    .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp))
                                     .clickable { windowMenuExpanded = true }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,

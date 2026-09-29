@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
@@ -51,6 +52,7 @@ object PreferenceRepository {
     // ── Preference keys ───────────────────────────────────────────────────────
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val THEME_STYLE by lazy { stringPreferencesKey("theme_style") }
+    private val THEME_PALETTE by lazy { stringPreferencesKey("theme_palette") }
     private val CRT_SCANLINES by lazy { booleanPreferencesKey("crt_scanlines") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
@@ -91,6 +93,10 @@ object PreferenceRepository {
     // Orthogonal to themeMode (D1): the retro look layers over either dark or light.
     private val _themeStyle = MutableStateFlow(ThemeStyle.DEFAULT)
     val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
+
+    // Orthogonal to themeMode and themeStyle (D1): which colours. STYLE = the style's own palette.
+    private val _themePalette = MutableStateFlow(ThemePalette.STYLE)
+    val themePalette: StateFlow<ThemePalette> = _themePalette.asStateFlow()
 
     // The "CRT scanlines" switch (D13): a static scanline + vignette overlay, Retro only. Off
     // by default — it is the most recognisable "CRT" cue, but it dims dense small text.
@@ -254,6 +260,9 @@ object PreferenceRepository {
                     _themeStyle.value = p[THEME_STYLE]
                         ?.let { runCatching { ThemeStyle.valueOf(it) }.getOrNull() }
                         ?: ThemeStyle.DEFAULT
+                    _themePalette.value = p[THEME_PALETTE]
+                        ?.let { runCatching { ThemePalette.valueOf(it) }.getOrNull() }
+                        ?: ThemePalette.STYLE
                     _crtScanlines.value = p[CRT_SCANLINES] ?: false
                     _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
                     _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
@@ -319,6 +328,11 @@ object PreferenceRepository {
     fun setThemeStyle(value: ThemeStyle) {
         _themeStyle.value = value
         ioScope.launch { dataStore.edit { it[THEME_STYLE] = value.name } }
+    }
+
+    fun setThemePalette(value: ThemePalette) {
+        _themePalette.value = value
+        ioScope.launch { dataStore.edit { it[THEME_PALETTE] = value.name } }
     }
 
     fun setCrtScanlines(value: Boolean) {

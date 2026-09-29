@@ -178,6 +178,7 @@ Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> 
 
 - **Appearance** — Light, Dark, or System (follows OS) theme
 - **Style** — Default or Retro (pixel headings, a retro terminal font, squared corners; CRT power-on effects)
+- **Palette** — the style's own colours, High contrast (AAA text, thicker outlines and focus ring) or Monochrome
 - **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default; does not cover dialogs, menus, tooltips or the terminal)
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
 - **Tab behaviour** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and choose whether the tab strip shows always or only with multiple tabs
@@ -199,6 +200,7 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 
 - Light, Dark, and System (follows OS) themes (Material 3)
 - Retro style (opt-in) — pixel headings, a retro terminal font for text and code, squared corners, and CRT power-on / channel-cut motion in both its dark and light variants; optional scanline overlay
+- High contrast and Monochrome palettes, orthogonal to the Default/Retro style
 - Bundled **Inter**, **JetBrains Mono**, **Sixtyfour** (retro headings) and **Departure Mono** (retro text) fonts for consistent rendering across platforms
 - Status badges paired with a glyph so state is legible without relying on color
 - Collapsible sidebar — toggle from the title bar; state is persisted across sessions

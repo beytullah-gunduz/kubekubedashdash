@@ -37,6 +37,7 @@ data class SettingsEntry(val section: String, val title: String, val keywords: L
 val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Appearance", "Theme", listOf("dark", "light", "system")),
     SettingsEntry("Appearance", "Style", listOf("retro", "crt", "arcade", "pixel", "8-bit", "default", "standard")),
+    SettingsEntry("Appearance", "Palette", listOf("palette", "colours", "colors", "high contrast", "contrast", "accessibility", "a11y", "monochrome", "grey", "gray")),
     SettingsEntry("Appearance", "CRT scanlines", listOf("scanlines", "crt", "vignette", "retro")),
     SettingsEntry("Appearance", "UI zoom", listOf("font", "size", "scale", "bigger")),
     SettingsEntry("Appearance", "Table density", listOf("rows", "compact", "comfortable", "spacing")),

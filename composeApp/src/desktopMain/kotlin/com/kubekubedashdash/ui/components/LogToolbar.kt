@@ -47,6 +47,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.filter_list_filled
@@ -183,7 +184,7 @@ fun LogToolbarToggle(
             modifier = modifier
                 .height(28.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .border(1.dp, KdBorder, RoundedCornerShape(6.dp))
+                .border(kdOutlineWidth, KdBorder, RoundedCornerShape(6.dp))
                 .clickable(enabled = enabled, onClick = onToggle)
                 .padding(horizontal = 8.dp),
             contentAlignment = Alignment.Center,
@@ -218,7 +219,7 @@ fun LogToolbarMenu(
                 modifier = Modifier
                     .height(28.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .border(1.dp, KdBorder, RoundedCornerShape(6.dp))
+                    .border(kdOutlineWidth, KdBorder, RoundedCornerShape(6.dp))
                     .clickable(enabled = items.isNotEmpty()) { expanded = true }
                     .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.Center,

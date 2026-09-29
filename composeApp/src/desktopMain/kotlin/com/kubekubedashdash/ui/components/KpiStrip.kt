@@ -42,6 +42,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceUsageSummary
@@ -235,7 +236,7 @@ private fun KpiChip(
         KpiTone.Neutral, KpiTone.Muted -> null
     }
     val bg = if (clickable && hovered) KdHover else Color.Transparent
-    val border = if (active) BorderStroke(1.dp, KdPrimary) else null
+    val border = if (active) BorderStroke(kdOutlineWidth, KdPrimary) else null
 
     val content: @Composable () -> Unit = {
         Surface(

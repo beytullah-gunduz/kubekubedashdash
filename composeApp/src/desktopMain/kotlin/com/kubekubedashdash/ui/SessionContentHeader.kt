@@ -66,6 +66,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_back_filled
 import com.kubekubedashdash.resources.arrow_forward_filled
@@ -391,7 +392,7 @@ private fun CompactNamespaceSelector(
                         .widthIn(min = 220.dp, max = 320.dp)
                         .height(menuHeight)
                         .background(KdSurface, RoundedCornerShape(4.dp))
-                        .border(1.dp, KdBorder, RoundedCornerShape(4.dp)),
+                        .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp)),
                 ) {
                     Column(
                         modifier = Modifier

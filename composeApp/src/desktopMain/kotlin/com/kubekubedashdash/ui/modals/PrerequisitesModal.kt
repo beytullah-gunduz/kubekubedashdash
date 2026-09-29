@@ -67,6 +67,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
@@ -109,7 +110,7 @@ fun PrerequisitesModal(
             modifier = Modifier.widthIn(max = 780.dp).crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             Column {
@@ -275,7 +276,7 @@ fun PrerequisitesModal(
                                 OutlinedButton(
                                     onClick = onIgnore,
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, KdBorder),
+                                    border = BorderStroke(kdOutlineWidth, KdBorder),
                                 ) {
                                     Text("Continue", color = KdTextSecondary)
                                 }
