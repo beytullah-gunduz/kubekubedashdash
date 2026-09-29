@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -68,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
+import com.kubekubedashdash.KdOnError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
 import com.kubekubedashdash.KdSidebarBg
@@ -80,6 +80,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.data.repository.NavPreferenceRepository
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
@@ -88,6 +89,7 @@ import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.ui.components.SeverityDot
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.HealthLevel
 import com.kubekubedashdash.util.DemoContext
@@ -328,6 +330,7 @@ private fun NavKindItem(
         collapsed = collapsed,
         badge = if (isCluster) healthBadgeColor(clusterHealth) else null,
         badgeContentDescription = if (isCluster) healthBadgeDescription(clusterHealth) else null,
+        badgeFilled = clusterHealth?.level == HealthLevel.CRITICAL,
         count = counts[kind.key],
         onCountClick = onNavigate,
         contextMenu = onToggleFavourite?.let { toggle ->
@@ -571,6 +574,9 @@ fun SidebarItem(
     // item's label so e.g. "Cluster" becomes "Cluster, cluster health
     // critical" when there's a non-null badge. Required if badge is set.
     badgeContentDescription: String? = null,
+    // Filled = critical, hollow ring = warning, so the badge differs by shape
+    // as well as colour (D18). Only read when [badge] is set.
+    badgeFilled: Boolean = true,
     // Trailing signal count (e.g. "3 pods failing"). A second, independent
     // click target inside the row — clicking it opens count.target instead
     // of the row's own onClick. Takes priority over [badge] when both are
@@ -672,13 +678,12 @@ fun SidebarItem(
                 // reuses the same dot the health badge uses, just in the
                 // count's severity colour.
                 count != null && collapsed -> {
-                    Box(
+                    SeverityDot(
+                        color = countDotColor(count.severity),
+                        filled = count.severity == CountSeverity.ERROR,
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(end = 4.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(countDotColor(count.severity))
                             .semantics { contentDescription = count.description },
                     )
                 }
@@ -710,7 +715,18 @@ fun SidebarItem(
                                 Text(
                                     text = count.value.toString(),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = countDotColor(count.severity),
+                                    color = if (count.severity == CountSeverity.ERROR) {
+                                        KdOnError
+                                    } else {
+                                        countDotColor(count.severity)
+                                    },
+                                    // An ERROR count is a filled pill (D18); the pill is on the
+                                    // Text, not the 24 dp clickable Box, so the hit target is unchanged.
+                                    modifier = if (count.severity == CountSeverity.ERROR) {
+                                        Modifier.background(KdError, 6.dp.kdCorner).padding(horizontal = 4.dp)
+                                    } else {
+                                        Modifier
+                                    },
                                 )
                             }
                         }
@@ -718,13 +734,12 @@ fun SidebarItem(
                 }
 
                 badge != null -> {
-                    Box(
+                    SeverityDot(
+                        color = badge,
+                        filled = badgeFilled,
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(end = if (collapsed) 4.dp else 10.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(badge)
                             .then(
                                 if (badgeContentDescription != null) {
                                     Modifier.semantics { contentDescription = badgeContentDescription }

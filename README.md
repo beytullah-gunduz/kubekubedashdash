@@ -204,6 +204,7 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 - High contrast, Monochrome and five editor palettes (Solarized, Gruvbox, Catppuccin, Nord, Dracula), orthogonal to the Default/Retro style
 - Bundled **Inter**, **JetBrains Mono**, **Sixtyfour** (retro headings) and **Departure Mono** (retro text) fonts for consistent rendering across platforms
 - Status badges paired with a glyph so state is legible without relying on color; optional colour-blind-safe status colours
+- Status is never colour alone: glyphs, filled vs hollow dots, dashed rings and usage-tier icons
 - Collapsible sidebar — toggle from the title bar; state is persisted across sessions
 - macOS window tiling — supports half-screen and other Sonoma tiling arrangements
 - Resizable detail panels and a resizable logs drawer; widths/heights persist across tab switches

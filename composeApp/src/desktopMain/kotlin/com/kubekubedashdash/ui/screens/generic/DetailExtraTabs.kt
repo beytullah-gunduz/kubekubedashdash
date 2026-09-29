@@ -39,7 +39,6 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdStrokeCap
@@ -55,6 +54,9 @@ import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.UsageTierGlyph
+import com.kubekubedashdash.ui.components.color
+import com.kubekubedashdash.ui.components.usageTier
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.OverviewSection
 import com.kubekubedashdash.ui.screens.relatedOverviewSection
@@ -740,12 +742,8 @@ private fun OwnedPodItem(pod: PodInfo, onClick: () -> Unit) {
 
 @Composable
 fun UsageBarRow(row: QuotaUsageRow) {
-    val barColor =
-        when {
-            row.fraction < 0.7f -> KdSuccess
-            row.fraction < 0.85f -> KdWarning
-            else -> KdError
-        }
+    val tier = usageTier(row.fraction)
+    val barColor = tier.color()
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -758,11 +756,17 @@ fun UsageBarRow(row: QuotaUsageRow) {
                 style = MaterialTheme.typography.bodySmall,
                 color = KdTextSecondary,
             )
-            Text(
-                "${row.used} / ${row.hard}",
-                style = MaterialTheme.typography.bodySmall,
-                color = KdTextPrimary,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                UsageTierGlyph(tier)
+                Text(
+                    "${row.used} / ${row.hard}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = KdTextPrimary,
+                )
+            }
         }
         Spacer(Modifier.height(4.dp))
         // The card behind this row is already KdSurfaceVariant, so a 4 dp track

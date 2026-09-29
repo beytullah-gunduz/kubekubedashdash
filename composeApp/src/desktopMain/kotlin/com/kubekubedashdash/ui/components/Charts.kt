@@ -103,11 +103,8 @@ fun CircularUsageIndicator(
         targetValue = clamped,
         animationSpec = tween(durationMillis = 800),
     )
-    val gaugeColor = when {
-        clamped > 0.85f -> KdError
-        clamped > 0.70f -> KdWarning
-        else -> KdSuccess
-    }
+    val tier = usageTier(clamped)
+    val gaugeColor = tier.color()
 
     Column(
         modifier = modifier,
@@ -157,7 +154,13 @@ fun CircularUsageIndicator(
             )
         }
         Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            UsageTierGlyph(tier)
+            Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
+        }
         Text(
             "$usedText / $totalText",
             style = MaterialTheme.typography.labelSmall,
@@ -179,11 +182,8 @@ fun HalfCircularUsageIndicator(
         targetValue = clamped,
         animationSpec = tween(durationMillis = 800),
     )
-    val gaugeColor = when {
-        clamped > 0.85f -> KdError
-        clamped > 0.70f -> KdWarning
-        else -> KdSuccess
-    }
+    val tier = usageTier(clamped)
+    val gaugeColor = tier.color()
 
     Column(
         modifier = modifier,
@@ -234,7 +234,13 @@ fun HalfCircularUsageIndicator(
                 modifier = Modifier.padding(bottom = 2.dp),
             )
         }
-        Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            UsageTierGlyph(tier)
+            Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
+        }
         Text(
             "$usedText / $totalText",
             style = MaterialTheme.typography.labelSmall,
@@ -274,11 +280,7 @@ fun UsageHistoryBar(
                 val y = size.height - barHeight
 
                 val fade = 0.4f + 0.6f * (index.toFloat() / (barCount - 1).coerceAtLeast(1))
-                val barColor = when {
-                    clamped > 0.85f -> KdError
-                    clamped > 0.70f -> KdWarning
-                    else -> KdSuccess
-                }
+                val barColor = usageTier(clamped).color()
 
                 drawRoundRect(
                     color = barColor.copy(alpha = fade),

@@ -9,11 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpOffset
@@ -59,13 +54,10 @@ fun LiveDataDot(isConnected: Boolean, errorMessage: String?, modifier: Modifier 
     val stateText = if (healthy) "Live data connected" else (errorMessage ?: "Disconnected")
 
     val dot = @Composable {
-        Box(
-            modifier = modifier
-                .size(8.dp)
-                .semantics { contentDescription = stateText }
-                .alpha(dotAlpha)
-                .clip(CircleShape)
-                .background(dotColor),
+        SeverityDot(
+            color = dotColor,
+            filled = healthy,
+            modifier = modifier.semantics { contentDescription = stateText }.alpha(dotAlpha),
         )
     }
 

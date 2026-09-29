@@ -37,6 +37,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
+import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.schedule_filled
@@ -56,7 +57,7 @@ fun statusVisual(status: String): StatusVisual = when (status.lowercase()) {
         StatusVisual(Res.drawable.check_circle_filled, KdSuccess)
 
     "succeeded", "completed", "complete" ->
-        StatusVisual(Res.drawable.check_circle_filled, KdInfo)
+        StatusVisual(Res.drawable.check_filled, KdInfo)
 
     "pending", "waiting", "containercreating", "terminating" ->
         StatusVisual(Res.drawable.schedule_filled, KdWarning)

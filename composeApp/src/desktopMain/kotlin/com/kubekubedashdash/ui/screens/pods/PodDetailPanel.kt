@@ -80,6 +80,7 @@ import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.terminal_filled
+import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.services.portforward.PortForwardRequest
@@ -499,13 +500,24 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount:
                     if (tab == DetailTab.Events && warningCount > 0) {
                         Spacer(Modifier.width(6.dp))
                         Surface(shape = 8.dp.kdCorner, color = KdWarning.copy(alpha = 0.18f)) {
-                            Text(
-                                "$warningCount",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = KdWarning,
-                                fontWeight = FontWeight.SemiBold,
+                            Row(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            )
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Icon(
+                                    painterResource(Res.drawable.warning_filled),
+                                    contentDescription = null,
+                                    tint = KdWarning,
+                                    modifier = Modifier.size(10.dp),
+                                )
+                                Text(
+                                    "$warningCount",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = KdWarning,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
                 }

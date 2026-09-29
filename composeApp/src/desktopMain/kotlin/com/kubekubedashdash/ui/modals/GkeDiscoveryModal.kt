@@ -83,6 +83,7 @@ import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.error
+import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.warning_filled
@@ -880,7 +881,13 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
                 ok == 0 && failed > 0 -> KdError
                 else -> KdWarning
             }
-            Icon(painterResource(Res.drawable.check_filled), null, tint = tint, modifier = Modifier.size(20.dp))
+            // Same branches as the tint, so the outcome reads without colour (D18).
+            val icon = when {
+                failed == 0 && cancelled == 0 -> Res.drawable.check_filled
+                ok == 0 && failed > 0 -> Res.drawable.error_filled
+                else -> Res.drawable.warning_filled
+            }
+            Icon(painterResource(icon), null, tint = tint, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 summaryLine(ok, failed, cancelled),
