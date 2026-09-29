@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,14 +24,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.jediterm.terminal.TerminalColor
-import com.jediterm.terminal.TextStyle
+import com.jediterm.terminal.model.JediTerminal
 import com.jediterm.terminal.ui.JediTermWidget
-import com.jediterm.terminal.ui.settings.DefaultSettingsProvider
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdTerminalBg
+import com.kubekubedashdash.KdTerminalFg
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.model.TerminalSession
 import kotlinx.coroutines.Dispatchers
@@ -98,7 +97,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = modifier.fillMaxSize().background(KdTerminalBg)) {
         if (error != null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
@@ -116,12 +115,24 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                     // Reuse the session's widget across reattach so scrollback and
                     // shell state persist; create it once on first attach.
                     factory = {
-                        val widget = session.widget ?: createTerminalWidget(conn, ThemeManager.isDarkTheme).also { session.widget = it }
+                        val widget = session.widget ?: createTerminalWidget(conn).also { session.widget = it }
                         // 1.12.0 deprecated SwingPanel(background = …); the deprecated
                         // overload set exactly this on the component it returned.
-                        widget.component.apply { background = java.awt.Color.BLACK }
+                        widget.component.apply { background = KdTerminalBg.toAwt() }
                     },
                 )
+                // Re-theme an open terminal (D13): cells hold supplier-backed default colours and indexed
+                // colours resolve through the provider, both at paint time; only the Swing component
+                // background is a snapshot, so reset it and repaint. session.widget is a @Volatile var, not
+                // snapshot state: this re-runs on a palette change, which is enough because a widget built
+                // on first attach already starts from the current palette. Do not turn it into state.
+                LaunchedEffect(ThemeManager.paletteKey, session.widget) {
+                    val widget = session.widget ?: return@LaunchedEffect
+                    val settings = KdTerminalSettings()
+                    (widget.terminal as? JediTerminal)?.styleState?.setDefaultStyle(settings.defaultTextStyle())
+                    widget.component.background = KdTerminalBg.toAwt()
+                    widget.terminalPanel.repaint()
+                }
             }
 
             AnimatedVisibility(
@@ -131,7 +142,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
+                    modifier = Modifier.fillMaxSize().background(KdTerminalBg.copy(alpha = 0.85f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(
@@ -145,7 +156,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                         )
                         Text(
                             text = "Connecting to ${session.displayLabel}…",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            color = KdTerminalFg.copy(alpha = 0.8f),
                         )
                     }
                 }
@@ -154,31 +165,8 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
     }
 }
 
-private fun createTerminalWidget(
-    connector: KubectlExecTtyConnector,
-    darkTheme: Boolean,
-): JediTermWidget {
-    val settings = object : DefaultSettingsProvider() {
-        @Suppress("OVERRIDE_DEPRECATION")
-        override fun getDefaultStyle(): TextStyle = if (darkTheme) {
-            TextStyle(
-                TerminalColor(com.jediterm.core.Color(0xD4, 0xD4, 0xD4)),
-                TerminalColor(com.jediterm.core.Color(0x1A, 0x1A, 0x1A)),
-            )
-        } else {
-            TextStyle(
-                TerminalColor(com.jediterm.core.Color(0x1A, 0x1A, 0x1A)),
-                TerminalColor(com.jediterm.core.Color(0xF5, 0xF5, 0xF5)),
-            )
-        }
-
-        @Suppress("DEPRECATION")
-        override fun useAntialiasing(): Boolean = true
-
-        override fun scrollToBottomOnTyping(): Boolean = true
-    }
-
-    val widget = JediTermWidget(settings)
+private fun createTerminalWidget(connector: KubectlExecTtyConnector): JediTermWidget {
+    val widget = JediTermWidget(KdTerminalSettings())
     widget.setTtyConnector(connector)
     widget.start()
     return widget
