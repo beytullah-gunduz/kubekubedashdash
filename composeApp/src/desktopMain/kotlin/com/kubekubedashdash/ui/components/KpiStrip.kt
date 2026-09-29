@@ -42,9 +42,11 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceUsageSummary
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.errorPodStatuses
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.pendingPodStatuses
 import java.util.Locale
@@ -189,7 +191,7 @@ fun KpiStrip(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 6.dp.orCompact(3.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         kpis.forEachIndexed { index, kpi ->
@@ -235,7 +237,7 @@ private fun KpiChip(
         KpiTone.Neutral, KpiTone.Muted -> null
     }
     val bg = if (clickable && hovered) KdHover else Color.Transparent
-    val border = if (active) BorderStroke(1.dp, KdPrimary) else null
+    val border = if (active) BorderStroke(kdOutlineWidth, KdPrimary) else null
 
     val content: @Composable () -> Unit = {
         Surface(

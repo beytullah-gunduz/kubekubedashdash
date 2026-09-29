@@ -34,6 +34,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.SessionId
+import com.kubekubedashdash.theme.kdInkOn
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
@@ -68,7 +69,7 @@ internal fun ClusterSummaryCard(
                     Text(
                         text = clusterInitial(summary.contextName),
                         style = MaterialTheme.typography.labelMedium,
-                        color = androidx.compose.ui.graphics.Color.White,
+                        color = kdInkOn(clusterColor.composeColor),
                         fontWeight = FontWeight.Bold,
                     )
                 }

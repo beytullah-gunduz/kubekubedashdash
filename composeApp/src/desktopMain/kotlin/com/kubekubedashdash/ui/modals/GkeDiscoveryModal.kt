@@ -34,6 +34,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,7 +57,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,15 +74,16 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
-import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.error
+import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.warning_filled
@@ -168,7 +169,7 @@ fun GkeDiscoveryModal(
             modifier = Modifier.widthIn(min = 640.dp, max = 820.dp).crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 24.dp,
         ) {
             Column {
@@ -291,7 +292,7 @@ private fun GcloudMissing(onDismiss: () -> Unit) {
             OutlinedButton(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, KdBorder),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Close", color = KdTextPrimary) }
         }
     }
@@ -337,8 +338,7 @@ private fun NotSignedIn(viewModel: GkeDiscoveryViewModel) {
     Text(
         "gcloud auth login",
         color = KdTextPrimary,
-        // Default keeps the system monospace it has always had (D3); Retro follows the code face (D18).
-        fontFamily = if (ThemeManager.isRetro) kdMonoFamily() else FontFamily.Monospace,
+        fontFamily = kdMonoFamily(),
         style = MaterialTheme.typography.bodySmall,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
@@ -349,7 +349,7 @@ private fun NotSignedIn(viewModel: GkeDiscoveryViewModel) {
     OutlinedButton(
         onClick = { viewModel.retryLoad() },
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Try again", color = KdTextPrimary) }
 }
 
@@ -366,7 +366,7 @@ private fun LoadFailed(message: String, viewModel: GkeDiscoveryViewModel) {
     OutlinedButton(
         onClick = { viewModel.retryLoad() },
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Try again", color = KdTextPrimary) }
 }
 
@@ -881,7 +881,13 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
                 ok == 0 && failed > 0 -> KdError
                 else -> KdWarning
             }
-            Icon(painterResource(Res.drawable.check_filled), null, tint = tint, modifier = Modifier.size(20.dp))
+            // Same branches as the tint, so the outcome reads without colour (D18).
+            val icon = when {
+                failed == 0 && cancelled == 0 -> Res.drawable.check_filled
+                ok == 0 && failed > 0 -> Res.drawable.error_filled
+                else -> Res.drawable.warning_filled
+            }
+            Icon(painterResource(icon), null, tint = tint, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 summaryLine(ok, failed, cancelled),
@@ -955,7 +961,7 @@ private fun Footer(
                     viewModel.goToStep(GkeDiscoveryStep.PICK_PROJECTS)
                 },
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, KdBorder),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Back", color = KdTextPrimary) }
             Spacer(Modifier.width(8.dp))
         }
@@ -980,7 +986,7 @@ private fun Footer(
                 }
             },
             shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             enabled = if (step == GkeDiscoveryStep.IMPORTING) {
                 !cancelRequested
             } else {
@@ -1004,7 +1010,7 @@ private fun Footer(
                     enabled = scanEnabled,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
-                ) { Text("Scan", color = if (scanEnabled) KdOnPrimary else Color.White) }
+                ) { Text("Scan", color = if (scanEnabled) KdOnPrimary else Color.Unspecified) }
             }
 
             GkeDiscoveryStep.SCANNING -> Button(
@@ -1013,9 +1019,9 @@ private fun Footer(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Scanning…", color = Color.White)
+                Text("Scanning…")
             }
 
             GkeDiscoveryStep.PICK_CLUSTERS -> {
@@ -1029,7 +1035,7 @@ private fun Footer(
                 ) {
                     Text(
                         if (selected == 0) "Import" else "Import $selected",
-                        color = if (importEnabled) KdOnPrimary else Color.White,
+                        color = if (importEnabled) KdOnPrimary else Color.Unspecified,
                     )
                 }
             }
@@ -1040,9 +1046,9 @@ private fun Footer(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Importing…", color = Color.White)
+                Text("Importing…")
             }
 
             GkeDiscoveryStep.DONE -> if (!hideOpenClustersButton) {

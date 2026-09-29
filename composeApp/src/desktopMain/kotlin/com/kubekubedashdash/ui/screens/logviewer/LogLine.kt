@@ -18,15 +18,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.orCompact
 
 @Composable
 internal fun LogLine(line: String, matcher: LogMatcher, wrap: Boolean) {
     val color = logSeverityColor(line)
 
-    val text = remember(line, matcher) { highlightOccurrences(line, matcher) }
+    val text = remember(line, matcher, ThemeManager.paletteKey) { highlightOccurrences(line, matcher) }
 
     Text(
         text = text,
@@ -39,7 +42,7 @@ internal fun LogLine(line: String, matcher: LogMatcher, wrap: Boolean) {
         maxLines = if (wrap) Int.MAX_VALUE else 1,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 1.dp)
+            .padding(vertical = 1.dp.orCompact(0.dp))
             .then(if (!wrap) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
     )
 }
@@ -51,7 +54,7 @@ internal fun LogLine(line: String, matcher: LogMatcher, wrap: Boolean) {
  * can keep the same severity colours while swapping the no-severity default
  * for their own body-text colour.
  */
-internal fun logSeverityColor(line: String, default: Color = Color(0xFFB0BEC5)): Color = when {
+internal fun logSeverityColor(line: String, default: Color = KdTextPrimary): Color = when {
     line.contains("ERROR", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> KdError
     line.contains("WARN", ignoreCase = true) -> KdWarning
     line.contains("DEBUG", ignoreCase = true) -> KdTextSecondary

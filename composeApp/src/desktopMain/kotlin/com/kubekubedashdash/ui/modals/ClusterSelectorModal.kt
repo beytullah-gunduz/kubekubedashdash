@@ -66,6 +66,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
@@ -211,7 +212,7 @@ fun ClusterSelectorModal(
                 .crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             Column {

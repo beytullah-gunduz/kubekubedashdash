@@ -50,10 +50,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdSeriesMemory
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
@@ -71,6 +71,7 @@ import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.clear_all_filled
@@ -80,6 +81,7 @@ import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.resources.terminal_filled
+import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.services.portforward.PortForwardRequest
@@ -484,7 +486,7 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount:
                 unselectedContentColor = KdTextSecondary,
             ) {
                 Row(
-                    modifier = Modifier.padding(vertical = 10.dp),
+                    modifier = Modifier.padding(vertical = 10.dp.orCompact(6.dp)),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
@@ -499,13 +501,24 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount:
                     if (tab == DetailTab.Events && warningCount > 0) {
                         Spacer(Modifier.width(6.dp))
                         Surface(shape = 8.dp.kdCorner, color = KdWarning.copy(alpha = 0.18f)) {
-                            Text(
-                                "$warningCount",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = KdWarning,
-                                fontWeight = FontWeight.SemiBold,
+                            Row(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            )
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Icon(
+                                    painterResource(Res.drawable.warning_filled),
+                                    contentDescription = null,
+                                    tint = KdWarning,
+                                    modifier = Modifier.size(10.dp),
+                                )
+                                Text(
+                                    "$warningCount",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = KdWarning,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
                 }
@@ -544,7 +557,7 @@ private fun OverviewTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(14.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (warningEvents.isNotEmpty()) {
@@ -666,7 +679,7 @@ private fun PodEventsTab(
             val events = state.data
             val rows = remember(events, now) { events.map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) } }
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(14.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 item { SectionLabel("${rows.size} Events") }
@@ -679,7 +692,7 @@ private fun PodEventsTab(
 @Composable
 private fun CenteredNote(title: String, body: String) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(14.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -688,8 +701,6 @@ private fun CenteredNote(title: String, body: String) {
         Text(body, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
     }
 }
-
-private val KdMemoryColor = Color(0xFF8B5CF6)
 
 @Composable
 private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
@@ -715,7 +726,7 @@ private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
                 label = "Memory",
                 currentText = if (memValues.isNotEmpty()) formatMemorySize(memValues.last()) else "\u2014",
                 formatValue = ::formatMemorySize,
-                lineColor = if (ThemeManager.isRetro) KdAccent else KdMemoryColor,
+                lineColor = KdSeriesMemory,
                 modifier = Modifier.weight(1f),
             )
         }

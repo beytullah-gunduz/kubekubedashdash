@@ -34,6 +34,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -59,11 +60,14 @@ import com.kubekubedashdash.KdOnPrimary
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
+import com.kubekubedashdash.KdTerminalBg
+import com.kubekubedashdash.KdTerminalFg
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
@@ -106,7 +110,7 @@ fun PrerequisitesModal(
             modifier = Modifier.widthIn(max = 780.dp).crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             Column {
@@ -231,10 +235,10 @@ fun PrerequisitesModal(
                                         painterResource(Res.drawable.cloud_filled),
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
-                                        tint = if (awsCliAvailable) KdOnPrimary else Color.White,
+                                        tint = if (awsCliAvailable) KdOnPrimary else LocalContentColor.current,
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Discover EKS Clusters", color = if (awsCliAvailable) KdOnPrimary else Color.White)
+                                    Text("Discover EKS Clusters", color = if (awsCliAvailable) KdOnPrimary else Color.Unspecified)
                                 }
                                 if (!awsCliAvailable) {
                                     Spacer(Modifier.width(8.dp))
@@ -255,10 +259,10 @@ fun PrerequisitesModal(
                                         painterResource(Res.drawable.cloud_filled),
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
-                                        tint = if (gcloudCliAvailable) KdOnPrimary else Color.White,
+                                        tint = if (gcloudCliAvailable) KdOnPrimary else LocalContentColor.current,
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Discover GKE Clusters", color = if (gcloudCliAvailable) KdOnPrimary else Color.White)
+                                    Text("Discover GKE Clusters", color = if (gcloudCliAvailable) KdOnPrimary else Color.Unspecified)
                                 }
                                 if (!gcloudCliAvailable) {
                                     Spacer(Modifier.width(8.dp))
@@ -272,7 +276,7 @@ fun PrerequisitesModal(
                                 OutlinedButton(
                                     onClick = onIgnore,
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, KdBorder),
+                                    border = BorderStroke(kdOutlineWidth, KdBorder),
                                 ) {
                                     Text("Continue", color = KdTextSecondary)
                                 }
@@ -322,7 +326,7 @@ private fun LogOutputPanel() {
                 .fillMaxWidth()
                 .heightIn(min = 80.dp, max = 150.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color.Black.copy(alpha = 0.85f)),
+                .background(KdTerminalBg),
         ) {
             Box(
                 modifier = Modifier
@@ -335,7 +339,7 @@ private fun LogOutputPanel() {
                             "ERROR" -> KdError
                             "WARN" -> KdWarning
                             "DEBUG" -> KdTextSecondary
-                            else -> Color(0xFFCCCCCC)
+                            else -> KdTerminalFg
                         }
                         Text(
                             entry.formattedMessage,

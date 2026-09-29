@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 
@@ -86,7 +87,7 @@ fun SettingsDialog(
                 .crtCardReveal(crtGhost),
             shape = 12.dp.kdCorner,
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             SettingsScreen(

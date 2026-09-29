@@ -37,6 +37,8 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.filter_list_filled
@@ -100,13 +102,13 @@ fun StatusFilterMenu(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
                 .border(
-                    width = 1.dp,
+                    width = kdOutlineWidth,
                     color = borderColor,
                     shape = RoundedCornerShape(6.dp),
                 )
                 .background(bgColor)
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .padding(horizontal = 10.dp, vertical = 5.dp.orCompact(3.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(

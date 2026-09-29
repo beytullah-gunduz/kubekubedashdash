@@ -56,6 +56,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.delete_filled
@@ -182,7 +183,7 @@ fun DetailPanelHeader(
         val hasVerbContent = shownSafe.isNotEmpty() || shownDanger.isNotEmpty() || overflowed.isNotEmpty()
 
         Row(
-            modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp.orCompact(6.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -209,8 +210,8 @@ fun DetailPanelHeader(
             }
 
             // Dp.Unspecified drops the 48 dp touch-target minimum — this is a
-            // pointer-driven desktop header, not a touch UI (precedent:
-            // ui/components/ResourceTable.kt:237-241). Without it every button
+            // pointer-driven desktop header, not a touch UI (precedent: the
+            // select-all Checkbox in ResourceTable's header row). Without it every button
             // below renders wider than its budgeted width and Close can be
             // squeezed off the end of the row entirely.
             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {

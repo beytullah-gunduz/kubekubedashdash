@@ -73,9 +73,15 @@ class SettingsIndexTest {
     }
 
     @Test
-    fun `density finds Table density`() {
+    fun `density finds Density`() {
         val results = settingsSearchResults("density")
-        assertTrue(results.any { it.title == "Table density" })
+        assertTrue(results.any { it.title == "Density" })
+    }
+
+    @Test
+    fun `dense finds Density`() {
+        val results = settingsSearchResults("dense")
+        assertTrue(results.any { it.title == "Density" })
     }
 
     @Test
@@ -145,6 +151,42 @@ class SettingsIndexTest {
     fun `crt finds Style`() {
         val results = settingsSearchResults("crt")
         assertTrue(results.any { it.title == "Style" })
+    }
+
+    @Test
+    fun `contrast finds Palette`() {
+        val results = settingsSearchResults("contrast")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `monochrome finds Palette`() {
+        val results = settingsSearchResults("monochrome")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `nord finds Palette`() {
+        val results = settingsSearchResults("nord")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `dracula finds Palette`() {
+        val results = settingsSearchResults("dracula")
+        assertTrue(results.any { it.title == "Palette" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `color blind finds Colour-blind-safe status colours`() {
+        val results = settingsSearchResults("color blind")
+        assertTrue(results.any { it.title == "Colour-blind-safe status colours" && it.section == "Appearance" })
+    }
+
+    @Test
+    fun `deuteranopia finds Colour-blind-safe status colours`() {
+        val results = settingsSearchResults("deuteranopia")
+        assertTrue(results.any { it.title == "Colour-blind-safe status colours" && it.section == "Appearance" })
     }
 
     @Test

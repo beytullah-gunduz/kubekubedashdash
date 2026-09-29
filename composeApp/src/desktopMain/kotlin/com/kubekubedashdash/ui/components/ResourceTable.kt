@@ -96,8 +96,10 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
 import com.kubekubedashdash.resources.arrow_upward_filled
@@ -196,10 +198,9 @@ fun ResourceTable(
     var sortAscending by remember { mutableStateOf(defaultSortAscending) }
     val copyToClipboard = rememberCopyToClipboard()
 
-    // Collected once here, not inside TableRowItem, so a 1000-row list isn't
-    // subscribed per row and non-skippable.
-    val density by PreferenceRepository.tableDensity.collectAsState()
-    val rowPadding = density.rowPadding
+    // Density and hidden columns are read once here, not inside TableRowItem,
+    // so a 1000-row list isn't subscribed per row and non-skippable.
+    val rowPadding = 7.dp.orCompact(3.dp)
     val hiddenColumns by PreferenceRepository.hiddenTableColumns.collectAsState()
 
     // Full-list indices, never a filtered copy: the sort, defaultSortColumn
@@ -268,7 +269,7 @@ fun ResourceTable(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(KdSurfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp.orCompact(4.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selectable) {
@@ -381,12 +382,12 @@ fun ResourceTable(
                             color = KdTextSecondary,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         )
-                        TableDensity.entries.forEach { option ->
+                        LayoutDensity.entries.forEach { option ->
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-                                            if (density == option) {
+                                            if (ThemeManager.layoutDensity == option) {
                                                 Icon(
                                                     painterResource(Res.drawable.check_filled),
                                                     contentDescription = null,
@@ -402,7 +403,7 @@ fun ResourceTable(
                                         )
                                     }
                                 },
-                                onClick = { PreferenceRepository.setTableDensity(option) },
+                                onClick = { ThemeManager.setLayoutDensity(option) },
                             )
                         }
                     }
@@ -867,7 +868,7 @@ fun SkeletonRows(rowCount: Int = 6) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                    .padding(horizontal = 16.dp, vertical = 11.dp.orCompact(7.dp)),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -981,7 +982,7 @@ fun ResourceCountHeader(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp.orCompact(8.dp), bottom = 8.dp.orCompact(4.dp)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

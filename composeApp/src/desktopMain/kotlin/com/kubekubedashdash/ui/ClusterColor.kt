@@ -25,9 +25,6 @@ data class ClusterColor(
 ) {
     val composeColor: Color get() = override ?: Color.hsl(hue, saturation, lightness)
 
-    fun shifted(deltaLightness: Float): Color = override
-        ?: Color.hsl(hue, saturation, (lightness + deltaLightness).coerceIn(0f, 1f))
-
     companion object {
         // Every minted demo label ("demo-cluster (mock) #N") folds to the one
         // demo row the picker lists, so the demo cluster keeps one hue and one

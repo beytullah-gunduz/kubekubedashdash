@@ -44,6 +44,7 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.crt.CrtPanelTiming
 import com.kubekubedashdash.ui.crt.crtPanelFrame
@@ -265,7 +266,7 @@ fun DetailHost(
                             .width(sheetWidth.dp)
                             .fillMaxHeight()
                             // Retro (D21): a hairline edge, not a soft Material shadow.
-                            .then(if (retro) Modifier.border(1.dp, KdBorder) else Modifier.shadow(12.dp))
+                            .then(if (retro) Modifier.border(kdOutlineWidth, KdBorder) else Modifier.shadow(12.dp))
                             .background(KdSurface)
                             .blockFallThrough(),
                     ) { detailWithControls() }

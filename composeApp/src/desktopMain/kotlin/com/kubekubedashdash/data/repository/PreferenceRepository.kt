@@ -6,12 +6,13 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
-import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.clampUiScale
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
@@ -51,6 +52,8 @@ object PreferenceRepository {
     // ── Preference keys ───────────────────────────────────────────────────────
     private val THEME_MODE by lazy { stringPreferencesKey("theme_mode") }
     private val THEME_STYLE by lazy { stringPreferencesKey("theme_style") }
+    private val THEME_PALETTE by lazy { stringPreferencesKey("theme_palette") }
+    private val CVD_SAFE_STATUS by lazy { booleanPreferencesKey("cvd_safe_status") }
     private val CRT_SCANLINES by lazy { booleanPreferencesKey("crt_scanlines") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
@@ -80,6 +83,8 @@ object PreferenceRepository {
     private val STATS_PANELS_EXPANDED by lazy { stringPreferencesKey("stats_panels_expanded") }
     private val DETAIL_PANE_WIDTHS by lazy { stringPreferencesKey("detail_pane_widths") }
     private val PALETTE_RECENTS by lazy { stringPreferencesKey("palette_recents") }
+
+    // Holds LayoutDensity since density went app-wide (D6); the key name is kept so saved choices carry over.
     private val TABLE_DENSITY by lazy { stringPreferencesKey("table_density") }
     private val TABLE_COLUMNS_HIDDEN by lazy { stringPreferencesKey("table_columns_hidden") }
     private val UI_SCALE_PERCENT by lazy { intPreferencesKey("ui_scale_percent") }
@@ -91,6 +96,15 @@ object PreferenceRepository {
     // Orthogonal to themeMode (D1): the retro look layers over either dark or light.
     private val _themeStyle = MutableStateFlow(ThemeStyle.DEFAULT)
     val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
+
+    // Orthogonal to themeMode and themeStyle (D1): which colours. STYLE = the style's own palette.
+    private val _themePalette = MutableStateFlow(ThemePalette.STYLE)
+    val themePalette: StateFlow<ThemePalette> = _themePalette.asStateFlow()
+
+    // The colour-blind-safe status switch (D5): blue/gold/crimson status colours in every palette.
+    // Off by default; independent of style, palette and mode.
+    private val _cvdSafeStatus = MutableStateFlow(false)
+    val cvdSafeStatus: StateFlow<Boolean> = _cvdSafeStatus.asStateFlow()
 
     // The "CRT scanlines" switch (D13): a static scanline + vignette overlay, Retro only. Off
     // by default — it is the most recognisable "CRT" cue, but it dims dense small text.
@@ -202,9 +216,9 @@ object PreferenceRepository {
     private val _paletteRecents = MutableStateFlow<List<String>>(emptyList())
     val paletteRecents: StateFlow<List<String>> = _paletteRecents.asStateFlow()
 
-    // Global row-density setting shared by every ResourceTable.
-    private val _tableDensity = MutableStateFlow(TableDensity.Comfortable)
-    val tableDensity: StateFlow<TableDensity> = _tableDensity.asStateFlow()
+    // App-wide spacing density (D6), shared by every screen; ThemeManager mirrors it.
+    private val _layoutDensity = MutableStateFlow(LayoutDensity.COMFORTABLE)
+    val layoutDensity: StateFlow<LayoutDensity> = _layoutDensity.asStateFlow()
 
     // Per-table column visibility, keyed "<tableKey>::<header>" (see
     // ui.components.tableColumnKey). Absent key = visible, so a column added
@@ -254,6 +268,10 @@ object PreferenceRepository {
                     _themeStyle.value = p[THEME_STYLE]
                         ?.let { runCatching { ThemeStyle.valueOf(it) }.getOrNull() }
                         ?: ThemeStyle.DEFAULT
+                    _themePalette.value = p[THEME_PALETTE]
+                        ?.let { runCatching { ThemePalette.valueOf(it) }.getOrNull() }
+                        ?: ThemePalette.STYLE
+                    _cvdSafeStatus.value = p[CVD_SAFE_STATUS] ?: false
                     _crtScanlines.value = p[CRT_SCANLINES] ?: false
                     _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
                     _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
@@ -286,7 +304,7 @@ object PreferenceRepository {
                     _maskSecretValues.value = p[MASK_SECRET_VALUES] ?: true
                     _restoreSessionOnLaunch.value = p[RESTORE_SESSION_ON_LAUNCH] ?: true
                     _captureDestinationDir.value = p[CAPTURE_DESTINATION_DIR] ?: defaultCaptureDestinationDir()
-                    _tableDensity.value = TableDensity.fromKey(p[TABLE_DENSITY])
+                    _layoutDensity.value = LayoutDensity.fromKey(p[TABLE_DENSITY])
                     // Zoom: holding Cmd+= repeats the key and each step persists
                     // from an unordered launch, so a re-seed could snap it back.
                     _uiScalePercent.value = clampUiScale(p[UI_SCALE_PERCENT] ?: 100)
@@ -319,6 +337,16 @@ object PreferenceRepository {
     fun setThemeStyle(value: ThemeStyle) {
         _themeStyle.value = value
         ioScope.launch { dataStore.edit { it[THEME_STYLE] = value.name } }
+    }
+
+    fun setThemePalette(value: ThemePalette) {
+        _themePalette.value = value
+        ioScope.launch { dataStore.edit { it[THEME_PALETTE] = value.name } }
+    }
+
+    fun setCvdSafeStatus(value: Boolean) {
+        _cvdSafeStatus.value = value
+        ioScope.launch { dataStore.edit { it[CVD_SAFE_STATUS] = value } }
     }
 
     fun setCrtScanlines(value: Boolean) {
@@ -440,8 +468,8 @@ object PreferenceRepository {
         }
     }
 
-    fun setTableDensity(value: TableDensity) {
-        _tableDensity.value = value
+    fun setLayoutDensity(value: LayoutDensity) {
+        _layoutDensity.value = value
         ioScope.launch { dataStore.edit { it[TABLE_DENSITY] = value.key } }
     }
 

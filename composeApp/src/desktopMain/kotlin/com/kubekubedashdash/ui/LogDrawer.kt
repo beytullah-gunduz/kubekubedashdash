@@ -76,6 +76,7 @@ import com.kubekubedashdash.services.DrawerLogTab
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.logcapture.CapturePhase
 import com.kubekubedashdash.services.portforward.PortForwardRegistry
+import com.kubekubedashdash.theme.kdInkOn
 import com.kubekubedashdash.ui.components.ActionTooltip
 import com.kubekubedashdash.ui.components.DrawerAppLogPane
 import com.kubekubedashdash.ui.components.DrawerCapturePane
@@ -387,7 +388,7 @@ internal fun LogTabClusterBadge(badge: LogTabBadge) {
         ) {
             Text(
                 clusterInitial(badge.context),
-                color = Color.White,
+                color = kdInkOn(badge.color),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

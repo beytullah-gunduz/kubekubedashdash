@@ -60,7 +60,9 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.retroChrome
@@ -385,7 +387,7 @@ fun CommandPalette(
                 ),
             shape = RoundedCornerShape(10.dp),
             color = KdSurface,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
         ) {
             Column {
@@ -450,7 +452,7 @@ private fun SearchBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(KdSurfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp.orCompact(8.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -510,7 +512,7 @@ private fun CategoryHeader(category: String) {
         color = KdTextSecondary,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp.orCompact(6.dp), bottom = 4.dp.orCompact(2.dp)),
     )
 }
 
@@ -528,7 +530,7 @@ private fun EntryRow(
             .clip(RoundedCornerShape(6.dp))
             .background(bg)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp.orCompact(5.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
@@ -582,7 +584,7 @@ private fun Footer() {
         modifier = Modifier
             .fillMaxWidth()
             .background(KdSurfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp.orCompact(5.dp)),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             HintKey("↑")
@@ -606,7 +608,7 @@ private fun HintKey(label: String) {
     Surface(
         shape = RoundedCornerShape(3.dp),
         color = KdSurface,
-        border = BorderStroke(1.dp, KdBorder),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
         modifier = Modifier.height(16.dp),
     ) {
         Box(

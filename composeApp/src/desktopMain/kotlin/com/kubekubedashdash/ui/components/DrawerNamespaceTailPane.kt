@@ -51,6 +51,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.expand_more_filled
@@ -421,7 +422,7 @@ private fun PodMuteMenu(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .border(width = 1.dp, color = KdBorder, shape = RoundedCornerShape(6.dp))
+                .border(width = kdOutlineWidth, color = KdBorder, shape = RoundedCornerShape(6.dp))
                 .clickable(enabled = pods.isNotEmpty()) { expanded = true }
                 .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,

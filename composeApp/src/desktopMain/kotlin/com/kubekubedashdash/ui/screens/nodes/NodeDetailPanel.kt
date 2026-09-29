@@ -51,6 +51,7 @@ import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.clear_all_filled
@@ -230,7 +231,7 @@ internal fun NodeDetailPanel(
                             selectedContentColor = KdPrimary,
                             unselectedContentColor = KdTextSecondary,
                         ) {
-                            Row(modifier = Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.padding(vertical = 10.dp.orCompact(6.dp)), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(painterResource(tab.icon), null, Modifier.size(14.dp))
                                 Spacer(Modifier.width(5.dp))
                                 Text(
@@ -399,7 +400,7 @@ private fun NodeOverviewCombinedTab(
     )
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(14.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         // ── Details ─────────────────────────────────────────────────────────
@@ -514,7 +515,7 @@ private fun NodeDetailsOnlyTab(
     )
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(14.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         item {
@@ -563,12 +564,12 @@ private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (
             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
         }
     } else if (pods.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)), contentAlignment = Alignment.Center) {
             Text("No pods on this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(14.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             item {
@@ -591,12 +592,12 @@ private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
         }
     } else if (events.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)), contentAlignment = Alignment.Center) {
             Text("No events for this node", style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(14.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             item {

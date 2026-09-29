@@ -49,6 +49,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.save_filled
@@ -80,7 +81,7 @@ internal fun AllClustersPresetMenu(
         // Trigger button — matches ViewModeToggle chrome
         Row(
             modifier = Modifier
-                .border(1.dp, KdBorder, RoundedCornerShape(4.dp))
+                .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp))
                 .clickable { expanded = !expanded }
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -172,7 +173,7 @@ internal fun AllClustersPresetMenu(
                         modifier = Modifier
                             .widthIn(min = 220.dp, max = 300.dp)
                             .background(KdSurface, RoundedCornerShape(6.dp))
-                            .border(1.dp, KdBorder, RoundedCornerShape(6.dp))
+                            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(6.dp))
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

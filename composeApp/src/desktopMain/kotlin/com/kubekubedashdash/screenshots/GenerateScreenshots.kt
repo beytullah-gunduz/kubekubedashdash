@@ -18,6 +18,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.Workspace
@@ -139,6 +140,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
     withTimeoutOrNull(5_000) { PreferenceRepository.preferencesLoaded.first { it } }
     val originalTheme = ThemeManager.mode
     val originalStyle = ThemeManager.style
+    val originalPalette = ThemeManager.palette
     try {
         // Force a deterministic dark baseline so every shot looks the same regardless
         // of the user's OS appearance setting. The original mode is restored in finally.
@@ -146,6 +148,8 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         // A user with Retro enabled must not regenerate the docs-site screenshots in
         // retro; the original style is restored in finally.
         ThemeManager.setStyle(ThemeStyle.DEFAULT)
+        // Likewise a chosen palette (High contrast, Monochrome, …) would recolour every shot.
+        ThemeManager.setPalette(ThemePalette.STYLE)
 
         log.info("Waiting for bootstrap workspace + window")
         val initialWorkspace = WorkspaceManager.workspaces.first { it.isNotEmpty() }.first()
@@ -518,6 +522,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         // developer's store.
         ThemeManager.setMode(originalTheme)
         ThemeManager.setStyle(originalStyle)
+        ThemeManager.setPalette(originalPalette)
     }
 }
 

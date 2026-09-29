@@ -30,9 +30,11 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdOnPrimary
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
+import com.kubekubedashdash.theme.kdPaletteSpec
 import org.jetbrains.compose.resources.painterResource
 
 internal data class ThemePreviewColors(
@@ -40,40 +42,14 @@ internal data class ThemePreviewColors(
     val background: Color,
     val surface: Color,
     val text: Color,
+    val border: Color,
+    val primary: Color,
 )
 
-internal val DarkPreviewColors = ThemePreviewColors(
-    sidebar = Color(0xFF161819),
-    background = Color(0xFF1E2124),
-    surface = Color(0xFF252A31),
-    text = Color(0xFFC8D1DC),
-)
-
-internal val LightPreviewColors = ThemePreviewColors(
-    sidebar = Color(0xFFFFFFFF),
-    background = Color(0xFFF8FAFC),
-    surface = Color(0xFFE2E8F0),
-    text = Color(0xFF1E293B),
-)
-
-internal val RetroDarkPreviewColors = ThemePreviewColors(
-    sidebar = Color(0xFF0A0B1A),
-    background = Color(0xFF12142B),
-    surface = Color(0xFF1E2240),
-    text = Color(0xFFE3E6F5),
-)
-
-internal val RetroLightPreviewColors = ThemePreviewColors(
-    sidebar = Color(0xFFE6DCC3),
-    background = Color(0xFFEFE7D2),
-    surface = Color(0xFFF8F2E3),
-    text = Color(0xFF2B2418),
-)
-
-/** Resolves the four preview palettes (D10): [ThemeStyle] × dark/light. */
-internal fun previewColorsFor(style: ThemeStyle, dark: Boolean): ThemePreviewColors = when (style) {
-    ThemeStyle.DEFAULT -> if (dark) DarkPreviewColors else LightPreviewColors
-    ThemeStyle.RETRO -> if (dark) RetroDarkPreviewColors else RetroLightPreviewColors
+/** A preview card's colours, straight from the palette table — never a copy that can drift (§1). */
+internal fun previewColorsFor(style: ThemeStyle, palette: ThemePalette, dark: Boolean): ThemePreviewColors {
+    val c = kdPaletteSpec(style, palette).variant(dark).colors
+    return ThemePreviewColors(c.sidebarBg, c.background, c.surface, c.textPrimary, c.border, c.primary)
 }
 
 @Composable
@@ -195,7 +171,7 @@ private fun ThemeMockup(
                     .fillMaxWidth(0.6f)
                     .height(8.dp)
                     .clip(wideBarShape)
-                    .background(colors.text.copy(alpha = 0.25f)),
+                    .background(colors.primary),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 repeat(2) {
@@ -204,6 +180,7 @@ private fun ThemeMockup(
                             .weight(1f)
                             .height(20.dp)
                             .clip(wideBarShape)
+                            .border(1.dp, colors.border, wideBarShape)
                             .background(colors.surface),
                     )
                 }

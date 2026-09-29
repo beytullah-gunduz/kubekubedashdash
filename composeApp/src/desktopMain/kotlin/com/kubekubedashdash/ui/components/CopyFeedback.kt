@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.kdOutlineWidth
 import kotlinx.coroutines.delay
 
 /**
@@ -92,7 +93,7 @@ private fun CopiedPill(text: String) {
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .background(KdSurface)
-            .border(1.dp, KdBorder, RoundedCornerShape(14.dp))
+            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, color = KdTextPrimary)

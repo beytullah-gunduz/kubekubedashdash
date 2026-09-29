@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -94,20 +95,25 @@ import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSelected
+import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
+import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.summary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
 import com.kubekubedashdash.data.repository.formatTopologyRefresh
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.cloud_filled
@@ -115,12 +121,12 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.theme.kdInkOn
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
 import com.kubekubedashdash.ui.SidebarSearchBox
 import com.kubekubedashdash.ui.clusterInitial
 import com.kubekubedashdash.ui.components.ShortcutGroups
-import com.kubekubedashdash.ui.components.TableDensity
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
@@ -229,10 +235,10 @@ private fun SettingsSection(
         Surface(
             shape = 12.dp.kdCorner,
             color = MaterialTheme.colorScheme.surfaceContainer,
-            border = BorderStroke(1.dp, KdBorder),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(20.dp), content = content)
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp.orCompact(14.dp)), content = content)
         }
     }
 }
@@ -257,7 +263,7 @@ private fun SettingsRowTitle(title: String) {
             .clip(RoundedCornerShape(4.dp))
             .background(if (highlighted) KdSelected else Color.Transparent)
             .border(
-                width = 1.dp,
+                width = kdOutlineWidth,
                 color = if (highlighted) KdPrimary else Color.Transparent,
                 shape = RoundedCornerShape(4.dp),
             )
@@ -305,7 +311,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         SettingsRowTitle("Pod range")
         Spacer(Modifier.height(4.dp))
@@ -330,7 +336,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
 
     if (mockRunning) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("●", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+            Text("●", color = KdSuccess, style = MaterialTheme.typography.bodyMedium)
             Text(
                 "Running — $connectedTabs ${if (connectedTabs == 1) "tab" else "tabs"} connected",
                 style = MaterialTheme.typography.bodyMedium,
@@ -349,11 +355,11 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         RangeControls()
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         SettingsRowTitle("Chaos")
         Spacer(Modifier.height(8.dp))
@@ -362,14 +368,14 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             OutlinedButton(
                 onClick = { showStopAllDialog = true },
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, KdBorder),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
             ) {
                 Text("Reset to baseline", color = MaterialTheme.colorScheme.error)
             }
             OutlinedButton(
                 onClick = { showKillServerDialog = true },
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, KdBorder),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
             ) {
                 Text("Kill mock server", color = MaterialTheme.colorScheme.error)
             }
@@ -445,7 +451,7 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
             color = KdTextSecondary,
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
         RangeControls()
     }
@@ -668,28 +674,28 @@ fun SettingsScreen(
                                     ThemePreviewCard(
                                         label = "Dark",
                                         selected = viewModel.themeMode == ThemeMode.DARK,
-                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = true),
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, viewModel.themePalette, dark = true),
                                         squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
                                     )
                                     ThemePreviewCard(
                                         label = "Light",
                                         selected = viewModel.themeMode == ThemeMode.LIGHT,
-                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = false),
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, viewModel.themePalette, dark = false),
                                         squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
                                     )
                                     ThemePreviewCard(
                                         label = "System",
                                         selected = viewModel.themeMode == ThemeMode.SYSTEM,
-                                        primaryColors = previewColorsFor(viewModel.themeStyle, dark = true),
-                                        secondaryColors = previewColorsFor(viewModel.themeStyle, dark = false),
+                                        primaryColors = previewColorsFor(viewModel.themeStyle, viewModel.themePalette, dark = true),
+                                        secondaryColors = previewColorsFor(viewModel.themeStyle, viewModel.themePalette, dark = false),
                                         squared = ThemeManager.isRetro,
                                         onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Style")
                                 Spacer(Modifier.height(4.dp))
@@ -705,21 +711,79 @@ fun SettingsScreen(
                                     ThemePreviewCard(
                                         label = "Default",
                                         selected = viewModel.themeStyle == ThemeStyle.DEFAULT,
-                                        primaryColors = previewColorsFor(ThemeStyle.DEFAULT, dark = currentModeIsDark),
-                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.DEFAULT, dark = false) else null,
+                                        primaryColors = previewColorsFor(ThemeStyle.DEFAULT, viewModel.themePalette, dark = currentModeIsDark),
+                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.DEFAULT, viewModel.themePalette, dark = false) else null,
                                         onClick = { viewModel.setThemeStyle(ThemeStyle.DEFAULT) },
                                     )
                                     ThemePreviewCard(
                                         label = "Retro",
                                         selected = viewModel.themeStyle == ThemeStyle.RETRO,
-                                        primaryColors = previewColorsFor(ThemeStyle.RETRO, dark = currentModeIsDark),
-                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.RETRO, dark = false) else null,
+                                        primaryColors = previewColorsFor(ThemeStyle.RETRO, viewModel.themePalette, dark = currentModeIsDark),
+                                        secondaryColors = if (currentModeIsSystem) previewColorsFor(ThemeStyle.RETRO, viewModel.themePalette, dark = false) else null,
                                         squared = true,
                                         onClick = { viewModel.setThemeStyle(ThemeStyle.RETRO) },
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
+
+                                SettingsRowTitle("Palette")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Colours only — the style keeps its fonts, corners and motion. High contrast also thickens outlines and the focus ring.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.CenterHorizontally),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                ) {
+                                    val currentModeIsDark = viewModel.themeMode != ThemeMode.LIGHT
+                                    val currentModeIsSystem = viewModel.themeMode == ThemeMode.SYSTEM
+                                    ThemePalette.entries.forEach { palette ->
+                                        ThemePreviewCard(
+                                            label = if (palette == ThemePalette.STYLE) {
+                                                if (viewModel.themeStyle == ThemeStyle.RETRO) "Retro" else "Default"
+                                            } else {
+                                                palette.label
+                                            },
+                                            selected = viewModel.themePalette == palette,
+                                            primaryColors = previewColorsFor(viewModel.themeStyle, palette, dark = currentModeIsDark),
+                                            secondaryColors = if (currentModeIsSystem) previewColorsFor(viewModel.themeStyle, palette, dark = false) else null,
+                                            squared = ThemeManager.isRetro,
+                                            onClick = { viewModel.setThemePalette(palette) },
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
+
+                                SettingsRowTitle("Colour-blind-safe status colours")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Blue, gold and crimson instead of green, amber and red for healthy, warning and failed states, tuned to stay distinct with red-green or blue-yellow colour blindness. Works with every palette.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = viewModel.cvdSafeStatus,
+                                        onCheckedChange = { viewModel.setCvdSafeStatus(it) },
+                                    )
+                                    Text(
+                                        if (viewModel.cvdSafeStatus) "On" else "Off",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (viewModel.cvdSafeStatus) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val crtScanlines by PreferenceRepository.crtScanlines.collectAsState()
                                 SettingsRowTitle("CRT scanlines")
@@ -746,7 +810,7 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val uiScalePercent by PreferenceRepository.uiScalePercent.collectAsState()
 
@@ -774,27 +838,25 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
-                                val tableDensity by viewModel.tableDensity.collectAsState()
-
-                                SettingsRowTitle("Table density")
+                                SettingsRowTitle("Density")
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Row height in every resource list. Also in each table's options menu.",
+                                    "Spacing across the app — rows, headers, panels, the palette and Settings. Text size never changes. Also in each table's options menu.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = KdTextSecondary,
                                 )
                                 Spacer(Modifier.height(12.dp))
 
                                 FullWidthSingleChoiceSegmentedButtonRow {
-                                    TableDensity.entries.forEachIndexed { index, option ->
+                                    LayoutDensity.entries.forEachIndexed { index, option ->
                                         SegmentedButton(
-                                            selected = tableDensity == option,
-                                            onClick = { viewModel.setTableDensity(option) },
+                                            selected = viewModel.layoutDensity == option,
+                                            onClick = { viewModel.setLayoutDensity(option) },
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
-                                                count = TableDensity.entries.size,
+                                                count = LayoutDensity.entries.size,
                                             ),
                                         ) {
                                             Text(
@@ -806,7 +868,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val logDrawerBesideSidebar by viewModel.logDrawerBesideSidebar.collectAsState()
                                 SettingsRowTitle("Log panel beside sidebar")
@@ -898,7 +960,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 val tabStripVisibility by viewModel.tabStripVisibility.collectAsState()
 
@@ -1211,7 +1273,7 @@ fun SettingsScreen(
                                         onClick = onDiscoverEks,
                                         enabled = awsCliAvailable,
                                         shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, KdBorder),
+                                        border = BorderStroke(kdOutlineWidth, KdBorder),
                                     ) {
                                         Icon(
                                             painterResource(Res.drawable.cloud_filled),
@@ -1232,7 +1294,7 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Google Cloud GKE")
                                 Spacer(Modifier.height(4.dp))
@@ -1247,7 +1309,7 @@ fun SettingsScreen(
                                         onClick = onDiscoverGke,
                                         enabled = gcloudCliAvailable,
                                         shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, KdBorder),
+                                        border = BorderStroke(kdOutlineWidth, KdBorder),
                                     ) {
                                         Icon(
                                             painterResource(Res.drawable.cloud_filled),
@@ -1294,7 +1356,7 @@ fun SettingsScreen(
                                 OutlinedButton(
                                     onClick = onShowAppLogs,
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, KdBorder),
+                                    border = BorderStroke(kdOutlineWidth, KdBorder),
                                 ) {
                                     Icon(
                                         painterResource(Res.drawable.description_filled),
@@ -1306,7 +1368,7 @@ fun SettingsScreen(
                                     Text("Open application logs", color = KdTextPrimary)
                                 }
 
-                                Spacer(Modifier.height(20.dp))
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
 
                                 SettingsRowTitle("Preferences storage")
                                 Spacer(Modifier.height(4.dp))
@@ -1425,7 +1487,7 @@ private fun ClusterColorsSection(
                 Text(
                     clusterInitial(ctx),
                     style = MaterialTheme.typography.labelSmall,
-                    color = androidx.compose.ui.graphics.Color.White,
+                    color = kdInkOn(effectiveColor.composeColor),
                 )
             }
             Spacer(Modifier.width(10.dp))

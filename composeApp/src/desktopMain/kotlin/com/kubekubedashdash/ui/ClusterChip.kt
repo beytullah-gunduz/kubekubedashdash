@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -67,8 +68,10 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
+import com.kubekubedashdash.theme.kdInkOn
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import java.awt.MouseInfo
@@ -240,7 +243,7 @@ fun ClusterChip(
                     }
                 }
                 .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp.orCompact(2.dp)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -435,7 +438,7 @@ private fun ClusterAvatar(
         )
         Text(
             text = initial,
-            color = Color.White,
+            color = kdInkOn(color),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -463,7 +466,15 @@ private fun ClusterAvatar(
                     useCenter = false,
                     topLeft = topLeft,
                     size = arcSize,
-                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    style = Stroke(
+                        width = stroke,
+                        cap = StrokeCap.Round,
+                        pathEffect = if (isConnected == false) {
+                            PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.5.dp.toPx()))
+                        } else {
+                            null
+                        },
+                    ),
                 )
             }
         }

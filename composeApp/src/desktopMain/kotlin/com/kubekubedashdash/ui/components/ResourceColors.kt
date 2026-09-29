@@ -6,8 +6,16 @@ import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.ThemePalette
+import com.kubekubedashdash.theme.kdGreyOf
 
-fun kindColor(kind: String): Color = when (kind) {
+/** A kind's identity colour; a luminance-matched grey in the Monochrome palette (D15). */
+fun kindColor(kind: String): Color = baseKindColor(kind).let {
+    if (ThemeManager.palette == ThemePalette.MONOCHROME) kdGreyOf(it) else it
+}
+
+private fun baseKindColor(kind: String): Color = when (kind) {
     "Deployment" -> Color(0xFF3D90CE)
 
     "ReplicaSet" -> Color(0xFFAB6DCE)

@@ -38,12 +38,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBackground
 import com.kubekubedashdash.KdBorder
-import com.kubekubedashdash.KdPrimary
-import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurfaceVariant
+import com.kubekubedashdash.KdSyntaxBool
+import com.kubekubedashdash.KdSyntaxComment
+import com.kubekubedashdash.KdSyntaxKey
+import com.kubekubedashdash.KdSyntaxNumber
+import com.kubekubedashdash.KdSyntaxString
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
@@ -218,12 +220,12 @@ fun ResourceDetailScreen(
 internal fun highlightYamlLine(line: String): AnnotatedString = buildAnnotatedString {
     when {
         line.trimStart().startsWith("#") -> {
-            withStyle(SpanStyle(color = KdTextSecondary)) { append(line) }
+            withStyle(SpanStyle(color = KdSyntaxComment)) { append(line) }
         }
 
         line.trimStart().startsWith("- ") -> {
             val indent = line.takeWhile { it == ' ' }
-            withStyle(SpanStyle(color = KdWarning)) { append("$indent- ") }
+            withStyle(SpanStyle(color = KdSyntaxBool)) { append("$indent- ") }
             val rest = line.trimStart().removePrefix("- ")
             appendYamlKeyValue(rest)
         }
@@ -237,7 +239,7 @@ internal fun highlightYamlLine(line: String): AnnotatedString = buildAnnotatedSt
         line.trimStart().endsWith(":") -> {
             val indent = line.takeWhile { it == ' ' }
             append(indent)
-            withStyle(SpanStyle(color = KdPrimary)) { append(line.trimStart()) }
+            withStyle(SpanStyle(color = KdSyntaxKey)) { append(line.trimStart()) }
         }
 
         else -> {
@@ -249,14 +251,14 @@ internal fun highlightYamlLine(line: String): AnnotatedString = buildAnnotatedSt
 internal fun AnnotatedString.Builder.appendYamlKeyValue(text: String) {
     val colonIdx = text.indexOf(": ")
     if (colonIdx >= 0) {
-        withStyle(SpanStyle(color = KdPrimary)) { append(text.substring(0, colonIdx)) }
+        withStyle(SpanStyle(color = KdSyntaxKey)) { append(text.substring(0, colonIdx)) }
         withStyle(SpanStyle(color = KdTextSecondary)) { append(": ") }
         val value = text.substring(colonIdx + 2)
         val valueColor = when {
-            value == "true" || value == "false" -> KdWarning
+            value == "true" || value == "false" -> KdSyntaxBool
             value == "null" || value == "~" -> KdTextSecondary
-            value.toIntOrNull() != null || value.toDoubleOrNull() != null -> KdSuccess
-            value.startsWith("\"") || value.startsWith("'") -> KdSuccess
+            value.toIntOrNull() != null || value.toDoubleOrNull() != null -> KdSyntaxNumber
+            value.startsWith("\"") || value.startsWith("'") -> KdSyntaxString
             else -> KdTextPrimary
         }
         withStyle(SpanStyle(color = valueColor)) { append(value) }

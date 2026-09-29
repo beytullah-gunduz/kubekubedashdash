@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
@@ -205,7 +206,7 @@ fun MapSelectorChip(
                 .border(1.5.dp, borderColor, RoundedCornerShape(16.dp)),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp.orCompact(3.dp)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -429,7 +430,7 @@ fun ClearFiltersChip(
             .pointerHoverIcon(PointerIcon.Hand),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp.orCompact(3.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(

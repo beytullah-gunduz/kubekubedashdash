@@ -33,6 +33,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.error_filled
@@ -100,7 +101,7 @@ internal fun ClusterHealthBanner(
         color = visual.accent.copy(
             alpha = if (health.level == HealthLevel.HEALTHY) HEALTHY_TINT_ALPHA else ALERT_TINT_ALPHA,
         ),
-        border = BorderStroke(1.dp, visual.accent.copy(alpha = BORDER_ALPHA)),
+        border = BorderStroke(kdOutlineWidth, visual.accent.copy(alpha = BORDER_ALPHA)),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
