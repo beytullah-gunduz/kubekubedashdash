@@ -98,8 +98,8 @@ class RetroTypographyTest {
         "labelSmallEmphasized" to labelSmallEmphasized,
     )
 
-    // The 11 slots appTypography sets explicitly (D3); the rest keep the M3 default
-    // Typography() values in both Default and Retro's `.reading()` pass-through.
+    // The 11 slots appTypography sets explicitly (D3); the other 19 use Material's sizes in
+    // Inter (fontFamily = sans) in Default, and pass through `.reading()` in Retro.
     private val appSetSlots = listOf(
         "headlineLarge", "headlineMedium", "headlineSmall",
         "titleLarge", "titleMedium",
@@ -120,10 +120,11 @@ class RetroTypographyTest {
         waitForIdle()
 
         val map = slots.toMap()
-        for (name in appSetSlots) {
-            assertEquals(sans, map.getValue(name).fontFamily, "$name should use Inter in Default")
-        }
+        for ((name, style) in slots) assertEquals(sans, style.fontFamily, "$name should use Inter in Default")
         assertEquals(28.sp, map.getValue("headlineLarge").fontSize, "D3 lock: headlineLarge stays 28sp in Default")
+        // Material's own sizes for the slots appTypography leaves unset: only the family changed.
+        assertEquals(14.sp, map.getValue("titleSmall").fontSize, "titleSmall keeps Material's 14sp in Default")
+        assertEquals(57.sp, map.getValue("displayLarge").fontSize, "displayLarge keeps Material's 57sp in Default")
         for ((name, style) in slots) {
             assertNotEquals(FontSynthesis.None, style.fontSynthesis, "$name must not disable font synthesis in Default")
         }
