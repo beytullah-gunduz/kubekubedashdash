@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
@@ -37,6 +38,23 @@ class SessionViewModelHistoryTest {
     }
 
     private val detail = Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "ns-a")
+
+    // No shared builder exists in TST, so every required field is filled here with obviously
+    // fake values (PaneContentKeyTest's pattern, plus a status to tell snapshots apart).
+    private fun pod(uid: String, name: String = "web-0", namespace: String = "default", status: String = "Running") = PodInfo(
+        uid = uid,
+        name = name,
+        namespace = namespace,
+        status = status,
+        ready = "1/1",
+        restarts = 0,
+        age = "1h",
+        node = "node-1",
+        ip = "10.0.0.1",
+        labels = emptyMap(),
+        annotations = emptyMap(),
+        containers = emptyList(),
+    )
 
     @Test
     fun `back returns to the previous main screen`() {
@@ -164,5 +182,27 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(Screen.Main.Deployments())
         viewModel.goForward()
         assertEquals(Screen.Main.Deployments(), viewModel.currentScreen.value)
+    }
+
+    @Test
+    fun `re-clicking the open resource after a tick refreshes the pane without a history entry`() {
+        viewModel.navigate(Screen.Main.Nodes())
+        viewModel.navigate(Screen.Main.Pods())
+        viewModel.navigate(Screen.Detail.PodDetail(pod("u-1", status = "Running")))
+        viewModel.navigate(Screen.Detail.PodDetail(pod("u-1", status = "Pending")))
+        assertEquals("Pending", (viewModel.extraPaneScreen.value as Screen.Detail.PodDetail).pod.status)
+        viewModel.goBack()
+        assertEquals(null, viewModel.extraPaneScreen.value)
+        assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
+    }
+
+    @Test
+    fun `opening a different pod is still a history event`() {
+        viewModel.navigate(Screen.Main.Nodes())
+        viewModel.navigate(Screen.Main.Pods())
+        viewModel.navigate(Screen.Detail.PodDetail(pod("u-1", name = "web-0")))
+        viewModel.navigate(Screen.Detail.PodDetail(pod("u-2", name = "web-1")))
+        viewModel.goBack()
+        assertEquals("u-1", (viewModel.extraPaneScreen.value as Screen.Detail.PodDetail).pod.uid)
     }
 }

@@ -11,6 +11,8 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.spotless)
+    // Dev only (hotRunDesktop + hotMcpServer). Bundled with the Compose Multiplatform plugin, so no version here.
+    id("org.jetbrains.compose.hot-reload")
 }
 
 spotless {
@@ -257,6 +259,24 @@ tasks.named<JavaExec>("generateScreenshots") {
     val dataDir = screenshotDataDir
     systemProperty("kkdd.dataDir", dataDir.absolutePath)
     doFirst { dataDir.deleteRecursively() }
+}
+
+// Hot reload (dev only): the screenshot generator's demo-only seam. An empty kubeconfig lists
+// no real context, so the Demo Cluster is the only cluster; a separate data directory
+// (build/hot-run-data, reset by `clean`) keeps the developer's preferences, session and cluster
+// colours untouched. `hotMcpServerDesktop` then lets an agent drive this instance.
+val hotRunDataDir = layout.buildDirectory.dir("hot-run-data").get().asFile
+tasks.matching { it.name.startsWith("hotRun") }.configureEach {
+    if (this is JavaExec) {
+        dependsOn(generateEmptyKubeconfig)
+        environment("KUBECONFIG", emptyKubeconfig.get().asFile.absolutePath)
+        // The async launcher may not forward the task environment; the `kubeconfig` system
+        // property wins over $KUBECONFIG in KubeconfigLocator and fabric8 alike, and rides the argfile.
+        // -PhotRunKubeconfig=<file> swaps in a hand-made fake kubeconfig (e.g. one unreachable
+        // context, to exercise the connection-error screen); never point it at a real one.
+        systemProperty("kubeconfig", providers.gradleProperty("hotRunKubeconfig").getOrElse(emptyKubeconfig.get().asFile.absolutePath))
+        systemProperty("kkdd.dataDir", hotRunDataDir.absolutePath)
+    }
 }
 
 // Release-build verification. Nothing else ever runs the ProGuard-shrunk jars before a

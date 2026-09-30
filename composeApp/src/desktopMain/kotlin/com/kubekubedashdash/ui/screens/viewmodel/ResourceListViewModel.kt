@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.Identifiable
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.models.sameResourceAs
 import com.kubekubedashdash.ui.components.BulkActionRunner
 import com.kubekubedashdash.ui.components.SelectionFunnel
 import kotlinx.coroutines.flow.Flow
@@ -14,9 +15,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
+/** The row that stays selected after a refresh: the same resource (uid, or namespace/name when blank). */
+internal fun <T : Identifiable> resyncSelection(selected: T?, current: List<T>): T? = selected?.let { sel -> current.find { it.sameResourceAs(sel) } }
+
+/** A click toggles: the selected resource again → none; anything else → that item. */
+internal fun <T : Identifiable> toggleSelection(selected: T?, item: T?): T? = if (item == null || selected?.sameResourceAs(item) == true) null else item
+
 /**
  * Base for simple resource-list view models: owns the [selected] item, exposes the
- * list [state], and keeps the selection in sync with the latest data by [Identifiable.uid].
+ * list [state], and keeps the selection in sync with the latest data by [sameResourceAs].
  * Subclasses just supply the source flow.
  */
 abstract class ResourceListViewModel<T : Identifiable>(
@@ -35,7 +42,7 @@ abstract class ResourceListViewModel<T : Identifiable>(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ResourceState.Loading)
 
     fun selectItem(item: T?) {
-        _selected.value = if (_selected.value?.uid == item?.uid) null else item
+        _selected.value = toggleSelection(_selected.value, item)
     }
 
     fun clearSelection() {
@@ -43,6 +50,6 @@ abstract class ResourceListViewModel<T : Identifiable>(
     }
 
     private fun syncSelection(current: List<T>) {
-        _selected.value = _selected.value?.let { sel -> current.find { it.uid == sel.uid } }
+        _selected.value = resyncSelection(_selected.value, current)
     }
 }

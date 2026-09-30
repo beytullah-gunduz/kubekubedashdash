@@ -387,8 +387,13 @@ fun TextStyle.retroChrome(size: TextUnit = TextUnit.Unspecified): TextStyle {
     )
 }
 
+/**
+ * The Default-style type scale over Inter. `fontFamily = sans` fills the 19 slots not set here
+ * (display*, titleSmall, the 15 *Emphasized) from Material's type scale in Inter (retro TODO #11).
+ */
 @Composable
 private fun appTypography(sans: FontFamily): Typography = Typography(
+    fontFamily = sans,
     headlineLarge = TextStyle(
         fontFamily = sans,
         fontWeight = FontWeight.SemiBold,

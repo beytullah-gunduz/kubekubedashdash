@@ -17,7 +17,9 @@ data class ServiceInfo(
     val annotations: Map<String, String>,
     // Structured spec.ports; [ports] above stays the display string.
     val portSpecs: List<ServicePortInfo> = emptyList(),
-) : Identifiable
+) : Identifiable {
+    override val fallbackKey: String get() = "$namespace/$name"
+}
 
 /** One `spec.ports` entry. [targetPort] is the raw IntOrString as text ("8080" or "http"); empty when unset. */
 @Serializable

@@ -103,6 +103,14 @@ internal fun Screen?.detailKindKey(): String? = when (this) {
     else -> null
 }
 
+/**
+ * The content router's AnimatedContent key (retro TODO #2). The connection-error screen is one
+ * piece of content whose error text and countdown change in place: keying it on its class stops a
+ * crossfade (Default) or remount (Retro) on every countdown tick. Every other screen keys on
+ * itself, exactly as before.
+ */
+internal fun routerContentKey(screen: Screen): Any = if (screen is Screen.Main.ConnectionError) Screen.Main.ConnectionError::class else screen
+
 @Composable
 fun ContentRouter(
     screen: Screen,
@@ -127,7 +135,6 @@ fun ContentRouter(
     pulseAnnotationsOnEntry: Boolean = false,
     onSelectCluster: () -> Unit = {},
     onRetryNow: () -> Unit = {},
-    onDiscoverEks: () -> Unit = {},
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
     onCaptureLogs: (String) -> Unit = {},
@@ -138,6 +145,7 @@ fun ContentRouter(
     val routerTransition = updateTransition(screen, label = "contentRouter")
     routerTransition.AnimatedContent(
         modifier = Modifier.fillMaxSize(),
+        contentKey = ::routerContentKey,
         transitionSpec = {
             if (!ThemeManager.isRetro) {
                 fadeIn() togetherWith fadeOut()
