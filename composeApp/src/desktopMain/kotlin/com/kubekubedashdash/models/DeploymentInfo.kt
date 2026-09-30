@@ -15,4 +15,6 @@ data class DeploymentInfo(
     val labels: Map<String, String>,
     val annotations: Map<String, String>,
     val conditions: List<String>,
-) : Identifiable
+) : Identifiable {
+    override val fallbackKey: String get() = "$namespace/$name"
+}

@@ -716,7 +716,6 @@ fun App(
                                     session = tab.session,
                                     sidebarCollapsed = sidebarCollapsed,
                                     onSelectCluster = { workspace.showClusterSelector() },
-                                    onDiscoverEks = { workspace.showEksDiscovery() },
                                     onOpenLogs = onOpenLogs,
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,

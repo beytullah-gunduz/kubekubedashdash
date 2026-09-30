@@ -28,6 +28,7 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.models.sameResourceAs
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
 import com.kubekubedashdash.resources.article_filled
@@ -275,7 +276,7 @@ fun GenericResourceScreen(
             LaunchedEffect(autoSelectMap, kind, s.data) {
                 val wanted = autoSelectMap[kind] ?: return@LaunchedEffect
                 val row = s.data.firstOrNull { it.name == wanted } ?: return@LaunchedEffect
-                if (selected?.uid != row.uid) viewModel.selectItem(row)
+                if (selected?.sameResourceAs(row) != true) viewModel.selectItem(row)
             }
 
             Box(

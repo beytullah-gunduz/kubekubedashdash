@@ -6,6 +6,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.isRecentWorthy
 import com.kubekubedashdash.ui.navShortcutKey
+import com.kubekubedashdash.ui.paneContentKey
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.clusterHealthFlow
 import com.kubekubedashdash.util.DemoContext
@@ -486,7 +487,19 @@ class SessionViewModel(
         } else {
             NavEntry(screen, null)
         }
-        if (target == currentEntry()) return
+        val current = currentEntry()
+        if (target == current) return
+        // The same resource in the pane — a re-click after a list tick hands in a newer snapshot.
+        // Refresh the pane's snapshot but record no history (retro TODO #23); like any non-event it
+        // also leaves the forward stack alone. target.screen == current.screen always holds for a
+        // Detail target (built from _currentScreen above); the check is defensive.
+        if (target.screen == current.screen && target.extraPane != null &&
+            target.extraPane.paneContentKey() != null &&
+            target.extraPane.paneContentKey() == current.extraPane.paneContentKey()
+        ) {
+            _extraPaneScreen.value = target.extraPane
+            return
+        }
         // The filter box is stored per session but means "filter THIS list";
         // a main-screen change must not carry "nginx" from Pods into Deployments.
         // Opening or closing a detail pane keeps the main screen and the filter.

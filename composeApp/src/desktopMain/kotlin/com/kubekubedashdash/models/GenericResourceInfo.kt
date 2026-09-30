@@ -13,4 +13,6 @@ data class GenericResourceInfo(
     val annotations: Map<String, String>,
     val extraColumns: Map<String, String> = emptyMap(),
     val owners: List<OwnerRefInfo> = emptyList(),
-) : Identifiable
+) : Identifiable {
+    override val fallbackKey: String get() = "${namespace.orEmpty()}/$name"
+}
