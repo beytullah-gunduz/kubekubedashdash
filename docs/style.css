@@ -551,7 +551,7 @@ img[data-zoom] {
 .bento-grid {
     /* Cap on a half-width tile's screenshot height. A taller shot is cropped at the bottom of the
        tile (click it for the full image) so side-by-side tiles end up about the same height. */
-    --tile-img-max: 420px;
+    --tile-img-max: 520px;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
@@ -601,6 +601,11 @@ img[data-zoom] {
     border-right: 0;
     border-bottom: 0;
     border-top-left-radius: 10px;
+}
+
+/* The pod's "why" (its container card) sits at the bottom of the capture; show that end. */
+.tile img[src$="pod-why.webp"] {
+    object-position: left bottom;
 }
 
 /* ---------------------------------------------------------- retro band

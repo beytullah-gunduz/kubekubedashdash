@@ -51,8 +51,8 @@ HERO_SLUGS = [
 # window. Multiplied by (image width / 1640) before cropping, so it works at 1x and 2x.
 CROPS: dict[str, tuple[int, int, int, int] | None] = {
     "fleet": None,
-    "pod-why": (1066, 30, 1640, 1040),
-    "bulk": (250, 40, 1640, 600),
+    "pod-why": (1066, 30, 1640, 930),
+    "bulk": (268, 40, 1640, 600),
     "tail": (0, 820, 1100, 1160),
     "port-forward": (523, 308, 1117, 853),
     "palette": (516, 80, 1126, 590),
@@ -65,6 +65,7 @@ FEATURE_MAX_WIDTH = 1600
 WEBP_QUALITY = 82
 CRT_WIDTH = 1200
 CRT_QUALITY = 72
+CRT_BEFORE_HOLD_MS = 1200  # the Default look before the switch
 CRT_FIRST_HOLD_MS = 600
 CRT_LAST_HOLD_MS = 2800
 CRT_MIN_FRAME_GAP_MS = 33  # drop frames closer than this (real ms) to the previously kept one
@@ -183,6 +184,10 @@ def build_crt(src: Path, img_dir: Path, written: list[Path]) -> None:
     durations.append(CRT_LAST_HOLD_MS)
     # "Prepend the first frame held 600 ms" == the first frame's own duration plus the hold.
     durations[0] += CRT_FIRST_HOLD_MS
+    # Open on the Default look the switch starts from, so the loop shows the switch itself.
+    if first is not None:
+        frames.insert(0, (0.0, fit_width(first, CRT_WIDTH)))
+        durations.insert(0, CRT_BEFORE_HOLD_MS)
 
     out = img_dir / "retro-crt.webp"
     out.parent.mkdir(parents=True, exist_ok=True)
