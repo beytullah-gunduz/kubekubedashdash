@@ -498,9 +498,9 @@ class DemoClusterSimulator(
     }
 
     private fun rollFate(now: Long): PodFate {
-        // Normal odds are 70% clean / 25% failed / 5% crash-loop; screenshot-calm is 96 / 2 / 2.
-        val cleanBelow = if (screenshotCalm) 96 else 70
-        val failBelow = if (screenshotCalm) 98 else 95
+        // Normal odds are 70% clean / 25% failed / 5% crash-loop; screenshot-calm is all clean.
+        val cleanBelow = if (screenshotCalm) 100 else 70
+        val failBelow = if (screenshotCalm) 100 else 95
         return when (random.nextInt(100)) {
             in 0 until cleanBelow -> PodFate.CleanExit(now, random.nextLong(30_000, 15 * 60_000))
 
