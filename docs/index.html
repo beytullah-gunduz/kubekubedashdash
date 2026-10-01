@@ -6,7 +6,7 @@
         <title>KubeKubeDashDash — operate your whole Kubernetes fleet from one desktop app</title>
         <meta
             name="description"
-            content="A fast, free desktop app for Kubernetes: browse every resource across many clusters, triage events, tail logs, port-forward and run everyday actions — from your kubeconfig. macOS, Windows, Linux."
+            content="A free desktop app for Kubernetes: browse every resource across many clusters, triage events, tail logs, port-forward and run everyday actions — from your kubeconfig. macOS, Windows, Linux."
         />
         <meta name="theme-color" content="#0a1322" media="(prefers-color-scheme: dark)" />
         <meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
@@ -17,19 +17,18 @@
         <meta property="og:title" content="KubeKubeDashDash — operate your whole Kubernetes fleet from one desktop app" />
         <meta
             property="og:description"
-            content="A fast, free desktop app for Kubernetes: browse every resource across many clusters, triage events, tail logs, port-forward and run everyday actions — from your kubeconfig. macOS, Windows, Linux."
+            content="A free desktop app for Kubernetes: browse every resource across many clusters, triage events, tail logs, port-forward and run everyday actions — from your kubeconfig. macOS, Windows, Linux."
         />
         <meta property="og:image" content="https://beytullah-gunduz.github.io/kubekubedashdash/img/og.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content="KubeKubeDashDash Cluster Overview next to the headline: operate your whole Kubernetes fleet from one desktop app" />
+        <meta property="og:image:alt" content="KubeKubeDashDash Cluster Overview below the headline: operate your whole Kubernetes fleet from one desktop app" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://beytullah-gunduz.github.io/kubekubedashdash/img/og.png" />
 
         <link rel="icon" href="favicon.ico" sizes="any" />
-        <link rel="icon" type="image/png" href="favicon.png" />
-        <link rel="apple-touch-icon" href="favicon.png" />
-        <!-- The hero image the visitor's colour scheme will show first (the <picture> below
+        <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+        <!-- The hero image the visitor's color scheme will show first (the <picture> below
              and these preloads agree on it); imagesrcset/imagesizes make the preload fetch the
              same candidate the <img> will pick, so nothing downloads twice. -->
         <link
@@ -58,7 +57,7 @@
         <header class="site-header" id="top">
             <div class="container nav">
                 <a class="brand" href="#top" aria-label="KubeKubeDashDash — home">
-                    <img class="brand-mark" src="favicon.png" alt="" width="28" height="28" />
+                    <img class="brand-mark" src="img/mark-64.png" alt="" width="28" height="28" />
                     <span class="brand-name">KubeKubeDashDash</span>
                 </a>
                 <nav class="nav-links" aria-label="Sections">
@@ -89,12 +88,11 @@
             <section class="hero">
                 <div class="container hero-copy">
                     <span class="eyebrow-pill" id="hero-eyebrow">Free &amp; open source</span>
-                    <h1>Operate your whole Kubernetes fleet from one fast desktop app.</h1>
+                    <h1>Operate your whole Kubernetes fleet from one desktop app.</h1>
                     <p class="hero-sub">
                         Browse every resource, triage events across clusters, tail logs and
-                        port-forward — then scale, restart, drain or evict with a confirmation in
-                        front of every destructive step. It runs on your kubeconfig: no account, no
-                        agent in your cluster, no YAML editor to fat-finger.
+                        port-forward — then scale, restart, drain or evict, with a confirmation in
+                        front of every destructive step.
                     </p>
                     <div class="hero-cta">
                         <a
@@ -118,6 +116,8 @@
                             View on GitHub
                         </a>
                     </div>
+                    <!-- Shown by the download script on macOS only. -->
+                    <p class="hero-note" id="hero-mac-note" hidden>Not notarized yet, so the first launch needs one extra step — <a href="#mac-first-launch">here's how</a>.</p>
                     <ul class="hero-trust">
                         <li><strong>MIT licensed</strong></li>
                         <li>macOS (Apple Silicon) · Windows · Linux</li>
@@ -173,17 +173,18 @@
             </section>
 
             <!-- ============================ VALUE STRIP ============================ -->
-            <section class="values container" aria-label="Highlights">
+            <section class="values container" aria-labelledby="highlights-h">
+                <h2 class="visually-hidden" id="highlights-h">Highlights</h2>
                 <div class="value">
                     <span class="value-icon">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M12 3 3 8l9 5 9-5-9-5z" />
-                            <path d="m3 12 9 5 9-5" />
-                            <path d="m3 16 9 5 9-5" />
+                            <circle cx="7.5" cy="15.5" r="4" />
+                            <path d="m10.5 12.5 9-9" />
+                            <path d="m16 7 3 3" />
                         </svg>
                     </span>
-                    <h3>Every cluster at once</h3>
-                    <p>Color-coded tabs, extra windows, and an All Clusters view that merges events from every connection.</p>
+                    <h3>Runs on your kubeconfig</h3>
+                    <p>No account and no agent in your cluster: it connects with the contexts and cloud CLIs you already use.</p>
                 </div>
                 <div class="value">
                     <span class="value-icon">
@@ -221,7 +222,7 @@
             <!-- ============================ FEATURES (bento) ============================ -->
             <section class="bento container" id="features">
                 <div class="section-eyebrow">Features</div>
-                <h2>Built for the 2 a.m. page, not the demo.</h2>
+                <h2>Built for the 2 a.m. page.</h2>
 
                 <div class="bento-grid">
                     <article class="tile tile-wide">
@@ -229,15 +230,18 @@
                             <h3>Triage the whole fleet</h3>
                             <p>The All Clusters tab adds up CPU, memory and pods across every open cluster, ranks clusters by recent errors, and merges their events into one filterable feed — with saved presets and a reason heatmap.</p>
                         </div>
-                        <img
-                            src="img/fleet.webp"
-                            alt="All Clusters tab: combined usage, one card per cluster, and a merged warning-event feed"
-                            width="1600"
-                            height="1132"
-                            loading="lazy"
-                            decoding="async"
-                            data-zoom
-                        />
+                        <picture>
+                            <source media="(max-width: 899px)" srcset="img/fleet-mobile.webp" width="900" height="635" />
+                            <img
+                                src="img/fleet.webp"
+                                alt="All Clusters tab: combined usage, one card per cluster, and a merged warning-event feed"
+                                width="1600"
+                                height="1132"
+                                loading="lazy"
+                                decoding="async"
+                                data-zoom
+                            />
+                        </picture>
                     </article>
 
                     <article class="tile">
@@ -248,8 +252,8 @@
                         <img
                             src="img/pod-why.webp"
                             alt="Pod detail panel with a warnings callout and a container in CrashLoopBackOff"
-                            width="1148"
-                            height="1800"
+                            width="1132"
+                            height="952"
                             loading="lazy"
                             decoding="async"
                             data-zoom
@@ -264,8 +268,8 @@
                         <img
                             src="img/secret.webp"
                             alt="Secret YAML with every value masked"
-                            width="1148"
-                            height="1060"
+                            width="1140"
+                            height="730"
                             loading="lazy"
                             decoding="async"
                             data-zoom
@@ -277,15 +281,18 @@
                             <h3>Act on many at once</h3>
                             <p>Select pods across the list and evict or delete them together. Scale, rollout restart, cordon, drain, trigger and suspend sit in each resource's header.</p>
                         </div>
-                        <img
-                            src="img/bulk.webp"
-                            alt="Pods list with six rows selected and the bulk action bar"
-                            width="1600"
-                            height="653"
-                            loading="lazy"
-                            decoding="async"
-                            data-zoom
-                        />
+                        <picture>
+                            <source media="(max-width: 899px)" srcset="img/bulk-mobile.webp" width="900" height="692" />
+                            <img
+                                src="img/bulk.webp"
+                                alt="Pods list with six rows selected and the bulk action bar"
+                                width="1600"
+                                height="665"
+                                loading="lazy"
+                                decoding="async"
+                                data-zoom
+                            />
+                        </picture>
                     </article>
 
                     <article class="tile">
@@ -296,8 +303,8 @@
                         <img
                             src="img/port-forward.webp"
                             alt="Port forward dialog for a service, mapping port 80 to a local port"
-                            width="1188"
-                            height="1090"
+                            width="1092"
+                            height="992"
                             loading="lazy"
                             decoding="async"
                             data-zoom
@@ -307,7 +314,7 @@
                     <article class="tile">
                         <div class="tile-text">
                             <h3>Jump anywhere with ⌘K</h3>
-                            <p>A fuzzy palette for screens, clusters, namespaces, pods, nodes and CRDs — plus verbs like rollout restart, scale and cordon.</p>
+                            <p>A fuzzy palette: type part of a name and jump straight to any screen, cluster, namespace, pod, node or CRD.</p>
                         </div>
                         <img
                             src="img/palette.webp"
@@ -323,17 +330,20 @@
                     <article class="tile tile-wide">
                         <div class="tile-text">
                             <h3>Tail a whole namespace</h3>
-                            <p>A stern-style merged tail follows every running pod in a namespace, colour-coded per pod — next to per-container log tabs with filter, wrap, timestamps and previous-run logs.</p>
+                            <p>A stern-style merged tail follows every running pod in a namespace, color-coded per pod — next to per-container log tabs with filter, wrap, timestamps and previous-run logs.</p>
                         </div>
-                        <img
-                            src="img/tail.webp"
-                            alt="Logs drawer tailing every pod in a namespace, colour-coded per pod"
-                            width="1600"
-                            height="495"
-                            loading="lazy"
-                            decoding="async"
-                            data-zoom
-                        />
+                        <picture>
+                            <source media="(max-width: 899px)" srcset="img/tail-mobile.webp" width="900" height="494" />
+                            <img
+                                src="img/tail.webp"
+                                alt="Logs drawer tailing every pod in a namespace, color-coded per pod"
+                                width="1600"
+                                height="495"
+                                loading="lazy"
+                                decoding="async"
+                                data-zoom
+                            />
+                        </picture>
                     </article>
                 </div>
             </section>
@@ -342,7 +352,7 @@
             <section class="retro" id="retro">
                 <div class="container retro-inner">
                     <div class="retro-copy">
-                        <div class="retro-eyebrow">Retro mode</div>
+                        <div class="retro-eyebrow"><img class="retro-eyebrow-img" src="img/retro-mode.png" alt="Retro mode" width="266" height="25" /></div>
                         <h2>Or flip it to Retro.</h2>
                         <p>
                             Pixel headings, a retro terminal font, squared corners, and a CRT that
@@ -354,6 +364,7 @@
                         <picture>
                             <source media="(prefers-reduced-motion: reduce)" srcset="img/retro-crt-poster.webp" />
                             <img
+                                id="retro-img"
                                 src="img/retro-crt.webp"
                                 width="1200"
                                 height="849"
@@ -361,6 +372,8 @@
                                 alt="The app switching to Retro style: a CRT power-on flash, then pixel headings and scanlines"
                             />
                         </picture>
+                        <!-- Revealed by the script (unless the visitor prefers reduced motion). -->
+                        <button class="crt-toggle" id="crt-toggle" type="button" hidden>Pause animation</button>
                     </div>
                 </div>
             </section>
@@ -394,7 +407,9 @@
     <span class="k">"kubekubedashdash"</span>: {
       <span class="k">"type"</span>: <span class="s">"sse"</span>,
       <span class="k">"url"</span>: <span class="s">"http://127.0.0.1:3001/"</span>,
-      <span class="k">"headers"</span>: { <span class="k">"Authorization"</span>: <span class="s">"Bearer &lt;token from Settings&gt;"</span> }
+      <span class="k">"headers"</span>: {
+        <span class="k">"Authorization"</span>: <span class="s">"Bearer &lt;token from Settings&gt;"</span>
+      }
     }
   }
 }</code></pre>
@@ -414,48 +429,51 @@
                         webhooks and any CRD on your cluster.
                     </p>
 
-                    <div class="kind-groups">
-                        <div class="kind-group">
-                            <h3>Cluster</h3>
-                            <ul><li>Nodes</li><li>Namespaces</li><li>Events</li></ul>
+                    <details class="kinds-details">
+                        <summary>Show all 36 resource kinds</summary>
+                        <div class="kind-groups">
+                            <div class="kind-group">
+                                <h3>Cluster</h3>
+                                <ul><li>Nodes</li><li>Namespaces</li><li>Events</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Workloads</h3>
+                                <ul><li>Pods</li><li>Deployments</li><li>StatefulSets</li><li>DaemonSets</li><li>ReplicaSets</li><li>Jobs</li><li>CronJobs</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Config</h3>
+                                <ul><li>ConfigMaps</li><li>Secrets</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Network</h3>
+                                <ul><li>Services</li><li>Ingresses</li><li>IngressClasses</li><li>Endpoints</li><li>EndpointSlices</li><li>NetworkPolicies</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Storage</h3>
+                                <ul><li>PersistentVolumes</li><li>PersistentVolumeClaims</li><li>StorageClasses</li><li>CSIDrivers</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Access control (RBAC)</h3>
+                                <ul><li>ServiceAccounts</li><li>Roles</li><li>ClusterRoles</li><li>RoleBindings</li><li>ClusterRoleBindings</li><li>CertificateSigningRequests</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Autoscaling &amp; disruption</h3>
+                                <ul><li>HorizontalPodAutoscalers</li><li>PodDisruptionBudgets</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Governance</h3>
+                                <ul><li>ResourceQuotas</li><li>LimitRanges</li><li>PriorityClasses</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Admission</h3>
+                                <ul><li>ValidatingWebhookConfigurations</li><li>MutatingWebhookConfigurations</li></ul>
+                            </div>
+                            <div class="kind-group">
+                                <h3>Custom</h3>
+                                <ul><li>Any CRD discovered on the cluster</li></ul>
+                            </div>
                         </div>
-                        <div class="kind-group">
-                            <h3>Workloads</h3>
-                            <ul><li>Pods</li><li>Deployments</li><li>StatefulSets</li><li>DaemonSets</li><li>ReplicaSets</li><li>Jobs</li><li>CronJobs</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Config</h3>
-                            <ul><li>ConfigMaps</li><li>Secrets</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Network</h3>
-                            <ul><li>Services</li><li>Ingresses</li><li>IngressClasses</li><li>Endpoints</li><li>EndpointSlices</li><li>NetworkPolicies</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Storage</h3>
-                            <ul><li>PersistentVolumes</li><li>PersistentVolumeClaims</li><li>StorageClasses</li><li>CSIDrivers</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Access control (RBAC)</h3>
-                            <ul><li>ServiceAccounts</li><li>Roles</li><li>ClusterRoles</li><li>RoleBindings</li><li>ClusterRoleBindings</li><li>CertificateSigningRequests</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Autoscaling &amp; disruption</h3>
-                            <ul><li>HorizontalPodAutoscalers</li><li>PodDisruptionBudgets</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Governance</h3>
-                            <ul><li>ResourceQuotas</li><li>LimitRanges</li><li>PriorityClasses</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Admission</h3>
-                            <ul><li>ValidatingWebhookConfigurations</li><li>MutatingWebhookConfigurations</li></ul>
-                        </div>
-                        <div class="kind-group">
-                            <h3>Custom</h3>
-                            <ul><li>Any CRD discovered on the cluster</li></ul>
-                        </div>
-                    </div>
+                    </details>
                 </div>
             </section>
 
@@ -517,7 +535,7 @@
                     </div>
 
                     <div class="download-notes">
-                        <p>
+                        <p id="mac-first-launch">
                             <strong>First launch on macOS.</strong> The app isn't notarized yet,
                             so macOS blocks the first launch. Open it once, then go to
                             <em>System Settings → Privacy &amp; Security</em> and click
@@ -561,7 +579,7 @@
         <footer class="site-footer">
             <div class="container footer-inner">
                 <div class="footer-brand">
-                    <img src="favicon.png" alt="" width="24" height="24" />
+                    <img src="img/mark-64.png" alt="" width="24" height="24" />
                     <span>KubeKubeDashDash</span>
                 </div>
                 <nav class="footer-links" aria-label="Footer">
@@ -589,6 +607,7 @@
             <button class="lightbox-nav lightbox-prev" type="button" aria-label="Previous (←)">&#8249;</button>
             <button class="lightbox-nav lightbox-next" type="button" aria-label="Next (→)">&#8250;</button>
             <img class="lightbox-image" alt="" />
+            <p class="lightbox-caption" id="lightbox-caption"></p>
         </div>
 
         <script>
@@ -649,6 +668,11 @@
                         detected.classList.add("is-detected");
                         var badge = detected.querySelector(".dl-badge");
                         if (badge) badge.hidden = false;
+                    }
+                    // macOS only: point at the first-launch steps (the app is not notarized).
+                    if (os === "mac") {
+                        var note = document.getElementById("hero-mac-note");
+                        if (note) note.hidden = false;
                     }
                 }
 
@@ -712,7 +736,7 @@
             // Ten pre-rendered shots of the same cluster (see docs/img/hero-<look>.webp,
             // plus a -1000 variant for small screens). The chips form an ARIA radio
             // group: roving tabindex, arrow keys move AND select. Starts on the light
-            // or dark Default shot to match the visitor's colour scheme.
+            // or dark Default shot to match the visitor's color scheme.
             (function () {
                 var img = document.getElementById("hero-img");
                 var group = document.querySelector(".looks");
@@ -808,6 +832,49 @@
                 });
             })();
 
+            // ---- Retro CRT loop: pause control + animate only while in view ----
+            // The <picture>'s reduced-motion <source> already serves the still poster, so
+            // with that preference there is nothing to control (the button stays hidden).
+            // Otherwise the animated WebP plays only while the band is on screen — each
+            // re-entry restarts the power-on effect — and a pause button pins the poster.
+            (function () {
+                var img = document.getElementById("retro-img");
+                var btn = document.getElementById("crt-toggle");
+                if (!img || !btn) return;
+                if (
+                    window.matchMedia &&
+                    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                )
+                    return;
+
+                var ANIMATED = "img/retro-crt.webp";
+                var POSTER = "img/retro-crt-poster.webp";
+                var paused = false;
+                var visible = true;
+
+                function apply() {
+                    var want = visible && !paused ? ANIMATED : POSTER;
+                    if (img.getAttribute("src") !== want) img.src = want;
+                }
+
+                btn.hidden = false;
+                btn.addEventListener("click", function () {
+                    paused = !paused;
+                    btn.textContent = paused ? "Play animation" : "Pause animation";
+                    apply();
+                });
+
+                if ("IntersectionObserver" in window) {
+                    new IntersectionObserver(
+                        function (entries) {
+                            visible = entries[entries.length - 1].isIntersecting;
+                            apply();
+                        },
+                        { threshold: 0.25 },
+                    ).observe(img);
+                }
+            })();
+
             // ---- Scroll-spy: highlight the active section in the header nav ----
             (function () {
                 var links = Array.prototype.slice.call(
@@ -849,6 +916,7 @@
             (function () {
                 var lightbox = document.getElementById("lightbox");
                 var lightboxImg = lightbox.querySelector(".lightbox-image");
+                var caption = document.getElementById("lightbox-caption");
                 var closeBtn = lightbox.querySelector(".lightbox-close");
                 var prevBtn = lightbox.querySelector(".lightbox-prev");
                 var nextBtn = lightbox.querySelector(".lightbox-next");
@@ -867,6 +935,14 @@
                     // shot, while currentSrc may be the 1000 px variant on a small screen.
                     lightboxImg.src = img.src || img.currentSrc;
                     lightboxImg.alt = img.alt || "";
+                    // Caption: the tile's heading, else "Cluster Overview" for the hero, else the alt.
+                    var tile = img.closest(".tile");
+                    var h3 = tile && tile.querySelector("h3");
+                    caption.textContent = h3
+                        ? h3.textContent
+                        : img.id === "hero-img"
+                          ? "Cluster Overview"
+                          : img.alt;
                 }
 
                 function open(i) {
@@ -884,9 +960,29 @@
                     if (lastFocused && lastFocused.focus) lastFocused.focus();
                 }
 
+                // Screenshots are plain <img>s, so make them keyboard-operable buttons.
+                // Enter opens on keydown; Space opens on keyup, like a native button, so the
+                // keyup can't land on (and click) the Close button that takes focus on open.
                 images.forEach(function (img, i) {
+                    img.tabIndex = 0;
+                    img.setAttribute("role", "button");
+                    img.setAttribute("aria-label", "Enlarge: " + img.alt);
                     img.addEventListener("click", function () {
                         open(i);
+                    });
+                    img.addEventListener("keydown", function (e) {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            open(i);
+                        } else if (e.key === " " || e.key === "Spacebar") {
+                            e.preventDefault(); // no page scroll
+                        }
+                    });
+                    img.addEventListener("keyup", function (e) {
+                        if (e.key === " " || e.key === "Spacebar") {
+                            e.preventDefault();
+                            open(i);
+                        }
                     });
                 });
 

@@ -4,16 +4,6 @@
    light via prefers-color-scheme. Zero dependencies.
    ============================================================ */
 
-/* Pixel face used only by the Retro band's eyebrow (the app's own Retro heading font).
-   Licence: docs/fonts/sixtyfour-OFL.txt */
-@font-face {
-    font-family: "Sixtyfour";
-    src: url("fonts/sixtyfour_regular.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
 :root {
     /* dark (default — matches the navy app icon) */
     --bg: #0a1322;
@@ -24,7 +14,7 @@
     --border-strong: #2c4a6b;
     --fg: #e9eff7;
     --fg-muted: #93a4bd;
-    --fg-faint: #6b7d96;
+    --fg-faint: #7589a3;
     --accent: #4da3ff;
     --accent-strong: #6cb4ff;
     --accent-2: #34d6c8;
@@ -50,7 +40,7 @@
         --border-strong: #c6d2e2;
         --fg: #0d1b2e;
         --fg-muted: #51627a;
-        --fg-faint: #7a8aa0;
+        --fg-faint: #5f7089;
         --accent: #1f6fe0;
         --accent-strong: #195fc4;
         --accent-2: #0fb5a6;
@@ -126,9 +116,29 @@ figure {
     margin: 0;
 }
 
-/* Every zoomable screenshot opens in the lightbox (script at the bottom of index.html). */
+/* Every zoomable screenshot opens in the lightbox (script at the bottom of index.html), which
+   also makes them keyboard-focusable buttons. The ring is inset because .hero-shot and .tile
+   clip their contents (overflow: hidden) and would cut an outer ring off. */
 img[data-zoom] {
     cursor: zoom-in;
+}
+main img[data-zoom]:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+}
+
+/* Text for screen readers only (e.g. a heading that keeps the outline sequential). */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 
 .container {
@@ -334,6 +344,13 @@ img[data-zoom] {
     gap: 12px;
     margin-bottom: 26px;
 }
+/* macOS-only line under the CTAs (revealed by the download script); sits closer to the buttons
+   than the trust list does. */
+.hero-note {
+    margin: -8px 0 22px;
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+}
 .hero-trust {
     list-style: none;
     margin: 0;
@@ -458,7 +475,7 @@ img[data-zoom] {
     height: 10px;
     border-radius: 50%;
     background: var(--dot, var(--accent));
-    /* a hairline ring so the near-white and mid-grey dots read on either surface */
+    /* a hairline ring so the near-white and mid-gray dots read on either surface */
     box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.5);
 }
 .look[data-look="default-dark"] {
@@ -588,9 +605,15 @@ img[data-zoom] {
 }
 /* The screenshot starts at the text's left edge and runs off the tile's right and bottom edges
    (width + 24 px = the tile's right padding), so it reads as a window peeking out of the card. */
+/* Wide tiles wrap their screenshot in a <picture> (a phone crop below 900 px); the wrapper takes
+   over the bottom-pinning so the image inside can stay a plain block. */
+.tile picture {
+    display: block;
+    margin-top: auto;
+}
 .tile img {
     display: block;
-    margin-top: auto; /* pins the shot to the tile's bottom when a neighbour makes the tile taller */
+    margin-top: auto; /* pins the shot to the tile's bottom when a taller sibling stretches the tile */
     width: calc(100% + 24px);
     max-width: none;
     height: auto;
@@ -603,13 +626,8 @@ img[data-zoom] {
     border-top-left-radius: 10px;
 }
 
-/* The pod's "why" (its container card) sits at the bottom of the capture; show that end. */
-.tile img[src$="pod-why.webp"] {
-    object-position: left bottom;
-}
-
 /* ---------------------------------------------------------- retro band
-   Always dark, in both colour schemes: it is a picture of the Retro look. */
+   Always dark, in both color schemes: it is a picture of the Retro look. */
 .retro {
     position: relative;
     overflow: hidden;
@@ -641,14 +659,16 @@ img[data-zoom] {
     gap: 40px;
     align-items: center;
 }
+/* "RETRO MODE" in the app's pixel face is a pre-rendered PNG (docs/img/retro-mode.png, drawn at 2x
+   and shown at half size), so the page ships no web font. */
 .retro-eyebrow {
     margin-bottom: 14px;
-    font-family: "Sixtyfour", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.4;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: #33ff66;
+    line-height: 0;
+}
+.retro-eyebrow-img {
+    display: block;
+    height: 12px;
+    width: auto;
 }
 .retro h2 {
     font-size: clamp(1.8rem, 3.6vw, 2.6rem);
@@ -662,6 +682,9 @@ img[data-zoom] {
     font-size: 1.05rem;
     color: rgba(216, 255, 224, 0.8);
 }
+.retro-media {
+    position: relative; /* anchors the pause button */
+}
 .retro-media picture,
 .retro-media img {
     display: block;
@@ -673,6 +696,39 @@ img[data-zoom] {
     box-shadow:
         0 0 0 1px #1f3b2a,
         0 30px 80px -30px rgba(51, 255, 102, 0.35);
+}
+/* Pause/play for the looping CRT animation (hidden until the script reveals it). */
+.crt-toggle {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    padding: 6px 13px;
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(51, 255, 102, 0.35);
+    background: rgba(5, 7, 10, 0.72);
+    color: #d8ffe0;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.3;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+.crt-toggle[hidden] {
+    display: none;
+}
+.crt-toggle:hover {
+    background: rgba(5, 7, 10, 0.9);
+    border-color: #33ff66;
+}
+/* the band is dark in both color schemes, so the ring uses the band's own green */
+.crt-toggle:focus-visible {
+    outline-color: #33ff66;
+    border-radius: var(--radius-pill);
 }
 
 /* ---------------------------------------------------------- MCP */
@@ -714,8 +770,8 @@ img[data-zoom] {
     color: var(--fg);
 }
 
-/* Dark in both colour schemes (like a terminal); the accent tokens are re-pinned to their
-   dark-mode values so the syntax colours keep their contrast on the dark card. */
+/* Dark in both color schemes (like a terminal); the accent tokens are re-pinned to their
+   dark-mode values so the syntax colors keep their contrast on the dark card. */
 .code-card {
     --accent: #4da3ff;
     --accent-2: #34d6c8;
@@ -787,10 +843,48 @@ img[data-zoom] {
 .coverage-lede {
     color: var(--fg-muted);
     max-width: 70ch;
-    margin: 0 0 40px;
+    margin: 0 0 24px;
     font-size: 1.05rem;
 }
+/* The kind list is collapsed behind a pill-style summary (native <details>, no script). */
+.kinds-details > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px; /* touch target */
+    padding: 6px 16px;
+    list-style: none;
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.2;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+.kinds-details > summary::-webkit-details-marker {
+    display: none;
+}
+.kinds-details > summary::after {
+    content: "+";
+    font-size: 1.1em;
+    line-height: 1;
+}
+.kinds-details[open] > summary::after {
+    content: "\2212"; /* minus sign */
+}
+.kinds-details > summary:hover {
+    border-color: var(--accent);
+}
+.kinds-details > summary:focus-visible {
+    border-radius: var(--radius-pill);
+}
 .kind-groups {
+    margin-top: 24px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 28px 32px;
@@ -998,7 +1092,7 @@ img[data-zoom] {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 40px;
+    padding: 40px 40px 64px; /* the extra bottom room holds the caption */
     background: rgba(5, 9, 16, 0.93);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -1025,6 +1119,23 @@ img[data-zoom] {
     border-radius: 8px;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
     cursor: default;
+}
+/* The tile's heading, so a zoomed screenshot says what it shows. Clicks fall through to the
+   backdrop (click-to-close stays intact). */
+.lightbox-caption {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: min(80ch, calc(100% - 48px));
+    margin: 0;
+    color: #fff;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
 }
 .lightbox-close,
 .lightbox-nav {
