@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -128,7 +130,7 @@ fun fitHeaderVerbs(availableDp: Float, verbWidthsDp: List<Float>, overflowWidthD
     return n
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailPanelHeader(
     name: String,
@@ -196,9 +198,9 @@ fun DetailPanelHeader(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (status != null) StatusBadge(status)
-                    Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                    Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 // D7: rendered under the subtitle only when there is a chain to
                 // show — outermost first, so D3's nearest-first list is reversed
