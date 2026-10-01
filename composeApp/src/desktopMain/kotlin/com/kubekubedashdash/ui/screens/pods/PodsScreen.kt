@@ -31,6 +31,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.delete_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -171,6 +172,12 @@ fun PodsScreen(
                     filtered.asSequence().map { it.uid }.filter { it !in stalePods.keys }.toSet()
                 }
                 LaunchedEffect(visibleSelectableUids) { viewModel.selection.setVisible(visibleSelectableUids) }
+                val autoSelectCount by ScreenshotHooks.autoSelectPodCount.collectAsState()
+                LaunchedEffect(visibleSelectableUids, autoSelectCount) {
+                    if (autoSelectCount > 0) {
+                        viewModel.selection.set(filtered.map { it.uid }.filter { it in visibleSelectableUids }.take(autoSelectCount).toSet())
+                    }
+                }
 
                 Column(modifier = Modifier.fillMaxSize()) {
                     val kpiIds = remember { listOf("total", "failing", "pending", "cpu", "mem") }

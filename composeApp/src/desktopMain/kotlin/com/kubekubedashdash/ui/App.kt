@@ -368,6 +368,33 @@ fun App(
             }
         }
 
+        // Namespace tail — replay the existing onTailLogs path, then clear the one-shot.
+        val pendingTail by workspace.tailRequest.collectAsState()
+        LaunchedEffect(pendingTail) {
+            pendingTail?.let { ns ->
+                onTailLogs(ns)
+                workspace.clearTailRequest()
+            }
+        }
+
+        // Port-forward dialog — bind to the active session like LocalPortForwardLauncher does.
+        val pendingPortForwardRequest by workspace.portForwardRequest.collectAsState()
+        LaunchedEffect(pendingPortForwardRequest) {
+            pendingPortForwardRequest?.let { req ->
+                activeSession?.let { pendingPortForward = PendingPortForward(it, req) }
+                workspace.clearPortForwardRequest()
+            }
+        }
+
+        // Port-forward dialog close — screenshot teardown, then clear the one-shot.
+        val pendingDismissPortForward by workspace.dismissPortForwardRequest.collectAsState()
+        LaunchedEffect(pendingDismissPortForward) {
+            if (pendingDismissPortForward) {
+                pendingPortForward = null
+                workspace.clearDismissPortForwardRequest()
+            }
+        }
+
         val sessionForPalette = activeSession ?: titleSession
         val paletteEntries = rememberPaletteEntries(
             activeSession = sessionForPalette,

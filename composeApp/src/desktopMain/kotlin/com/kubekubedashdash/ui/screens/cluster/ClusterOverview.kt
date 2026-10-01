@@ -48,6 +48,7 @@ import com.kubekubedashdash.ui.components.SummaryCard
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterOverviewViewModel
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.errorPodStatuses
+import com.kubekubedashdash.util.DemoContext
 
 @Composable
 fun ClusterOverviewScreen(
@@ -97,7 +98,10 @@ fun ClusterOverviewScreen(
     // lifetime of the connection, so the header paints immediately
     // instead of waiting for any flow to emit.
     val clusterName = remember(reactiveClient) { reactiveClient.getCurrentContext() }
-    val clusterServer = remember(reactiveClient) { reactiveClient.getClusterServer() }
+    // Screenshot labels stand in for the demo's localhost mock URL, which is never shown then.
+    val clusterServer = remember(reactiveClient) {
+        if (DemoContext.isScreenshotLabel(clusterName)) "" else reactiveClient.getClusterServer()
+    }
     val clusterVersion = (state as? ResourceState.Success)?.data?.version.orEmpty()
 
     Column(
