@@ -4,9 +4,9 @@ A desktop Kubernetes dashboard built with Compose Multiplatform. It connects to 
 
 It stays a browse-and-operate tool rather than an authoring tool: there is no blanket resource creation or free-form YAML editing — writes are limited to the targeted actions listed below.
 
-![KubeKubeDashDash overview](docs/screenshots/01-cluster-overview.png)
+![KubeKubeDashDash overview](docs/screenshots/overview.png)
 
-![Multiple clusters open in parallel tabs](docs/screenshots/99-multi-tab.png)
+![All Clusters view across three demo clusters](docs/screenshots/fleet.png)
 
 ## Features
 
@@ -36,7 +36,7 @@ A dedicated tab (alongside your per-cluster tabs) that aggregates everything you
 
 A whole-cluster graph that visualizes how resources relate, with workload cards, a dedicated pod column, and animated "packets" flowing along connections.
 
-![Cluster topology graph](docs/screenshots/21-topology.png)
+![Cluster topology graph](docs/screenshots/topology.png)
 
 - Columns are pyramid-arranged by upstream connection count, and the viewport centers on the graph on landing
 - Viewport controls: **zoom** in/out, **pan** (drag), **rotate** the flow direction through four orientations, and **fit to screen**

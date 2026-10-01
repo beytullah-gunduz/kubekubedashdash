@@ -3,28 +3,53 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>KubeKubeDashDash — a desktop dashboard for your whole Kubernetes fleet</title>
+        <title>KubeKubeDashDash — operate your whole Kubernetes fleet from one desktop app</title>
         <meta
             name="description"
-            content="A fast Compose Desktop dashboard for Kubernetes. Browse every resource kind, stream logs, open a pod shell, map topology, and run real operational actions across many clusters at once — all from your kubeconfig. Free, open source, macOS / Windows / Linux."
+            content="A fast, free desktop app for Kubernetes: browse every resource across many clusters, triage events, tail logs, port-forward and run everyday actions — from your kubeconfig. macOS, Windows, Linux."
         />
         <meta name="theme-color" content="#0a1322" media="(prefers-color-scheme: dark)" />
         <meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
 
-        <!-- Open Graph / social -->
+        <!-- Open Graph / social (absolute URLs: crawlers don't resolve relative ones) -->
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="KubeKubeDashDash — a desktop Kubernetes dashboard" />
+        <meta property="og:url" content="https://beytullah-gunduz.github.io/kubekubedashdash/" />
+        <meta property="og:title" content="KubeKubeDashDash — operate your whole Kubernetes fleet from one desktop app" />
         <meta
             property="og:description"
-            content="Browse, inspect, and operate every cluster in your kubeconfig — multi-window, multi-tab, real-time. Free & open source for macOS, Windows, and Linux."
+            content="A fast, free desktop app for Kubernetes: browse every resource across many clusters, triage events, tail logs, port-forward and run everyday actions — from your kubeconfig. macOS, Windows, Linux."
         />
-        <meta property="og:image" content="screenshots/01-cluster-overview.png" />
+        <meta property="og:image" content="https://beytullah-gunduz.github.io/kubekubedashdash/img/og.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="KubeKubeDashDash Cluster Overview next to the headline: operate your whole Kubernetes fleet from one desktop app" />
         <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://beytullah-gunduz.github.io/kubekubedashdash/img/og.png" />
 
         <link rel="icon" href="favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" href="favicon.png" />
         <link rel="apple-touch-icon" href="favicon.png" />
-        <link rel="preload" as="image" href="screenshots/01-cluster-overview.png" />
+        <!-- The hero image the visitor's colour scheme will show first (the <picture> below
+             and these preloads agree on it); imagesrcset/imagesizes make the preload fetch the
+             same candidate the <img> will pick, so nothing downloads twice. -->
+        <link
+            rel="preload"
+            as="image"
+            href="img/hero-default-dark.webp"
+            imagesrcset="img/hero-default-dark-1000.webp 1000w, img/hero-default-dark.webp 2000w"
+            imagesizes="(max-width: 1208px) 100vw, 1160px"
+            media="(prefers-color-scheme: dark)"
+            fetchpriority="high"
+        />
+        <link
+            rel="preload"
+            as="image"
+            href="img/hero-default-light.webp"
+            imagesrcset="img/hero-default-light-1000.webp 1000w, img/hero-default-light.webp 2000w"
+            imagesizes="(max-width: 1208px) 100vw, 1160px"
+            media="(prefers-color-scheme: light)"
+            fetchpriority="high"
+        />
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
@@ -38,7 +63,8 @@
                 </a>
                 <nav class="nav-links" aria-label="Sections">
                     <a href="#features">Features</a>
-                    <a href="#resources">Resources</a>
+                    <a href="#retro">Retro</a>
+                    <a href="#mcp">MCP</a>
                     <a href="#download">Download</a>
                 </nav>
                 <div class="nav-actions">
@@ -61,276 +87,317 @@
         <main id="main">
             <!-- ============================ HERO ============================ -->
             <section class="hero">
-                <div class="container hero-inner">
-                    <div class="hero-copy">
-                        <div class="hero-logo">
-                            <img src="favicon.png" alt="KubeKubeDashDash logo" width="56" height="56" />
-                        </div>
-                        <h1>A desktop dashboard for your whole Kubernetes fleet</h1>
-                        <p class="hero-sub">
-                            Browse every resource kind, stream logs, open a pod shell, map
-                            topology, and run real operational actions — across many clusters
-                            at once, all from your kubeconfig.
-                        </p>
-                        <div class="hero-cta">
-                            <a
-                                class="btn btn-primary btn-lg"
-                                id="hero-download"
-                                href="#download"
-                                data-default-label="Download"
-                            >
-                                <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-                                    <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z" />
-                                    <path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.97a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.779a.749.749 0 1 1 1.06-1.06l1.97 1.97Z" />
-                                </svg>
-                                <span class="btn-label">Download</span>
-                            </a>
-                            <a
-                                class="btn btn-secondary btn-lg"
-                                href="https://github.com/beytullah-gunduz/kubekubedashdash"
-                                target="_blank"
-                                rel="noopener"
-                            >
-                                View on GitHub
-                            </a>
-                        </div>
-                        <ul class="hero-trust">
-                            <li><strong>Free &amp; open source</strong> · MIT</li>
-                            <li>macOS · Windows · Linux</li>
-                            <li>Bundles its own JVM — no Java to install</li>
-                        </ul>
+                <div class="container hero-copy">
+                    <span class="eyebrow-pill" id="hero-eyebrow">Free &amp; open source</span>
+                    <h1>Operate your whole Kubernetes fleet from one fast desktop app.</h1>
+                    <p class="hero-sub">
+                        Browse every resource, triage events across clusters, tail logs and
+                        port-forward — then scale, restart, drain or evict with a confirmation in
+                        front of every destructive step. It runs on your kubeconfig: no account, no
+                        agent in your cluster, no YAML editor to fat-finger.
+                    </p>
+                    <div class="hero-cta">
+                        <a
+                            class="btn btn-primary btn-lg"
+                            id="hero-download"
+                            href="#download"
+                            data-default-label="Download"
+                        >
+                            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+                                <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z" />
+                                <path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.97a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.779a.749.749 0 1 1 1.06-1.06l1.97 1.97Z" />
+                            </svg>
+                            <span class="btn-label">Download</span>
+                        </a>
+                        <a
+                            class="btn btn-secondary btn-lg"
+                            href="https://github.com/beytullah-gunduz/kubekubedashdash"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            View on GitHub
+                        </a>
+                    </div>
+                    <ul class="hero-trust">
+                        <li><strong>MIT licensed</strong></li>
+                        <li>macOS (Apple Silicon) · Windows · Linux</li>
+                        <li>One installer — nothing else to install</li>
+                    </ul>
+                </div>
+
+                <div class="container hero-stage">
+                    <div class="hero-shot-wrap">
+                        <figure class="hero-shot">
+                            <!-- Without JS (or before it runs) the <source> shows the light shot to
+                                 light-scheme visitors. The look switcher below removes it on init
+                                 and drives the <img> directly. -->
+                            <picture>
+                                <source
+                                    media="(prefers-color-scheme: light)"
+                                    srcset="img/hero-default-light-1000.webp 1000w, img/hero-default-light.webp 2000w"
+                                    sizes="(max-width: 1208px) 100vw, 1160px"
+                                />
+                                <img
+                                    id="hero-img"
+                                    src="img/hero-default-dark.webp"
+                                    srcset="img/hero-default-dark-1000.webp 1000w, img/hero-default-dark.webp 2000w"
+                                    sizes="(max-width: 1208px) 100vw, 1160px"
+                                    width="2000"
+                                    height="1415"
+                                    alt="KubeKubeDashDash Cluster Overview: KPI tiles, cluster usage gauges, pod status and recent events"
+                                    fetchpriority="high"
+                                    decoding="async"
+                                    data-zoom
+                                />
+                            </picture>
+                        </figure>
                     </div>
 
-                    <figure class="hero-shot">
+                    <!-- Hidden until the look-switcher script runs: without JS the chips would do nothing. -->
+                    <div class="hero-looks" hidden>
+                        <div class="looks" role="radiogroup" aria-label="Theme preview">
+                            <button type="button" class="look" role="radio" aria-checked="true" tabindex="0" data-look="default-dark"><span class="look-dot" aria-hidden="true"></span>Default</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="default-light"><span class="look-dot" aria-hidden="true"></span>Light</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="retro"><span class="look-dot" aria-hidden="true"></span>Retro</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="catppuccin"><span class="look-dot" aria-hidden="true"></span>Catppuccin</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="nord"><span class="look-dot" aria-hidden="true"></span>Nord</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="dracula"><span class="look-dot" aria-hidden="true"></span>Dracula</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="gruvbox"><span class="look-dot" aria-hidden="true"></span>Gruvbox</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="solarized"><span class="look-dot" aria-hidden="true"></span>Solarized</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="high-contrast"><span class="look-dot" aria-hidden="true"></span>High contrast</button>
+                            <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="monochrome"><span class="look-dot" aria-hidden="true"></span>Monochrome</button>
+                        </div>
+                        <p class="looks-caption">Same cluster, ten looks — switch any time in Settings.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================ VALUE STRIP ============================ -->
+            <section class="values container" aria-label="Highlights">
+                <div class="value">
+                    <span class="value-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 3 3 8l9 5 9-5-9-5z" />
+                            <path d="m3 12 9 5 9-5" />
+                            <path d="m3 16 9 5 9-5" />
+                        </svg>
+                    </span>
+                    <h3>Every cluster at once</h3>
+                    <p>Color-coded tabs, extra windows, and an All Clusters view that merges events from every connection.</p>
+                </div>
+                <div class="value">
+                    <span class="value-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3z" />
+                            <path d="m9 12 2 2 4-4" />
+                        </svg>
+                    </span>
+                    <h3>Safe by design</h3>
+                    <p>No YAML editing, no blanket create. Destructive actions confirm first; reversible ones offer Undo.</p>
+                </div>
+                <div class="value">
+                    <span class="value-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="2.5" y="6" width="19" height="12" rx="2" />
+                            <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7.5 14h9" />
+                        </svg>
+                    </span>
+                    <h3>Keyboard-first</h3>
+                    <p>⌘K jumps to any screen, resource or action. Back and forward work like a browser.</p>
+                </div>
+                <div class="value">
+                    <span class="value-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5" />
+                            <path d="M3.5 4v4.5H8" />
+                            <path d="M12 8v4.5l3 1.5" />
+                        </svg>
+                    </span>
+                    <h3>Picks up where you left off</h3>
+                    <p>Tabs, screens and window layout come back on the next launch.</p>
+                </div>
+            </section>
+
+            <!-- ============================ FEATURES (bento) ============================ -->
+            <section class="bento container" id="features">
+                <div class="section-eyebrow">Features</div>
+                <h2>Built for the 2 a.m. page, not the demo.</h2>
+
+                <div class="bento-grid">
+                    <article class="tile tile-wide">
+                        <div class="tile-text">
+                            <h3>Triage the whole fleet</h3>
+                            <p>The All Clusters tab adds up CPU, memory and pods across every open cluster, ranks clusters by recent errors, and merges their events into one filterable feed — with saved presets and a reason heatmap.</p>
+                        </div>
                         <img
-                            src="screenshots/01-cluster-overview.png"
-                            alt="KubeKubeDashDash cluster overview: a health banner, CPU and memory usage, node and pod counts, and a live event stream"
-                            width="1640"
-                            height="1160"
-                            fetchpriority="high"
+                            src="img/fleet.webp"
+                            alt="All Clusters tab: combined usage, one card per cluster, and a merged warning-event feed"
+                            width="1600"
+                            height="1132"
+                            loading="lazy"
                             decoding="async"
+                            data-zoom
                         />
-                    </figure>
-                </div>
-            </section>
+                    </article>
 
-            <!-- ===================== FEATURES (differentiators) ===================== -->
-            <div class="section-eyebrow container" id="features">What makes it different</div>
-
-            <section class="feature container">
-                <div class="feature-text">
-                    <h2>Many clusters, many windows, many tabs</h2>
-                    <p>
-                        Every cluster gets its own tab with a color-coded chip and a live
-                        connection-status ring. Open additional OS windows — each an
-                        independent workspace with its own tabs, navigation, and namespace.
-                        Drag a tab between windows to reorganize, or tear one off into a new
-                        window; the connection travels with it.
-                    </p>
-                </div>
-                <div class="feature-media grid-2">
-                    <figure>
+                    <article class="tile">
+                        <div class="tile-text">
+                            <h3>See why a pod fails</h3>
+                            <p>Warnings surface at the top of the pod, and each container card says why: the waiting reason, the exit code, and when the last run ended.</p>
+                        </div>
                         <img
-                            src="screenshots/99-multi-window.png"
-                            alt="Two KubeKubeDashDash windows side by side, each connected to a different cluster"
-                            width="1976" height="1396" loading="lazy" decoding="async"
+                            src="img/pod-why.webp"
+                            alt="Pod detail panel with a warnings callout and a container in CrashLoopBackOff"
+                            width="1148"
+                            height="2020"
+                            loading="lazy"
+                            decoding="async"
+                            data-zoom
                         />
-                        <figcaption>Two windows, two clusters, side by side</figcaption>
-                    </figure>
-                    <figure>
+                    </article>
+
+                    <article class="tile">
+                        <div class="tile-text">
+                            <h3>Secrets stay masked</h3>
+                            <p>Secret values are masked in YAML until you reveal them — on purpose, one resource at a time.</p>
+                        </div>
                         <img
-                            src="screenshots/99-multi-tab.png"
-                            alt="Three color-coded cluster tabs in a single window"
-                            width="1640" height="1160" loading="lazy" decoding="async"
+                            src="img/secret.webp"
+                            alt="Secret YAML with every value masked"
+                            width="1148"
+                            height="1060"
+                            loading="lazy"
+                            decoding="async"
+                            data-zoom
                         />
-                        <figcaption>Three cluster tabs in one window</figcaption>
-                    </figure>
+                    </article>
+
+                    <article class="tile tile-wide">
+                        <div class="tile-text">
+                            <h3>Act on many at once</h3>
+                            <p>Select pods across the list and evict or delete them together. Scale, rollout restart, cordon, drain, trigger and suspend sit in each resource's header.</p>
+                        </div>
+                        <img
+                            src="img/bulk.webp"
+                            alt="Pods list with six rows selected and the bulk action bar"
+                            width="1600"
+                            height="645"
+                            loading="lazy"
+                            decoding="async"
+                            data-zoom
+                        />
+                    </article>
+
+                    <article class="tile">
+                        <div class="tile-text">
+                            <h3>Port-forward in two clicks</h3>
+                            <p>Forward a pod or service to 127.0.0.1, then open, copy or stop it from the drawer's Port forwards tab.</p>
+                        </div>
+                        <img
+                            src="img/port-forward.webp"
+                            alt="Port forward dialog for a service, mapping port 80 to a local port"
+                            width="1188"
+                            height="1090"
+                            loading="lazy"
+                            decoding="async"
+                            data-zoom
+                        />
+                    </article>
+
+                    <article class="tile">
+                        <div class="tile-text">
+                            <h3>Jump anywhere with ⌘K</h3>
+                            <p>A fuzzy palette for screens, clusters, namespaces, pods, nodes and CRDs — plus verbs like rollout restart, scale and cordon.</p>
+                        </div>
+                        <img
+                            src="img/palette.webp"
+                            alt="Command palette matching frontend pods and deployments"
+                            width="1220"
+                            height="1020"
+                            loading="lazy"
+                            decoding="async"
+                            data-zoom
+                        />
+                    </article>
+
+                    <article class="tile tile-wide">
+                        <div class="tile-text">
+                            <h3>Tail a whole namespace</h3>
+                            <p>A stern-style merged tail follows every running pod in a namespace, colour-coded per pod — next to per-container log tabs with filter, wrap, timestamps and previous-run logs.</p>
+                        </div>
+                        <img
+                            src="img/tail.webp"
+                            alt="Logs drawer tailing every pod in a namespace, colour-coded per pod"
+                            width="1600"
+                            height="495"
+                            loading="lazy"
+                            decoding="async"
+                            data-zoom
+                        />
+                    </article>
                 </div>
             </section>
 
-            <section class="feature container reverse">
-                <div class="feature-text">
-                    <h2>Your whole fleet on one screen</h2>
-                    <p>
-                        Open more than one cluster and an <strong>All Clusters</strong> tab
-                        appears: aggregated CPU, memory, and pod usage with history
-                        sparklines, a summary card per cluster sorted by recent errors, and a
-                        merged, filterable event feed spanning every connection — complete
-                        with savable filter presets and a reason heatmap.
-                    </p>
-                </div>
-                <figure class="feature-media">
-                    <img
-                        src="screenshots/45-all-clusters.png"
-                        alt="The All Clusters tab: aggregated stats, per-cluster summary cards, and a merged event feed"
-                        width="1640" height="1160" loading="lazy" decoding="async"
-                    />
-                </figure>
-            </section>
-
-            <section class="feature container">
-                <div class="feature-text">
-                    <h2>See how it all connects</h2>
-                    <p>
-                        A whole-cluster topology graph shows workloads, pods, services, and
-                        the relationships between them, with animated packets flowing along
-                        connections. Zoom, pan, rotate the flow, and fit to screen; click a
-                        node to highlight its entire pipe. Refreshes on a configurable
-                        interval and pauses when you look away.
-                    </p>
-                </div>
-                <figure class="feature-media">
-                    <img
-                        src="screenshots/21-topology.png"
-                        alt="Cluster topology graph showing workloads, pods, and services connected by their relationships"
-                        width="1640" height="1160" loading="lazy" decoding="async"
-                    />
-                </figure>
-            </section>
-
-            <section class="feature container reverse">
-                <div class="feature-text">
-                    <h2>Operate, don't just observe</h2>
-                    <p>
-                        KubeKubeDashDash goes beyond read-only browsing. Evict, force-delete,
-                        or open a shell into pods; cordon and drain nodes; scale and
-                        rollout-restart workloads; trigger or suspend CronJobs; approve or deny
-                        certificate signing requests — each from the resource's detail panel,
-                        every destructive step behind a confirmation dialog.
-                    </p>
-                    <p class="feature-note">
-                        It stays a browse-and-operate tool: no blanket resource creation and no
-                        free-form YAML editing.
-                    </p>
-                </div>
-                <div class="feature-media grid-2 tight">
-                    <figure>
-                        <img src="screenshots/46-pod-actions.png" alt="Pod detail panel with Evict and Force-Delete actions" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>Pods — Evict, Force-Delete, Shell</figcaption>
-                    </figure>
-                    <figure>
-                        <img src="screenshots/47-node-actions.png" alt="Node detail panel with Cordon and Drain actions" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>Nodes — Cordon, Drain</figcaption>
-                    </figure>
-                    <figure>
-                        <img src="screenshots/48-deployment-actions.png" alt="Deployment detail panel with Scale and Rollout Restart actions" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>Deployments — Scale, Restart</figcaption>
-                    </figure>
-                    <figure>
-                        <img src="screenshots/50-cronjob-actions.png" alt="CronJob detail panel with Trigger Now and Suspend actions" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>CronJobs — Trigger, Suspend</figcaption>
-                    </figure>
+            <!-- ============================ RETRO ============================ -->
+            <section class="retro" id="retro">
+                <div class="container retro-inner">
+                    <div class="retro-copy">
+                        <div class="retro-eyebrow">Retro mode</div>
+                        <h2>Or flip it to Retro.</h2>
+                        <p>
+                            Pixel headings, a retro terminal font, squared corners, and a CRT that
+                            powers on when you switch — with optional scanlines. Pure nostalgia;
+                            every feature still works.
+                        </p>
+                    </div>
+                    <div class="retro-media">
+                        <picture>
+                            <source media="(prefers-reduced-motion: reduce)" srcset="img/retro-crt-poster.webp" />
+                            <img
+                                src="img/retro-crt.webp"
+                                width="1200"
+                                height="849"
+                                loading="lazy"
+                                alt="The app switching to Retro style: a CRT power-on flash, then pixel headings and scanlines"
+                            />
+                        </picture>
+                    </div>
                 </div>
             </section>
 
-            <section class="feature container">
-                <div class="feature-text">
-                    <h2>Jump anywhere with ⌘K</h2>
+            <!-- ============================ MCP ============================ -->
+            <section class="mcp container" id="mcp">
+                <div class="mcp-copy">
+                    <div class="section-eyebrow">For your AI assistant</div>
+                    <h2>Let your AI assistant read your clusters — safely.</h2>
                     <p>
-                        Press <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> for a fuzzy finder that scores
-                        on subsequence matches — jump to any screen, switch between open
-                        clusters, or navigate straight to a namespace, a cached pod, a node, or
-                        a discovered CRD, without lifting your hands off the keyboard.
+                        Turn on the embedded Model Context Protocol server in Settings →
+                        Integrations and point any MCP client at it. It is read-only by design: it
+                        binds to 127.0.0.1, can require a bearer token (always required when you
+                        open it to your network), and keeps Secret, ConfigMap and Node contents out
+                        of its YAML results.
                     </p>
+                    <ul class="mcp-tools">
+                        <li><code>list_clusters</code> <span>every open cluster</span></li>
+                        <li><code>list_resources</code> <span>any kind, any namespace</span></li>
+                        <li><code>get_resource_yaml</code> <span>one object's YAML</span></li>
+                        <li><code>get_pod_logs</code> <span>recent lines, by container</span></li>
+                    </ul>
                 </div>
-                <figure class="feature-media">
-                    <img
-                        src="screenshots/56-command-palette.png"
-                        alt="The command palette open with fuzzy-searchable navigation entries"
-                        width="1640" height="1160" loading="lazy" decoding="async"
-                    />
-                </figure>
-            </section>
-
-            <section class="feature container reverse">
-                <div class="feature-text">
-                    <h2>Logs and a real pod shell, docked in</h2>
-                    <p>
-                        Stream pod logs in a resizable bottom drawer (<kbd>⌘J</kbd> /
-                        <kbd>Ctrl J</kbd>) — one tab per container, per-tab text filter with
-                        match highlighting, and a persistent tab for the app's own
-                        diagnostics. Need to get in? Open an interactive
-                        <code>kubectl exec</code> shell that keeps its scrollback across tab
-                        switches.
-                    </p>
-                </div>
-                <figure class="feature-media">
-                    <img
-                        src="screenshots/57-logs.png"
-                        alt="The logs drawer expanded, streaming a pod's log output"
-                        width="1640" height="1160" loading="lazy" decoding="async"
-                    />
-                </figure>
-            </section>
-
-            <section class="feature container">
-                <div class="feature-text">
-                    <h2>Detail panels that go deep</h2>
-                    <p>
-                        Many kinds get resource-specific tabs. Roles and RoleBindings resolve
-                        their effective rules and subjects, ResourceQuotas show live usage
-                        bars, EndpointSlices link straight through to the Service that backs
-                        them, and Deployments draw their full ownership graph.
-                    </p>
-                </div>
-                <div class="feature-media grid-2 tight">
-                    <figure>
-                        <img src="screenshots/52-rbac-rules.png" alt="Role detail showing its resolved policy rules" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>RBAC — resolved rules</figcaption>
-                    </figure>
-                    <figure>
-                        <img src="screenshots/53-rolebinding.png" alt="RoleBinding detail showing subjects and resolved permissions" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>RoleBindings — subjects</figcaption>
-                    </figure>
-                    <figure>
-                        <img src="screenshots/51-quota-usage.png" alt="ResourceQuota detail showing usage bars per resource" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>Quotas — usage bars</figcaption>
-                    </figure>
-                    <figure>
-                        <img src="screenshots/54-endpointslice.png" alt="EndpointSlice detail listing endpoints and a link to the backing Service" width="1640" height="1160" loading="lazy" decoding="async" />
-                        <figcaption>EndpointSlices — backing Service</figcaption>
-                    </figure>
-                </div>
-            </section>
-
-            <section class="feature container reverse">
-                <div class="feature-text">
-                    <h2>Your CRDs, treated as first-class</h2>
-                    <p>
-                        Custom resource definitions are discovered automatically when you
-                        connect, then listed in a dedicated, searchable sidebar section grouped
-                        by API group. Pin or hide them per cluster, browse them through the
-                        same table and detail UI as built-in kinds, and find them in the
-                        command palette and the topology graph.
-                    </p>
-                </div>
-                <figure class="feature-media">
-                    <img
-                        src="screenshots/55-custom-resources.png"
-                        alt="A custom resource instance list for a discovered CRD"
-                        width="1640" height="1160" loading="lazy" decoding="async"
-                    />
-                </figure>
-            </section>
-
-            <section class="feature container">
-                <div class="feature-text">
-                    <h2>Light, dark, or follow the system</h2>
-                    <p>
-                        Built on Material 3 with bundled Inter, JetBrains Mono, Sixtyfour, and Departure Mono fonts for
-                        consistent rendering everywhere. Pick light, dark, or system, then a style (Default or Retro) and
-                        a palette: High contrast, Monochrome, Solarized, Gruvbox, Catppuccin, Nord, or Dracula. Every screen,
-                        panel, chart, and graph adapts. Status pairs color with a shape or glyph, and an optional
-                        color-blind-safe set keeps it legible either way.
-                    </p>
-                </div>
-                <figure class="feature-media">
-                    <img
-                        src="screenshots/99-theme.png"
-                        alt="The same Cluster Overview rendered in light and dark themes side by side"
-                        width="2112" height="1492" loading="lazy" decoding="async"
-                    />
-                    <figcaption>The same overview, light on the left and dark on the right</figcaption>
+                <figure class="code-card">
+                    <figcaption class="code-card-bar">
+                        <span class="code-card-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                        <span>MCP client config · SSE</span>
+                    </figcaption>
+                    <pre tabindex="0"><code>{
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"kubekubedashdash"</span>: {
+      <span class="k">"type"</span>: <span class="s">"sse"</span>,
+      <span class="k">"url"</span>: <span class="s">"http://127.0.0.1:3001/"</span>,
+      <span class="k">"headers"</span>: { <span class="k">"Authorization"</span>: <span class="s">"Bearer &lt;token from Settings&gt;"</span> }
+    }
+  }
+}</code></pre>
                 </figure>
             </section>
 
@@ -413,7 +480,7 @@
                             </svg>
                             <div class="dl-body">
                                 <span class="dl-title">macOS</span>
-                                <span class="dl-meta">.dmg</span>
+                                <span class="dl-meta">.dmg · Apple Silicon</span>
                             </div>
                             <span class="dl-badge" hidden>Detected</span>
                         </a>
@@ -451,19 +518,20 @@
 
                     <div class="download-notes">
                         <p>
-                            <strong>First launch on macOS.</strong> The build isn't notarized
-                            yet, so Gatekeeper will block a normal double-click. Right-click the
-                            app in <em>Applications</em> → <em>Open</em> → <em>Open</em> once,
-                            and macOS remembers it from then on.
+                            <strong>First launch on macOS.</strong> The app isn't notarized yet,
+                            so macOS blocks the first launch. Open it once, then go to
+                            <em>System Settings → Privacy &amp; Security</em> and click
+                            <em>Open Anyway</em> (macOS 15 Sequoia and later). On older macOS,
+                            Control-click the app in <em>Applications</em> → <em>Open</em>.
                         </p>
                         <p>
-                            <strong>Verify your download.</strong> Each installer ships with a
-                            matching <code>.sha256</code> on the
-                            <a href="https://github.com/beytullah-gunduz/kubekubedashdash/releases/latest" target="_blank" rel="noopener">releases page</a>.
-                            Other architectures (e.g. Apple Silicon native, Linux non-Debian)
-                            can be
+                            <strong>Intel Mac or another Linux?</strong> The macOS build is Apple
+                            Silicon only and the Linux build is a Debian package for amd64.
+                            Anything else can be
                             <a href="https://github.com/beytullah-gunduz/kubekubedashdash#building-distributable-packages" target="_blank" rel="noopener">built from source</a>
-                            with JDK 21.
+                            with JDK 21. Each installer ships with a matching
+                            <code>.sha256</code> on the
+                            <a href="https://github.com/beytullah-gunduz/kubekubedashdash/releases/latest" target="_blank" rel="noopener">releases page</a>.
                         </p>
                         <p>
                             <strong>You'll need</strong> a <code>~/.kube/config</code> with at
@@ -504,7 +572,7 @@
                 </nav>
             </div>
             <div class="container footer-fine">
-                <p>Screenshots captured against the built-in demo cluster. Built with Kotlin Multiplatform &amp; Compose Desktop.</p>
+                <p>Screenshots show the built-in demo cluster, with its tabs renamed. Built with Kotlin Multiplatform &amp; Compose Desktop.</p>
             </div>
         </footer>
 
@@ -546,6 +614,14 @@
                     var uaData = navigator.userAgentData;
                     var plat = (uaData && uaData.platform) || navigator.platform || "";
                     var ua = navigator.userAgent || "";
+                    // Phones and tablets get no installer: Android reports Linux, an iPhone's
+                    // UA says "like Mac OS X", and iPadOS poses as a Mac with a touch screen.
+                    if (
+                        (uaData && uaData.mobile) ||
+                        /Android|iPhone|iPad|iPod/i.test(ua) ||
+                        (/Mac/i.test(plat) && navigator.maxTouchPoints > 1)
+                    )
+                        return null;
                     if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) return "mac";
                     if (/Win/i.test(plat) || /Windows/i.test(ua)) return "win";
                     if (/Linux|X11|CrOS/i.test(plat) || /Linux/i.test(ua)) return "linux";
@@ -603,6 +679,9 @@
                                 tag.textContent = rel.tag_name;
                                 tag.hidden = false;
                             }
+                            // hero eyebrow pill: "Free & open source · v1.2.3"
+                            var eyebrow = document.getElementById("hero-eyebrow");
+                            if (eyebrow) eyebrow.textContent += " · " + rel.tag_name;
                         }
 
                         Object.keys(OS_EXT).forEach(function (key) {
@@ -627,6 +706,106 @@
                     .catch(function () {
                         /* keep static fallbacks (cards → /releases/latest page) */
                     });
+            })();
+
+            // ---- Hero look switcher ----
+            // Ten pre-rendered shots of the same cluster (see docs/img/hero-<look>.webp,
+            // plus a -1000 variant for small screens). The chips form an ARIA radio
+            // group: roving tabindex, arrow keys move AND select. Starts on the light
+            // or dark Default shot to match the visitor's colour scheme.
+            (function () {
+                var img = document.getElementById("hero-img");
+                var group = document.querySelector(".looks");
+                var wrap = document.querySelector(".hero-looks");
+                if (!img || !group || !wrap) return;
+
+                var radios = Array.prototype.slice.call(
+                    group.querySelectorAll('[role="radio"]'),
+                );
+                if (!radios.length) return;
+                var preloaded = {};
+
+                function srcsetFor(look) {
+                    return (
+                        "img/hero-" + look + "-1000.webp 1000w, img/hero-" + look + ".webp 2000w"
+                    );
+                }
+
+                // Fetch a look's image ahead of the click (hover / keyboard focus).
+                function preload(look) {
+                    if (preloaded[look]) return;
+                    preloaded[look] = true;
+                    var im = new Image();
+                    im.sizes = img.sizes;
+                    im.srcset = srcsetFor(look);
+                    im.src = "img/hero-" + look + ".webp";
+                }
+
+                // The static <source> only exists so no-JS light visitors get the light
+                // shot. Once we drive the <img> ourselves it would override our srcset.
+                function dropStaticSources() {
+                    var picture = img.parentNode;
+                    if (!picture || picture.nodeName !== "PICTURE") return;
+                    Array.prototype.slice
+                        .call(picture.querySelectorAll("source"))
+                        .forEach(function (s) {
+                            picture.removeChild(s);
+                        });
+                }
+
+                function select(radio, moveFocus) {
+                    var look = radio.getAttribute("data-look");
+                    radios.forEach(function (r) {
+                        var on = r === radio;
+                        r.setAttribute("aria-checked", on ? "true" : "false");
+                        r.tabIndex = on ? 0 : -1;
+                    });
+                    dropStaticSources();
+                    img.srcset = srcsetFor(look);
+                    img.src = "img/hero-" + look + ".webp";
+                    if (moveFocus) radio.focus();
+                }
+
+                var prefersLight =
+                    window.matchMedia &&
+                    window.matchMedia("(prefers-color-scheme: light)").matches;
+                var initial = prefersLight ? "default-light" : "default-dark";
+                radios.forEach(function (r) {
+                    if (r.getAttribute("data-look") === initial) select(r, false);
+                });
+                wrap.hidden = false;
+
+                radios.forEach(function (r) {
+                    var look = r.getAttribute("data-look");
+                    r.addEventListener("click", function () {
+                        select(r, false);
+                    });
+                    r.addEventListener("pointerenter", function () {
+                        preload(look);
+                    });
+                    r.addEventListener("focus", function () {
+                        preload(look);
+                    });
+                });
+
+                group.addEventListener("keydown", function (e) {
+                    var cur = radios.indexOf(document.activeElement);
+                    if (cur < 0) return;
+                    var next;
+                    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                        next = (cur + 1) % radios.length;
+                    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                        next = (cur - 1 + radios.length) % radios.length;
+                    } else if (e.key === "Home") {
+                        next = 0;
+                    } else if (e.key === "End") {
+                        next = radios.length - 1;
+                    } else {
+                        return;
+                    }
+                    e.preventDefault();
+                    select(radios[next], true);
+                });
             })();
 
             // ---- Scroll-spy: highlight the active section in the header nav ----
@@ -677,14 +856,16 @@
                 var lastFocused = null;
 
                 var images = Array.prototype.slice.call(
-                    document.querySelectorAll("main figure img"),
+                    document.querySelectorAll("main img[data-zoom]"),
                 );
                 var index = -1;
 
                 function show(i) {
                     index = (i + images.length) % images.length;
                     var img = images[index];
-                    lightboxImg.src = img.currentSrc || img.src;
+                    // img.src, not currentSrc: the hero's src is always its full-size 2000 px
+                    // shot, while currentSrc may be the 1000 px variant on a small screen.
+                    lightboxImg.src = img.src || img.currentSrc;
                     lightboxImg.alt = img.alt || "";
                 }
 
