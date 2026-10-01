@@ -229,14 +229,14 @@ class DemoClusterSimulator(
 
                     deficit > 0 && random.nextInt(100) < 70 -> spawnNode()
 
-                    surplus >= NODE_BURST_THRESHOLD -> {
+                    !screenshotCalm && surplus >= NODE_BURST_THRESHOLD -> {
                         nodes.filter { it.metadata.name !in protectedNodes }
                             .shuffled()
                             .take(minOf(surplus, NODE_BURST_SIZE))
                             .forEach { removeNode(it.metadata.name) }
                     }
 
-                    surplus > 0 && random.nextInt(100) < 50 -> {
+                    !screenshotCalm && surplus > 0 && random.nextInt(100) < 50 -> {
                         val candidate = nodes.filter { it.metadata.name !in protectedNodes }.randomOrNull()
                         if (candidate != null) removeNode(candidate.metadata.name)
                     }
@@ -725,7 +725,7 @@ class DemoClusterSimulator(
         }.onSuccess {
             emitEvent("Normal", "SuccessfulCreate", "Created job $name", "Job", ns, name, "job-controller")
             val now = System.currentTimeMillis()
-            val willSucceed = random.nextInt(100) < JOB_SUCCESS_PROBABILITY
+            val willSucceed = screenshotCalm || random.nextInt(100) < JOB_SUCCESS_PROBABILITY
             jobFates[key] = JobFate.Active(
                 createdAt = now,
                 runForMs = random.nextLong(JOB_RUN_MIN_MS, JOB_RUN_MAX_MS),
@@ -920,7 +920,7 @@ class DemoClusterSimulator(
                 val app = pod.metadata.labels?.get("app") ?: name.substringBefore("-")
                 val image = pod.spec?.containers?.firstOrNull()?.image ?: "alpine:latest"
 
-                if (random.nextInt(100) < (if (screenshotCalm) 2 else 10)) {
+                if (random.nextInt(100) < (if (screenshotCalm) 0 else 10)) {
                     emitEvent("Warning", "Unhealthy", "Readiness probe failed: HTTP 503", "Pod", ns, name, "kubelet")
                 } else {
                     when (random.nextInt(3)) {
@@ -1004,7 +1004,7 @@ class DemoClusterSimulator(
     // ── Tunables ──────────────────────────────────────────────────────────────
 
     companion object {
-        /** Screenshot-only: far fewer failures and warnings. ALWAYS false in normal use. */
+        /** Screenshot-only: no failing pods or jobs, no node removals, no probe noise. ALWAYS false in normal use. */
         @Volatile
         var screenshotCalm: Boolean = false
 
