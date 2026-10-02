@@ -33,8 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -46,6 +49,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.dashboard_filled
@@ -64,6 +68,8 @@ internal fun AllClustersEventsFilterBar(
     onUpdateFilters: ((EventTriageFilters) -> EventTriageFilters) -> Unit,
     presetMenuSlot: @Composable () -> Unit = {},
     heatmapVisible: Boolean = false,
+    // The heatmap is closed but the data now merits it: mark the toggle rather than move the table.
+    heatmapHint: Boolean = false,
     onToggleHeatmap: () -> Unit = {},
 ) {
     var showTypeFilter by remember { mutableStateOf(false) }
@@ -238,6 +244,7 @@ internal fun AllClustersEventsFilterBar(
         HeatmapToggle(
             active = heatmapVisible,
             enabled = availableClusters.size > 1,
+            hint = heatmapHint,
             onToggle = onToggleHeatmap,
         )
     }
@@ -414,6 +421,7 @@ private fun ViewModeToggle(
 private fun HeatmapToggle(
     active: Boolean,
     enabled: Boolean,
+    hint: Boolean,
     onToggle: () -> Unit,
 ) {
     val foreground = if (active) KdPrimary else KdTextSecondary
@@ -446,9 +454,25 @@ private fun HeatmapToggle(
                 style = MaterialTheme.typography.labelSmall,
                 color = foreground,
             )
+            if (hint) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(kdDotShape)
+                        .background(KdPrimary)
+                        .semantics { contentDescription = "Warnings across several clusters" },
+                )
+            }
         }
     }
-    if (enabled) {
+    if (enabled && hint) {
+        TooltipArea(
+            tooltip = { TriageTooltip("Warnings across 3 or more clusters: open the heatmap to compare them") },
+            tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
+        ) {
+            toggle()
+        }
+    } else if (enabled) {
         toggle()
     } else {
         TooltipArea(

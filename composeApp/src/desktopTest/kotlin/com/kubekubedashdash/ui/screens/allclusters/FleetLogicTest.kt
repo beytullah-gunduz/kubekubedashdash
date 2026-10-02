@@ -95,6 +95,35 @@ class FleetLogicTest {
     }
 
     @Test
+    fun `heatmapWorthOpening needs three clusters and two reasons`() {
+        fun data(clusters: Int, reasons: Int) = HeatmapData(
+            clusters = (1..clusters).map { "cluster-$it" },
+            reasons = (1..reasons).map { "reason-$it" },
+            cells = emptyMap(),
+        )
+        assertFalse(heatmapWorthOpening(data(clusters = 2, reasons = 5)))
+        assertFalse(heatmapWorthOpening(data(clusters = 3, reasons = 1)))
+        assertTrue(heatmapWorthOpening(data(clusters = 3, reasons = 2)))
+        assertFalse(heatmapWorthOpening(HeatmapData(emptyList(), emptyList(), emptyMap())))
+    }
+
+    @Test
+    fun `estimatedHeatmapHeight grows per cluster up to the cap`() {
+        assertEquals(128.dp, estimatedHeatmapHeight(3))
+        assertEquals(160.dp, estimatedHeatmapHeight(4))
+        assertEquals(256.dp, estimatedHeatmapHeight(20))
+    }
+
+    @Test
+    fun `heatmapFits keeps the table its minimum`() {
+        // 610 - 224 - 128 = 258 dp left for the table; 490 - 224 - 128 = 138 dp is too little.
+        assertTrue(heatmapFits(viewport = 610.dp, chrome = 224.dp, clusters = 3))
+        assertFalse(heatmapFits(viewport = 490.dp, chrome = 224.dp, clusters = 3))
+        // Exactly the minimum still fits.
+        assertTrue(heatmapFits(viewport = 572.dp, chrome = 224.dp, clusters = 3))
+    }
+
+    @Test
     fun `phaseBreakdown gives every phase count`() {
         assertEquals("Loading", phaseBreakdown(null))
         assertEquals("10 running · 4 pending · 14 failed · 2 succeeded", phaseBreakdown(PodPhaseCounts(10, 4, 14, 2)))

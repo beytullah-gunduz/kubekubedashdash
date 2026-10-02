@@ -15,6 +15,30 @@ internal val FLEET_PANEL_MIN_WIDTH: Dp = 240.dp
 /** Gap between fleet-strip panels. */
 internal val FLEET_PANEL_GAP: Dp = 12.dp
 
+/** Table header plus about six comfortable rows; the event table never gets less. */
+internal val MIN_EVENT_TABLE_HEIGHT: Dp = 220.dp
+
+/**
+ * Fewest clusters for which the heatmap opens by itself: with two, its two rows repeat what the
+ * grouped table's Clusters column already shows.
+ */
+internal const val HEATMAP_AUTO_OPEN_MIN_CLUSTERS = 3
+
+/** How long after the tab appears data may still open the heatmap; later data only marks the toggle. */
+internal const val HEATMAP_ARRIVAL_WINDOW_MS = 1_500L
+
+/** The heatmap is worth opening unasked when 3+ clusters have warnings across 2+ reasons. */
+internal fun heatmapWorthOpening(data: HeatmapData): Boolean = data.clusters.size >= HEATMAP_AUTO_OPEN_MIN_CLUSTERS && data.reasons.size >= 2
+
+/**
+ * The heatmap's height for [clusters] rows, as AllClustersReasonHeatmap lays it out: 8 dp padding
+ * top and bottom, a 16 dp header line, then 28 dp rows 4 dp apart, the content capped at 240 dp.
+ */
+internal fun estimatedHeatmapHeight(clusters: Int): Dp = minOf(256.dp, 32.dp + 32.dp * clusters)
+
+/** Whether opening the heatmap still leaves the event table its minimum below [chrome] in [viewport]. */
+internal fun heatmapFits(viewport: Dp, chrome: Dp, clusters: Int): Boolean = viewport - chrome - estimatedHeatmapHeight(clusters) >= MIN_EVENT_TABLE_HEIGHT
+
 /** True when [panelCount] panels fit side by side at their minimum width. */
 internal fun fleetStripFits(available: Dp, panelCount: Int): Boolean = panelCount <= 0 || available >= FLEET_PANEL_MIN_WIDTH * panelCount + FLEET_PANEL_GAP * (panelCount - 1)
 

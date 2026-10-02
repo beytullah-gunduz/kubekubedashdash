@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -31,6 +33,8 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
 import com.kubekubedashdash.ui.screens.cluster.UsageScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun AllClustersScreen() {
@@ -56,6 +60,12 @@ fun AllClustersScreen() {
     val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
     val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_ALL_CLUSTERS] ?: true
 
+    // Kept out of the filters on purpose: an auto-opened heatmap is not a filter the user set, so
+    // it must not make the table "filtered" (empty-state wording, Clear filters) or land in a preset.
+    var heatmapAutoOpened by remember { mutableStateOf(false) }
+    val heatmapDismissed by PreferenceRepository.heatmapAutoOpenDismissed.collectAsState()
+    val heatmapShown = filters.heatmapVisible || heatmapAutoOpened
+
     BoxWithConstraints(Modifier.fillMaxSize().padding(16.dp)) {
         val density = LocalDensity.current
         // Height of everything above the table, measured; the table gets the
@@ -65,6 +75,20 @@ fun AllClustersScreen() {
         // onSizeChanged settles it. No loop — the chrome never depends on tableHeight.
         var chromeHeight by remember { mutableStateOf(0.dp) }
         val tableHeight = maxOf(MIN_EVENT_TABLE_HEIGHT, maxHeight - chromeHeight)
+
+        // The heatmap opens by itself at most once per visit (this page is disposed while another
+        // tab shows), and only from data present on arrival: data that qualifies later only marks
+        // the toggle, so the table never moves under the pointer. A close stops it for good, until
+        // the user opens it by hand; a short window keeps the table its minimum instead.
+        val viewport = maxHeight
+        LaunchedEffect(Unit) {
+            if (PreferenceRepository.heatmapAutoOpenDismissed.value || viewModel.filters.value.heatmapVisible) return@LaunchedEffect
+            val data = withTimeoutOrNull(HEATMAP_ARRIVAL_WINDOW_MS) {
+                viewModel.heatmapData.first(::heatmapWorthOpening)
+            } ?: return@LaunchedEffect
+            val chrome = snapshotFlow { chromeHeight }.first { it > 0.dp }
+            if (heatmapFits(viewport, chrome, data.clusters.size)) heatmapAutoOpened = true
+        }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Column(Modifier.fillMaxWidth().onSizeChanged { chromeHeight = with(density) { it.height.toDp() } }) {
                 FleetStrip(
@@ -102,12 +126,24 @@ fun AllClustersScreen() {
                             onSavePreset = viewModel::saveCurrentAsPreset,
                         )
                     },
-                    heatmapVisible = filters.heatmapVisible,
-                    onToggleHeatmap = { viewModel.updateFilters { f -> f.copy(heatmapVisible = !f.heatmapVisible) } },
+                    heatmapVisible = heatmapShown,
+                    heatmapHint = !heatmapShown && !heatmapDismissed && heatmapWorthOpening(heatmapData),
+                    onToggleHeatmap = {
+                        // Any close, of an auto-opened or a hand-opened heatmap, stops auto-opening;
+                        // opening it by hand allows it again.
+                        if (heatmapShown) {
+                            heatmapAutoOpened = false
+                            viewModel.updateFilters { f -> f.copy(heatmapVisible = false) }
+                            PreferenceRepository.setHeatmapAutoOpenDismissed(true)
+                        } else {
+                            viewModel.updateFilters { f -> f.copy(heatmapVisible = true) }
+                            PreferenceRepository.setHeatmapAutoOpenDismissed(false)
+                        }
+                    },
                 )
                 AnimatedVisibility(
                     // Mirrors the disabled toggle: without this, a previously-on heatmap stays stuck open when clusters drop below 2.
-                    visible = filters.heatmapVisible && availableClusters.size > 1,
+                    visible = heatmapShown && availableClusters.size > 1,
                     enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
                     exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(animationSpec = tween(200)),
                 ) {
@@ -130,9 +166,6 @@ fun AllClustersScreen() {
         }
     }
 }
-
-/** Table header plus about six comfortable rows; the table never gets less. */
-private val MIN_EVENT_TABLE_HEIGHT = 220.dp
 
 /**
  * Header wording for the All Clusters usage section. A tab with a namespace
