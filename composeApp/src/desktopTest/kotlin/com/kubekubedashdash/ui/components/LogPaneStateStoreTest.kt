@@ -44,4 +44,25 @@ class LogPaneStateStoreTest {
         assertEquals("x", store.stateFor("a").filterText)
         assertEquals("", store.stateFor("b").filterText)
     }
+
+    @Test
+    fun `existingStates returns only existing states, as the same objects`() {
+        val store = LogPaneStateStore()
+        val a = store.stateFor("a")
+        val found = store.existingStates(listOf("a", "b"))
+        assertEquals(setOf("a"), found.keys)
+        assertSame(a, found.getValue("a"))
+        // Asking for "b" must not have created it.
+        assertEquals(1, store.size)
+    }
+
+    @Test
+    fun `putAll puts states back under their keys`() {
+        val store = LogPaneStateStore()
+        val saved = LogPaneViewState()
+        saved.filterText = "x"
+        store.putAll(mapOf("a" to saved))
+        assertSame(saved, store.stateFor("a"))
+        assertEquals("x", store.stateFor("a").filterText)
+    }
 }
