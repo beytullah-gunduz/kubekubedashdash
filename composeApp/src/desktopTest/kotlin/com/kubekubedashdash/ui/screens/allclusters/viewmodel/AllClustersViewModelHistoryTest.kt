@@ -27,6 +27,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * All Clusters sums each open tab's pods and usage, which follow that tab's
@@ -162,5 +163,22 @@ class AllClustersViewModelHistoryTest {
             .associate { it.sessionId to it.namespace }
 
         assertEquals(mapOf(first.id to "ns-a", second.id to null), namespaces)
+    }
+
+    @Test
+    fun `each cluster summary carries its own usage, pods and capacity, in tab order`() = runBlocking {
+        val first = openTab("cluster-1", "ns-a")
+        val second = openTab("cluster-2", "ns-b")
+        val summaries = withTimeout(15_000) {
+            vm.clusterSummaries.first { list ->
+                list.size == 2 && list.all { it.usage?.metricsAvailable == true && it.podsCount != null && it.podsCapacity > 0 }
+            }
+        }
+        assertEquals(listOf(first.id, second.id), summaries.map { it.sessionId })
+        assertEquals(listOf(2, 5), summaries.map { it.podsCount })
+        assertEquals(listOf(10, 10), summaries.map { it.podsCapacity })
+        assertEquals(listOf(200L, 500L), summaries.map { it.usage!!.cpuUsedMillis })
+        assertEquals(listOf(4000L, 4000L), summaries.map { it.usage!!.cpuCapacityMillis })
+        assertTrue(summaries.all { it.phaseCounts != null })
     }
 }
