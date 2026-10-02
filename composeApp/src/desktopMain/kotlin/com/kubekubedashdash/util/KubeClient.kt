@@ -650,6 +650,7 @@ class KubeClient(
 
     /** Throws on any failure (F9: MCP reports it with isError). */
     fun fetchPodLogs(name: String, namespace: String, container: String?, tailLines: Int = 1000): String {
+        if (connectionManager.isDemo) return DemoPodLogs.history(namespace, name, container, tailLines, false).joinToString("\n")
         log.debug("Fetching pod logs pod={} namespace={} container={} tailLines={}", name, namespace, container, tailLines)
         val op = client.pods().inNamespace(namespace).withName(name)
         val withC = if (container != null) op.inContainer(container) else op

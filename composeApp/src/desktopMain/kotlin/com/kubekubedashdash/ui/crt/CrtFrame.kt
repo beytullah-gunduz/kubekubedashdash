@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import kotlin.math.max
 
 /** The three inputs [drawCrtFrame] needs for one frame: aperture ignite/open plus phosphor glow. */
@@ -243,7 +244,7 @@ fun rememberCrtScreenPowerOn(): Animatable<Float, AnimationVector1D> {
     LaunchedEffect(retro, dark) {
         if (retro) {
             if (progress.value >= 1f) progress.snapTo(0f)
-            progress.animateTo(1f, tween(370, easing = LinearEasing))
+            progress.animateTo(1f, tween(370 * ScreenshotHooks.crtTimeScale.value, easing = LinearEasing))
         } else {
             progress.snapTo(1f)
         }

@@ -70,6 +70,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
@@ -1463,6 +1464,7 @@ class ReactiveKubeClient(
     // ── On-demand: Pod Logs ─────────────────────────────────────────────────────
 
     fun getPodLogs(name: String, namespace: String, container: String?, tailLines: Int = 1000): String = try {
+        if (connectionManager.isDemo) return DemoPodLogs.history(namespace, name, container, tailLines, false).joinToString("\n")
         log.debug("Fetching pod logs pod={} namespace={} container={} tailLines={}", name, namespace, container, tailLines)
         val op = k8s.pods().inNamespace(namespace).withName(name)
         val withC = if (container != null) op.inContainer(container) else op
@@ -1659,6 +1661,14 @@ class ReactiveKubeClient(
      * Never calling tailingLines() means "unlimited".
      */
     fun openCaptureLogStream(namespace: String, query: LogQuery): InputStream {
+        if (connectionManager.isDemo) {
+            val lines = if (query.previous) {
+                DemoPodLogs.terminated(namespace, query.podName, query.containerName, 400, timestamps = true)
+            } else {
+                DemoPodLogs.history(namespace, query.podName, query.containerName, 400, timestamps = true)
+            }
+            return (lines.joinToString("\n") + "\n").byteInputStream()
+        }
         val base: BytesLimitTerminateTimeTailPrettyLoggable =
             k8s.pods().inNamespace(namespace).withName(query.podName)
                 .inContainer(query.containerName)
@@ -1703,6 +1713,22 @@ class ReactiveKubeClient(
         // flush their line buffer.
         oneShotTailLines: Int = 5_000,
     ): Flow<String> = flow {
+        if (connectionManager.isDemo) {
+            // The demo's mock API server answers /log with its whole database; serve made-up logs.
+            // A real stream ends when its client closes; this one never does, so stop it when the
+            // connection changes (a CURRENT_VIEW reconnect keeps the drawer tab open).
+            val version = connectionManager.connectionVersion.value
+            val phase = runCatching { k8s.pods().inNamespace(namespace).withName(name).get()?.status?.phase }.getOrNull()
+            if (phase == "Succeeded" || phase == "Failed") {
+                DemoPodLogs.terminated(namespace, name, container, 200, options.timestamps).forEach { emit(it) }
+            } else {
+                emitAll(
+                    DemoPodLogs.stream(namespace, name, container, options)
+                        .takeWhile { connectionManager.connectionVersion.value == version },
+                )
+            }
+            return@flow
+        }
         // Probe phase once so terminal pods (Succeeded/Failed) get a one-shot
         // historical read instead of watchLog() with follow=true, which on a
         // terminated container can return immediately with no data.

@@ -19,4 +19,13 @@ object ScreenshotHooks {
 
     /** Screenshot-only: the detail host ignores the per-kind width memory, so captures never depend on the developer's preferences. */
     val ignorePaneWidthMemory = MutableStateFlow(false)
+
+    /** Screenshot-only: the command palette opens pre-filled with this query. Empty in normal use. */
+    val paletteQuery = MutableStateFlow("")
+
+    /** Screenshot-only: the Pods list selects its first N visible rows. 0 in normal use. */
+    val autoSelectPodCount = MutableStateFlow(0)
+
+    /** Screenshot-only: slows the Retro power-on so a frame sequence can be captured. 1 in normal use. */
+    val crtTimeScale = MutableStateFlow(1)
 }

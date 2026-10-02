@@ -118,7 +118,7 @@ kotlin.sourceSets.named("desktopMain") {
 
 tasks.register<JavaExec>("generateScreenshots") {
     group = "documentation"
-    description = "Drives the live app via WorkspaceManager and captures every Screen.Main + multi-tab + multi-window into docs/screenshots/. Runs on your Mac; the window must stay visible while it runs."
+    description = "Drives the live app against the built-in demo cluster and writes the landing-page captures into build/screenshots/ (raw PNGs). Then run scripts/site_images.py."
     val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
     dependsOn(desktopMain.compileTaskProvider)
     classpath(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)

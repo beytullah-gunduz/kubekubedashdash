@@ -350,6 +350,13 @@ class KubeConnectionManager(
 
     fun getClusterServer(): String = _client?.configuration?.masterUrl ?: ""
 
+    /**
+     * True while this manager is connected to a built-in demo instance (not a real cluster).
+     * Checks the pair, not `_mockHandle` alone: `connect()` publishes `_client` before it nulls
+     * `_mockHandle`, so a reader in between must not see a real client as the demo.
+     */
+    val isDemo: Boolean get() = _mockHandle?.let { it.client === _client } == true
+
     /** True once [close] ran: the owning cluster tab is gone. Lock-free, for polling. */
     val isClosed: Boolean get() = closed
 
