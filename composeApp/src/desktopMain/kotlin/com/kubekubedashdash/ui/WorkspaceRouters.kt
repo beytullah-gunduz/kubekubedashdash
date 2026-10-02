@@ -24,6 +24,7 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.extension_filled
+import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.crt.SwapStyle
 import com.kubekubedashdash.ui.crt.crtContentCut
@@ -139,6 +140,7 @@ fun ContentRouter(
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
     onCaptureLogs: (String) -> Unit = {},
     onTailLogs: (String) -> Unit = {},
+    onTailPods: (List<TailPodRef>) -> List<String> = { emptyList() },
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
 
@@ -256,6 +258,7 @@ fun ContentRouter(
                     onNavigate = onNavigate,
                     onOpenLogs = onOpenLogs,
                     onOpenTerminal = onOpenTerminal,
+                    onTailPods = onTailPods,
                     selectPodUid = target.selectPodUid,
                     initialStatusFilter = target.statusFilter,
                     initialSelectedUid = paneSelectionUid,

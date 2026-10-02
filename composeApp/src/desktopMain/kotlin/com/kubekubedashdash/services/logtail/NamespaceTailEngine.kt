@@ -59,6 +59,13 @@ class NamespaceTailTask internal constructor(
  */
 object NamespaceTailEngine {
     const val MAX_STREAMS = 40
+
+    /**
+     * Most distinct namespaces a pod-set tail may span: each one costs a
+     * full-namespace discovery informer, so the Pods screen refuses a larger
+     * selection instead of starting dozens of them.
+     */
+    const val MAX_TAIL_NAMESPACES = 10
     const val MAX_BUFFERED_LINES = 20_000
 
     /**
