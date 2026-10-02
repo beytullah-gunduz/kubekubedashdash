@@ -4,6 +4,7 @@ import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureTask
 import com.kubekubedashdash.services.logtail.NamespaceTailTask
+import com.kubekubedashdash.services.logtail.TailTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -105,19 +106,52 @@ data class ActiveCaptureTask(
 }
 
 /**
- * Drawer tab backed by a live [NamespaceTailTask]. Mirrors [ActiveCaptureTask]
+ * Drawer tab backed by a live [NamespaceTailTask] — a whole-namespace tail or
+ * a pod-set tail, per [NamespaceTailTask.target]. Mirrors [ActiveCaptureTask]
  * in shape, but the registry enforces at most one of these per [sessionId] —
  * see [openOrFocusTailTab] — because the tail's stream cap is sized per
- * session, not per namespace.
+ * session, not per target.
  */
 data class ActiveNamespaceTail(
     override val sessionId: String,
     val task: NamespaceTailTask,
     override val openedAt: Long,
 ) : DrawerLogTab {
-    override val key: String get() = "tail|$sessionId|${task.namespace}"
-    override val displayLabel: String get() = "Tail · ${task.namespace}"
+    override val key: String get() = tailTabKey(sessionId, task.target)
+    override val displayLabel: String
+        get() = when (val target = task.target) {
+            is TailTarget.Namespace -> "Tail · ${target.namespace}"
+
+            is TailTarget.Pods -> {
+                val namespaces = target.namespaces
+                val where = if (namespaces.size == 1) namespaces.single() else "${namespaces.size} namespaces"
+                "Tail · ${target.pods.size} pods · $where"
+            }
+        }
 }
+
+/**
+ * Drawer-tab key of the tail for [target] in [sessionId]. A namespace keeps
+ * `tail|<session>|<ns>`; a pod set is `tail|<session>|pods|` + its sorted
+ * `ns/name` refs joined by commas, so the same set always maps to the same key
+ * whatever order it was selected in (DNS-1123 names contain none of `|`, `,`
+ * or `/`, so distinct sets cannot collide).
+ */
+internal fun tailTabKey(sessionId: String, target: TailTarget): String = when (target) {
+    is TailTarget.Namespace -> "tail|$sessionId|${target.namespace}"
+
+    is TailTarget.Pods ->
+        "tail|$sessionId|pods|" +
+            target.pods
+                .sortedWith(compareBy({ it.namespace }, { it.name }))
+                .joinToString(",") { "${it.namespace}/${it.name}" }
+}
+
+/**
+ * Outcome of opening a tail tab: the tab's [key], and the display labels of
+ * the other tails this call closed to make room (one tail per session).
+ */
+data class TailOpenResult(val key: String, val replaced: List<String>)
 
 object LogStreamRegistry {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -389,8 +423,8 @@ object LogStreamRegistry {
     }
 
     /**
-     * Opens (or focuses) the namespace tail tab for [namespace] in [session].
-     * A one-line delegation kept separate from [openOrFocusTailTab] so unit
+     * Opens (or focuses) the tail tab for [namespace] in [session]. A one-line
+     * delegation kept separate from [openOrFocusTailTab] so unit
      * tests never construct a [ClusterSession] — its init starts real
      * connection machinery on the session scope.
      */
@@ -398,7 +432,21 @@ object LogStreamRegistry {
         session: ClusterSession,
         namespace: String,
         taskFactory: () -> NamespaceTailTask,
-    ): String = openOrFocusTailTab(session.id.value, namespace, taskFactory)
+    ): String = openOrFocusTail(session, TailTarget.Namespace(namespace), taskFactory).key
+
+    /** Same as the namespace overload, for any [TailTarget]; reports which tails it replaced. */
+    fun openOrFocusTail(
+        session: ClusterSession,
+        target: TailTarget,
+        taskFactory: () -> NamespaceTailTask,
+    ): TailOpenResult = openOrFocusTailTab(session.id.value, target, taskFactory)
+
+    /** The namespace-tail seam; delegates to the [TailTarget] overload and returns just the key. */
+    internal fun openOrFocusTailTab(
+        sessionId: String,
+        namespace: String,
+        taskFactory: () -> NamespaceTailTask,
+    ): String = openOrFocusTailTab(sessionId, TailTarget.Namespace(namespace), taskFactory).key
 
     /**
      * The unit-testable seam, mirroring [openOrFocusCaptureTab]. Takes a
@@ -408,38 +456,38 @@ object LogStreamRegistry {
      *
      * At most ONE tail tab is kept per [sessionId]: unlike captures, the
      * tail's stream cap ([com.kubekubedashdash.services.logtail.NamespaceTailEngine.MAX_STREAMS])
-     * is sized for a single namespace tail per session, so before inserting
+     * is sized for a single tail per session, so before inserting
      * the new tab every other [ActiveNamespaceTail] belonging to this
      * session is closed first — [close] cancels its job, unwinding that
      * tail's collectors and freeing its slots before the new tail claims
-     * any.
+     * any. Their display labels come back in [TailOpenResult.replaced].
      */
     @Synchronized
     internal fun openOrFocusTailTab(
         sessionId: String,
-        namespace: String,
+        target: TailTarget,
         taskFactory: () -> NamespaceTailTask,
-    ): String {
-        val key = "tail|$sessionId|$namespace"
+    ): TailOpenResult {
+        val key = tailTabKey(sessionId, target)
         val existing = _tabs.value[key] as? ActiveNamespaceTail
         if (existing != null) {
             if (existing.task.isRunning) {
                 _focusedKey.value = key
-                return key
+                return TailOpenResult(key, emptyList())
             }
             close(key)
         }
-        _tabs.value.values
+        val displaced = _tabs.value.values
             .filterIsInstance<ActiveNamespaceTail>()
             .filter { it.sessionId == sessionId && it.key != key }
-            .forEach { close(it.key) }
+        displaced.forEach { close(it.key) }
         val task = taskFactory()
         jobs[key] = task.job
         _tabs.update {
             it + (key to ActiveNamespaceTail(sessionId, task, System.currentTimeMillis()))
         }
         _focusedKey.value = key
-        return key
+        return TailOpenResult(key, displaced.map { it.displayLabel })
     }
 
     @Synchronized

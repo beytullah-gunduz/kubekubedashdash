@@ -45,7 +45,7 @@ class DrawerNamespaceTailPaneStateTest {
         sessionId = "session-1",
         task = NamespaceTailTask(
             namespace = "default",
-            state = MutableStateFlow(TailState(namespace = "default", lines = lines, attachedPods = listOf("web-0", "web-1"))),
+            state = MutableStateFlow(TailState(lines = lines, attachedPods = listOf("web-0", "web-1"))),
             job = Job(),
         ),
         openedAt = 0L,

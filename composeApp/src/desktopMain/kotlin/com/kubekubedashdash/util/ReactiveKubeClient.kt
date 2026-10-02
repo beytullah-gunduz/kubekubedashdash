@@ -1698,6 +1698,10 @@ class ReactiveKubeClient(
         namespace: String,
         container: String?,
         options: LogStreamOptions = LogStreamOptions(),
+        // Depth of the one-shot read a terminal pod (or `options.previous`) gets;
+        // the merged tails pass a shallow value so a few Completed pods cannot
+        // flush their line buffer.
+        oneShotTailLines: Int = 5_000,
     ): Flow<String> = flow {
         // Probe phase once so terminal pods (Succeeded/Failed) get a one-shot
         // historical read instead of watchLog() with follow=true, which on a
@@ -1725,7 +1729,7 @@ class ReactiveKubeClient(
                 options.previous,
             )
             try {
-                val text = podLogSource(name, namespace, container, options, tailLines = 5_000).log
+                val text = podLogSource(name, namespace, container, options, tailLines = oneShotTailLines).log
                 if (!text.isNullOrEmpty()) {
                     text.lineSequence().forEach { emit(it) }
                 }

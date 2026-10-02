@@ -58,6 +58,7 @@ import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.save_filled
 import com.kubekubedashdash.services.ActiveNamespaceTail
 import com.kubekubedashdash.services.logtail.TailLine
+import com.kubekubedashdash.services.logtail.fileStem
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.screens.logviewer.LogMatcher
 import com.kubekubedashdash.ui.screens.logviewer.logSeverityColor
@@ -259,7 +260,7 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, viewState: LogPaneViewStat
                 IconButton(
                     onClick = {
                         logSaver(
-                            "tail-${tab.task.namespace}",
+                            tab.task.target.fileStem(),
                             visibleLines.map { line -> if (line.notice) line.text else "[${line.podName}] ${line.text}" },
                         )
                     },

@@ -20,5 +20,13 @@ interface NamespaceTailGateway {
 class DefaultNamespaceTailGateway(private val client: ReactiveKubeClient) : NamespaceTailGateway {
     override fun podSnapshots(namespace: String) = client.watchTailPods(namespace)
 
-    override fun streamPodLogs(podName: String, namespace: String, container: String?) = client.streamPodLogs(podName, namespace, container)
+    // A terminal pod gets a one-shot read instead of a followed stream; keep it
+    // as shallow as a live stream's backfill so a few Completed pods cannot
+    // flush the tail's line buffer.
+    override fun streamPodLogs(podName: String, namespace: String, container: String?) = client.streamPodLogs(
+        podName,
+        namespace,
+        container,
+        oneShotTailLines = NamespaceTailEngine.ONE_SHOT_TAIL_LINES,
+    )
 }
