@@ -5,14 +5,12 @@ import kotlin.math.abs
 /**
  * The zoom levels the keyboard and the Settings control both offer.
  *
- * Capped at 150 deliberately. The list/detail scaffold picks its pane count
- * from the window size class, which `currentWindowAdaptiveInfo` derives in dp
- * through the *current* density — so zoom shrinks the window as far as that
- * calculation is concerned. On a 1440 dp window, 200 % reports 720 dp, which
- * falls below the two-partition threshold and unmounts the sidebar with no
- * way back except undoing the zoom. 150 % reports 960 dp and stays safe.
- * Going higher needs the directive computed from [LocalSystemDensity]
- * instead, which is a change to the scaffold, not to this list.
+ * Capped at 150. The cap was first set to keep the sidebar: the session
+ * scaffold took its pane count from the window size class, counted in dp
+ * through the zoomed density, so 200 % on a 1440 dp window read as 720 dp and
+ * dropped the sidebar. The scaffold now keeps two panes at any width or zoom
+ * (SessionScaffoldDirective in WorkspaceScaffold.kt), so that reason is gone;
+ * going higher is still unchecked for the rest of the layout at that size.
  */
 val UiScaleSteps = listOf(80, 100, 125, 150)
 

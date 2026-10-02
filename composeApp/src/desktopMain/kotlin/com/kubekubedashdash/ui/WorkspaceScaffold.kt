@@ -8,13 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.VerticalDragHandle
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.layout.AnimatedPane
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldDefaults
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
-import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
+import androidx.compose.material3.adaptive.layout.PaneScaffoldDirective
 import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
@@ -59,7 +58,6 @@ import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
  * [bottomSlot] is the window's log drawer when the widescreen layout places
  * it in this tab: rendered under the content, right of the sidebar.
  */
-@OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 internal fun SessionPaneContent(
     session: ClusterSession,
@@ -108,31 +106,7 @@ internal fun SessionPaneContent(
     val pulseLabelsOnEntry = labelQuery.isNotBlank()
     val pulseAnnotationsOnEntry = annotationQuery.isNotBlank()
 
-    val defaultDirective = calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2())
-    val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
-        scaffoldDirective = defaultDirective,
-        adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
-    )
-
     val density = LocalDensity.current
-    val collapsedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(56.dp) }
-    val expandedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(280.dp) }
-    val expansionState = key(density) {
-        rememberPaneExpansionState(
-            anchors = listOf(collapsedAnchor, expandedAnchor),
-            initialAnchoredIndex = if (sidebarCollapsed) 0 else 1,
-        )
-    }
-    LaunchedEffect(sidebarCollapsed, density) {
-        expansionState.animateTo(if (sidebarCollapsed) collapsedAnchor else expandedAnchor)
-    }
-
-    LaunchedEffect(Unit) {
-        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, Screen.Main.Connecting)
-    }
-    LaunchedEffect(currentScreen) {
-        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentScreen)
-    }
 
     // Where the bottom slot sits in this page, so the reconnect scrim can leave
     // the log drawer uncovered. The page's coordinates live in a plain holder
@@ -160,132 +134,111 @@ internal fun SessionPaneContent(
         // while it is not.
         Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { pageCoordinates.value = it }) {
             Row(modifier = Modifier.fillMaxSize()) {
-                ListDetailPaneScaffold(
-                    paneExpansionState = expansionState,
-                    paneExpansionDragHandle = if (sidebarCollapsed) {
-                        null
-                    } else {
-                        { state ->
-                            val interactionSource = remember { MutableInteractionSource() }
-                            VerticalDragHandle(
-                                modifier = Modifier.paneExpansionDraggable(
-                                    state,
-                                    48.dp, // fixed: Compact drops the local's floor, and the handle's touch size must not collapse to 0
-                                    interactionSource,
-                                ),
-                                interactionSource = interactionSource,
-                            )
-                        }
-                    },
-                    directive = navigator.scaffoldDirective,
-                    scaffoldState = navigator.scaffoldState,
-                    listPane = {
-                        AnimatedPane {
-                            Sidebar(
-                                currentScreen = currentScreen,
-                                onNavigate = { sessionVm.navigate(it) },
-                                collapsed = sidebarCollapsed,
-                                clusterHealth = clusterHealth,
-                            )
-                        }
-                    },
-                    detailPane = {
-                        AnimatedPane {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                SessionContentHeader(
-                                    screen = currentScreen,
-                                    canGoBack = canGoBack,
-                                    canGoForward = canGoForward,
-                                    onBack = sessionVm::goBack,
-                                    onForward = sessionVm::goForward,
-                                    searchFocusRequests = searchFocusRequests,
-                                    selectedNamespace = selectedNamespace,
-                                    namespaces = namespaceList,
-                                    onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
-                                    searchQuery = searchQuery,
-                                    onSearchChange = { sessionVm.setSearchQuery(it) },
-                                )
-                                // One host for list + detail: the sidebar keeps its width and
-                                // the two share the content area (split, overlay below
-                                // 1200 dp, or the detail expanded over the list).
-                                // Retro keeps the closing pane's content and width key for its CRT collapse (D22).
-                                val paneScreen = retroLatched(extraPaneScreen)
-                                DetailHost(
-                                    visible = extraPaneScreen != null,
-                                    kindKey = paneScreen.detailKindKey(),
-                                    onWidthChange = sessionVm::setExtraPaneWidth,
-                                    expanded = extraPaneExpanded,
-                                    onExpandedChange = sessionVm::setExtraPaneExpanded,
-                                    onClose = sessionVm::closeExtraPane,
-                                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                                    list = {
-                                        ContentRouter(
-                                            screen = currentScreen,
-                                            searchQuery = searchQuery,
-                                            labelQuery = labelQuery,
-                                            onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
-                                            annotationQuery = annotationQuery,
-                                            onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
-                                            pulseLabelsOnEntry = pulseLabelsOnEntry,
-                                            pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                            onNavigate = sessionVm::navigate,
-                                            clusterHealth = clusterHealth,
-                                            paneSelectionUid = extraPaneScreen.paneSelectionUid(),
-                                            onSelectCluster = onSelectCluster,
-                                            onRetryNow = sessionVm::retryNow,
-                                            onOpenLogs = onOpenLogs,
-                                            onOpenTerminal = onOpenTerminal,
-                                            onCaptureLogs = onCaptureLogs,
-                                            onTailLogs = onTailLogs,
-                                            onTailPods = onTailPods,
-                                        )
-                                    },
-                                    detail = {
-                                        ExtraPaneRouter(
-                                            screen = paneScreen,
-                                            onNavigate = sessionVm::navigate,
-                                            onClose = { sessionVm.closeExtraPane() },
-                                            modifier = Modifier.fillMaxSize(),
-                                            onOpenLogs = onOpenLogs,
-                                            onOpenTerminal = onOpenTerminal,
-                                            labelQuery = labelQuery,
-                                            onToggleLabel = { k, v ->
-                                                sessionVm.setLabelQuery(
-                                                    screenKey,
-                                                    toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
-                                                )
-                                            },
-                                            annotationQuery = annotationQuery,
-                                            onToggleAnnotation = { k, v ->
-                                                sessionVm.setAnnotationQuery(
-                                                    screenKey,
-                                                    toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
-                                                )
-                                            },
-                                        )
-                                    },
-                                )
-                                if (bottomSlot != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .onGloballyPositioned { slot ->
-                                                val page = pageCoordinates.value
-                                                if (page != null && page.isAttached) {
-                                                    bottomSlotStartPx = page.localPositionOf(slot, Offset.Zero).x
-                                                }
-                                                bottomSlotHeightPx = slot.size.height
-                                            },
-                                    ) {
-                                        bottomSlot()
-                                        DisposableEffect(Unit) { onDispose { bottomSlotHeightPx = 0 } }
-                                    }
-                                }
-                            }
-                        }
+                SessionScaffold(
+                    currentScreen = currentScreen,
+                    sidebarCollapsed = sidebarCollapsed,
+                    sidebar = {
+                        Sidebar(
+                            currentScreen = currentScreen,
+                            onNavigate = { sessionVm.navigate(it) },
+                            collapsed = sidebarCollapsed,
+                            clusterHealth = clusterHealth,
+                        )
                     },
                     modifier = Modifier.fillMaxSize(),
-                )
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        SessionContentHeader(
+                            screen = currentScreen,
+                            canGoBack = canGoBack,
+                            canGoForward = canGoForward,
+                            onBack = sessionVm::goBack,
+                            onForward = sessionVm::goForward,
+                            searchFocusRequests = searchFocusRequests,
+                            selectedNamespace = selectedNamespace,
+                            namespaces = namespaceList,
+                            onNamespaceChange = { sessionVm.setSelectedNamespace(it) },
+                            searchQuery = searchQuery,
+                            onSearchChange = { sessionVm.setSearchQuery(it) },
+                        )
+                        // One host for list + detail: the sidebar keeps its width and
+                        // the two share the content area (split, overlay below
+                        // 1200 dp, or the detail expanded over the list).
+                        // Retro keeps the closing pane's content and width key for its CRT collapse (D22).
+                        val paneScreen = retroLatched(extraPaneScreen)
+                        DetailHost(
+                            visible = extraPaneScreen != null,
+                            kindKey = paneScreen.detailKindKey(),
+                            onWidthChange = sessionVm::setExtraPaneWidth,
+                            expanded = extraPaneExpanded,
+                            onExpandedChange = sessionVm::setExtraPaneExpanded,
+                            onClose = sessionVm::closeExtraPane,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            list = {
+                                ContentRouter(
+                                    screen = currentScreen,
+                                    searchQuery = searchQuery,
+                                    labelQuery = labelQuery,
+                                    onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
+                                    annotationQuery = annotationQuery,
+                                    onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
+                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                    onNavigate = sessionVm::navigate,
+                                    clusterHealth = clusterHealth,
+                                    paneSelectionUid = extraPaneScreen.paneSelectionUid(),
+                                    onSelectCluster = onSelectCluster,
+                                    onRetryNow = sessionVm::retryNow,
+                                    onOpenLogs = onOpenLogs,
+                                    onOpenTerminal = onOpenTerminal,
+                                    onCaptureLogs = onCaptureLogs,
+                                    onTailLogs = onTailLogs,
+                                    onTailPods = onTailPods,
+                                )
+                            },
+                            detail = {
+                                ExtraPaneRouter(
+                                    screen = paneScreen,
+                                    onNavigate = sessionVm::navigate,
+                                    onClose = { sessionVm.closeExtraPane() },
+                                    modifier = Modifier.fillMaxSize(),
+                                    onOpenLogs = onOpenLogs,
+                                    onOpenTerminal = onOpenTerminal,
+                                    labelQuery = labelQuery,
+                                    onToggleLabel = { k, v ->
+                                        sessionVm.setLabelQuery(
+                                            screenKey,
+                                            toggleSelectorEntry(sessionVm.labelQueries.value[screenKey].orEmpty(), k, v),
+                                        )
+                                    },
+                                    annotationQuery = annotationQuery,
+                                    onToggleAnnotation = { k, v ->
+                                        sessionVm.setAnnotationQuery(
+                                            screenKey,
+                                            toggleSelectorEntry(sessionVm.annotationQueries.value[screenKey].orEmpty(), k, v),
+                                        )
+                                    },
+                                )
+                            },
+                        )
+                        if (bottomSlot != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onGloballyPositioned { slot ->
+                                        val page = pageCoordinates.value
+                                        if (page != null && page.isAttached) {
+                                            bottomSlotStartPx = page.localPositionOf(slot, Offset.Zero).x
+                                        }
+                                        bottomSlotHeightPx = slot.size.height
+                                    },
+                            ) {
+                                bottomSlot()
+                                DisposableEffect(Unit) { onDispose { bottomSlotHeightPx = 0 } }
+                            }
+                        }
+                    }
+                }
             }
             ReconnectOverlay(
                 visible = reconnecting,
@@ -300,6 +253,92 @@ internal fun SessionPaneContent(
             )
         }
     }
+}
+
+/**
+ * Two partitions at any window width and any UI zoom, so the sidebar —
+ * expanded, or the collapsed rail — never leaves the window.
+ *
+ * Not `calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2())`: that
+ * drops to one partition (no sidebar) below 840 dp, measured through the
+ * zoomed density, and the navigator's scaffold state only moves to a new pane
+ * layout when it navigates — so a resize left the sidebar as it was at the last
+ * navigation, missing from a window that opened narrow and was then widened.
+ * The 24 dp spacer is what the size class gave from 840 dp up, so a window of
+ * normal width looks the same as before.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+private val SessionScaffoldDirective = PaneScaffoldDirective(
+    maxHorizontalPartitions = 2,
+    horizontalPartitionSpacerSize = 24.dp,
+    maxVerticalPartitions = 1,
+    verticalPartitionSpacerSize = 0.dp,
+    defaultPanePreferredWidth = 360.dp,
+    excludedBounds = emptyList(),
+)
+
+/**
+ * The two-pane shell of a session page: [sidebar] in the list pane, [content]
+ * in the detail pane, and the drag handle between them while the sidebar is
+ * expanded. [currentScreen] drives the scaffold's navigation history.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+@Composable
+internal fun SessionScaffold(
+    currentScreen: Screen,
+    sidebarCollapsed: Boolean,
+    sidebar: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val navigator = rememberListDetailPaneScaffoldNavigator<Any>(
+        scaffoldDirective = SessionScaffoldDirective,
+        adaptStrategies = ListDetailPaneScaffoldDefaults.adaptStrategies(),
+    )
+
+    val density = LocalDensity.current
+    val collapsedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(56.dp) }
+    val expandedAnchor = remember { PaneExpansionAnchor.Offset.fromStart(280.dp) }
+    val expansionState = key(density) {
+        rememberPaneExpansionState(
+            anchors = listOf(collapsedAnchor, expandedAnchor),
+            initialAnchoredIndex = if (sidebarCollapsed) 0 else 1,
+        )
+    }
+    LaunchedEffect(sidebarCollapsed, density) {
+        expansionState.animateTo(if (sidebarCollapsed) collapsedAnchor else expandedAnchor)
+    }
+
+    LaunchedEffect(Unit) {
+        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, Screen.Main.Connecting)
+    }
+    LaunchedEffect(currentScreen) {
+        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentScreen)
+    }
+
+    ListDetailPaneScaffold(
+        paneExpansionState = expansionState,
+        paneExpansionDragHandle = if (sidebarCollapsed) {
+            null
+        } else {
+            { state ->
+                val interactionSource = remember { MutableInteractionSource() }
+                VerticalDragHandle(
+                    modifier = Modifier.paneExpansionDraggable(
+                        state,
+                        48.dp, // fixed: Compact drops the local's floor, and the handle's touch size must not collapse to 0
+                        interactionSource,
+                    ),
+                    interactionSource = interactionSource,
+                )
+            }
+        },
+        directive = navigator.scaffoldDirective,
+        scaffoldState = navigator.scaffoldState,
+        listPane = { AnimatedPane { sidebar() } },
+        detailPane = { AnimatedPane { content() } },
+        modifier = modifier,
+    )
 }
 
 /** Non-snapshot holder for the page's layout coordinates (see SessionPaneContent). */
