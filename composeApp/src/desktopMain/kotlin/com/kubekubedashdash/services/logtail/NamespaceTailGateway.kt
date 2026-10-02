@@ -1,5 +1,6 @@
 package com.kubekubedashdash.services.logtail
 
+import com.kubekubedashdash.services.LogStreamOptions
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,9 @@ interface NamespaceTailGateway {
     fun podSnapshots(namespace: String): Flow<List<CapturePodSpec>>
 
     fun streamPodLogs(podName: String, namespace: String, container: String?): Flow<String>
+
+    /** One-shot read of [container]'s previous (last terminated) run; completes after the dump. */
+    fun previousPodLogs(podName: String, namespace: String, container: String): Flow<String>
 }
 
 class DefaultNamespaceTailGateway(private val client: ReactiveKubeClient) : NamespaceTailGateway {
@@ -27,6 +31,16 @@ class DefaultNamespaceTailGateway(private val client: ReactiveKubeClient) : Name
         podName,
         namespace,
         container,
+        oneShotTailLines = NamespaceTailEngine.ONE_SHOT_TAIL_LINES,
+    )
+
+    // `options.previous` forces the one-shot branch regardless of the pod's
+    // phase; a failed read surfaces as a "[fetch error: …]" line, then completes.
+    override fun previousPodLogs(podName: String, namespace: String, container: String) = client.streamPodLogs(
+        podName,
+        namespace,
+        container,
+        LogStreamOptions(previous = true),
         oneShotTailLines = NamespaceTailEngine.ONE_SHOT_TAIL_LINES,
     )
 }

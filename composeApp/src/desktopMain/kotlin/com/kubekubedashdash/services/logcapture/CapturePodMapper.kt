@@ -41,11 +41,15 @@ object CapturePodMapper {
         statuses: List<ContainerStatus>,
     ): CaptureContainerSpec {
         val status = statuses.find { it.name == name }
+        val lastTerminated = status?.lastState?.terminated
         return CaptureContainerSpec(
             name = name,
             kind = kind,
             restartCount = status?.restartCount ?: 0,
             started = status?.state?.running != null || status?.state?.terminated != null,
+            runId = status?.containerID?.takeIf { it.isNotBlank() },
+            previousRunId = lastTerminated?.let { t -> t.containerID?.takeIf { it.isNotBlank() } ?: t.finishedAt?.takeIf { it.isNotBlank() } },
+            previousExit = lastTerminated?.let { t -> "${t.reason?.takeIf { it.isNotBlank() } ?: "Exited"}, exit ${t.exitCode ?: "?"}" },
         )
     }
 }

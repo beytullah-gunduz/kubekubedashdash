@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -48,6 +49,13 @@ class NamespaceTailTask internal constructor(
  * set of pods — into one bounded live buffer, with informer-driven pod churn,
  * a sticky stream cap, and clean cancellation. Pure logic + coroutines — no
  * Compose, no UI, no registry.
+ *
+ * Containers are re-examined per container: a started main container that is
+ * not live and has restarted since it was last attached (or was never attached)
+ * is streamed again even while a sibling keeps the pod attached. A pod-set
+ * target additionally dumps, once and one at a time, the last terminated run of
+ * a main container that is waiting between runs (crash loop), deduplicated by
+ * container id so a run already streamed live is not read again.
  */
 object NamespaceTailEngine {
     const val MAX_STREAMS = 40
@@ -91,7 +99,16 @@ object NamespaceTailEngine {
                     fanOutScope = this,
                     lineBuffer = lineBuffer,
                     state = state,
+                    dumpQueue = if (target is TailTarget.Pods) Channel(Channel.UNLIMITED) else null,
                 )
+
+                // One consumer: previous-run dumps run one at a time and take no
+                // stream slot. Cancelling the task job cancels it.
+                ctx.dumpQueue?.let { queue ->
+                    launch {
+                        for (request in queue) runDump(request, ctx)
+                    }
+                }
 
                 launch {
                     while (isActive) {
@@ -206,6 +223,7 @@ object NamespaceTailEngine {
                     lineBuffer.append(TailLine(podName = "", text = "── $podKey stream ended ──", notice = true))
                 }
                 bookkeeping.recordedRestartCount.remove(podKey)
+                bookkeeping.seenRuns.remove(podKey)
             }
 
             for ((podKey, info) in bookkeeping.attached) {
@@ -248,16 +266,54 @@ object NamespaceTailEngine {
             bookkeeping.recordedRestartCount.remove(pod.key)
             lineBuffer.append(TailLine(podName = "", text = "── ${pod.key} started ──", notice = true))
 
-            val multiContainer = containers.size > 1
-            containers.forEach { container ->
-                info.liveContainers[container.name] = ctx.fanOutScope.launch {
-                    runCollector(
-                        ctx = ctx,
-                        podKey = pod.key,
-                        namespace = pod.namespace,
-                        podName = pod.spec.name,
-                        containerName = container.name,
-                        multiContainer = multiContainer,
+            val multiContainer = hasSeveralMainContainers(pod.spec)
+            containers.forEach { container -> launchContainer(ctx, pod, info, container, multiContainer) }
+        }
+
+        // Per-container pass, after the new-pod loop so a freed slot goes to a
+        // new pod before a container re-attach. An attached pod is otherwise
+        // never re-examined, which would leave a restarted container beside a
+        // running sidecar (or one that started late) unstreamed forever. A
+        // container that finds no slot is simply retried on a later pass: it
+        // counts towards neither the cap notice nor cappedKeys.
+        for ((podKey, info) in bookkeeping.attached.toList()) {
+            val pod = bookkeeping.lastSnapshot[podKey] ?: continue
+            if (target is TailTarget.Namespace && pod.spec.phase in TERMINAL_PHASES) continue
+            val multiContainer = hasSeveralMainContainers(pod.spec)
+            for (container in eligibleContainers(pod.spec)) {
+                if (container.name in info.liveContainers) continue
+                if (container.restartCount <= (info.attachedAt[container.name] ?: -1)) continue
+                if (bookkeeping.usedSlots + 1 > MAX_STREAMS) continue
+
+                bookkeeping.usedSlots += 1
+                lineBuffer.append(TailLine(podName = "", text = "── $podKey · ${container.name} started ──", notice = true))
+                launchContainer(ctx, pod, info, container, multiContainer)
+            }
+        }
+
+        // Pod-set targets: queue one previous-run dump per waiting main container
+        // whose last terminated run has not been streamed or dumped yet. Scans
+        // lastSnapshot in its own order (never sorted) so dumps are FIFO.
+        ctx.dumpQueue?.let { queue ->
+            for (pod in bookkeeping.lastSnapshot.values) {
+                if (pod.spec.phase in TERMINAL_PHASES) continue
+                val multiContainer = hasSeveralMainContainers(pod.spec)
+                for (container in pod.spec.containers) {
+                    if (container.kind != CaptureContainerKind.MAIN || container.started) continue
+                    val previousRunId = container.previousRunId ?: continue
+                    val seen = bookkeeping.seenRuns.getOrPut(pod.key) { mutableSetOf() }
+                    if (!seen.add("${container.name}:$previousRunId")) continue
+                    // trySend on an UNLIMITED channel never suspends, so it is safe under the mutex.
+                    queue.trySend(
+                        DumpRequest(
+                            podKey = pod.key,
+                            namespace = pod.namespace,
+                            podName = pod.spec.name,
+                            container = container.name,
+                            multiContainer = multiContainer,
+                            exit = container.previousExit,
+                            previousRunId = previousRunId,
+                        ),
                     )
                 }
             }
@@ -287,9 +343,10 @@ object NamespaceTailEngine {
     /**
      * Status of every pod of a pod-set [target], keyed by display key. First
      * match wins: attached, over the cap, absent from the snapshot, terminal
-     * phase, remembered as detached at a restart-count baseline (a live pod
-     * between runs: crash loop or closed stream), otherwise still waiting for
-     * a started main container.
+     * phase, remembered as detached at a restart-count baseline or with a main
+     * container waiting after a terminated run (a live pod between runs: crash
+     * loop or closed stream), otherwise still waiting for a started main
+     * container.
      */
     private fun podStatuses(
         target: TailTarget.Pods,
@@ -305,10 +362,75 @@ object NamespaceTailEngine {
                 key in cappedKeys -> TailPodStatus.CAPPED
                 snapshotPod == null -> TailPodStatus.GONE
                 snapshotPod.spec.phase in TERMINAL_PHASES -> TailPodStatus.ENDED
-                key in bookkeeping.recordedRestartCount -> TailPodStatus.IDLE
+                key in bookkeeping.recordedRestartCount || snapshotPod.spec.containers.any { it.kind == CaptureContainerKind.MAIN && !it.started && it.previousRunId != null } -> TailPodStatus.IDLE
                 else -> TailPodStatus.WAITING
             }
         }
+
+    /**
+     * Starts [container]'s live collector and records, under the caller's lock,
+     * the restart count it was attached at and (when known) its run id. The
+     * caller has already claimed the stream slot.
+     */
+    private fun launchContainer(
+        ctx: TailContext,
+        pod: TailPod,
+        info: AttachedPodInfo,
+        container: CaptureContainerSpec,
+        multiContainer: Boolean,
+    ) {
+        info.attachedAt[container.name] = container.restartCount
+        container.runId?.let { ctx.bookkeeping.seenRuns.getOrPut(pod.key) { mutableSetOf() }.add("${container.name}:$it") }
+        info.liveContainers[container.name] = ctx.fanOutScope.launch {
+            runCollector(
+                ctx = ctx,
+                podKey = pod.key,
+                namespace = pod.namespace,
+                podName = pod.spec.name,
+                containerName = container.name,
+                multiContainer = multiContainer,
+            )
+        }
+    }
+
+    /** Whether a container's lines need its name as a prefix: the pod has several main containers. */
+    private fun hasSeveralMainContainers(pod: CapturePodSpec): Boolean = pod.containers.count { it.kind == CaptureContainerKind.MAIN } > 1
+
+    /**
+     * One previous-run dump: re-checks that [request]'s run is still the one
+     * the pod reports (releasing the lock before any I/O), then appends a
+     * notice and the one-shot read of that run.
+     */
+    private suspend fun runDump(request: DumpRequest, ctx: TailContext) {
+        val bookkeeping = ctx.bookkeeping
+        val current = bookkeeping.mutex.withLock {
+            bookkeeping.lastSnapshot[request.podKey]?.spec?.containers?.firstOrNull { it.name == request.container }?.previousRunId == request.previousRunId
+        }
+        // Pod gone, or lastState has moved on to a newer run (which the pass that
+        // observed it has queued): nothing to read.
+        if (!current) return
+
+        val exit = request.exit?.let { " ($it)" } ?: ""
+        ctx.lineBuffer.append(TailLine(podName = "", text = "── ${request.podKey}: previous run of ${request.container}$exit ──", notice = true))
+        try {
+            ctx.gateway.previousPodLogs(request.podName, request.namespace, request.container).collect { text ->
+                val prefixed = if (request.multiContainer) "${request.container} $text" else text
+                ctx.lineBuffer.append(TailLine(podName = request.podKey, text = prefixed))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            log.warn(
+                "Previous-run read failed pod={} namespace={} container={}: {}",
+                request.podName,
+                request.namespace,
+                request.container,
+                e.message,
+            )
+            ctx.lineBuffer.append(TailLine(podName = "", text = "── ${request.podKey}: previous run of ${request.container} unavailable ──", notice = true))
+        }
+    }
 
     private suspend fun runCollector(
         ctx: TailContext,
@@ -353,9 +475,18 @@ object NamespaceTailEngine {
             val info = bookkeeping.attached[podKey] ?: return@withLock // already detached elsewhere — dedupe
             if (info.liveContainers.remove(containerName) == null) return@withLock // already freed — dedupe
             bookkeeping.usedSlots -= 1
+            // While the container waits out its backoff, status.containerID still
+            // names the instance that just ended: remember it as streamed so the
+            // dump scan does not read the same run again.
+            bookkeeping.lastSnapshot[podKey]?.spec?.containers?.firstOrNull { it.name == containerName }?.runId?.let {
+                bookkeeping.seenRuns.getOrPut(podKey) { mutableSetOf() }.add("$containerName:$it")
+            }
             if (info.liveContainers.isEmpty()) {
                 bookkeeping.attached.remove(podKey)
-                bookkeeping.recordedRestartCount[podKey] = info.maxRestartCountSeen
+                // The count the pod was actually streamed at, not the highest count
+                // merely observed: a restart seen while the old stream was still
+                // open is then re-attached by the re-run below instead of lost.
+                bookkeeping.recordedRestartCount[podKey] = info.attachedAt.values.maxOrNull() ?: info.maxRestartCountSeen
                 ctx.lineBuffer.append(TailLine(podName = "", text = "── $podKey stream ended ──", notice = true))
             }
             applySnapshotLocked(null, ctx)
@@ -377,12 +508,27 @@ object NamespaceTailEngine {
         val fanOutScope: CoroutineScope,
         val lineBuffer: LineBuffer,
         val state: MutableStateFlow<TailState>,
+        /** Previous-run dump requests; non-null for pod-set targets only. */
+        val dumpQueue: Channel<DumpRequest>?,
+    )
+
+    /** One queued previous-run read; [previousRunId] is re-checked when it is served. */
+    private data class DumpRequest(
+        val podKey: String,
+        val namespace: String,
+        val podName: String,
+        val container: String,
+        val multiContainer: Boolean,
+        val exit: String?,
+        val previousRunId: String,
     )
 
     /** Per-pod attachment bookkeeping. Guarded by [Bookkeeping.mutex]. */
     private class AttachedPodInfo(
         val liveContainers: MutableMap<String, Job>,
         var maxRestartCountSeen: Int,
+        /** Container name to its `restartCount` at its last live attach. */
+        val attachedAt: MutableMap<String, Int> = mutableMapOf(),
     )
 
     /** All engine mutable state, accessed only while holding [mutex]. */
@@ -393,6 +539,13 @@ object NamespaceTailEngine {
         /** Restart-count baseline recorded at detach; cleared on disappearance. */
         val recordedRestartCount = mutableMapOf<String, Int>()
         var usedSlots = 0
+
+        /**
+         * Pod key to `"$containerName:$runId"` entries for runs streamed live or
+         * dumped. Container-qualified so a `finishedAt` fallback id cannot collide
+         * across containers. Removed only when the pod disappears.
+         */
+        val seenRuns = mutableMapOf<String, MutableSet<String>>()
 
         /** Keyed by [TailPod.key]; keeps the snapshot's list order (never sorted). */
         var lastSnapshot: Map<String, TailPod> = emptyMap()

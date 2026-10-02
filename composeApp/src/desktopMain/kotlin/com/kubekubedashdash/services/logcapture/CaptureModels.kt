@@ -8,6 +8,12 @@ data class CaptureContainerSpec(
     val restartCount: Int,
     /** True if the container is running or has terminated — i.e. it can have logs. */
     val started: Boolean,
+    /** Container id of the current instance (`status.containerID`); null when unknown. */
+    val runId: String? = null,
+    /** Id of the last terminated instance (`lastState.terminated.containerID`, else its `finishedAt`); null when none. */
+    val previousRunId: String? = null,
+    /** How the last terminated instance ended, e.g. "Error, exit 1" or "OOMKilled, exit 137"; null when none. */
+    val previousExit: String? = null,
 )
 
 data class CapturePodSpec(

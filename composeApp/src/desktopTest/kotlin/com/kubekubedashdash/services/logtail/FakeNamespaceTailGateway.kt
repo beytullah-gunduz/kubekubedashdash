@@ -8,12 +8,15 @@ import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.merge
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Test double for [NamespaceTailGateway]. No cluster involved — pod discovery
  * is driven by [pushSnapshot]/[failDiscovery], and each container's log
  * stream is an independently programmable channel driven by
- * [pushLine]/[completeStream]/[failStream].
+ * [pushLine]/[completeStream]/[failStream]. A container's previous-run read
+ * ([previousPodLogs]) is a second, independent family of channels driven by
+ * [pushPreviousLine]/[completePreviousStream]/[failPreviousStream].
  *
  * Namespace handling is wildcard-by-default: a `null` namespace on a push or
  * stream helper means "any namespace", so a single-namespace test can ignore
@@ -47,6 +50,17 @@ class FakeNamespaceTailGateway : NamespaceTailGateway {
     // act on whichever channel is current for that key. Keyed
     // (namespace, pod, container).
     private val podStreams = ConcurrentHashMap<Triple<String, String, String?>, Channel<String>>()
+
+    // Same keying and re-arming, for previousPodLogs() reads.
+    private val previousStreams = ConcurrentHashMap<Triple<String, String, String?>, Channel<String>>()
+
+    // Call counts (how many times the engine asked, not whether a channel is
+    // currently open — hasStream stays true after a stream closes). Incremented
+    // together with the channel registration under [requestLock], so a test that
+    // sees a count can never still be looking at the previous channel.
+    private val streamRequests = ConcurrentHashMap<Triple<String, String, String?>, AtomicInteger>()
+    private val previousRequests = ConcurrentHashMap<Triple<String, String, String?>, AtomicInteger>()
+    private val requestLock = Any()
 
     private fun publish(namespace: String?, event: DiscoveryEvent) {
         val target = if (namespace == null) anyNamespaceEvents else eventsFor(namespace)
@@ -87,6 +101,45 @@ class FakeNamespaceTailGateway : NamespaceTailGateway {
      */
     fun hasStream(podName: String, container: String?, namespace: String? = null): Boolean = streamsFor(podName, container, namespace).isNotEmpty()
 
+    private fun previousStreamsFor(podName: String, container: String?, namespace: String?): List<Channel<String>> = previousStreams.entries
+        .filter { (key, _) -> key.second == podName && key.third == container && (namespace == null || key.first == namespace) }
+        .map { it.value }
+
+    /** True once the engine has called [previousPodLogs] for this pod/container. */
+    fun hasPreviousStream(podName: String, container: String?, namespace: String? = null): Boolean = previousStreamsFor(podName, container, namespace).isNotEmpty()
+
+    fun pushPreviousLine(podName: String, container: String?, text: String, namespace: String? = null) {
+        previousStreamsFor(podName, container, namespace).forEach { it.trySend(text) }
+    }
+
+    fun completePreviousStream(podName: String, container: String?, namespace: String? = null) {
+        previousStreamsFor(podName, container, namespace).forEach { it.close() }
+    }
+
+    fun failPreviousStream(podName: String, container: String?, message: String, namespace: String? = null) {
+        previousStreamsFor(podName, container, namespace).forEach { it.close(RuntimeException(message)) }
+    }
+
+    /**
+     * How many times the engine called [streamPodLogs] for this pod/container
+     * (summed across namespaces when [namespace] is null).
+     */
+    fun streamRequestCount(podName: String, container: String?, namespace: String? = null): Int = synchronized(requestLock) {
+        streamRequests.entries
+            .filter { (key, _) -> key.second == podName && key.third == container && (namespace == null || key.first == namespace) }
+            .sumOf { it.value.get() }
+    }
+
+    /**
+     * How many times the engine called [previousPodLogs] for this
+     * pod/container, counted at call time (not on first collect).
+     */
+    fun previousRequestCount(podName: String, container: String?, namespace: String? = null): Int = synchronized(requestLock) {
+        previousRequests.entries
+            .filter { (key, _) -> key.second == podName && key.third == container && (namespace == null || key.first == namespace) }
+            .sumOf { it.value.get() }
+    }
+
     override fun podSnapshots(namespace: String): Flow<List<CapturePodSpec>> = flow {
         merge(anyNamespaceEvents, eventsFor(namespace)).collect { event ->
             when (event) {
@@ -98,7 +151,21 @@ class FakeNamespaceTailGateway : NamespaceTailGateway {
 
     override fun streamPodLogs(podName: String, namespace: String, container: String?): Flow<String> {
         val channel = Channel<String>(Channel.UNLIMITED)
-        podStreams[Triple(namespace, podName, container)] = channel
+        val key = Triple(namespace, podName, container)
+        synchronized(requestLock) {
+            streamRequests.getOrPut(key) { AtomicInteger() }.incrementAndGet()
+            podStreams[key] = channel
+        }
+        return channel.consumeAsFlow()
+    }
+
+    override fun previousPodLogs(podName: String, namespace: String, container: String): Flow<String> {
+        val channel = Channel<String>(Channel.UNLIMITED)
+        val key = Triple(namespace, podName, container)
+        synchronized(requestLock) {
+            previousRequests.getOrPut(key) { AtomicInteger() }.incrementAndGet()
+            previousStreams[key] = channel
+        }
         return channel.consumeAsFlow()
     }
 }
