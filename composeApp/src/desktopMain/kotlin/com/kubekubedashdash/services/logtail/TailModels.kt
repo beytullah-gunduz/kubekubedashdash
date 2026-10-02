@@ -20,7 +20,7 @@ sealed interface TailTarget {
     val namespaces: List<String>
 
     data class Namespace(val namespace: String) : TailTarget {
-        override val namespaces: List<String> get() = listOf(namespace)
+        override val namespaces: List<String> = listOf(namespace)
     }
 
     data class Pods(val pods: Set<TailPodRef>) : TailTarget {
@@ -28,7 +28,8 @@ sealed interface TailTarget {
             require(pods.isNotEmpty()) { "a pod-set tail needs at least one pod" }
         }
 
-        override val namespaces: List<String> get() = pods.map { it.namespace }.distinct().sorted()
+        // Computed once: keyFor reads it per pod on every discovery event.
+        override val namespaces: List<String> = pods.map { it.namespace }.distinct().sorted()
     }
 }
 

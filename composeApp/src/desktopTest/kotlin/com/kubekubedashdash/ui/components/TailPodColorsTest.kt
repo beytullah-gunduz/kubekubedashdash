@@ -6,6 +6,8 @@ import com.kubekubedashdash.services.logtail.TailState
 import com.kubekubedashdash.services.logtail.TailTarget
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.tailTabLabel
+import kotlin.math.abs
+import kotlin.math.min
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -55,20 +57,31 @@ class TailPodColorsTest {
     }
 
     @Test
-    fun `the first six hues avoid the red band and never pair red with green`() {
+    fun `the first six hues never pair red with green`() {
         val hues = (0 until 6).map { podSetHue(it) }
 
-        // Red band of error text, either side of 0°.
-        assertTrue(hues.none { it >= 340f || it <= 20f }, "a hue sits in the red band: $hues")
-        // Pure green (~90°–150°) is the other half of the red/green pair.
+        // Pure green (~90°–150°) is the other half of the red/green pair; red is covered below.
         assertTrue(hues.none { it in 90f..150f }, "a hue is green: $hues")
-        assertEquals(6, hues.toSet().size)
     }
 
     @Test
-    fun `pods beyond the curated hues continue by the golden angle`() {
-        assertEquals((210f + 6 * 137.508f) % 360f, podSetHue(6))
-        assertEquals((210f + 9 * 137.508f) % 360f, podSetHue(9))
+    fun `the first twelve hues avoid the red band and stay at least twenty degrees apart`() {
+        val hues = (0 until 12).map { podSetHue(it) }
+
+        // Red band of error text, either side of 0°.
+        assertTrue(hues.none { it >= 340f || it <= 20f }, "a hue sits in the red band: $hues")
+        for (i in hues.indices) {
+            for (j in i + 1 until hues.size) {
+                val d = abs(hues[i] - hues[j]).let { min(it, 360f - it) }
+                assertTrue(d >= 20f, "pods $i and $j are only $d° apart: ${hues[i]} vs ${hues[j]}")
+            }
+        }
+    }
+
+    @Test
+    fun `sets larger than twelve repeat the hues in order`() {
+        assertEquals(podSetHue(0), podSetHue(12))
+        assertEquals(podSetHue(5), podSetHue(17))
     }
 
     @Test

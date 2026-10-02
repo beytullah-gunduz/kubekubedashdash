@@ -129,16 +129,21 @@ internal fun ownerKey(podName: String): String {
 internal fun podPrefixColor(podName: String): Color = ClusterColor.fromContext(ownerKey(podName)).composeColor
 
 /**
- * Hues for the first pods of a pod set: blue and orange first (the pair
- * colour-blind viewers tell apart best), then violet, teal, yellow and
- * magenta. None sits in the red band of error text and no red/green pair is
- * among them — a golden-angle walk cannot promise that for even three pods
- * (from blue it lands on red-pink, then green).
+ * Hues for the pods of a pod set, in the order they are handed out. The first
+ * six are blue and orange (the pair colour-blind viewers tell apart best),
+ * then violet, teal, yellow and magenta: no red/green pair among them. The
+ * next six fill the gaps on the wheel. All twelve stay out of the red band of
+ * error text (340°–20°) and at least 20° apart. A computed walk (e.g. golden
+ * angle) cannot promise either: from blue it reaches red-pink at the second
+ * pod, and spliced after a list it collides with it at the seventh.
  */
-private val POD_SET_HUES = floatArrayOf(210f, 35f, 275f, 170f, 55f, 315f)
+private val POD_SET_HUES = floatArrayOf(210f, 35f, 275f, 170f, 55f, 315f, 115f, 242f, 85f, 190f, 145f, 295f)
 
-/** Hue of the [index]-th pod of a set: the curated list, then golden-angle steps. */
-internal fun podSetHue(index: Int): Float = if (index < POD_SET_HUES.size) POD_SET_HUES[index] else (210f + index * 137.508f) % 360f
+/**
+ * Hue of the [index]-th pod of a set. Sets larger than the list repeat its
+ * colours; the pod name in the prefix stays the cue that tells them apart.
+ */
+internal fun podSetHue(index: Int): Float = POD_SET_HUES[index % POD_SET_HUES.size]
 
 /**
  * Prefix colour for each pod of a tail.
