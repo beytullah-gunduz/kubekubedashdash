@@ -1283,3 +1283,19 @@ main img[data-zoom]:focus-visible {
         scroll-behavior: auto !important;
     }
 }
+
+/* Single-column tiles (below 900 px) have no neighbour to match, so never crop their screenshot. */
+@media (max-width: 899px) {
+    .tile img {
+        max-height: none;
+    }
+}
+
+/* On a phone (360 px and up) the config sample fits its card without scrolling: its longest line
+   is ~42 characters. Narrower screens scroll inside the card, never the page. */
+@media (max-width: 540px) {
+    .code-card pre {
+        font-size: 11px;
+        padding: 14px;
+    }
+}
