@@ -83,6 +83,9 @@ import com.kubekubedashdash.services.ActivePortForwards
 import com.kubekubedashdash.services.DrawerLogTab
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.logcapture.CapturePhase
+import com.kubekubedashdash.services.logtail.TailPodStatus
+import com.kubekubedashdash.services.logtail.TailState
+import com.kubekubedashdash.services.logtail.TailTarget
 import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.theme.kdInkOn
 import com.kubekubedashdash.ui.components.ActionTooltip
@@ -435,7 +438,7 @@ private fun drawerTabLabel(tab: DrawerLogTab): String = when (tab) {
 
     is ActiveNamespaceTail -> {
         val s by tab.task.state.collectAsState()
-        "${tab.displayLabel} (${s.attachedPods.size})"
+        tailTabLabel(tab.displayLabel, tab.task.target, s)
     }
 
     is ActivePortForwards -> {
@@ -445,6 +448,23 @@ private fun drawerTabLabel(tab: DrawerLogTab): String = when (tab) {
     }
 
     else -> tab.displayLabel
+}
+
+/**
+ * The tab-strip text of a tail. A namespace tail shows how many pods are
+ * attached. A pod-set tail shows "(streaming/selected)" only while at least one
+ * pod is streaming, waiting for a container or idle between restarts; once the
+ * set is over (Job pods that finished, pods that are gone) there is no suffix,
+ * so a finished tail never reads "(0/3)" as if it were broken.
+ */
+internal fun tailTabLabel(label: String, target: TailTarget, state: TailState): String = when (target) {
+    is TailTarget.Namespace -> "$label (${state.attachedPods.size})"
+
+    is TailTarget.Pods -> {
+        val statuses = state.podStatus.values
+        val live = statuses.any { it == TailPodStatus.STREAMING || it == TailPodStatus.WAITING || it == TailPodStatus.IDLE }
+        if (live) "$label (${statuses.count { it == TailPodStatus.STREAMING }}/${statuses.size})" else label
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

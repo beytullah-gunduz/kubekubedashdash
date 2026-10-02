@@ -7,6 +7,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CapturePodMapperTest {
@@ -139,5 +140,100 @@ class CapturePodMapperTest {
         assertEquals(0, missing.restartCount)
         assertFalse(missing.started)
         assertTrue(spec.containers.any { it.name == "app" && it.started })
+    }
+
+    @Test
+    fun `maps the current run id and the last terminated run with how it ended`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("pod-a").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").build())
+            .endSpec()
+            .withNewStatus()
+            .withPhase("Running")
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withRestartCount(2)
+                    .withContainerID("containerd://example-run-2")
+                    .withNewState().withNewRunning().endRunning().endState()
+                    .withNewLastState()
+                    .withNewTerminated()
+                    .withContainerID("containerd://example-run-1")
+                    .withReason("Error")
+                    .withExitCode(1)
+                    .withFinishedAt("2026-01-01T00:00:00Z")
+                    .endTerminated()
+                    .endLastState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val container = CapturePodMapper.map(pod).containers.single()
+
+        assertEquals("containerd://example-run-2", container.runId)
+        assertEquals("containerd://example-run-1", container.previousRunId)
+        assertEquals("Error, exit 1", container.previousExit)
+    }
+
+    @Test
+    fun `falls back to finishedAt when the terminated run has a blank container id`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("pod-a").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").build())
+            .endSpec()
+            .withNewStatus()
+            .withPhase("Running")
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withRestartCount(1)
+                    .withNewState().withNewWaiting().withReason("CrashLoopBackOff").endWaiting().endState()
+                    .withNewLastState()
+                    .withNewTerminated()
+                    .withContainerID("")
+                    .withReason("OOMKilled")
+                    .withExitCode(137)
+                    .withFinishedAt("2026-01-01T00:00:00Z")
+                    .endTerminated()
+                    .endLastState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val container = CapturePodMapper.map(pod).containers.single()
+
+        assertNull(container.runId)
+        assertEquals("2026-01-01T00:00:00Z", container.previousRunId)
+        assertEquals("OOMKilled, exit 137", container.previousExit)
+    }
+
+    @Test
+    fun `leaves the run fields null when the container never terminated`() {
+        val pod = PodBuilder()
+            .withNewMetadata().withName("pod-a").endMetadata()
+            .withNewSpec()
+            .withContainers(ContainerBuilder().withName("app").build())
+            .endSpec()
+            .withNewStatus()
+            .withPhase("Running")
+            .withContainerStatuses(
+                ContainerStatusBuilder()
+                    .withName("app")
+                    .withRestartCount(0)
+                    .withNewState().withNewRunning().endRunning().endState()
+                    .build(),
+            )
+            .endStatus()
+            .build()
+
+        val container = CapturePodMapper.map(pod).containers.single()
+
+        assertNull(container.runId)
+        assertNull(container.previousRunId)
+        assertNull(container.previousExit)
     }
 }

@@ -30,8 +30,11 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.clear_all_filled
 import com.kubekubedashdash.resources.delete_filled
+import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.monitor_heart_filled
 import com.kubekubedashdash.screenshots.ScreenshotHooks
+import com.kubekubedashdash.services.logtail.NamespaceTailEngine
+import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.ui.LocalConnectionError
 import com.kubekubedashdash.ui.LocalIsConnected
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
@@ -77,6 +80,9 @@ fun PodsScreen(
     onNavigate: (Screen) -> Unit,
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenTerminal: (String, String, String) -> Unit = { _, _, _ -> },
+    // Starts a live tail of exactly these pods and returns the display labels of
+    // the tails it replaced (one tail per cluster tab); see App.kt's onTailPods.
+    onTailPods: (List<TailPodRef>) -> List<String> = { emptyList() },
     selectPodUid: String? = null,
     // When a navigation target supplies a status allowlist (e.g. the
     // cluster-health banner clicking "3 pods in error"), seed the filter
@@ -109,6 +115,19 @@ fun PodsScreen(
     val delete = rememberConfirmableAction()
     var terminalPickerPod by remember { mutableStateOf<PodInfo?>(null) }
     var logsPickerPod by remember { mutableStateOf<PodInfo?>(null) }
+
+    // Shared by a row's "View logs" and a one-pod "Tail logs": a one-container
+    // pod opens straight away, a multi-container pod asks which container first.
+    val openPodLogs: (PodInfo) -> Unit = { pod ->
+        when {
+            pod.containers.size == 1 ->
+                onOpenLogs(pod.name, pod.namespace, pod.containers.first().name)
+
+            pod.containers.size > 1 -> logsPickerPod = pod
+
+            else -> onOpenLogs(pod.name, pod.namespace, null)
+        }
+    }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkPods by remember { mutableStateOf<List<PodInfo>>(emptyList()) }
     var pendingEvict by remember { mutableStateOf<PodInfo?>(null) }
@@ -259,12 +278,51 @@ fun PodsScreen(
                     // count it would flash "0 pods selected" on every Clear.
                     var lastSelectedCount by remember { mutableStateOf(0) }
                     if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
+                    // Not destructive, so no confirm dialog, and the selection is kept:
+                    // the usual next step (evict the noisy pod, delete the stuck one)
+                    // needs it. One pod is just that pod's log tab; a set is one merged tail.
+                    val tailSelection: () -> Unit = tail@{
+                        val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
+                        // The bar can still be clicked while it animates away with nothing selected.
+                        if (snapshot.isEmpty()) return@tail
+                        if (snapshot.size == 1) {
+                            openPodLogs(snapshot.single())
+                            return@tail
+                        }
+                        if (snapshot.map { it.namespace }.distinct().size > NamespaceTailEngine.MAX_TAIL_NAMESPACES) {
+                            feedback.info(
+                                "Tail at most ${NamespaceTailEngine.MAX_TAIL_NAMESPACES} namespaces at once",
+                                "Narrow the selection, or tail one namespace from Namespaces.",
+                            )
+                            return@tail
+                        }
+                        val replaced = onTailPods(snapshot.map { TailPodRef(it.namespace, it.name) })
+                        replaced.forEach { label ->
+                            feedback.info("Stopped $label", "Only one live tail runs per cluster tab.")
+                        }
+                        if (snapshot.sumOf { it.containers.size } > NamespaceTailEngine.MAX_STREAMS) {
+                            feedback.info(
+                                "Only ${NamespaceTailEngine.MAX_STREAMS} container streams attach",
+                                "The rest wait for a free slot.",
+                            )
+                        }
+                    }
                     AnimatedVisibility(selectedUids.isNotEmpty(), enter = enter, exit = exit) {
                         BulkSelectionBar(
                             selectedCount = lastSelectedCount,
                             kind = "pods",
                             onClear = { viewModel.selection.set(emptySet()) },
                         ) {
+                            BulkVerbButton(
+                                icon = Res.drawable.description_filled,
+                                label = "Tail logs",
+                                description = "Stream the selected pods' logs into one merged, colour-coded view " +
+                                    "in the log drawer. Follows container restarts; replacement pods with new " +
+                                    "names are not added. A crash-looping container also shows the output of " +
+                                    "its last crashed run.",
+                                tint = KdTextPrimary,
+                                onClick = tailSelection,
+                            )
                             BulkVerbButton(
                                 icon = Res.drawable.clear_all_filled,
                                 label = "Evict",
@@ -301,16 +359,7 @@ fun PodsScreen(
                             selectedPodUid = pod.uid
                             onNavigate(Screen.Detail.PodDetail(pod))
                         },
-                        onViewLogs = { pod ->
-                            when {
-                                pod.containers.size == 1 ->
-                                    onOpenLogs(pod.name, pod.namespace, pod.containers.first().name)
-
-                                pod.containers.size > 1 -> logsPickerPod = pod
-
-                                else -> onOpenLogs(pod.name, pod.namespace, null)
-                            }
-                        },
+                        onViewLogs = openPodLogs,
                         onOpenTerminal = { pod ->
                             when {
                                 pod.containers.size == 1 ->

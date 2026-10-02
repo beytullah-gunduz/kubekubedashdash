@@ -22,7 +22,7 @@ class LogPaneViewState {
     /** Pinned to the newest line: the pod pane's Follow chip, the tail pane's stickToBottom. */
     var follow by mutableStateOf(true)
 
-    /** Namespace tail only: pods whose lines are hidden. */
+    /** Tail panes (namespace or pod set): pods whose lines are hidden. */
     var mutedPods by mutableStateOf(emptySet<String>())
 
     // Last scroll position. Plain fields, not snapshot state: nothing renders

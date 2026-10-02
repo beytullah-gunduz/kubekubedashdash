@@ -69,6 +69,8 @@ import com.kubekubedashdash.services.logcapture.DefaultNamespaceLogCaptureGatewa
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureEngine
 import com.kubekubedashdash.services.logtail.DefaultNamespaceTailGateway
 import com.kubekubedashdash.services.logtail.NamespaceTailEngine
+import com.kubekubedashdash.services.logtail.TailPodRef
+import com.kubekubedashdash.services.logtail.TailTarget
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.terminal.JediTermPane
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
@@ -389,6 +391,28 @@ fun App(
                     }
                     if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
                 }
+            }
+        }
+
+        // The Pods screen's bulk "Tail logs": a tail of exactly the selected pods.
+        // Keyed on activeSession for the same reason as onTailLogs above. Returns
+        // the display labels of the tails this call replaced (one tail per cluster
+        // tab) so the screen can announce them; empty when none, or when there is
+        // no active session.
+        val onTailPods: (List<TailPodRef>) -> List<String> = remember(activeSession) {
+            { refs ->
+                activeSession?.let { session ->
+                    val target = TailTarget.Pods(refs.toSet())
+                    val result = LogStreamRegistry.openOrFocusTail(session, target) {
+                        NamespaceTailEngine.start(
+                            session.scope,
+                            DefaultNamespaceTailGateway(session.reactiveClient),
+                            target,
+                        )
+                    }
+                    if (drawerState == LogDrawerState.HIDDEN) drawerState = LogDrawerState.EXPANDED
+                    result.replaced
+                } ?: emptyList()
             }
         }
 
@@ -802,6 +826,7 @@ fun App(
                                     onOpenTerminal = onOpenTerminal,
                                     onCaptureLogs = onCaptureLogs,
                                     onTailLogs = onTailLogs,
+                                    onTailPods = onTailPods,
                                     onPortForward = onPortForward,
                                     bottomSlot = if (tab.key == drawerHostKey) logDrawer else null,
                                 )

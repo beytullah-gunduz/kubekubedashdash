@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.DetailHost
 import com.kubekubedashdash.ui.components.ReconnectOverlay
@@ -68,6 +69,7 @@ internal fun SessionPaneContent(
     onOpenTerminal: (String, String, String) -> Unit,
     onCaptureLogs: (String) -> Unit,
     onTailLogs: (String) -> Unit,
+    onTailPods: (List<TailPodRef>) -> List<String>,
     onPortForward: ((ClusterSession, PortForwardRequest) -> Unit)? = null,
     bottomSlot: (@Composable () -> Unit)? = null,
 ) {
@@ -235,6 +237,7 @@ internal fun SessionPaneContent(
                                             onOpenTerminal = onOpenTerminal,
                                             onCaptureLogs = onCaptureLogs,
                                             onTailLogs = onTailLogs,
+                                            onTailPods = onTailPods,
                                         )
                                     },
                                     detail = {
