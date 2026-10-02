@@ -284,6 +284,7 @@ private fun MetricRow(label: String, fraction: Float?, valueText: String, detail
                 color = KdTextPrimary,
                 textAlign = TextAlign.End,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(44.dp),
             )
         }
@@ -352,24 +353,31 @@ private fun podsValue(count: Int?, capacity: Int): String = when {
     else -> percentText(count.toFloat() / capacity)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ColumnScope.PhaseFooter(phases: PodPhaseCounts?, warnings: Int, timeWindow: TimeWindow, onShowWarnings: () -> Unit) {
     // Pushes the footer to the panel bottom so footers align across panels.
     Spacer(Modifier.weight(1f))
+    // The bar and the phase line only say what is wrong, and a narrow panel cuts the line: the
+    // hover text gives every count.
+    val breakdown = phaseBreakdown(phases)
     if (phases != null) {
-        PodStatusBar(phases.running, phases.pending, phases.failed, phases.succeeded)
+        TooltipArea(tooltip = { TriageTooltip(breakdown) }) {
+            PodStatusBar(phases.running, phases.pending, phases.failed, phases.succeeded)
+        }
     } else {
         Spacer(Modifier.height(6.dp))
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            phaseSummary(phases),
-            style = MaterialTheme.typography.labelSmall,
-            color = if ((phases?.failed ?: 0) > 0) KdError else KdTextSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        TooltipArea(tooltip = { TriageTooltip(breakdown) }, modifier = Modifier.weight(1f)) {
+            Text(
+                phaseSummary(phases),
+                style = MaterialTheme.typography.labelSmall,
+                color = if ((phases?.failed ?: 0) > 0) KdError else KdTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Spacer(Modifier.width(8.dp))
         WarningsChip(warnings, timeWindow, onShowWarnings)
     }
@@ -540,16 +548,17 @@ private fun TopNodesPanel(
             maxLines = 1,
         )
         topNodes.forEach { node ->
-            TopNodeRow(
-                node.usage,
-                onClick = { onNodeClick(node) },
-                leading = {
-                    TooltipArea(tooltip = { TriageTooltip(node.contextName) }) {
+            // A narrow panel cuts the node name; the hover text gives it with its cluster.
+            TooltipArea(tooltip = { TriageTooltip("${node.usage.nodeName}\n${node.contextName}") }) {
+                TopNodeRow(
+                    node.usage,
+                    onClick = { onNodeClick(node) },
+                    leading = {
                         ClusterDot(colorOf(node.contextName), contentDescription = node.contextName)
-                    }
-                    Spacer(Modifier.width(6.dp))
-                },
-            )
+                        Spacer(Modifier.width(6.dp))
+                    },
+                )
+            }
         }
     }
 }

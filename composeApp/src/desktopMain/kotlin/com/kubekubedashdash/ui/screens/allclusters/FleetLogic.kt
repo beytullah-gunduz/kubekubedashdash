@@ -54,6 +54,13 @@ internal fun phaseSummary(phases: PodPhaseCounts?): String {
     return if (parts.isEmpty()) "None failed or pending" else parts.joinToString(" · ")
 }
 
+/** Every phase count, for the hover text of a panel's pod bar and phase line. */
+internal fun phaseBreakdown(phases: PodPhaseCounts?): String = if (phases == null) {
+    "Loading"
+} else {
+    "${phases.running} running · ${phases.pending} pending · ${phases.failed} failed · ${phases.succeeded} succeeded"
+}
+
 /** used / capacity, or null when the capacity is unknown. */
 internal fun usageFraction(used: Long, capacity: Long): Float? = if (capacity > 0) used.toFloat() / capacity else null
 

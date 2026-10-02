@@ -95,6 +95,12 @@ class FleetLogicTest {
     }
 
     @Test
+    fun `phaseBreakdown gives every phase count`() {
+        assertEquals("Loading", phaseBreakdown(null))
+        assertEquals("10 running · 4 pending · 14 failed · 2 succeeded", phaseBreakdown(PodPhaseCounts(10, 4, 14, 2)))
+    }
+
+    @Test
     fun `percentText follows the gauges rule`() {
         assertEquals("0%", percentText(0f))
         assertEquals("9.4%", percentText(0.094f))

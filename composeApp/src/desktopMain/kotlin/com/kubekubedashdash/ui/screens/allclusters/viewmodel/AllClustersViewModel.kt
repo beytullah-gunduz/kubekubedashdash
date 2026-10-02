@@ -284,7 +284,7 @@ class AllClustersViewModel internal constructor(
 
     // ── Cluster summaries ─────────────────────────────────────────────────────────
 
-    /** One summary card per open cluster session. */
+    /** One summary per open cluster tab, in tab order; the fleet strip draws a panel for each. */
     val clusterSummaries: StateFlow<List<ClusterSummary>> = clusterTabs
         .flatMapLatest { tabs ->
             if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
@@ -363,7 +363,7 @@ class AllClustersViewModel internal constructor(
                 ?: summaries.firstOrNull()?.contextName
             if (target.isNullOrEmpty()) return
             _filters.value = EventTriageFilters(
-                types = setOf("Warning", "Error"),
+                types = EventTriageFilters.DEFAULT_TYPES,
                 clusters = setOf(target),
                 namespaces = emptySet(),
                 reasons = emptySet(),

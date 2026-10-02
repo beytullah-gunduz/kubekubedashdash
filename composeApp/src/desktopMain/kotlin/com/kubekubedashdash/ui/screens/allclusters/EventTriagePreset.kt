@@ -23,7 +23,7 @@ fun buildBuiltIns(summaries: List<AllClustersViewModel.ClusterSummary>): List<Ev
         id = "critical-only",
         name = "Critical only",
         filters = EventTriageFilters(
-            types = setOf("Warning", "Error"),
+            types = EventTriageFilters.DEFAULT_TYPES,
             clusters = emptySet(),
             namespaces = emptySet(),
             reasons = emptySet(),
@@ -38,7 +38,7 @@ fun buildBuiltIns(summaries: List<AllClustersViewModel.ClusterSummary>): List<Ev
         name = "This cluster only",
         // Placeholder — recomputed at apply-time from live clusterSummaries.
         filters = EventTriageFilters(
-            types = setOf("Warning", "Error"),
+            types = EventTriageFilters.DEFAULT_TYPES,
             clusters = emptySet(),
             namespaces = emptySet(),
             reasons = emptySet(),

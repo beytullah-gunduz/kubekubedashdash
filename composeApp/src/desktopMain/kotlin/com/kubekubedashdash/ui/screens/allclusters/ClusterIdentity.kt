@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.ui.ClusterColor
 
@@ -84,7 +84,7 @@ internal fun ClusterNameLabel(
 /** The plain hover tooltip used across the All Clusters tab. */
 @Composable
 internal fun TriageTooltip(text: String) {
-    Surface(shape = RoundedCornerShape(6.dp), color = KdSurface, shadowElevation = 4.dp, tonalElevation = 2.dp) {
+    Surface(shape = 6.dp.kdCorner, color = KdSurface, shadowElevation = 4.dp, tonalElevation = 2.dp) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
