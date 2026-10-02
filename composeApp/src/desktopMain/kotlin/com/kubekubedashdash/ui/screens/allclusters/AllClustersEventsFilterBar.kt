@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
@@ -85,12 +87,12 @@ internal fun AllClustersEventsFilterBar(
         // Type filter
         FilterChip(
             label = "Type",
-            active = filters.types.isNotEmpty() && filters.types != availableTypes,
+            active = typeFilterActive(filters.types, availableTypes),
             summary = if (filters.types.isEmpty()) "All" else filters.types.joinToString(", "),
         ) {
             ColumnFilterDropdown(
                 expanded = showTypeFilter,
-                active = filters.types.isNotEmpty() && filters.types != availableTypes,
+                active = typeFilterActive(filters.types, availableTypes),
                 onToggle = { showTypeFilter = !showTypeFilter },
                 onDismiss = { showTypeFilter = false },
                 availableValues = availableTypes.ifEmpty { setOf("Normal", "Warning", "Error") },
@@ -114,9 +116,10 @@ internal fun AllClustersEventsFilterBar(
                 active = filters.clusters.isNotEmpty(),
                 summary = when {
                     filters.clusters.isEmpty() -> "All (${availableClusters.size})"
-                    filters.clusters.size == 1 -> filters.clusters.first().substringAfterLast("/").take(16)
+                    filters.clusters.size == 1 -> filters.clusters.first()
                     else -> "${filters.clusters.size}/${availableClusters.size}"
                 },
+                summaryOverflow = TextOverflow.StartEllipsis,
             ) {
                 ColumnFilterDropdown(
                     expanded = showClusterFilter,
@@ -146,7 +149,7 @@ internal fun AllClustersEventsFilterBar(
                 active = filters.namespaces.isNotEmpty(),
                 summary = when {
                     filters.namespaces.isEmpty() -> "All"
-                    filters.namespaces.size == 1 -> filters.namespaces.first().take(12)
+                    filters.namespaces.size == 1 -> filters.namespaces.first()
                     else -> "${filters.namespaces.size}/${availableNamespaces.size}"
                 },
             ) {
@@ -177,7 +180,7 @@ internal fun AllClustersEventsFilterBar(
                 active = filters.reasons.isNotEmpty(),
                 summary = when {
                     filters.reasons.isEmpty() -> "All"
-                    filters.reasons.size == 1 -> filters.reasons.first().take(14)
+                    filters.reasons.size == 1 -> filters.reasons.first()
                     else -> "${filters.reasons.size} selected"
                 },
             ) {
@@ -303,6 +306,7 @@ private fun FilterChip(
     label: String,
     active: Boolean,
     summary: String,
+    summaryOverflow: TextOverflow = TextOverflow.Ellipsis,
     filterDropdown: @Composable () -> Unit,
 ) {
     Box(contentAlignment = Alignment.CenterStart) {
@@ -322,9 +326,17 @@ private fun FilterChip(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "$label: $summary",
+                text = "$label:",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (active) KdPrimary else KdTextSecondary,
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (active) KdPrimary else KdTextSecondary,
+                maxLines = 1,
+                overflow = summaryOverflow,
+                modifier = Modifier.widthIn(max = 160.dp),
             )
             filterDropdown()
         }

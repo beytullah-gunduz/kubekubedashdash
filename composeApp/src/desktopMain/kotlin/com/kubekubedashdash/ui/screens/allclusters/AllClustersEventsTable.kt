@@ -1,5 +1,7 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -40,6 +44,8 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
@@ -76,15 +82,17 @@ internal fun AllClustersEventsTable(
     mode: ViewMode,
     hasActiveFilters: Boolean,
     onClearFilters: () -> Unit,
+    onEventClick: (EventInfo) -> Unit,
 ) {
+    val colorOf = rememberClusterColorOf()
     BoxWithConstraints {
         val tableWidth = maxWidth
 
         when {
             events.isEmpty() && hasActiveFilters -> EmptyFilterState(onClearFilters)
             events.isEmpty() -> EmptyFilterState(onClearFilters = null)
-            mode == ViewMode.RAW -> RawEventsTable(events = events, tableWidth = tableWidth)
-            else -> GroupedEventsTable(groups = groupedEvents, tableWidth = tableWidth)
+            mode == ViewMode.RAW -> RawEventsTable(events, tableWidth, colorOf, onEventClick)
+            else -> GroupedEventsTable(groupedEvents, tableWidth, colorOf, onEventClick)
         }
     }
 }
@@ -92,11 +100,12 @@ internal fun AllClustersEventsTable(
 // ── Raw mode ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
-    val allColumns = buildRawColumns()
+private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp, colorOf: (String) -> Color, onEventClick: (EventInfo) -> Unit) {
+    val allColumns = buildRawColumns(colorOf)
     val visibleColumns = allColumns.filter { it.minTableWidth == null || tableWidth >= it.minTableWidth }
     val columns = visibleColumns.map { it.def }
 
+    val eventsById = remember(events) { events.associateBy { "${it.sessionId.orEmpty()}:${it.uid}" } }
     val rows = events.map { ev ->
         val rowBg = rowBackground(ev.type)
         TableRow(
@@ -112,7 +121,7 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
     ResourceTable(
         columns = columns,
         rows = rows,
-        onRowClick = null,
+        onRowClick = { row -> eventsById[row.id]?.let(onEventClick) },
         selectedRowId = null,
         emptyMessage = "No events found",
         defaultSortHeader = "Last Seen",
@@ -126,7 +135,7 @@ private fun RawEventsTable(events: List<EventInfo>, tableWidth: Dp) {
 // ── Grouped mode ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
+private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp, colorOf: (String) -> Color, onEventClick: (EventInfo) -> Unit) {
     val expandedKeys = remember { mutableStateSetOf<GroupKey>() }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -210,14 +219,16 @@ private fun GroupedEventsTable(groups: List<EventGroup>, tableWidth: Dp) {
                             group = group,
                             isExpanded = isExpanded,
                             tableWidth = tableWidth,
+                            colorOf = colorOf,
                             onClick = {
                                 if (isExpanded) expandedKeys.remove(group.key) else expandedKeys.add(group.key)
                             },
+                            onOpenEvent = { onEventClick(group.members.single()) },
                         )
                     }
                     if (isExpanded) {
                         items(group.members, key = { ev -> "member:${ev.sessionId.orEmpty()}:${ev.uid}" }) { ev ->
-                            MemberRow(ev = ev, tableWidth = tableWidth)
+                            MemberRow(ev = ev, tableWidth = tableWidth, colorOf = colorOf, onClick = { onEventClick(ev) })
                         }
                     }
                 }
@@ -246,7 +257,9 @@ private fun GroupHeaderRow(
     group: EventGroup,
     isExpanded: Boolean,
     tableWidth: Dp,
+    colorOf: (String) -> Color,
     onClick: () -> Unit,
+    onOpenEvent: () -> Unit,
 ) {
     val bg = rowBackground(group.key.type)
     val borderColor = KdBorder.copy(alpha = 0.6f)
@@ -256,7 +269,7 @@ private fun GroupHeaderRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg ?: androidx.compose.ui.graphics.Color.Transparent)
-            .let { if (isSingleMember) it else it.clickable(onClick = onClick) }
+            .clickable(onClick = if (isSingleMember) onOpenEvent else onClick)
             .padding(horizontal = 16.dp, vertical = 7.dp.orCompact(3.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -277,7 +290,7 @@ private fun GroupHeaderRow(
             EventTypeIcon(group.key.type)
         }
         Box(modifier = Modifier.width(150.dp)) {
-            if (!isSingleMember) {
+            if (showsTrend(group.bucketHistogram)) {
                 Sparkline(
                     buckets = group.bucketHistogram,
                     modifier = Modifier.matchParentSize(),
@@ -307,13 +320,34 @@ private fun GroupHeaderRow(
         if (tableWidth >= 650.dp) {
             Box(modifier = Modifier.weight(1f)) {
                 val omitCount = isSingleMember && group.perClusterCounts.size == 1
-                val summary = group.perClusterCounts.entries
-                    .sortedByDescending { it.value }
-                    .joinToString(", ") { (cluster, count) ->
-                        val name = cluster.substringAfterLast("/").take(12)
-                        if (omitCount) name else "$name ($count)"
-                    }
-                CellText(summary)
+                GroupClustersCell(group.perClusterCounts, omitCount, colorOf)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GroupClustersCell(perCluster: Map<String, Int>, omitCount: Boolean, colorOf: (String) -> Color) {
+    if (perCluster.size == 1) {
+        val (name, count) = perCluster.entries.single()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ClusterNameLabel(name, colorOf(name), Modifier.weight(1f, fill = false))
+            if (!omitCount) CellText(" ($count)")
+        }
+        return
+    }
+    TooltipArea(tooltip = { TriageTooltip(clusterCountsTooltip(perCluster)) }) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            perCluster.entries.sortedByDescending { it.value }.forEach { (name, count) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$name: $count" },
+                ) {
+                    ClusterDot(colorOf(name))
+                    Spacer(Modifier.width(4.dp))
+                    CellText("$count")
+                }
             }
         }
     }
@@ -323,12 +357,15 @@ private fun GroupHeaderRow(
 private fun MemberRow(
     ev: EventInfo,
     tableWidth: Dp,
+    colorOf: (String) -> Color,
+    onClick: () -> Unit,
 ) {
     val bg = rowBackground(ev.type)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg ?: androidx.compose.ui.graphics.Color.Transparent)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 5.dp.orCompact(2.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -349,7 +386,10 @@ private fun MemberRow(
             Box(modifier = Modifier.width(88.dp)) { CellText(ev.lastSeen) }
         }
         if (tableWidth >= 650.dp) {
-            Box(modifier = Modifier.weight(1f)) { CellText(ev.cluster ?: "—") }
+            Box(modifier = Modifier.weight(1f)) {
+                val cluster = ev.cluster
+                if (cluster != null) ClusterNameLabel(cluster, colorOf(cluster)) else CellText("—")
+            }
         }
     }
 }
@@ -402,7 +442,7 @@ private fun rowBackground(type: String) = when (type) {
     else -> null
 }
 
-private fun buildRawColumns() = listOf(
+private fun buildRawColumns(colorOf: (String) -> Color) = listOf(
     EventColumn(
         def = ColumnDef(header = "Type", width = 50.dp),
         cell = { ev -> CellData(text = ev.type, content = { EventTypeIcon(ev.type) }) },
@@ -431,8 +471,11 @@ private fun buildRawColumns() = listOf(
         minTableWidth = 950.dp,
     ),
     EventColumn(
-        def = ColumnDef("Cluster", width = 140.dp),
-        cell = { ev -> CellData(ev.cluster ?: "—") },
+        def = ColumnDef("Cluster", width = 180.dp),
+        cell = { ev ->
+            val name = ev.cluster
+            if (name == null) CellData("—") else CellData(name, content = { ClusterNameLabel(name, colorOf(name)) })
+        },
         minTableWidth = 650.dp,
     ),
     EventColumn(

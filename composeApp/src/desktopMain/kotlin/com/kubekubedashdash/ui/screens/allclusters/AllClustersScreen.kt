@@ -124,6 +124,7 @@ fun AllClustersScreen() {
                     mode = filters.mode,
                     hasActiveFilters = !filters.isDefault,
                     onClearFilters = viewModel::resetFilters,
+                    onEventClick = { ev -> eventJumpTarget(ev)?.let { (sessionId, screen) -> WorkspaceManager.openInClusterTab(sessionId, screen) } },
                 )
             }
         }

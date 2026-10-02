@@ -1,5 +1,7 @@
 package com.kubekubedashdash.ui.screens.allclusters
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,13 +18,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AllClustersReasonHeatmap(
     data: HeatmapData,
@@ -33,6 +36,7 @@ internal fun AllClustersReasonHeatmap(
         return
     }
 
+    val colorOf = rememberClusterColorOf()
     val allNonZeroValues = data.cells.values.filter { it > 0 }
     val clusterColumnWidth = 180.dp
 
@@ -50,7 +54,7 @@ internal fun AllClustersReasonHeatmap(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Leading empty column (120dp)
+            // Leading empty column (clusterColumnWidth)
             Box(modifier = Modifier.width(clusterColumnWidth))
 
             // Reason header cells
@@ -59,15 +63,17 @@ internal fun AllClustersReasonHeatmap(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = reason,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KdTextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.width(80.dp),
-                        fontSize = 10.sp,
-                    )
+                    TooltipArea(tooltip = { TriageTooltip(reason) }) {
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KdTextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
@@ -79,15 +85,8 @@ internal fun AllClustersReasonHeatmap(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Cluster name label (120dp)
-                Text(
-                    text = cluster,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = KdTextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(clusterColumnWidth),
-                )
+                // Cluster name label (clusterColumnWidth)
+                ClusterNameLabel(cluster, colorOf(cluster), Modifier.width(clusterColumnWidth))
 
                 // Cell per reason
                 data.reasons.forEach { reason ->
