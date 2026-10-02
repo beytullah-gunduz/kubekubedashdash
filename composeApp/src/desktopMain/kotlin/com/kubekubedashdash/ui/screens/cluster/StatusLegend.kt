@@ -13,12 +13,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextSecondary
 
 @Composable
-internal fun StatusLegend(label: String, count: Int, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+internal fun StatusLegend(label: String, count: Int, color: Color, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(10.dp)
@@ -29,6 +30,8 @@ internal fun StatusLegend(label: String, count: Int, color: Color) {
             "$label: $count",
             style = MaterialTheme.typography.bodySmall,
             color = KdTextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

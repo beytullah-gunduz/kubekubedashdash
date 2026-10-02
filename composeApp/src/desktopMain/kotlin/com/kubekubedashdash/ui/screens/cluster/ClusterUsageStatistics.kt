@@ -8,7 +8,10 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,6 +67,7 @@ data class UsageScope(val title: String, val note: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ClusterUsageStatistics(
     phaseCounts: PodPhaseCounts?,
@@ -130,70 +134,99 @@ fun ClusterUsageStatistics(
                 exit = shrinkVertically() + fadeOut(),
             ) {
                 Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 18.dp)) {
-                    Row(
+                    // A third gauge that doesn't fit drops to its own line; the
+                    // padding keeps the captions ("cores", "GiB") from touching.
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
                     ) {
-                        ClusterCpuGauge(usage, cpuHistory)
-                        ClusterMemoryGauge(usage, memHistory)
-                        ClusterPodsGauge(podsCount, podsCapacity, podsLoaded, podsHistory)
+                        Box(Modifier.padding(horizontal = GAUGE_GAP / 2)) { ClusterCpuGauge(usage, cpuHistory) }
+                        Box(Modifier.padding(horizontal = GAUGE_GAP / 2)) { ClusterMemoryGauge(usage, memHistory) }
+                        Box(Modifier.padding(horizontal = GAUGE_GAP / 2)) { ClusterPodsGauge(podsCount, podsCapacity, podsLoaded, podsHistory) }
                     }
 
                     Spacer(Modifier.height(20.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Pod Status",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = KdTextPrimary,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            if (phaseCounts == null) {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = KdPrimary,
-                                    )
+                    val showTopNodes = topNodes.size >= 3 && usage?.metricsAvailable == true
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        if (usageSectionsSideBySide(maxWidth)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                            ) {
+                                PodStatusSection(phaseCounts, Modifier.weight(1f))
+                                if (showTopNodes) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TopNodesByPressure(topNodes, onNodeClick)
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
-                            } else {
-                                PodStatusBar(
-                                    phaseCounts.running,
-                                    phaseCounts.pending,
-                                    phaseCounts.failed,
-                                    phaseCounts.succeeded,
-                                )
-                                Spacer(Modifier.height(10.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceAround,
-                                ) {
-                                    StatusLegend("Running", phaseCounts.running, KdSuccess)
-                                    StatusLegend("Pending", phaseCounts.pending, KdWarning)
-                                    StatusLegend("Failed", phaseCounts.failed, KdError)
-                                    StatusLegend("Succeeded", phaseCounts.succeeded, KdInfo)
-                                }
-                            }
-                        }
-
-                        if (topNodes.size >= 3 && usage?.metricsAvailable == true) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                TopNodesByPressure(topNodes, onNodeClick)
                             }
                         } else {
-                            Spacer(modifier = Modifier.weight(1f))
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                PodStatusSection(phaseCounts, Modifier.fillMaxWidth())
+                                if (showTopNodes) {
+                                    Spacer(Modifier.height(20.dp))
+                                    TopNodesByPressure(topNodes, onNodeClick)
+                                }
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private val GAUGE_GAP = 16.dp
+private val LEGEND_GAP = 16.dp
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PodStatusSection(phaseCounts: PodPhaseCounts?, modifier: Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            "Pod Status",
+            style = MaterialTheme.typography.labelLarge,
+            color = KdTextPrimary,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(8.dp))
+        if (phaseCounts == null) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = KdPrimary,
+                )
+            }
+        } else {
+            PodStatusBar(
+                phaseCounts.running,
+                phaseCounts.pending,
+                phaseCounts.failed,
+                phaseCounts.succeeded,
+            )
+            Spacer(Modifier.height(10.dp))
+            // Wraps onto a second line rather than squeezing the last entry
+            // into one letter per line; the padding is the gap SpaceAround
+            // alone doesn't guarantee.
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val itemModifier = Modifier.padding(horizontal = LEGEND_GAP / 2)
+                StatusLegend("Running", phaseCounts.running, KdSuccess, itemModifier)
+                StatusLegend("Pending", phaseCounts.pending, KdWarning, itemModifier)
+                StatusLegend("Failed", phaseCounts.failed, KdError, itemModifier)
+                StatusLegend("Succeeded", phaseCounts.succeeded, KdInfo, itemModifier)
             }
         }
     }
