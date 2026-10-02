@@ -64,6 +64,7 @@ object PreferenceRepository {
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
     private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
     private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
+    private val HEATMAP_AUTO_OPEN_DISMISSED by lazy { booleanPreferencesKey("heatmap_auto_open_dismissed") }
     private val DEMO_NODES_MIN by lazy { intPreferencesKey("demo_nodes_min") }
     private val DEMO_NODES_MAX by lazy { intPreferencesKey("demo_nodes_max") }
     private val DEMO_PODS_MIN by lazy { intPreferencesKey("demo_pods_min") }
@@ -137,6 +138,11 @@ object PreferenceRepository {
 
     private val _sidebarCollapsed = MutableStateFlow(false)
     val sidebarCollapsed: StateFlow<Boolean> = _sidebarCollapsed.asStateFlow()
+
+    // The user closed the All Clusters heatmap, so it no longer opens by itself;
+    // opening it by hand clears this.
+    private val _heatmapAutoOpenDismissed = MutableStateFlow(false)
+    val heatmapAutoOpenDismissed: StateFlow<Boolean> = _heatmapAutoOpenDismissed.asStateFlow()
 
     private val _demoTargets = MutableStateFlow(
         DemoClusterSimulator.Targets(nodesMin = 30, nodesMax = 100, podsMin = 300, podsMax = 1000),
@@ -286,6 +292,7 @@ object PreferenceRepository {
                     _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
                     _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
                     _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
+                    _heatmapAutoOpenDismissed.value = p[HEATMAP_AUTO_OPEN_DISMISSED] ?: false
                     _demoTargets.value = DemoClusterSimulator.Targets(
                         nodesMin = p[DEMO_NODES_MIN] ?: 30,
                         nodesMax = p[DEMO_NODES_MAX] ?: 100,
@@ -425,6 +432,11 @@ object PreferenceRepository {
     fun setSidebarCollapsed(value: Boolean) {
         _sidebarCollapsed.value = value
         ioScope.launch { dataStore.edit { it[SIDEBAR_COLLAPSED] = value } }
+    }
+
+    fun setHeatmapAutoOpenDismissed(value: Boolean) {
+        _heatmapAutoOpenDismissed.value = value
+        ioScope.launch { dataStore.edit { it[HEATMAP_AUTO_OPEN_DISMISSED] = value } }
     }
 
     fun setMaskSecretValues(value: Boolean) {

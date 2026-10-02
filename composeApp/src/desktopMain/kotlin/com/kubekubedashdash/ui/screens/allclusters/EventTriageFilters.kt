@@ -14,7 +14,7 @@ enum class ViewMode { RAW, GROUPED }
 
 @Serializable
 data class EventTriageFilters(
-    val types: Set<String> = setOf("Warning", "Error"),
+    val types: Set<String> = DEFAULT_TYPES,
     val clusters: Set<String> = emptySet(),
     val namespaces: Set<String> = emptySet(),
     val reasons: Set<String> = emptySet(),
@@ -24,11 +24,16 @@ data class EventTriageFilters(
     val heatmapVisible: Boolean = false,
 ) {
     val isDefault: Boolean
-        get() = types == setOf("Warning", "Error") &&
+        get() = types == DEFAULT_TYPES &&
             clusters.isEmpty() &&
             namespaces.isEmpty() &&
             reasons.isEmpty() &&
             searchText.isEmpty() &&
             timeWindow == TimeWindow.LAST_1H &&
             !heatmapVisible
+
+    companion object {
+        /** The type allowlist a fresh All Clusters tab starts with. */
+        val DEFAULT_TYPES: Set<String> = setOf("Warning", "Error")
+    }
 }

@@ -9,6 +9,7 @@ import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
+import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.services.WorkspaceManager
@@ -20,6 +21,7 @@ import com.kubekubedashdash.ui.screens.allclusters.HeatmapData
 import com.kubekubedashdash.ui.screens.allclusters.TimeWindow
 import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
+import com.kubekubedashdash.ui.screens.allclusters.rankTopNodes
 import com.kubekubedashdash.util.ReactiveKubeClient
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -75,6 +77,14 @@ class AllClustersViewModel internal constructor(
         // The tab's selected namespace, which its pods, usage and events follow;
         // null is all namespaces.
         val namespace: String? = null,
+        // This tab's own usage reading: used figures follow its namespace,
+        // capacity is whole-cluster. Null until the first reading.
+        val usage: ResourceUsageSummary? = null,
+        // Pods in the tab's namespace scope; null until cluster info loads.
+        val podsCount: Int? = null,
+        // Allocatable pod slots over the cluster's nodes; 0 until nodes load.
+        val podsCapacity: Int = 0,
+        val phaseCounts: PodPhaseCounts? = null,
     )
 
     private data class ClusterSummaryBase(
@@ -274,7 +284,7 @@ class AllClustersViewModel internal constructor(
 
     // ── Cluster summaries ─────────────────────────────────────────────────────────
 
-    /** One summary card per open cluster session. */
+    /** One summary per open cluster tab, in tab order; the fleet strip draws a panel for each. */
     val clusterSummaries: StateFlow<List<ClusterSummary>> = clusterTabs
         .flatMapLatest { tabs ->
             if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
@@ -296,7 +306,13 @@ class AllClustersViewModel internal constructor(
                             namespace = namespace,
                         )
                     }
-                    combine(base, aggregatedEvents, _filters, timeWindowTicker) { b, events, filters, _ ->
+                    val load = combine(
+                        tab.session.reactiveClient.resourceUsage,
+                        tab.session.reactiveClient.nodes,
+                    ) { usageState, nodesState ->
+                        (usageState as? ResourceState.Success)?.data to podSlots(nodesState)
+                    }
+                    combine(base, load, aggregatedEvents, _filters, timeWindowTicker) { b, loaded, events, filters, _ ->
                         val cutoff = Instant.now().minusSeconds(filters.timeWindow.minutes * 60)
                         val recentErrors = events.count { ev ->
                             ev.cluster == b.ctx &&
@@ -312,6 +328,10 @@ class AllClustersViewModel internal constructor(
                             namespaceCount = b.info?.namespacesCount ?: 0,
                             recentErrorCount = recentErrors,
                             namespace = b.namespace,
+                            usage = loaded.first,
+                            podsCount = b.info?.podsCount,
+                            podsCapacity = loaded.second,
+                            phaseCounts = b.info?.let { PodPhaseCounts(it.runningPods, it.pendingPods, it.failedPods, it.succeededPods) },
                         )
                     }
                 },
@@ -343,7 +363,7 @@ class AllClustersViewModel internal constructor(
                 ?: summaries.firstOrNull()?.contextName
             if (target.isNullOrEmpty()) return
             _filters.value = EventTriageFilters(
-                types = setOf("Warning", "Error"),
+                types = EventTriageFilters.DEFAULT_TYPES,
                 clusters = setOf(target),
                 namespaces = emptySet(),
                 reasons = emptySet(),
@@ -518,15 +538,21 @@ class AllClustersViewModel internal constructor(
         .map { it.value }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Top 3 nodes by pressure fraction across all open sessions. */
-    val topNodesAcrossAllClusters: StateFlow<List<NodeResourceUsage>> = clusterTabs
+    /** A node's usage and the open cluster tab it was read from. */
+    data class ClusterNodeUsage(val sessionId: SessionId, val contextName: String, val usage: NodeResourceUsage)
+
+    /** The three most-pressured nodes across all open tabs, each tagged with its tab. */
+    val topClusterNodes: StateFlow<List<ClusterNodeUsage>> = clusterTabs
         .flatMapLatest { tabs ->
             if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
-            combine(tabs.map { tab -> tab.session.reactiveClient.nodeUsages }) { usageMaps ->
-                usageMaps.flatMap { it.values }
-                    .sortedByDescending { it.pressureFraction }
-                    .take(3)
-            }
+            combine(
+                tabs.map { tab ->
+                    combine(tab.session.viewModel.selectedContext, tab.session.reactiveClient.nodeUsages) { ctx, usages ->
+                        // Same blank-context key as aggregatedEvents, so the dot matches the events table.
+                        usages.values.map { ClusterNodeUsage(tab.session.id, ctx.ifBlank { "?" }, it) }
+                    }
+                },
+            ) { perTab -> rankTopNodes(perTab.toList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

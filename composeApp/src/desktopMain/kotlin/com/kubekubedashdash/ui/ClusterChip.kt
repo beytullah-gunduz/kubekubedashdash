@@ -54,7 +54,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -72,6 +71,7 @@ import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.theme.kdInkOn
+import com.kubekubedashdash.ui.components.truncateStart
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import java.awt.MouseInfo
@@ -479,39 +479,6 @@ private fun ClusterAvatar(
             }
         }
     }
-}
-
-/**
- * Width-measured start-side truncation. If [label] is wider than
- * [maxWidthPx] at [style], returns `"…" + label.takeLast(n)` where `n` is
- * the largest tail length whose rendered width still fits. Otherwise
- * returns [label] unchanged. Uses binary search over `n` so a long ARN
- * costs ~`log2(label.length)` measurements (~10 for a 1k-char string).
- */
-private fun truncateStart(
-    label: String,
-    measurer: TextMeasurer,
-    style: TextStyle,
-    maxWidthPx: Int,
-): String {
-    if (label.isEmpty()) return label
-    val fullWidth = measurer.measure(label, style, maxLines = 1).size.width
-    if (fullWidth <= maxWidthPx) return label
-    var lo = 0
-    var hi = label.length
-    var best = "…"
-    while (lo <= hi) {
-        val mid = (lo + hi) / 2
-        val candidate = "…" + label.takeLast(mid)
-        val candidateWidth = measurer.measure(candidate, style, maxLines = 1).size.width
-        if (candidateWidth <= maxWidthPx) {
-            best = candidate
-            lo = mid + 1
-        } else {
-            hi = mid - 1
-        }
-    }
-    return best
 }
 
 @Composable

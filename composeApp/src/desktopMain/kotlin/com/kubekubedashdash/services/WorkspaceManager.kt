@@ -3,6 +3,7 @@ package com.kubekubedashdash.services
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPosition
+import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
@@ -367,6 +368,31 @@ object WorkspaceManager {
             win.requestFocus()
         }
         return true
+    }
+
+    /**
+     * Shows [screen] in the cluster tab holding [sessionId] and brings that tab
+     * forward: the All Clusters tab's jump into one cluster. Navigates first so
+     * the tab appears already on [screen]. False when no open tab holds it.
+     */
+    fun openInClusterTab(sessionId: SessionId, screen: Screen): Boolean {
+        val session = _workspaces.value.asSequence()
+            .flatMap { it.tabs.value.asSequence() }
+            .filterIsInstance<WorkspaceTab.Cluster>()
+            .firstOrNull { it.session.id == sessionId }
+            ?.session ?: return false
+        val current = session.viewModel.currentScreen.value
+        // A tab still connecting rewrites its screen every second and lands on
+        // the overview when it connects, so a jump there would be lost.
+        if (current is Screen.Main.Connecting || current is Screen.Main.ConnectionError) {
+            return activateClusterTab(sessionId)
+        }
+        // navigate() treats an identical screen value as "already there": with
+        // the detail pane open it would close the very pane this jump opens,
+        // with it closed it returns early. The tab already shows the target
+        // list either way; only raise it.
+        if (current != screen) session.viewModel.navigate(screen)
+        return activateClusterTab(sessionId)
     }
 
     /**
