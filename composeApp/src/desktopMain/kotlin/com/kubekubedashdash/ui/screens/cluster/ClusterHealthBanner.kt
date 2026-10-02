@@ -2,11 +2,15 @@ package com.kubekubedashdash.ui.screens.cluster
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +31,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
@@ -73,6 +78,7 @@ internal enum class HealthSegment {
  * fixed-height placeholder so the cards below don't shift when the first
  * value lands.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ClusterHealthBanner(
     health: ClusterHealthSummary?,
@@ -92,7 +98,9 @@ internal fun ClusterHealthBanner(
         // screen reader announces the new state without the user having to
         // find the banner. Polite (not Assertive) so it doesn't interrupt
         // the user mid-sentence; this isn't a modal alert.
-        modifier = modifier.fillMaxWidth().height(BANNER_HEIGHT)
+        // A minimum, not a fixed height: a narrow window wraps the segments
+        // onto a second line, which a fixed height clipped.
+        modifier = modifier.fillMaxWidth().heightIn(min = BANNER_HEIGHT)
             .semantics {
                 liveRegion = LiveRegionMode.Polite
                 contentDescription = a11yDescription
@@ -114,46 +122,55 @@ internal fun ClusterHealthBanner(
                 modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.width(12.dp))
-            Text(
-                visual.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = visual.accent,
-                fontWeight = FontWeight.SemiBold,
-            )
-            val segments = health.segments()
-            if (segments.isNotEmpty()) {
-                Spacer(Modifier.width(12.dp))
+            // Each segment wraps as a unit, its separator with it, so a narrow
+            // window gets a second line rather than a link broken in two.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    "—",
+                    visual.title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = KdTextSecondary,
+                    color = visual.accent,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                segments.forEachIndexed { i, (segment, label) ->
-                    if (i == 0) Spacer(Modifier.width(12.dp)) else BulletSeparator()
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = KdTextPrimary,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier
-                            .pointerHoverIcon(PointerIcon.Hand)
-                            .clickable { onSegmentClick(segment) },
-                    )
+                health.segments().forEachIndexed { i, (segment, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (i == 0) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "—",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                        } else {
+                            Text(
+                                "·",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = KdTextSecondary,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = KdTextPrimary,
+                            textDecoration = TextDecoration.Underline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clickable { onSegmentClick(segment) },
+                        )
+                    }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun BulletSeparator() {
-    Spacer(Modifier.width(8.dp))
-    Text(
-        "·",
-        style = MaterialTheme.typography.bodyMedium,
-        color = KdTextSecondary,
-    )
-    Spacer(Modifier.width(8.dp))
 }
 
 private val BANNER_HEIGHT = 48.dp

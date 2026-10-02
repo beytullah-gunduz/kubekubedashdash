@@ -10,13 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.RecentSlice
-
-private val THREE_COLUMN_THRESHOLD = 1100.dp
 
 @Composable
 internal fun RecentClusterActivity(
@@ -31,21 +28,22 @@ internal fun RecentClusterActivity(
     onViewAllEvents: () -> Unit,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val threeColumns = maxWidth >= THREE_COLUMN_THRESHOLD
+        val threeColumns = maxWidth >= RECENT_THREE_COLUMN_THRESHOLD
+        val showNamespace = recentCardShowsNamespace(recentCardWidth(maxWidth))
         if (threeColumns) {
             Row(
                 modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(RECENT_CARD_GAP),
             ) {
                 NodesCard(nodes, onNodeClick, onViewAllNodes, Modifier.weight(1f).fillMaxHeight())
-                PodsCard(pods, onPodClick, onViewAllPods, Modifier.weight(1f).fillMaxHeight())
-                EventsCard(events, onEventClick, onViewAllEvents, Modifier.weight(1f).fillMaxHeight())
+                PodsCard(pods, showNamespace, onPodClick, onViewAllPods, Modifier.weight(1f).fillMaxHeight())
+                EventsCard(events, showNamespace, onEventClick, onViewAllEvents, Modifier.weight(1f).fillMaxHeight())
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(RECENT_CARD_GAP)) {
                 NodesCard(nodes, onNodeClick, onViewAllNodes, Modifier.fillMaxWidth())
-                PodsCard(pods, onPodClick, onViewAllPods, Modifier.fillMaxWidth())
-                EventsCard(events, onEventClick, onViewAllEvents, Modifier.fillMaxWidth())
+                PodsCard(pods, showNamespace, onPodClick, onViewAllPods, Modifier.fillMaxWidth())
+                EventsCard(events, showNamespace, onEventClick, onViewAllEvents, Modifier.fillMaxWidth())
             }
         }
     }
@@ -72,6 +70,7 @@ private fun NodesCard(
 @Composable
 private fun PodsCard(
     slice: RecentSlice<PodInfo>,
+    showNamespace: Boolean,
     onClick: (PodInfo) -> Unit,
     onViewAll: () -> Unit,
     modifier: Modifier,
@@ -83,13 +82,14 @@ private fun PodsCard(
         viewAllLabel = { total -> "Show 10 of ${"%,d".format(total)} — view all pods →" },
         onViewAll = onViewAll,
         modifier = modifier,
-        row = { pod -> CompactPodRow(pod, onClick = { onClick(pod) }) },
+        row = { pod -> CompactPodRow(pod, showNamespace, onClick = { onClick(pod) }) },
     )
 }
 
 @Composable
 private fun EventsCard(
     slice: RecentSlice<EventInfo>,
+    showNamespace: Boolean,
     onClick: (EventInfo) -> Unit,
     onViewAll: () -> Unit,
     modifier: Modifier,
@@ -101,6 +101,6 @@ private fun EventsCard(
         viewAllLabel = { total -> "Show 10 of ${"%,d".format(total)} — view all events →" },
         onViewAll = onViewAll,
         modifier = modifier,
-        row = { event -> CompactEventRow(event, onClick = { onClick(event) }) },
+        row = { event -> CompactEventRow(event, showNamespace, onClick = { onClick(event) }) },
     )
 }

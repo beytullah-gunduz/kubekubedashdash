@@ -68,8 +68,10 @@ internal fun CompactNodeRow(node: NodeInfo, onClick: () -> Unit) {
     }
 }
 
+// showNamespace = false drops the 120 dp namespace column, which in a narrow
+// card left the pod name a handful of characters.
 @Composable
-internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
+internal fun CompactPodRow(pod: PodInfo, showNamespace: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -87,14 +89,16 @@ internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
             modifier = Modifier.width(100.dp),
             style = MaterialTheme.typography.labelSmall,
         )
-        Text(
-            pod.namespace,
-            style = MaterialTheme.typography.labelSmall,
-            color = KdTextSecondary,
-            modifier = Modifier.width(120.dp),
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        if (showNamespace) {
+            Text(
+                pod.namespace,
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextSecondary,
+                modifier = Modifier.width(120.dp),
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+            )
+        }
         Text(
             pod.age,
             style = MaterialTheme.typography.labelSmall,
@@ -107,7 +111,7 @@ internal fun CompactPodRow(pod: PodInfo, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun CompactEventRow(event: EventInfo, onClick: () -> Unit) {
+internal fun CompactEventRow(event: EventInfo, showNamespace: Boolean, onClick: () -> Unit) {
     val (icon, tint) = when (event.type) {
         "Warning" -> Res.drawable.warning_filled to KdWarning
         "Error" -> Res.drawable.error_filled to KdError
@@ -132,14 +136,16 @@ internal fun CompactEventRow(event: EventInfo, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
         )
-        Text(
-            event.namespace.ifBlank { "-" },
-            style = MaterialTheme.typography.labelSmall,
-            color = KdTextSecondary,
-            modifier = Modifier.width(120.dp),
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        if (showNamespace) {
+            Text(
+                event.namespace.ifBlank { "-" },
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextSecondary,
+                modifier = Modifier.width(120.dp),
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+            )
+        }
         Text(
             event.lastSeen,
             style = MaterialTheme.typography.labelSmall,

@@ -1,9 +1,12 @@
 package com.kubekubedashdash.ui.screens.cluster
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kubekubedashdash.KdError
@@ -153,51 +157,63 @@ fun ClusterOverviewScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SummaryCard(
-                title = "Nodes",
-                value = nodesCount.asCardValue(),
-                icon = Res.drawable.dns_filled,
-                color = KdPrimary,
-                modifier = Modifier.weight(1f),
-                trailingBadge = issueBadgeFor(health?.nodesNotReady, "NotReady", KdError),
-                onClick = { onNavigate(Screen.Main.Nodes()) },
-            )
-            SummaryCard(
-                title = "Namespaces",
-                value = namespacesCount.asCardValue(),
-                icon = Res.drawable.folder_special_filled,
-                color = KdInfo,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigate(Screen.Main.Namespaces) },
-            )
-            SummaryCard(
-                title = "Pods",
-                value = podsCount.asCardValue(),
-                icon = Res.drawable.view_in_ar_filled,
-                color = KdSuccess,
-                modifier = Modifier.weight(1f),
-                trailingBadge = issueBadgeFor(health?.podsInError, "failed", KdError),
-                onClick = { onNavigate(Screen.Main.Pods()) },
-            )
-            SummaryCard(
-                title = "Deployments",
-                value = deploymentsCount.asCardValue(),
-                icon = Res.drawable.layers_filled,
-                color = KdWarning,
-                modifier = Modifier.weight(1f),
-                trailingBadge = issueBadgeFor(health?.deploymentsDegraded, "degraded", KdWarning),
-                onClick = { onNavigate(Screen.Main.Deployments()) },
-            )
-            SummaryCard(
-                title = "Services",
-                value = servicesCount.asCardValue(),
-                icon = Res.drawable.cloud_filled,
-                color = Color(0xFF9C27B0),
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigate(Screen.Main.Services) },
-            )
-        }
+        SummaryCardGrid(
+            listOf(
+                { cardModifier ->
+                    SummaryCard(
+                        title = "Nodes",
+                        value = nodesCount.asCardValue(),
+                        icon = Res.drawable.dns_filled,
+                        color = KdPrimary,
+                        modifier = cardModifier,
+                        trailingBadge = issueBadgeFor(health?.nodesNotReady, "NotReady", KdError),
+                        onClick = { onNavigate(Screen.Main.Nodes()) },
+                    )
+                },
+                { cardModifier ->
+                    SummaryCard(
+                        title = "Namespaces",
+                        value = namespacesCount.asCardValue(),
+                        icon = Res.drawable.folder_special_filled,
+                        color = KdInfo,
+                        modifier = cardModifier,
+                        onClick = { onNavigate(Screen.Main.Namespaces) },
+                    )
+                },
+                { cardModifier ->
+                    SummaryCard(
+                        title = "Pods",
+                        value = podsCount.asCardValue(),
+                        icon = Res.drawable.view_in_ar_filled,
+                        color = KdSuccess,
+                        modifier = cardModifier,
+                        trailingBadge = issueBadgeFor(health?.podsInError, "failed", KdError),
+                        onClick = { onNavigate(Screen.Main.Pods()) },
+                    )
+                },
+                { cardModifier ->
+                    SummaryCard(
+                        title = "Deployments",
+                        value = deploymentsCount.asCardValue(),
+                        icon = Res.drawable.layers_filled,
+                        color = KdWarning,
+                        modifier = cardModifier,
+                        trailingBadge = issueBadgeFor(health?.deploymentsDegraded, "degraded", KdWarning),
+                        onClick = { onNavigate(Screen.Main.Deployments()) },
+                    )
+                },
+                { cardModifier ->
+                    SummaryCard(
+                        title = "Services",
+                        value = servicesCount.asCardValue(),
+                        icon = Res.drawable.cloud_filled,
+                        color = Color(0xFF9C27B0),
+                        modifier = cardModifier,
+                        onClick = { onNavigate(Screen.Main.Services) },
+                    )
+                },
+            ),
+        )
 
         Spacer(Modifier.height(24.dp))
 
@@ -236,6 +252,30 @@ fun ClusterOverviewScreen(
 private fun Int?.asCardValue(): String = this?.toString() ?: "—"
 
 /**
+ * The summary cards, all on one row while they fit at [SUMMARY_CARD_MIN_WIDTH] and on evened-out
+ * rows below that. Each row takes its tallest card's height, so a card whose badge moved under its
+ * title doesn't leave its neighbours short.
+ */
+@Composable
+private fun SummaryCardGrid(cards: List<@Composable (Modifier) -> Unit>) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val perRow = summaryCardsPerRow(maxWidth, cards.size)
+        Column(verticalArrangement = Arrangement.spacedBy(SUMMARY_CARD_GAP)) {
+            cards.chunked(perRow).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(SUMMARY_CARD_GAP),
+                ) {
+                    row.forEach { card -> card(Modifier.weight(1f).fillMaxHeight()) }
+                    // A short last row stays on the grid of the rows above.
+                    repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Returns a `trailingBadge` lambda for [SummaryCard] when [count] is
  * non-null and positive, otherwise null. Hoisted out so the call sites
  * stay readable (one line per card) and the bandaid-shaped chrome lives
@@ -257,6 +297,8 @@ private fun IssueBadge(count: Int, label: String, color: Color) {
             style = MaterialTheme.typography.labelSmall,
             color = color,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
     }
