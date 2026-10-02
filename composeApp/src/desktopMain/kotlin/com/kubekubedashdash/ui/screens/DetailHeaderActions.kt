@@ -198,7 +198,11 @@ fun DetailPanelHeader(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (status != null) StatusBadge(status)
                     Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
