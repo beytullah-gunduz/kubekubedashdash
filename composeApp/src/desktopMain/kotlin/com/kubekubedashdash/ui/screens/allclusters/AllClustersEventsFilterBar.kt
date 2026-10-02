@@ -56,6 +56,7 @@ import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.list_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.ui.components.ColumnFilterDropdown
+import com.kubekubedashdash.ui.components.StartEllipsisText
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -125,7 +126,7 @@ internal fun AllClustersEventsFilterBar(
                     filters.clusters.size == 1 -> filters.clusters.first()
                     else -> "${filters.clusters.size}/${availableClusters.size}"
                 },
-                summaryOverflow = TextOverflow.StartEllipsis,
+                summaryKeepsEnd = true,
             ) {
                 ColumnFilterDropdown(
                     expanded = showClusterFilter,
@@ -313,7 +314,8 @@ private fun FilterChip(
     label: String,
     active: Boolean,
     summary: String,
-    summaryOverflow: TextOverflow = TextOverflow.Ellipsis,
+    // A cluster name keeps its end: the start of many context names is a shared prefix.
+    summaryKeepsEnd: Boolean = false,
     filterDropdown: @Composable () -> Unit,
 ) {
     Box(contentAlignment = Alignment.CenterStart) {
@@ -337,14 +339,23 @@ private fun FilterChip(
                 style = MaterialTheme.typography.labelSmall,
                 color = if (active) KdPrimary else KdTextSecondary,
             )
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (active) KdPrimary else KdTextSecondary,
-                maxLines = 1,
-                overflow = summaryOverflow,
-                modifier = Modifier.widthIn(max = 160.dp),
-            )
+            if (summaryKeepsEnd) {
+                StartEllipsisText(
+                    summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (active) KdPrimary else KdTextSecondary,
+                    modifier = Modifier.widthIn(max = 160.dp),
+                )
+            } else {
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (active) KdPrimary else KdTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 160.dp),
+                )
+            }
             filterDropdown()
         }
     }

@@ -22,7 +22,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdSurface
@@ -31,6 +30,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.StartEllipsisText
 
 /** Resolves a context name to its cluster colour; read once per table or strip, never per row. */
 @Composable
@@ -54,7 +54,8 @@ internal fun ClusterDot(color: Color, size: Dp = 8.dp, contentDescription: Strin
 /**
  * A cluster's dot and full context name on one line: the one way this tab shows a cluster name.
  * Never cut in code; the start ellipsizes so the distinguishing tail (an EKS ARN's cluster name,
- * a GKE context's zone and name) stays visible.
+ * a GKE context's zone and name) stays visible ([StartEllipsisText]: TextOverflow.StartEllipsis
+ * draws a trailing ellipsis on desktop).
  */
 @Composable
 internal fun ClusterNameLabel(
@@ -69,13 +70,11 @@ internal fun ClusterNameLabel(
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         ClusterDot(color, dotSize)
         Spacer(Modifier.width(6.dp))
-        Text(
+        StartEllipsisText(
             contextName,
             style = style,
             color = textColor,
             fontWeight = fontWeight,
-            maxLines = 1,
-            overflow = TextOverflow.StartEllipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
     }
