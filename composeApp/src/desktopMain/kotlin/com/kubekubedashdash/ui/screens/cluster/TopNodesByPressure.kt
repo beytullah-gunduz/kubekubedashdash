@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,7 +51,7 @@ internal fun TopNodesByPressure(
 }
 
 @Composable
-private fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit) {
+internal fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit, leading: (@Composable RowScope.() -> Unit)? = null) {
     val showCpu = node.cpuFraction >= node.memoryFraction
     val frac = if (showCpu) node.cpuFraction else node.memoryFraction
     val pct = (frac * 100).toInt().coerceAtLeast(0)
@@ -67,6 +68,7 @@ private fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit) {
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        leading?.invoke(this)
         Text(
             node.nodeName,
             style = MaterialTheme.typography.bodySmall,

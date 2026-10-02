@@ -23,14 +23,14 @@ class AllClustersUsageScopeTest {
     fun `mixed tabs say how many clusters are scoped`() {
         val one = allClustersUsageScope(listOf("ns-a", null))
         assertEquals("Usage Statistics · namespace-scoped", one?.title)
-        assertEquals("Pods and usage for 1 of 2 clusters cover one namespace (see its card); capacity is whole-cluster", one?.note)
+        assertEquals("Pods and usage for 1 of 2 clusters cover one namespace (see its panel); capacity is whole-cluster", one?.note)
 
         assertEquals(
-            "Pods and usage for 2 of 3 clusters cover one namespace each (see their cards); capacity is whole-cluster",
+            "Pods and usage for 2 of 3 clusters cover one namespace each (see their panels); capacity is whole-cluster",
             allClustersUsageScope(listOf("ns-a", null, "ns-b"))?.note,
         )
         assertEquals(
-            "Pods and usage for all 2 clusters cover one namespace each (see their cards); capacity is whole-cluster",
+            "Pods and usage for all 2 clusters cover one namespace each (see their panels); capacity is whole-cluster",
             allClustersUsageScope(listOf("ns-a", "ns-b"))?.note,
         )
     }

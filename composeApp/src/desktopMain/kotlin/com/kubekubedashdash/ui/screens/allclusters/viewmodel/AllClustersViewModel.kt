@@ -556,18 +556,6 @@ class AllClustersViewModel internal constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Top 3 nodes by pressure fraction across all open sessions. */
-    val topNodesAcrossAllClusters: StateFlow<List<NodeResourceUsage>> = clusterTabs
-        .flatMapLatest { tabs ->
-            if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
-            combine(tabs.map { tab -> tab.session.reactiveClient.nodeUsages }) { usageMaps ->
-                usageMaps.flatMap { it.values }
-                    .sortedByDescending { it.pressureFraction }
-                    .take(3)
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
     init {
         viewModelScope.launch {
             PreferenceRepository.customPresets.collect { persisted ->
