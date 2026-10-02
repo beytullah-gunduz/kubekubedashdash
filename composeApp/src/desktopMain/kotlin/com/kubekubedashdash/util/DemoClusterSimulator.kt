@@ -229,14 +229,14 @@ class DemoClusterSimulator(
 
                     deficit > 0 && random.nextInt(100) < 70 -> spawnNode()
 
-                    surplus >= NODE_BURST_THRESHOLD -> {
+                    !screenshotCalm && surplus >= NODE_BURST_THRESHOLD -> {
                         nodes.filter { it.metadata.name !in protectedNodes }
                             .shuffled()
                             .take(minOf(surplus, NODE_BURST_SIZE))
                             .forEach { removeNode(it.metadata.name) }
                     }
 
-                    surplus > 0 && random.nextInt(100) < 50 -> {
+                    !screenshotCalm && surplus > 0 && random.nextInt(100) < 50 -> {
                         val candidate = nodes.filter { it.metadata.name !in protectedNodes }.randomOrNull()
                         if (candidate != null) removeNode(candidate.metadata.name)
                     }
@@ -477,6 +477,12 @@ class DemoClusterSimulator(
                     .endSpec()
                     .endTemplate()
                     .endSpec()
+                    .withNewStatus()
+                    .withReplicas(1)
+                    .withReadyReplicas(1)
+                    .withAvailableReplicas(1)
+                    .withUpdatedReplicas(1)
+                    .endStatus()
                     .build(),
             ).create()
         }.getOrNull() ?: return null
@@ -491,17 +497,22 @@ class DemoClusterSimulator(
         return createdRs
     }
 
-    private fun rollFate(now: Long): PodFate = when (random.nextInt(100)) {
-        in 0 until 70 -> PodFate.CleanExit(now, random.nextLong(30_000, 15 * 60_000))
+    private fun rollFate(now: Long): PodFate {
+        // Normal odds are 70% clean / 25% failed / 5% crash-loop; screenshot-calm is all clean.
+        val cleanBelow = if (screenshotCalm) 100 else 70
+        val failBelow = if (screenshotCalm) 100 else 95
+        return when (random.nextInt(100)) {
+            in 0 until cleanBelow -> PodFate.CleanExit(now, random.nextLong(30_000, 15 * 60_000))
 
-        in 70 until 95 -> PodFate.FailExit(now, random.nextLong(15_000, 5 * 60_000))
+            in cleanBelow until failBelow -> PodFate.FailExit(now, random.nextLong(15_000, 5 * 60_000))
 
-        else -> PodFate.CrashLoop(
-            createdAt = now,
-            restartsLeft = 5,
-            restartCount = 0,
-            nextCrashMs = random.nextLong(CRASH_RESTART_MIN_MS, CRASH_RESTART_MAX_MS),
-        )
+            else -> PodFate.CrashLoop(
+                createdAt = now,
+                restartsLeft = 5,
+                restartCount = 0,
+                nextCrashMs = random.nextLong(CRASH_RESTART_MIN_MS, CRASH_RESTART_MAX_MS),
+            )
+        }
     }
 
     private suspend fun doCleanExit(ns: String, name: String) {
@@ -714,7 +725,7 @@ class DemoClusterSimulator(
         }.onSuccess {
             emitEvent("Normal", "SuccessfulCreate", "Created job $name", "Job", ns, name, "job-controller")
             val now = System.currentTimeMillis()
-            val willSucceed = random.nextInt(100) < JOB_SUCCESS_PROBABILITY
+            val willSucceed = screenshotCalm || random.nextInt(100) < JOB_SUCCESS_PROBABILITY
             jobFates[key] = JobFate.Active(
                 createdAt = now,
                 runForMs = random.nextLong(JOB_RUN_MIN_MS, JOB_RUN_MAX_MS),
@@ -803,6 +814,12 @@ class DemoClusterSimulator(
             val ns = p.metadata?.namespace ?: return@mapNotNull null
             "$ns/$n"
         }.toSet()
+        // A pod deleted since the last tick leaves its PodMetrics behind; drop it.
+        (podMetricsState.keys - podKeys).forEach { key ->
+            runCatching {
+                client.resource(MockClusterProvider.buildPodMetrics(key.substringAfter('/'), key.substringBefore('/'), emptyList())).delete()
+            }
+        }
         nodeMetricsState.keys.retainAll(nodeNames)
         podMetricsState.keys.retainAll(podKeys)
 
@@ -903,7 +920,7 @@ class DemoClusterSimulator(
                 val app = pod.metadata.labels?.get("app") ?: name.substringBefore("-")
                 val image = pod.spec?.containers?.firstOrNull()?.image ?: "alpine:latest"
 
-                if (random.nextInt(100) < 10) {
+                if (random.nextInt(100) < (if (screenshotCalm) 0 else 10)) {
                     emitEvent("Warning", "Unhealthy", "Readiness probe failed: HTTP 503", "Pod", ns, name, "kubelet")
                 } else {
                     when (random.nextInt(3)) {
@@ -987,6 +1004,10 @@ class DemoClusterSimulator(
     // ── Tunables ──────────────────────────────────────────────────────────────
 
     companion object {
+        /** Screenshot-only: no failing pods or jobs, no node removals, no probe noise. ALWAYS false in normal use. */
+        @Volatile
+        var screenshotCalm: Boolean = false
+
         private const val NODE_LOOP_MEAN_MS = 8_000L
         private const val NODE_LOOP_JITTER_MS = 4_000L
         private const val POD_LOOP_MEAN_MS = 1_200L

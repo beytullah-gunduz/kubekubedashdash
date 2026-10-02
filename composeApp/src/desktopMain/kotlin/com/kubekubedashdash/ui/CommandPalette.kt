@@ -66,6 +66,7 @@ import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.palette.PALETTE_VERBS
 import com.kubekubedashdash.ui.palette.PaletteVerb
 import com.kubekubedashdash.ui.palette.PendingVerb
@@ -243,7 +244,7 @@ fun CommandPalette(
     onDismiss: () -> Unit,
     perCategoryCap: Int = 8,
 ) {
-    var query by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf(ScreenshotHooks.paletteQuery.value) }
     var pendingVerb by remember { mutableStateOf<PaletteVerb?>(null) }
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()

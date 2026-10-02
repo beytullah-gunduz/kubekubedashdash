@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.window.WindowPosition
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.services.portforward.PortForwardRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -138,6 +139,18 @@ class Workspace(
     // One-shot "hide the logs drawer" request, consumed by App.kt. False in normal use.
     private val _hideLogsRequest = MutableStateFlow(false)
     val hideLogsRequest: StateFlow<Boolean> = _hideLogsRequest.asStateFlow()
+
+    // One-shot "tail this namespace" request (screenshot driver), consumed by App.kt. Null in normal use.
+    private val _tailRequest = MutableStateFlow<String?>(null)
+    val tailRequest: StateFlow<String?> = _tailRequest.asStateFlow()
+
+    // One-shot "open the port-forward dialog" request (screenshot driver), consumed by App.kt.
+    private val _portForwardRequest = MutableStateFlow<PortForwardRequest?>(null)
+    val portForwardRequest: StateFlow<PortForwardRequest?> = _portForwardRequest.asStateFlow()
+
+    // One-shot "close the port-forward dialog" request (screenshot teardown). False in normal use.
+    private val _dismissPortForwardRequest = MutableStateFlow(false)
+    val dismissPortForwardRequest: StateFlow<Boolean> = _dismissPortForwardRequest.asStateFlow()
 
     /**
      * Screen-space rectangle of this window's chip-drop zone — the chip slot in
@@ -346,6 +359,36 @@ class Workspace(
     /** Clear a consumed hide-logs request. */
     fun clearHideLogsRequest() {
         _hideLogsRequest.value = false
+    }
+
+    /** Ask App.kt to tail every running pod in [namespace] (screenshot driver). */
+    fun requestTailLogs(namespace: String) {
+        _tailRequest.value = namespace
+    }
+
+    /** Clear a consumed tail request. */
+    fun clearTailRequest() {
+        _tailRequest.value = null
+    }
+
+    /** Ask App.kt to open the port-forward dialog for [request] (screenshot driver). */
+    fun requestPortForward(request: PortForwardRequest) {
+        _portForwardRequest.value = request
+    }
+
+    /** Clear a consumed port-forward request. */
+    fun clearPortForwardRequest() {
+        _portForwardRequest.value = null
+    }
+
+    /** Ask App.kt to close the port-forward dialog (screenshot teardown). */
+    fun requestDismissPortForward() {
+        _dismissPortForwardRequest.value = true
+    }
+
+    /** Clear a consumed dismiss-port-forward request. */
+    fun clearDismissPortForwardRequest() {
+        _dismissPortForwardRequest.value = false
     }
 
     fun updateDropZoneScreenBounds(bounds: Rect?) {

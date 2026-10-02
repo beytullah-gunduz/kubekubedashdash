@@ -139,6 +139,7 @@ object MockClusterProvider {
     }
 
     private fun generateUnusedLabel(): String {
+        DemoContext.screenshotLabels.firstOrNull { it !in instances }?.let { return it }
         var n = 1
         while ("$MOCK_LABEL_PREFIX #$n" in instances) n++
         return "$MOCK_LABEL_PREFIX #$n"
