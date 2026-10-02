@@ -27,6 +27,7 @@ import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.screenshots.ScreenshotHooks
+import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.services.portforward.PortForwardRequest
@@ -373,6 +374,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         captureWindow(initialWorkspace.id, outDir.resolve("tail.png"))
         log.info("captured tail")
         initialWorkspace.requestHideLogs()
+        LogStreamRegistry.clearAll() // close the tail tab too, or later shots' title bars show the hidden-tabs chip
         delay(800)
 
         // 13. topology

@@ -20,6 +20,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +29,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,17 +38,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -63,10 +69,12 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
+import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.services.ActiveAppLog
 import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.ActiveLogStream
@@ -87,6 +95,7 @@ import com.kubekubedashdash.ui.components.DrawerLogPane
 import com.kubekubedashdash.ui.components.DrawerNamespaceTailPane
 import com.kubekubedashdash.ui.components.DrawerPortForwardsPane
 import com.kubekubedashdash.ui.components.LogPaneStateStore
+import com.kubekubedashdash.ui.crt.crtCardReveal
 import kotlinx.coroutines.flow.map
 import org.jetbrains.compose.resources.painterResource
 import java.awt.Cursor
@@ -115,6 +124,30 @@ internal fun logTabBadges(
         .mapValues { (_, context) -> LogTabBadge(context, colorFor(context)) }
 }
 
+/** The drawer's show/hide shortcut as this OS writes it — App.kt binds Cmd+J on macOS, Ctrl+J elsewhere. */
+internal val logDrawerShortcut: String =
+    if (System.getProperty("os.name").orEmpty().lowercase().contains("mac")) "⌘J" else "Ctrl+J"
+
+/**
+ * The tabs "Close all" closes: each of [tabs] whose own ✕ shows — every tab
+ * but Port forwards while at least one forward runs (closing that tab stops
+ * nothing, so its ✕ hides then, and so does this).
+ */
+internal fun closeAllTargets(tabs: Collection<DrawerLogTab>, runningForwards: Int): List<DrawerLogTab> = tabs.filter { it !is ActivePortForwards || runningForwards == 0 }
+
+/** Namespaces whose capture is still running among [targets] — closing their tabs cancels them. */
+internal fun runningCaptureNamespaces(targets: Collection<DrawerLogTab>): List<String> = targets.filterIsInstance<ActiveCaptureTask>().filter { it.task.isRunning }.map { it.task.namespace }
+
+/** The "Close all" confirmation's body, for one or more running captures. */
+internal fun closeAllConfirmBody(namespaces: List<String>): String = if (namespaces.size == 1) {
+    "A log capture of namespace \"${namespaces.single()}\" is still running. Closing its tab cancels it; the files it already wrote stay on disk."
+} else {
+    "${namespaces.size} log captures are still running (${namespaces.joinToString(", ")}). Closing their tabs cancels them; the files they already wrote stay on disk."
+}
+
+/** "1 log tab" / "3 log tabs". */
+internal fun logTabCount(n: Int): String = if (n == 1) "1 log tab" else "$n log tabs"
+
 @Composable
 fun LogDrawer(
     state: LogDrawerState,
@@ -128,6 +161,8 @@ fun LogDrawer(
     // process-global singleton). The shared application-log tab always shows.
     visibleSessionIds: Set<String> = emptySet(),
     clusterBadges: Map<String, LogTabBadge> = emptyMap(),
+    // "Close all" — the keys of the tabs to close, in strip order. The window closes them and offers Undo.
+    onCloseAll: (keys: List<String>) -> Unit = {},
 ) {
     val allTabs by LogStreamRegistry.tabs.collectAsState()
     val focusedKey by LogStreamRegistry.focusedKey.collectAsState()
@@ -140,6 +175,11 @@ fun LogDrawer(
     val runningForwards by remember {
         PortForwardRegistry.forwards.map { list -> list.count { it.isRunning } }
     }.collectAsState(initial = PortForwardRegistry.forwards.value.count { it.isRunning })
+    // The window's tabs in strip order, and the ones "Close all" closes.
+    val stripTabs = remember(tabs) { tabs.values.sortedBy { it.openedAt } }
+    val closeTargets = remember(stripTabs, runningForwards) { closeAllTargets(stripTabs, runningForwards) }
+    // Non-null while the "a capture is still running" confirmation is up: the namespaces it names.
+    var confirmCloseAllFor by remember { mutableStateOf<List<String>?>(null) }
     val persistedHeightDp by PreferenceRepository.logDrawerHeightDp.collectAsState()
     val density = LocalDensity.current
     var liveHeightDp by remember { mutableFloatStateOf(persistedHeightDp.toFloat()) }
@@ -234,6 +274,27 @@ fun LogDrawer(
                     }
                 }
 
+                if (closeTargets.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            val running = runningCaptureNamespaces(closeTargets)
+                            if (running.isEmpty()) {
+                                onCloseAll(closeTargets.map { it.key })
+                            } else {
+                                confirmCloseAllFor = running
+                            }
+                        },
+                        modifier = Modifier.height(28.dp),
+                        shape = 6.dp.kdCorner,
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    ) {
+                        Text("Close all (${closeTargets.size})", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
                 IconButton(
                     onClick = {
                         onStateChange(
@@ -258,15 +319,7 @@ fun LogDrawer(
                     )
                 }
 
-                IconButton(
-                    onClick = { onStateChange(LogDrawerState.HIDDEN) },
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.close_filled),
-                        contentDescription = "Close log drawer",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                HideDrawerButton(onClick = { onStateChange(LogDrawerState.HIDDEN) })
             }
 
             AnimatedVisibility(
@@ -330,6 +383,29 @@ fun LogDrawer(
                 }
             }
         }
+    }
+
+    confirmCloseAllFor?.let { namespaces ->
+        AlertDialog(
+            modifier = Modifier.crtCardReveal(),
+            onDismissRequest = { confirmCloseAllFor = null },
+            title = { Text("Close all log tabs?") },
+            text = { Text(closeAllConfirmBody(namespaces), style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmCloseAllFor = null
+                        // The tabs as they are now — they may have changed while the dialog was up.
+                        onCloseAll(closeTargets.map { it.key })
+                    },
+                ) {
+                    Text("Close all", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCloseAllFor = null }) { Text("Keep open") }
+            },
+        )
     }
 }
 
@@ -412,6 +488,29 @@ internal fun LogTabClusterBadge(badge: LogTabBadge) {
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * Hides the drawer; its tabs stay open ("Close all" closes them). Drawn as a
+ * panel-closing glyph — the sidebar toggle's, turned to point down — so it
+ * never reads as the per-tab ✕.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HideDrawerButton(onClick: () -> Unit) {
+    TooltipArea(
+        tooltip = { ActionTooltip("Hide log drawer", "Log tabs stay open. $logDrawerShortcut shows the drawer again.") },
+        tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(
+                painter = painterResource(Res.drawable.left_panel_close),
+                contentDescription = "Hide log drawer",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.rotate(-90f),
             )
         }
     }

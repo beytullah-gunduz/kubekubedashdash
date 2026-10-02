@@ -153,6 +153,25 @@ internal fun tailTabKey(sessionId: String, target: TailTarget): String = when (t
  */
 data class TailOpenResult(val key: String, val replaced: List<String>)
 
+/**
+ * What [LogStreamRegistry.closeTabs] took out of the drawer — enough for
+ * [LogStreamRegistry.restoreTabs] to put it back (the drawer's "Close all"
+ * undo). Holds each pod stream's flow factory and each tail's task factory,
+ * and through them a [ClusterSession]: keep it only as long as the undo is
+ * offered.
+ */
+class ClosedDrawerTabs internal constructor(
+    internal val tabs: List<DrawerLogTab>,
+    internal val streamFactories: Map<String, (container: String?, options: LogStreamOptions) -> Flow<String>>,
+    internal val tailFactories: Map<String, () -> NamespaceTailTask>,
+    internal val focusedKey: String?,
+) {
+    val size: Int get() = tabs.size
+
+    /** True when an undo restarts a log stream (a pod log or a namespace tail) rather than putting a tab back as it was. */
+    val restartsStreams: Boolean get() = tabs.any { it is ActiveLogStream || it is ActiveNamespaceTail }
+}
+
 object LogStreamRegistry {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val _tabs = MutableStateFlow<Map<String, DrawerLogTab>>(emptyMap())
@@ -169,6 +188,18 @@ object LogStreamRegistry {
      * [ClusterSession] via closure.
      */
     private val factories = ConcurrentHashMap<String, (container: String?, options: LogStreamOptions) -> Flow<String>>()
+
+    /**
+     * The task factory behind each open [ActiveNamespaceTail], keyed the same
+     * as [jobs]. Retained only so [closeTabs] can hand it to [restoreTabs] —
+     * the drawer's "Close all" undo — which runs it again. Must be dropped
+     * wherever a tail's key is dropped from [jobs]: like [factories], an entry
+     * holds a [ClusterSession] via closure.
+     */
+    private val tailFactories = ConcurrentHashMap<String, () -> NamespaceTailTask>()
+
+    /** Test hook: the keys whose tail factory is still retained. */
+    internal val retainedTailFactoryKeys: Set<String> get() = tailFactories.keys.toSet()
 
     internal const val MAX_LINES = 5_000
 
@@ -483,6 +514,7 @@ object LogStreamRegistry {
         displaced.forEach { close(it.key) }
         val task = taskFactory()
         jobs[key] = task.job
+        tailFactories[key] = taskFactory
         _tabs.update {
             it + (key to ActiveNamespaceTail(sessionId, task, System.currentTimeMillis()))
         }
@@ -501,6 +533,7 @@ object LogStreamRegistry {
     fun close(key: String) {
         jobs.remove(key)?.cancel()
         factories.remove(key)
+        tailFactories.remove(key)
         _tabs.update { it - key }
         if (_focusedKey.value == key) _focusedKey.value = null
     }
@@ -512,11 +545,81 @@ object LogStreamRegistry {
         _tabs.value.values.filter { it.sessionId == sessionId.value }.forEach { close(it.key) }
     }
 
+    /**
+     * Closes every open tab in [keys] exactly as [close] does — cancelling pod
+     * streams, tails and running captures — and returns what was closed, in
+     * [keys] order, for [restoreTabs]. Keys that are not open are ignored.
+     */
+    @Synchronized
+    fun closeTabs(keys: Collection<String>): ClosedDrawerTabs {
+        val open = _tabs.value
+        val closing = keys.distinct().mapNotNull { open[it] }
+        val closed = ClosedDrawerTabs(
+            tabs = closing,
+            streamFactories = closing.mapNotNull { tab -> factories[tab.key]?.let { tab.key to it } }.toMap(),
+            tailFactories = closing.mapNotNull { tab -> tailFactories[tab.key]?.let { tab.key to it } }.toMap(),
+            focusedKey = _focusedKey.value,
+        )
+        closing.forEach { close(it.key) }
+        return closed
+    }
+
+    /**
+     * Puts back what [closeTabs] took out, each tab at its old place in the
+     * strip (its openedAt is kept). Pod streams and namespace tails RESTART —
+     * a new collector or task, an empty buffer; the application-log,
+     * port-forwards and capture tabs come back as the same objects (a capture
+     * the close cancelled shows its "cancelled" receipt). Skips a tab whose
+     * key is open again, one whose session is not in [liveSessionIds] (its
+     * cluster tab has closed or left the window since), and a tail whose
+     * session already runs another tail (at most one per session — see
+     * [openOrFocusTailTab]). Re-focuses the tab that had focus when they were
+     * closed, if it came back. Returns the keys restored.
+     */
+    @Synchronized
+    fun restoreTabs(closed: ClosedDrawerTabs, liveSessionIds: Set<String>): Set<String> {
+        val restored = LinkedHashMap<String, DrawerLogTab>()
+        for (tab in closed.tabs) {
+            if (tab.key in _tabs.value) continue
+            val sessionId = tab.sessionId
+            if (sessionId != null && sessionId !in liveSessionIds) continue
+            val back: DrawerLogTab = when (tab) {
+                is ActiveLogStream -> {
+                    val factory = closed.streamFactories[tab.key] ?: continue
+                    val state = MutableStateFlow<List<String>>(emptyList())
+                    val dropped = MutableStateFlow(0)
+                    factories[tab.key] = factory
+                    jobs[tab.key] = launchCollector(factory(tab.id.container, tab.options), state, dropped)
+                    tab.copy(lines = state.asStateFlow(), droppedLines = dropped.asStateFlow())
+                }
+
+                is ActiveNamespaceTail -> {
+                    val factory = closed.tailFactories[tab.key] ?: continue
+                    val sessionHasTail = (_tabs.value.values + restored.values)
+                        .any { it is ActiveNamespaceTail && it.sessionId == tab.sessionId }
+                    if (sessionHasTail) continue
+                    val task = factory()
+                    jobs[tab.key] = task.job
+                    tailFactories[tab.key] = factory
+                    tab.copy(task = task)
+                }
+
+                is ActiveCaptureTask, is ActiveAppLog, is ActivePortForwards -> tab
+            }
+            restored[tab.key] = back
+        }
+        if (restored.isEmpty()) return emptySet()
+        _tabs.update { it + restored }
+        closed.focusedKey?.takeIf { it in restored }?.let { _focusedKey.value = it }
+        return restored.keys.toSet()
+    }
+
     internal fun clearAll() {
         jobs.keys().toList().forEach { key ->
             jobs.remove(key)?.cancel()
         }
         factories.clear()
+        tailFactories.clear()
         _tabs.value = emptyMap()
         _focusedKey.value = null
     }

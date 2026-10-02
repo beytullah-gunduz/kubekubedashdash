@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -81,6 +82,8 @@ import com.kubekubedashdash.ui.crt.crtScanlines
 import com.kubekubedashdash.ui.crt.crtScreenPowerOn
 import com.kubekubedashdash.ui.crt.rememberCrtGhost
 import com.kubekubedashdash.ui.crt.rememberCrtScreenPowerOn
+import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.modals.ClusterSelectorModal
 import com.kubekubedashdash.ui.modals.EksDiscoveryModal
 import com.kubekubedashdash.ui.modals.GkeDiscoveryModal
@@ -95,8 +98,10 @@ import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ShellEnvironment
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 import java.awt.EventQueue
 import java.awt.event.WindowEvent
@@ -284,6 +289,53 @@ fun App(
                 drawerState = LogDrawerState.HIDDEN
             }
             prevDrawerTabCount.value = visibleDrawerTabCount
+        }
+        // "Close all" in the drawer header. Closes the tabs, then offers an Undo that
+        // reopens them — pod streams and tails restart — with their filters and toggles,
+        // and shows the drawer again if closing its last tab hid it. ActionFeedbackState
+        // runs the inverse off the EDT, so it hops back for the pane-state store (main
+        // thread only), the registry and drawerState; restore and putAll share one EDT
+        // turn, before the retainOnly effect above can see the new keys. Window-live
+        // sessions are read when Undo is clicked: a cluster tab closed in between gets
+        // none of its tabs back.
+        val actionFeedback = LocalActionFeedback.current
+        val liveSessionIds by rememberUpdatedState(visibleSessionIds)
+        val onCloseAllDrawerTabs: (List<String>) -> Unit = remember(actionFeedback) {
+            { keys ->
+                val savedPaneStates = logPaneStates.existingStates(keys)
+                val stateBefore = drawerState
+                val closed = LogStreamRegistry.closeTabs(keys)
+                if (closed.size > 0) {
+                    actionFeedback.success(
+                        title = "Closed ${logTabCount(closed.size)}",
+                        detail = if (closed.restartsStreams) "Undo reopens them, but their log streams start over." else null,
+                        undo = UndoAction(
+                            successTitle = "Reopened log tabs",
+                            failureTitle = "Couldn't reopen log tabs",
+                            run = {
+                                withContext(Dispatchers.Main) {
+                                    val restored = LogStreamRegistry.restoreTabs(closed, liveSessionIds)
+                                    val kept = savedPaneStates.filterKeys { it in restored }
+                                    // The streams restart empty, so the old scroll position points
+                                    // nowhere: come back following the newest line.
+                                    kept.values.forEach { state ->
+                                        state.follow = true
+                                        state.scrollIndex = 0
+                                        state.scrollOffset = 0
+                                    }
+                                    logPaneStates.putAll(kept)
+                                    if (restored.isEmpty()) {
+                                        Result.failure(IllegalStateException("They are open again, or their cluster tabs have closed."))
+                                    } else {
+                                        if (drawerState == LogDrawerState.HIDDEN) drawerState = stateBefore
+                                        Result.success(Unit)
+                                    }
+                                }
+                            },
+                        ),
+                    )
+                }
+            }
         }
         val onOpenLogs: (String, String, String?) -> Unit = remember(activeSession) {
             { pod, ns, container ->
@@ -618,6 +670,8 @@ fun App(
                                         PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
                                     },
                                     onOpenSettings = { workspace.showSettings() },
+                                    hiddenLogTabCount = if (drawerState == LogDrawerState.HIDDEN) visibleDrawerTabCount else 0,
+                                    onShowLogDrawer = { drawerState = LogDrawerState.EXPANDED },
                                     chipSlot = if (!isMultiTab && selectedContext.isNotBlank() && activeSession != null) {
                                         @Composable {
                                             val ctx = selectedContext
@@ -739,6 +793,7 @@ fun App(
                                 paneStates = logPaneStates,
                                 visibleSessionIds = visibleSessionIds,
                                 clusterBadges = clusterBadges,
+                                onCloseAll = onCloseAllDrawerTabs,
                             )
                         }
                         HorizontalPager(

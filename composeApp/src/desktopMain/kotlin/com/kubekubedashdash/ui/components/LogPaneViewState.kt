@@ -47,5 +47,13 @@ class LogPaneStateStore {
         states.keys.retainAll(keys)
     }
 
+    /** The states that exist for [keys] — the same objects — so the drawer's "Close all" undo can put them back. */
+    fun existingStates(keys: Collection<String>): Map<String, LogPaneViewState> = keys.mapNotNull { key -> states[key]?.let { key to it } }.toMap()
+
+    /** Puts back states taken by [existingStates], replacing any under the same keys. */
+    fun putAll(saved: Map<String, LogPaneViewState>) {
+        states.putAll(saved)
+    }
+
     internal val size: Int get() = states.size
 }
