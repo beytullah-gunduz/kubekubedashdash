@@ -26,6 +26,7 @@ import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.screenshots.ScreenshotHooks
+import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.services.session.SessionPersistence
@@ -427,6 +428,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         ScreenshotHooks.autoTab.value = emptyMap()
         initialWorkspace.dismissPalette()
         initialWorkspace.requestHideLogs() // collapse the logs drawer (P1 hide path)
+        LogStreamRegistry.clearAll() // close its tab too, or later shots' title bars show the hidden-tabs chip
         sessionVm.closeExtraPane()
         sessionVm.navigate(Screen.Main.ClusterOverview)
         delay(1500L)

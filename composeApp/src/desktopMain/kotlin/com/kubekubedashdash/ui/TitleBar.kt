@@ -1,7 +1,9 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -50,8 +53,11 @@ import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
 import com.kubekubedashdash.resources.settings_filled
@@ -76,6 +82,9 @@ fun WindowScope.TitleBar(
     onToggleSidebar: () -> Unit,
     onOpenSettings: () -> Unit,
     chipSlot: (@Composable () -> Unit)? = null,
+    // Drawer tabs this window keeps while its log drawer is hidden; above zero, a chip shows them.
+    hiddenLogTabCount: Int = 0,
+    onShowLogDrawer: () -> Unit = {},
 ) {
     val toggleMaximize = {
         windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
@@ -162,6 +171,10 @@ fun WindowScope.TitleBar(
 
             Spacer(Modifier.weight(1f))
 
+            if (hiddenLogTabCount > 0) {
+                HiddenLogTabsChip(count = hiddenLogTabCount, onClick = onShowLogDrawer)
+                Spacer(Modifier.width(6.dp))
+            }
             SettingsButton(onClick = onOpenSettings)
 
             if (!isMacOS) {
@@ -184,6 +197,54 @@ fun WindowScope.TitleBar(
         WindowDraggableArea {
             rowContent()
         }
+    }
+}
+
+/**
+ * Shown while the log drawer is hidden but still holds tabs, so they are not
+ * forgotten: "3 log tabs ⌘J". A click shows the drawer. Eats presses like the
+ * other title-bar buttons, so a click never starts a window drag.
+ */
+@Composable
+internal fun HiddenLogTabsChip(count: Int, onClick: () -> Unit) {
+    val label = logTabCount(count)
+    val textStyle = LocalTextStyle.current
+        .copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
+        .retroChrome(9.sp)
+    Row(
+        modifier = Modifier
+            .height(24.dp)
+            .clip(12.dp.kdCorner)
+            .border(BorderStroke(kdOutlineWidth, KdBorder), 12.dp.kdCorner)
+            .kdFocusRing()
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Main)
+                        if (event.type == PointerEventType.Press) {
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                }
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .semantics(mergeDescendants = true) { contentDescription = "$label open — show the log drawer" }
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            painterResource(Res.drawable.article_filled),
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = KdTextSecondary,
+        )
+        Text(label, style = textStyle, color = KdTextSecondary, maxLines = 1)
+        Text(logDrawerShortcut, style = textStyle, color = KdTextSecondary.copy(alpha = 0.6f), maxLines = 1)
     }
 }
 
