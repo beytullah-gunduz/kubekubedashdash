@@ -21,6 +21,8 @@ data class EksCluster(
     val profile: String,
 )
 
+data class EksContextRef(val region: String, val accountId: String, val clusterName: String)
+
 class CliInvocationFailure(val exitCode: Int, val stderrSnippet: String, message: String) : Exception(message)
 
 object EksClusterDiscoverer {
@@ -28,9 +30,59 @@ object EksClusterDiscoverer {
     private val log = LoggerFactory.getLogger(EksClusterDiscoverer::class.java)
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val REGION_RX = Regex("^[a-z]{2}-[a-z]+-\\d+$")
-    private fun requireValidRegion(region: String) {
-        require(REGION_RX.matches(region)) { "Refusing AWS region with unexpected shape: '$region'" }
+    // Any partition's region: us-east-1, us-gov-west-1, cn-northwest-1, us-isob-east-1.
+    // Deliberately permissive: its only job is to guarantee the value has a region's shape and
+    // cannot be read as a flag by argv.
+    private val REGION_RX = Regex("^[a-z]{2,4}(-[a-z]+)+-\\d{1,2}$")
+
+    // An EKS cluster name: 1-100 letters, digits, hyphens or underscores, starting with a letter
+    // or digit. Guards the `--name` value in argv.
+    private val CLUSTER_NAME_RX = Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
+
+    // The context name `aws eks update-kubeconfig` writes by default: the cluster ARN, any partition.
+    private val CONTEXT_ARN_RX = Regex("""^arn:aws(?:-[a-z]+)*:eks:([^:]+):(\d+):cluster/(.+)$""")
+    private val ARN_MENTION_RX = Regex("""arn:aws(?:-[a-z]+)*:eks:""")
+
+    internal fun isValidRegion(value: String): Boolean = REGION_RX.matches(value)
+
+    internal fun isValidClusterName(value: String): Boolean = CLUSTER_NAME_RX.matches(value)
+
+    /**
+     * Guards every value that reaches argv. Returns a [Throwable] rather than throwing (same
+     * rationale as `GkeClusterDiscoverer.validate`): a throw inside the scan fan-out aborts every
+     * region's scan, and a throw inside the import loop's NonCancellable block escapes the loop
+     * and leaves the row "Cancelled" with no reason.
+     */
+    internal fun validate(region: String, clusterName: String?): Throwable? = when {
+        !REGION_RX.matches(region) ->
+            IllegalArgumentException("Refusing AWS region with unexpected shape: '$region'")
+
+        clusterName != null && !CLUSTER_NAME_RX.matches(clusterName) ->
+            IllegalArgumentException("Refusing EKS cluster name with unexpected shape: '$clusterName'")
+
+        else -> null
+    }
+
+    /** Parses an EKS context name (a cluster ARN in any partition); null for anything else. */
+    fun parseEksContext(ctx: String): EksContextRef? = CONTEXT_ARN_RX.matchEntire(ctx)?.let {
+        EksContextRef(region = it.groupValues[1], accountId = it.groupValues[2], clusterName = it.groupValues[3])
+    }
+
+    /** True when [ctx] mentions an EKS cluster ARN anywhere — the prerequisite check's lenient test. */
+    fun mentionsEksArn(ctx: String): Boolean = ARN_MENTION_RX.containsMatchIn(ctx)
+
+    /**
+     * Puts a plain-language hint in front of a failed `update-kubeconfig` message for the two
+     * refusals a by-name import meets. The raw message is kept on the next line.
+     */
+    internal fun describeImportFailure(raw: String, region: String): String = when {
+        listOf("AccessDeniedException", "AccessDenied", "not authorized to perform").any { raw.contains(it) } ->
+            "This profile isn't allowed to read the cluster (it needs eks:DescribeCluster).\n$raw"
+
+        listOf("ResourceNotFoundException", "No cluster found").any { raw.contains(it) } ->
+            "No cluster with this name in $region. Check the region and the cluster name.\n$raw"
+
+        else -> raw
     }
 
     val COMMON_REGIONS: List<String> = listOf(
@@ -76,7 +128,7 @@ object EksClusterDiscoverer {
     }
 
     suspend fun listClusters(profile: String, region: String): Result<List<EksCluster>> = withContext(Dispatchers.IO) {
-        requireValidRegion(region)
+        validate(region, null)?.let { return@withContext Result.failure(it) }
         log.debug("Listing clusters profile={} region={}", profile, region)
         val args = listOf(
             "aws", "eks", "list-clusters",
@@ -109,7 +161,7 @@ object EksClusterDiscoverer {
         clusterName: String,
         kubeconfigPath: String,
     ): Result<String> = withContext(Dispatchers.IO) {
-        requireValidRegion(region)
+        validate(region, clusterName)?.let { return@withContext Result.failure(it) }
         log.info("Importing cluster name={} region={} profile={}", clusterName, region, profile)
         try {
             KubeconfigLocator.ensureParentDirectory(kubeconfigPath)

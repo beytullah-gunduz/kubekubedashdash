@@ -3,6 +3,7 @@ package com.kubekubedashdash.util
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -172,5 +173,51 @@ class GkeClusterDiscovererTest {
     fun `validate accepts a GCP AI zone`() {
         val error = GkeClusterDiscoverer.validate("example-project", "us-west4-ai2b", null)
         assertNull(error)
+    }
+
+    // ── by-name field checks ──────────────────────────────────────────────
+
+    @Test
+    fun `isValidProjectId accepts a project id and rejects capitals`() {
+        assertTrue(GkeClusterDiscoverer.isValidProjectId("example-project"))
+        assertFalse(GkeClusterDiscoverer.isValidProjectId("Example-Project"))
+    }
+
+    @Test
+    fun `isValidLocation accepts a region and a zone and rejects a flag`() {
+        assertTrue(GkeClusterDiscoverer.isValidLocation("us-central1"))
+        assertTrue(GkeClusterDiscoverer.isValidLocation("us-central1-a"))
+        assertFalse(GkeClusterDiscoverer.isValidLocation("--location"))
+    }
+
+    @Test
+    fun `isValidClusterName accepts a cluster name and rejects capitals`() {
+        assertTrue(GkeClusterDiscoverer.isValidClusterName("example-cluster"))
+        assertFalse(GkeClusterDiscoverer.isValidClusterName("Example"))
+    }
+
+    // ── describeImportFailure ─────────────────────────────────────────────
+
+    @Test
+    fun `describeImportFailure adds the access hint for a 403 permission denied message`() {
+        val raw = "ERROR: (gcloud.container.clusters.get-credentials) ResponseError: code=403, " +
+            "message=Permission denied. PERMISSION_DENIED"
+        val described = GkeClusterDiscoverer.describeImportFailure(raw)
+        assertTrue(described.startsWith(GKE_ACCESS_HINT))
+        assertTrue(described.endsWith(raw))
+    }
+
+    @Test
+    fun `describeImportFailure adds the access hint for a 404 not found message`() {
+        val raw = "ERROR: (gcloud.container.clusters.get-credentials) ResponseError: code=404, " +
+            "message=Not found: projects/example-project/locations/us-central1/clusters/example-cluster."
+        val described = GkeClusterDiscoverer.describeImportFailure(raw)
+        assertTrue(described.startsWith(GKE_ACCESS_HINT))
+        assertTrue(described.endsWith(raw))
+    }
+
+    @Test
+    fun `describeImportFailure leaves any other message as it is`() {
+        assertEquals("exit 1", GkeClusterDiscoverer.describeImportFailure("exit 1"))
     }
 }

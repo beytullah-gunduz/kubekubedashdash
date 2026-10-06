@@ -5,6 +5,7 @@ import com.kubekubedashdash.util.AwsProfile
 import com.kubekubedashdash.util.AwsProfileReader
 import com.kubekubedashdash.util.EksCluster
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import com.kubekubedashdash.util.EksContextRef
 import com.kubekubedashdash.util.KubeconfigLocator
 import com.kubekubedashdash.util.KubeconfigReader
 import java.io.File
@@ -47,6 +48,13 @@ interface EksDiscoveryGateway {
     fun recallProfileSelection(): List<String>
 
     fun rememberProfileSelection(profileNames: List<String>)
+
+    /** The tab the modal showed last; BROWSE when nothing is stored. */
+    fun recallDiscoveryMode(): DiscoveryMode
+
+    fun rememberDiscoveryMode(mode: DiscoveryMode)
+
+    fun parseContext(ctx: String): EksContextRef?
 }
 
 /** Delegates every member to the pre-existing singletons — no behavior change. */
@@ -82,4 +90,10 @@ class DefaultEksDiscoveryGateway : EksDiscoveryGateway {
     override fun recallProfileSelection(): List<String> = PreferenceRepository.lastAwsProfiles.value
 
     override fun rememberProfileSelection(profileNames: List<String>) = PreferenceRepository.setLastAwsProfiles(profileNames)
+
+    override fun recallDiscoveryMode(): DiscoveryMode = DiscoveryMode.fromStored(PreferenceRepository.eksDiscoveryMode.value)
+
+    override fun rememberDiscoveryMode(mode: DiscoveryMode) = PreferenceRepository.setEksDiscoveryMode(mode.stored)
+
+    override fun parseContext(ctx: String): EksContextRef? = EksClusterDiscoverer.parseEksContext(ctx)
 }

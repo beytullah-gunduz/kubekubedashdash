@@ -304,7 +304,7 @@ private fun ProjectStep(viewModel: GkeDiscoveryViewModel) {
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         when (val state = loadState) {
-            ProjectLoadState.Loading -> {
+            ProjectLoadState.Loading, ProjectLoadState.NotRequested -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))

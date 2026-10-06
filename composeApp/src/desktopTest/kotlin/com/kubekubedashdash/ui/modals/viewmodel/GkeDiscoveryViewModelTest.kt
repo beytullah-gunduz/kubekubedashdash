@@ -1,7 +1,7 @@
 package com.kubekubedashdash.ui.modals.viewmodel
 
 import androidx.lifecycle.viewModelScope
-import com.kubekubedashdash.util.GcpProject
+import com.kubekubedashdash.util.GKE_ACCESS_HINT
 import com.kubekubedashdash.util.GkeCluster
 import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CompletableDeferred
@@ -10,14 +10,13 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -86,6 +85,26 @@ class GkeDiscoveryViewModelTest {
     }
 
     private fun rowStates(): Map<String, GkeImportRowState> = vm.importRows.value.associate { it.cluster.name to it.state }
+
+    /**
+     * `setUp()` builds [vm] before each test body runs, so its `init` has already listed projects
+     * and read contexts from the default fake. Tests that need a differently configured fake
+     * rebuild both; counters and lists are then asserted on the rebuilt fake only.
+     */
+    private fun rebuild(configure: FakeGkeDiscoveryGateway.() -> Unit) {
+        shutdownCleanly(vm.viewModelScope, label = "GkeDiscoveryViewModelTest")
+        fake = FakeGkeDiscoveryGateway(kubeconfigFile).apply {
+            clusters = mapOf("example-project" to listOf(clusterA, clusterB, clusterC))
+            configure()
+        }
+        vm = GkeDiscoveryViewModel(fake)
+    }
+
+    private fun fillValidByNameFields() {
+        vm.setByNameProject("example-project")
+        vm.setByNameLocation("us-central1")
+        vm.setByNameCluster("example-cluster")
+    }
 
     // Probe kept from WS1 step 1: proves the ViewModel constructs and its
     // init-time load completes in a plain JVM test without Dispatchers.setMain.
@@ -225,77 +244,130 @@ class GkeDiscoveryViewModelTest {
         // The scan persisted the selection through the gateway, not the real DataStore.
         assertEquals(listOf(listOf("example-project", "seed-project")), fake.rememberedSelections.toList())
     }
-}
 
-/**
- * In-memory [GkeDiscoveryGateway]. `importCluster` records its calls in order
- * and, when the test installed a [gate] for the cluster, suspends until the
- * test completes it — letting tests cancel while an import is in flight.
- * Without a gate it returns success immediately.
- */
-private class FakeGkeDiscoveryGateway(
-    private val kubeconfig: File,
-) : GkeDiscoveryGateway {
+    // ── "Enter by name" tab ────────────────────────────────────────────────
 
-    override val gcloudAvailable: Boolean = true
-    override val authPluginAvailable: Boolean = true
+    @Test
+    fun `by-name tab recalled does not list projects until Browse is shown`() = runBlocking {
+        rebuild { initialMode = DiscoveryMode.BY_NAME }
+        withTimeout(5_000) { vm.projectLoadState.first { it == ProjectLoadState.NotRequested } }
+        assertEquals(0, fake.listProjectsCalls.get())
 
-    var projects: List<GcpProject> = listOf(
-        GcpProject("example-project", "Example Project"),
-        GcpProject("seed-project", "Seed Project"),
-    )
-    var clusters: Map<String, List<GkeCluster>> = emptyMap()
-    var backupResult: (String) -> File? = { File("$it.backup") }
-
-    val importCalls: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
-    val importPaths: MutableList<String> = Collections.synchronizedList(mutableListOf())
-    val backupRequests: MutableList<String> = Collections.synchronizedList(mutableListOf())
-    val rememberedSelections: MutableList<List<String>> = Collections.synchronizedList(mutableListOf())
-
-    private val gates = ConcurrentHashMap<String, CompletableDeferred<Result<String>>>()
-    private val started = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
-
-    /** Install (or fetch) the gate `importCluster` will await for [clusterName]. */
-    fun gate(clusterName: String): CompletableDeferred<Result<String>> = gates.getOrPut(clusterName) { CompletableDeferred() }
-
-    /** Suspends until `importCluster` has been entered for [clusterName]. */
-    suspend fun awaitImportStarted(clusterName: String) {
-        started.getOrPut(clusterName) { CompletableDeferred() }.await()
+        vm.setMode(DiscoveryMode.BROWSE)
+        withTimeout(5_000) { vm.projectLoadState.first { it is ProjectLoadState.Loaded } }
+        assertEquals(1, fake.listProjectsCalls.get())
+        assertEquals(listOf(DiscoveryMode.BROWSE), fake.rememberedModes.toList())
     }
 
-    override suspend fun activeAccount(): Result<String?> = Result.success("dev@example.com")
+    @Test
+    fun `paste fills the fields and reports what is missing`() {
+        vm.onPasteTextChange("gcloud container clusters get-credentials example-cluster --zone us-central1-a")
+        assertEquals("", vm.byNameProject.value)
+        assertEquals("us-central1-a", vm.byNameLocation.value)
+        assertEquals("example-cluster", vm.byNameCluster.value)
+        assertEquals(
+            PasteNotice("Filled the location and cluster. Add the project.", recognized = true),
+            vm.pasteNotice.value,
+        )
 
-    override suspend fun listProjects(): Result<List<GcpProject>> = Result.success(projects)
+        vm.onPasteTextChange("hello")
+        assertEquals(PasteNotice(GKE_PASTE_NOT_RECOGNIZED, recognized = false), vm.pasteNotice.value)
+        assertEquals("", vm.byNameProject.value)
+        assertEquals("us-central1-a", vm.byNameLocation.value)
+        assertEquals("example-cluster", vm.byNameCluster.value)
 
-    override suspend fun listClusters(projectId: String): Result<List<GkeCluster>> = Result.success(clusters[projectId].orEmpty())
-
-    override suspend fun importCluster(
-        projectId: String,
-        location: String,
-        clusterName: String,
-        kubeconfigPath: String,
-    ): Result<String> {
-        importCalls.add(Triple(projectId, location, clusterName))
-        importPaths.add(kubeconfigPath)
-        started.getOrPut(clusterName) { CompletableDeferred() }.complete(Unit)
-        val gate = gates[clusterName]
-        return gate?.await() ?: Result.success("gke_${projectId}_${location}_$clusterName")
+        vm.onPasteTextChange("")
+        assertNull(vm.pasteNotice.value)
     }
 
-    override fun parseContext(ctx: String): Triple<String, String, String>? = null
+    @Test
+    fun `by-name state validates fields and flags an existing context`() = runBlocking {
+        rebuild { contexts = listOf("gke_example-project_us-central1_example-cluster") }
+        fillValidByNameFields()
+        // The contexts arrive on IO, possibly after the first canImport emission.
+        withTimeout(5_000) { vm.byNameState.first { it.canImport && it.alreadyImported } }
 
-    override fun kubeconfigPath(): String = kubeconfig.absolutePath
-
-    override fun backupKubeconfig(kubeconfigPath: String): File? {
-        backupRequests.add(kubeconfigPath)
-        return backupResult(kubeconfigPath)
+        vm.setByNameProject("Bad_Project")
+        val state = withTimeout(5_000) { vm.byNameState.first { it.projectError == GKE_PROJECT_ERROR && !it.canImport } }
+        assertNull(state.locationError)
+        assertNull(state.clusterError)
     }
 
-    override fun existingContexts(): List<String> = emptyList()
+    @Test
+    fun `by-name import runs one cluster through the backup and lands on DONE`() = runBlocking {
+        fillValidByNameFields()
+        vm.startByNameImport()
+        awaitStep(GkeDiscoveryStep.DONE)
+        assertEquals(listOf(Triple("example-project", "us-central1", "example-cluster")), fake.importCalls.toList())
+        assertEquals(listOf(kubeconfigFile.absolutePath), fake.backupRequests.toList())
+        assertTrue(vm.anyImportSucceeded)
+    }
 
-    override fun recallProjectSelection(): List<String> = listOf("seed-project", "not-a-real-project")
+    @Test
+    fun `by-name backup failure returns to the form`() = runBlocking {
+        fake.backupResult = { null }
+        fillValidByNameFields()
+        vm.startByNameImport()
+        awaitStep(GkeDiscoveryStep.PICK_PROJECTS)
+        assertNotNull(vm.errorMessage.value)
+        assertTrue(fake.importCalls.isEmpty())
+        assertFalse(vm.busy.value)
+    }
 
-    override fun rememberProjectSelection(projectIds: List<String>) {
-        rememberedSelections.add(projectIds)
+    @Test
+    fun `add another keeps project and location and the sticky import flag`() = runBlocking {
+        fillValidByNameFields()
+        vm.startByNameImport()
+        awaitStep(GkeDiscoveryStep.DONE)
+
+        vm.addAnotherByName()
+        assertEquals(GkeDiscoveryStep.PICK_PROJECTS, vm.step.value)
+        assertEquals("", vm.byNameCluster.value)
+        assertEquals("example-project", vm.byNameProject.value)
+        assertEquals("us-central1", vm.byNameLocation.value)
+        assertTrue(vm.anyImportSucceeded)
+
+        vm.cancel()
+        assertTrue(vm.anyImportSucceeded)
+
+        vm.reset()
+        assertFalse(vm.anyImportSucceeded)
+        assertEquals("", vm.byNameProject.value)
+        assertEquals("", vm.byNameLocation.value)
+        assertEquals("", vm.byNameCluster.value)
+    }
+
+    @Test
+    fun `a refused by-name import shows the access hint`() = runBlocking {
+        fake.gate("example-cluster").complete(
+            Result.failure(
+                RuntimeException(
+                    "ERROR: (gcloud.container.clusters.get-credentials) ResponseError: code=403, " +
+                        "message=Required \"container.clusters.get\" permission(s) for " +
+                        "\"projects/example-project/locations/us-central1/clusters/example-cluster\".",
+                ),
+            ),
+        )
+        fillValidByNameFields()
+        vm.startByNameImport()
+        awaitStep(GkeDiscoveryStep.DONE)
+        val state = rowStates()["example-cluster"]
+        assertTrue(state is GkeImportRowState.Failed)
+        assertTrue(state.message.startsWith(GKE_ACCESS_HINT))
+        assertTrue(state.message.contains("code=403"))
+    }
+
+    @Test
+    fun `suggestions come from kubeconfig contexts`() = runBlocking {
+        rebuild {
+            contexts = listOf(
+                "gke_example-project_us-central1_cluster-a",
+                "gke_another-project_us-central1_cluster-b",
+                "arn:aws:eks:eu-west-1:000000000000:cluster/example-cluster",
+            )
+        }
+        val suggestions = withTimeout(5_000) { vm.byNameSuggestions.first { it.projects.isNotEmpty() } }
+        assertEquals(listOf("another-project", "example-project"), suggestions.projects)
+        assertEquals(listOf("us-central1"), suggestions.locations)
     }
 }
