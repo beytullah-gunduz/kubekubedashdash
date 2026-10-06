@@ -4,6 +4,8 @@ import com.kubekubedashdash.LayoutDensity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Tests for the pure table-controls model in TableOptions.kt:
@@ -307,5 +309,61 @@ class TableOptionsTest {
 
         val pinned = sortTableRows(rows, nameStatus, null, ascending = true, identityHeader = null, pinnedIds = setOf("pin:3"))
         assertEquals(listOf("3", "1", "2"), pinned.map { it.id })
+    }
+
+    // ── sortTableRows: numeric columns ──────────────────────────────────────
+
+    private val nameCpu = listOf(ColumnDef(header = "Name"), ColumnDef(header = "CPU"))
+
+    private fun numRow(id: String, name: String, value: Double?, pinId: String? = null) = TableRow(
+        id = id,
+        pinId = pinId,
+        cells = listOf(CellData(text = name), CellData(text = value?.toString() ?: "<none>", sortNumber = value)),
+    )
+
+    private fun sortByCpu(rows: List<TableRow>, ascending: Boolean, pinnedIds: Set<String> = emptySet()) = sortTableRows(rows, nameCpu, "CPU", ascending, identityHeader = "Name", pinnedIds = pinnedIds).map { it.id }
+
+    @Test
+    fun `a numeric column sorts by number, not by text`() {
+        val rows = listOf(
+            numRow("a", "pod-a", 900.0),
+            numRow("b", "pod-b", 1200.0),
+            numRow("c", "pod-c", 95.0),
+        )
+
+        assertEquals(listOf("c", "a", "b"), sortByCpu(rows, ascending = true))
+        assertEquals(listOf("b", "a", "c"), sortByCpu(rows, ascending = false))
+    }
+
+    @Test
+    fun `rows without a number go last in both directions`() {
+        val rows = listOf(
+            numRow("a", "pod-a", 10.0),
+            numRow("b", "pod-b", null),
+            numRow("c", "pod-c", 5.0),
+            numRow("d", "pod-d", null),
+        )
+
+        assertEquals(listOf("c", "a", "b", "d"), sortByCpu(rows, ascending = true))
+        assertEquals(listOf("a", "c", "b", "d"), sortByCpu(rows, ascending = false))
+    }
+
+    @Test
+    fun `pins still come first in a numeric sort`() {
+        val rows = listOf(
+            numRow("a", "pod-a", 10.0),
+            numRow("b", "pod-b", 5.0, pinId = "pin:b"),
+            numRow("c", "pod-c", null),
+        )
+
+        assertEquals(listOf("b", "a", "c"), sortByCpu(rows, ascending = true, pinnedIds = setOf("pin:b")))
+        assertEquals(listOf("b", "a", "c"), sortByCpu(rows, ascending = false, pinnedIds = setOf("pin:b")))
+    }
+
+    @Test
+    fun `ageSortKey puts the youngest first and an unparseable time last`() {
+        assertTrue(ageSortKey("2026-06-01T00:00:00Z")!! < ageSortKey("2026-01-01T00:00:00Z")!!)
+        assertNull(ageSortKey(""))
+        assertNull(ageSortKey("yesterday"))
     }
 }

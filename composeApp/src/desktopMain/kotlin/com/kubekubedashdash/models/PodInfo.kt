@@ -1,6 +1,7 @@
 package com.kubekubedashdash.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 @Serializable
 data class PodInfo(
@@ -30,4 +31,9 @@ data class PodInfo(
     // The PodScheduled condition's message while it is False: the scheduler's
     // "0/3 nodes are available: …" explanation for a Pending pod.
     val schedulingMessage: String = "",
+    // Requests/limits of the containers that run beside the app (containers +
+    // native sidecars), for the Pods table's usage tooltip and memory alert.
+    // @Transient keeps it out of the MCP `list_resources pod` JSON.
+    @Transient
+    val resources: List<ContainerResources> = emptyList(),
 )

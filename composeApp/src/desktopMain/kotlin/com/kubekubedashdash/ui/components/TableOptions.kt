@@ -1,5 +1,8 @@
 package com.kubekubedashdash.ui.components
 
+import java.time.Instant
+import java.time.format.DateTimeParseException
+
 /**
  * Preference entry key for one column of one table. Duplicate headers are
  * disambiguated by index — [com.kubekubedashdash.ui.screens.generic.GenericTable]
@@ -70,6 +73,10 @@ fun isLastVisibleColumn(
  * [sortHeader] keeps the source order. Descending is
  * the reverse of the ascending order, so tied rows land in reverse-identity
  * order when descending — that is intentional, not a bug to fix.
+ *
+ * A column whose cells carry [CellData.sortNumber] sorts by number; its rows
+ * without a number (no value: "—") go last in both directions, so a
+ * highest-first sort does not open on a screen of dashes.
  */
 fun sortTableRows(
     rows: List<TableRow>,
@@ -102,8 +109,31 @@ fun sortTableRows(
             return cell?.sortValue ?: cell?.text ?: ""
         }
 
-        val sorted = rows.sortedWith(compareBy({ primaryKey(it) }, { identityKey(it) }))
-        if (ascending) sorted else sorted.reversed()
+        fun primaryNumber(row: TableRow): Double? = row.cells.getOrNull(primaryIndex)?.sortNumber
+
+        val (numbered, unnumbered) = rows.partition { primaryNumber(it) != null }
+        if (numbered.isEmpty()) {
+            val sorted = rows.sortedWith(compareBy({ primaryKey(it) }, { identityKey(it) }))
+            if (ascending) sorted else sorted.reversed()
+        } else {
+            val sorted = numbered.sortedWith(compareBy({ primaryNumber(it) }, { identityKey(it) }))
+            val directed = if (ascending) sorted else sorted.reversed()
+            directed + unnumbered.sortedWith(compareBy({ primaryKey(it) }, { identityKey(it) }))
+        }
     }
     return ordered.sortedByDescending { (it.pinId ?: it.id) in pinnedIds }
+}
+
+/**
+ * [CellData.sortNumber] for an Age column. Ascending Age means youngest
+ * first, so the key is the NEGATED creation time. Blank or unparseable →
+ * null (the row sorts last).
+ */
+fun ageSortKey(creationTimestamp: String): Double? {
+    if (creationTimestamp.isBlank()) return null
+    return try {
+        -Instant.parse(creationTimestamp).toEpochMilli().toDouble()
+    } catch (_: DateTimeParseException) {
+        null
+    }
 }
