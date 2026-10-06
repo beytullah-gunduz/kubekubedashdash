@@ -57,6 +57,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,6 +88,7 @@ import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
+import com.kubekubedashdash.ui.modals.viewmodel.DiscoveryMode
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryStep
 import com.kubekubedashdash.ui.modals.viewmodel.EksDiscoveryViewModel
 import com.kubekubedashdash.ui.modals.viewmodel.ImportRow
@@ -104,10 +106,12 @@ fun EksDiscoveryModal(
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
     crtGhost: CrtGhost? = null,
+    vm: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel() },
 ) {
-    val viewModel: EksDiscoveryViewModel = viewModel { EksDiscoveryViewModel() }
+    val viewModel = vm
     LaunchedEffect(Unit) { viewModel.reset() }
     val step by viewModel.step.collectAsState()
+    val mode by viewModel.mode.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
@@ -118,9 +122,12 @@ fun EksDiscoveryModal(
     // (the in-flight update-kubeconfig is never killed — see the viewmodel kdoc).
     val closeOrComplete: () -> Unit = {
         when (step) {
+            // A scan can run after an earlier by-name import in the same session, so a scan
+            // closed mid-run still reports that import.
             EksDiscoveryStep.SCANNING -> {
+                val imported = viewModel.anyImportSucceeded
                 viewModel.cancel()
-                onDismiss()
+                if (imported) onCompleted() else onDismiss()
             }
 
             // DECIDED BY THE PLAN OWNER — do not substitute your own judgement.
@@ -169,14 +176,14 @@ fun EksDiscoveryModal(
             shadowElevation = 24.dp,
         ) {
             Column {
-                ModalHeader(step = step, onClose = closeOrComplete)
+                ModalHeader(step = step, mode = mode, onClose = closeOrComplete)
                 HorizontalDivider(color = KdBorder)
 
                 if (!viewModel.awsCliAvailable) {
                     AwsCliMissing(onDismiss)
                 } else {
                     when (step) {
-                        EksDiscoveryStep.PICK_PROFILE -> ProfileStep(viewModel)
+                        EksDiscoveryStep.PICK_PROFILE -> FirstStep(viewModel, mode)
                         EksDiscoveryStep.PICK_REGIONS -> RegionStep(viewModel)
                         EksDiscoveryStep.SCANNING -> ScanningStep(viewModel)
                         EksDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
@@ -212,7 +219,7 @@ fun EksDiscoveryModal(
 }
 
 @Composable
-private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
+private fun ModalHeader(step: EksDiscoveryStep, mode: DiscoveryMode, onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -237,7 +244,7 @@ private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                stepSubtitle(step),
+                stepSubtitle(step, mode),
                 style = MaterialTheme.typography.labelSmall,
                 color = KdTextSecondary,
             )
@@ -254,13 +261,21 @@ private fun ModalHeader(step: EksDiscoveryStep, onClose: () -> Unit) {
     }
 }
 
-private fun stepSubtitle(step: EksDiscoveryStep): String = when (step) {
-    EksDiscoveryStep.PICK_PROFILE -> "Step 1 of 4 · Choose AWS profile"
-    EksDiscoveryStep.PICK_REGIONS -> "Step 2 of 4 · Choose regions to scan"
-    EksDiscoveryStep.SCANNING -> "Step 3 of 4 · Scanning regions"
-    EksDiscoveryStep.PICK_CLUSTERS -> "Step 3 of 4 · Choose clusters to import"
-    EksDiscoveryStep.IMPORTING -> "Step 4 of 4 · Importing clusters"
-    EksDiscoveryStep.DONE -> "Step 4 of 4 · Done"
+private fun stepSubtitle(step: EksDiscoveryStep, mode: DiscoveryMode): String = when {
+    mode == DiscoveryMode.BY_NAME && step == EksDiscoveryStep.PICK_PROFILE -> "Enter a cluster by name"
+
+    mode == DiscoveryMode.BY_NAME && step == EksDiscoveryStep.IMPORTING -> "Importing cluster"
+
+    mode == DiscoveryMode.BY_NAME && step == EksDiscoveryStep.DONE -> "Done"
+
+    else -> when (step) {
+        EksDiscoveryStep.PICK_PROFILE -> "Step 1 of 4 · Choose AWS profile"
+        EksDiscoveryStep.PICK_REGIONS -> "Step 2 of 4 · Choose regions to scan"
+        EksDiscoveryStep.SCANNING -> "Step 3 of 4 · Scanning regions"
+        EksDiscoveryStep.PICK_CLUSTERS -> "Step 3 of 4 · Choose clusters to import"
+        EksDiscoveryStep.IMPORTING -> "Step 4 of 4 · Importing clusters"
+        EksDiscoveryStep.DONE -> "Step 4 of 4 · Done"
+    }
 }
 
 @Composable
@@ -297,23 +312,39 @@ private fun AwsCliMissing(onDismiss: () -> Unit) {
 }
 
 @Composable
+private fun FirstStep(viewModel: EksDiscoveryViewModel, mode: DiscoveryMode) {
+    Column {
+        DiscoveryModeTabs(mode = mode, browseLabel = "Browse profiles", onSelect = viewModel::setMode)
+        when (mode) {
+            DiscoveryMode.BROWSE -> ProfileStep(viewModel)
+            DiscoveryMode.BY_NAME -> EksByNameStep(viewModel)
+        }
+    }
+}
+
+@Composable
+private fun NoProfilesMessage() {
+    Text(
+        "No AWS profiles found at ~/.aws/credentials or ~/.aws/config.",
+        color = KdTextPrimary,
+        fontWeight = FontWeight.Medium,
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "Run `aws configure --profile NAME` from a terminal, then come back.",
+        color = KdTextSecondary,
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+@Composable
 private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
     val profiles by viewModel.profiles.collectAsState()
     val selected by viewModel.selectedProfiles.collectAsState()
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         if (profiles.isEmpty()) {
-            Text(
-                "No AWS profiles found at ~/.aws/credentials or ~/.aws/config.",
-                color = KdTextPrimary,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Run `aws configure --profile NAME` from a terminal, then come back.",
-                color = KdTextSecondary,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            NoProfilesMessage()
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -389,6 +420,111 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                     adapter = rememberScrollbarAdapter(listState),
                     modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                 )
+            }
+        }
+    }
+}
+
+/** The way out of a dead end in the browse flow: the "Enter by name" tab. */
+@Composable
+private fun EnterByNameButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(kdOutlineWidth, KdBorder),
+    ) { Text("Enter a cluster by name", color = KdTextPrimary) }
+}
+
+@Composable
+private fun EksByNameStep(viewModel: EksDiscoveryViewModel) {
+    val profiles by viewModel.profiles.collectAsState()
+    val pasteText by viewModel.pasteText.collectAsState()
+    val pasteNotice by viewModel.pasteNotice.collectAsState()
+    val profile by viewModel.byNameProfile.collectAsState()
+    val region by viewModel.byNameRegion.collectAsState()
+    val cluster by viewModel.byNameCluster.collectAsState()
+    val state by viewModel.byNameState.collectAsState()
+    val regionSuggestions by viewModel.byNameRegionSuggestions.collectAsState()
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+        ByNameInfoLine(
+            "Import a cluster you can access without listing clusters. " +
+                "It needs only permission to describe that cluster.",
+        )
+        Spacer(Modifier.height(12.dp))
+        if (profiles.isEmpty()) {
+            NoProfilesMessage()
+        } else {
+            PasteReferenceField(
+                value = pasteText,
+                onValueChange = viewModel::onPasteTextChange,
+                placeholder = "aws eks update-kubeconfig --name …  or  arn:aws:eks:…",
+                notice = pasteNotice,
+            )
+            Spacer(Modifier.height(16.dp))
+            Text("AWS profile", color = KdTextSecondary, style = MaterialTheme.typography.labelSmall)
+            Spacer(Modifier.height(4.dp))
+            Column(modifier = Modifier.heightIn(max = 132.dp).verticalScroll(rememberScrollState())) {
+                profiles.forEach { p ->
+                    val isSelected = p.name == profile
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) KdSelected else Color.Transparent)
+                            .clickable { viewModel.setByNameProfile(p.name) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag(ByNameTags.profile(p.name)),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { viewModel.setByNameProfile(p.name) },
+                            colors = RadioButtonDefaults.colors(selectedColor = KdPrimary, unselectedColor = KdTextSecondary),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            p.name,
+                            color = if (isSelected) KdPrimary else KdTextPrimary,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            p.defaultRegion ?: "no default region",
+                            color = KdTextSecondary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+            state.profileError?.let {
+                Text(it, color = KdError, style = MaterialTheme.typography.labelSmall)
+            }
+            Spacer(Modifier.height(8.dp))
+            ByNameTextField(
+                label = "Region",
+                value = region,
+                onValueChange = viewModel::setByNameRegion,
+                placeholder = "us-east-1",
+                error = state.regionError,
+                tag = ByNameTags.field("region"),
+                suggestionsLabel = "Suggestions:",
+                suggestions = regionSuggestions,
+            )
+            Spacer(Modifier.height(8.dp))
+            ByNameTextField(
+                label = "Cluster name",
+                value = cluster,
+                onValueChange = viewModel::setByNameCluster,
+                placeholder = "example-cluster",
+                error = state.clusterError,
+                tag = ByNameTags.field("cluster"),
+            )
+            if (state.alreadyImported) {
+                Spacer(Modifier.height(8.dp))
+                ByNameInfoLine("Already in your kubeconfig. Importing it again refreshes its credentials.")
             }
         }
     }
@@ -598,6 +734,7 @@ private fun ScanRow(row: RegionScanRow) {
 @Composable
 private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
     val candidates by viewModel.candidates.collectAsState()
+    val scanRows by viewModel.scanRows.collectAsState()
     val selectedCount = candidates.count { it.selected }
     val grouped = candidates.groupBy { it.cluster.profile }
     val showHeaders = grouped.size > 1
@@ -607,11 +744,36 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
             Text("No EKS clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Try widening the region scope, or pick different AWS profiles.",
+                "Try widening the region scope, or pick different AWS profiles. " +
+                    "If you can't list clusters but can access one, enter it by name.",
                 color = KdTextSecondary,
                 style = MaterialTheme.typography.bodySmall,
             )
+            Spacer(Modifier.height(12.dp))
+            EnterByNameButton(onClick = viewModel::switchToByName, modifier = Modifier.testTag(ByNameTags.SWITCH_TO_BY_NAME))
         } else {
+            val failedScans = scanRows.count { it.state is RegionScanState.Failed }
+            if (failedScans > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (failedScans == 1) "1 region could not be scanned." else "$failedScans regions could not be scanned.",
+                        color = KdWarning,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Enter a cluster by name",
+                        color = KdPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { viewModel.switchToByName() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .testTag(ByNameTags.SWITCH_TO_BY_NAME),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "$selectedCount of ${candidates.size} selected",
@@ -805,7 +967,7 @@ private fun ImportRowView(row: ImportRow) {
                     s.message,
                     color = KdError,
                     style = MaterialTheme.typography.labelSmall,
-                    maxLines = 2,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
 
@@ -902,6 +1064,9 @@ private fun Footer(
     val selectedProfiles by viewModel.selectedProfiles.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
     val cancelRequested by viewModel.cancelRequested.collectAsState()
+    val mode by viewModel.mode.collectAsState()
+    val byNameState by viewModel.byNameState.collectAsState()
+    val importRows by viewModel.importRows.collectAsState()
 
     Row(
         modifier = Modifier
@@ -923,6 +1088,15 @@ private fun Footer(
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Back", color = KdTextPrimary) }
+            Spacer(Modifier.width(8.dp))
+        }
+        if (step == EksDiscoveryStep.DONE && mode == DiscoveryMode.BY_NAME) {
+            OutlinedButton(
+                onClick = { viewModel.addAnotherByName() },
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
+                modifier = Modifier.testTag(ByNameTags.ADD_ANOTHER),
+            ) { Text("Add another", color = KdTextPrimary) }
             Spacer(Modifier.width(8.dp))
         }
         Spacer(Modifier.weight(1f))
@@ -963,7 +1137,16 @@ private fun Footer(
         Spacer(Modifier.width(8.dp))
 
         when (step) {
-            EksDiscoveryStep.PICK_PROFILE -> {
+            EksDiscoveryStep.PICK_PROFILE -> if (mode == DiscoveryMode.BY_NAME) {
+                val importEnabled = byNameState.canImport && !busy
+                Button(
+                    onClick = { viewModel.startByNameImport() },
+                    enabled = importEnabled,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                    modifier = Modifier.testTag(ByNameTags.IMPORT),
+                ) { Text("Import", color = if (importEnabled) KdOnPrimary else Color.Unspecified) }
+            } else {
                 val nextEnabled = selectedProfiles.isNotEmpty()
                 Button(
                     onClick = { viewModel.proceedFromProfile() },
@@ -1018,6 +1201,9 @@ private fun Footer(
             }
 
             EksDiscoveryStep.DONE -> if (!hideOpenClustersButton) {
+                // The action reads the sticky anyImportSucceeded (an earlier by-name run may have
+                // imported); the label reads this run only, so a failed run never says "Open clusters".
+                val rowsDone = importRows.any { it.state is ImportRowState.Done }
                 Button(
                     onClick = {
                         val anySuccess = viewModel.anyImportSucceeded
@@ -1028,7 +1214,7 @@ private fun Footer(
                 ) {
                     Icon(painterResource(Res.drawable.cloud_filled), null, tint = KdOnPrimary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = KdOnPrimary)
+                    Text(if (rowsDone) "Open clusters" else "Close", color = KdOnPrimary)
                 }
             }
         }
