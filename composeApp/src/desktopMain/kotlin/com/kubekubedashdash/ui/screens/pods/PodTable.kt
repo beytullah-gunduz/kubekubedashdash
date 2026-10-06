@@ -10,14 +10,18 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.PodUsage
+import com.kubekubedashdash.models.podUsageKey
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.ColumnDef
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
+import com.kubekubedashdash.ui.components.ageSortKey
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.components.restartCountColor
 import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
@@ -28,22 +32,25 @@ private class PodColumn(
     val header: String,
     val weight: Float,
     val minTableWidth: Dp,
-    val cell: (PodInfo) -> CellData,
+    val cell: (PodInfo, PodUsage?) -> CellData,
 )
 
 private val podColumns = listOf(
-    PodColumn("Name", 2.5f, 0.dp) { CellData(it.name, KdPrimary) },
-    PodColumn("Namespace", 1.2f, 400.dp) { CellData(it.namespace) },
-    PodColumn("Status", 1.0f, 0.dp) { pod ->
+    PodColumn("Name", 2.5f, 0.dp) { pod, _ -> CellData(pod.name, KdPrimary) },
+    PodColumn("Namespace", 1.2f, 400.dp) { pod, _ -> CellData(pod.namespace) },
+    PodColumn("Status", 1.0f, 0.dp) { pod, _ ->
         CellData(text = pod.status, sortValue = pod.status, content = { StatusCell(pod.status) })
     },
-    PodColumn("Ready", 0.6f, 300.dp) { CellData(it.ready) },
-    PodColumn("Restarts", 0.7f, 500.dp) { pod ->
-        CellData("${pod.restarts}", restartCountColor(pod.restarts))
+    PodColumn("Ready", 0.6f, 300.dp) { pod, _ -> CellData(pod.ready) },
+    PodColumn("Restarts", 0.7f, 500.dp) { pod, _ ->
+        CellData("${pod.restarts}", restartCountColor(pod.restarts), sortNumber = pod.restarts.toDouble())
     },
-    PodColumn("Node", 1.2f, 600.dp) { CellData(it.node) },
-    PodColumn("IP", 1.0f, 750.dp) { CellData(it.ip) },
-    PodColumn("Age", 0.7f, 0.dp) { CellData(it.age) },
+    // Above IP in width priority: IP (750 dp) drops first, Node (600 dp) last.
+    PodColumn("CPU", 0.7f, 680.dp) { pod, usage -> cpuCell(pod, usage) },
+    PodColumn("Memory", 0.9f, 680.dp) { pod, usage -> memoryCell(pod, usage) },
+    PodColumn("Node", 1.2f, 600.dp) { pod, _ -> CellData(pod.node) },
+    PodColumn("IP", 1.0f, 750.dp) { pod, _ -> CellData(pod.ip) },
+    PodColumn("Age", 0.7f, 0.dp) { pod, _ -> CellData(pod.age, sortNumber = ageSortKey(pod.creationTimestamp)) },
 )
 
 @Composable
@@ -65,6 +72,9 @@ internal fun PodTable(
     selectedUids: Set<String> = emptySet(),
     onSelectionChange: ((Set<String>) -> Unit)? = null,
     onEvict: ((PodInfo) -> Unit)? = null,
+    // Per-pod usage keyed by podUsageKey (ResourceUsageSummary.podUsages);
+    // a pod without an entry shows "—" in CPU and Memory.
+    usages: Map<String, PodUsage> = emptyMap(),
 ) {
     val portForward = LocalPortForwardLauncher.current
     val copyToClipboard = rememberCopyToClipboard()
@@ -73,6 +83,7 @@ internal fun PodTable(
         val columnDefs = visible.map { ColumnDef(it.header, it.weight) }
         val rows = pods.map { pod ->
             val isStale = pod.uid in staleUids
+            val usage = usages[podUsageKey(pod.namespace, pod.name)]
             // The stored status is the pod's last-seen value before it vanished;
             // an error there means it died badly (OOMKilled / CrashLoop / …).
             val staleError = isStale && podStatusSeverity(pod.status) == HealthSeverity.ERROR
@@ -84,7 +95,7 @@ internal fun PodTable(
                 identity = RowIdentity("Pod", pod.name, pod.namespace),
                 cells = visible.map { col ->
                     when {
-                        !isStale -> col.cell(pod)
+                        !isStale -> col.cell(pod, usage)
 
                         col.header == "Status" ->
                             if (staleError) {
@@ -94,8 +105,11 @@ internal fun PodTable(
                                 CellData("Terminating", KdTextSecondary)
                             }
 
+                        // A departed pod has no live usage.
+                        col.header == "CPU" || col.header == "Memory" -> CellData(NONE_PLACEHOLDER)
+
                         // Identity columns greyed: this row is a departed pod.
-                        else -> col.cell(pod).copy(color = KdTextSecondary, content = null)
+                        else -> col.cell(pod, usage).copy(color = KdTextSecondary, content = null)
                     }
                 },
                 actions = buildList {
