@@ -67,6 +67,7 @@ import com.kubekubedashdash.ui.components.PodStatusBar
 import com.kubekubedashdash.ui.components.UsageHistoryBar
 import com.kubekubedashdash.ui.components.UsageTierGlyph
 import com.kubekubedashdash.ui.components.color
+import com.kubekubedashdash.ui.components.horizontalScrollFade
 import com.kubekubedashdash.ui.components.usageTier
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
 import com.kubekubedashdash.ui.screens.cluster.TopNodeRow
@@ -159,7 +160,7 @@ internal fun FleetStrip(
                     val scrollState = rememberScrollState()
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Row(
-                            Modifier.weight(1f).horizontalScroll(scrollState),
+                            Modifier.weight(1f).horizontalScrollFade(scrollState).horizontalScroll(scrollState),
                             horizontalArrangement = Arrangement.spacedBy(FLEET_PANEL_GAP),
                         ) {
                             summaries.forEach { summary ->
