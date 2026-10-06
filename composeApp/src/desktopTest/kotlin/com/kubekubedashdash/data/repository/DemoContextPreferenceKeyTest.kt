@@ -9,7 +9,7 @@ import kotlin.test.assertFalse
  * Every per-cluster preference store keys the demo cluster the same way.
  * `PreferenceRepository.defaultNamespaceByContext` already folds every minted
  * "demo-cluster (mock) #N" label to the one row the picker lists
- * ([DemoContext.preferenceKey]); favourites, recents and CRD pins/hides were
+ * ([DemoContext.preferenceKey]); favourites and CRD pins/hides were
  * keyed by the raw label instead, so they vanished whenever the label was
  * re-minted — every fresh pick from the picker, and a restore of a `#N` that
  * no longer exists. The fold now lives in the repositories' pure update
@@ -28,15 +28,6 @@ class DemoContextPreferenceKeyTest {
         assertFalse(minted in after, "the raw minted label must not become a key")
         val gone = computeToggleFavourite(after, reminted, "Pods")
         assertFalse(folded in gone, "a later mint must find and remove the same favourite")
-    }
-
-    @Test
-    fun `recents recorded under a minted demo label are stored under the demo key`() {
-        val after = computeRecordRecent(emptyMap(), minted, "Nodes")
-        assertEquals(listOf("Nodes"), after[folded])
-        assertFalse(minted in after)
-        val removed = computeRemoveRecent(after, reminted, "Nodes")
-        assertFalse(folded in removed)
     }
 
     @Test

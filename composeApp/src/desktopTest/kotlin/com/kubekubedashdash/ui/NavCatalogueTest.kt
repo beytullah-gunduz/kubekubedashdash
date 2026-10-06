@@ -1,6 +1,5 @@
 package com.kubekubedashdash.ui
 
-import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.CrdScope
 import com.kubekubedashdash.services.session.SavedScreen
@@ -141,128 +140,56 @@ class NavCatalogueTest {
         assertFalse(matchesCrdSearch(crd(kind = "SparkApplication"), "nonexistent"))
     }
 
-    // ── resolveNavShortcuts ──────────────────────────────────────────────
+    // ── resolveNavFavourites ─────────────────────────────────────────────
 
     private val kinds = listOf(navKind("Pods")!!, navKind("Nodes")!!)
     private val spark = crd(kind = "SparkApplication", group = "spark.example.com")
 
     @Test
     fun `resolves a built-in key to its NavKind`() {
-        val result = resolveNavShortcuts(favourites = listOf("Pods"), recents = emptyList(), kinds = kinds, crds = null)
-        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Pods")!!)), result.favourites)
+        val result = resolveNavFavourites(favourites = listOf("Pods"), kinds = kinds, crds = null)
+        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Pods")!!)), result)
     }
 
     @Test
     fun `drops an unknown built-in key`() {
-        val result = resolveNavShortcuts(favourites = listOf("NoSuchKind"), recents = emptyList(), kinds = kinds, crds = null)
-        assertTrue(result.favourites.isEmpty())
+        val result = resolveNavFavourites(favourites = listOf("NoSuchKind"), kinds = kinds, crds = null)
+        assertTrue(result.isEmpty())
     }
 
     @Test
     fun `omits a CRD key while crds is still loading (null)`() {
-        val result = resolveNavShortcuts(
+        val result = resolveNavFavourites(
             favourites = listOf(spark.key),
-            recents = emptyList(),
             kinds = kinds,
             crds = null,
         )
-        assertTrue(result.favourites.isEmpty(), "a null crds list means Loading — the key must be omitted, not dropped")
+        assertTrue(result.isEmpty(), "a null crds list means Loading — the key must be omitted, not dropped")
     }
 
     @Test
     fun `resolves a CRD key once crds has loaded`() {
-        val result = resolveNavShortcuts(
+        val result = resolveNavFavourites(
             favourites = listOf(spark.key),
-            recents = emptyList(),
             kinds = kinds,
             crds = listOf(spark),
         )
-        assertEquals(listOf(NavShortcut.Crd(spark)), result.favourites)
+        assertEquals(listOf(NavShortcut.Crd(spark)), result)
     }
 
     @Test
     fun `drops a CRD key absent from a non-null crds list`() {
-        val result = resolveNavShortcuts(
+        val result = resolveNavFavourites(
             favourites = listOf(spark.key),
-            recents = emptyList(),
             kinds = kinds,
             crds = emptyList(),
         )
-        assertTrue(result.favourites.isEmpty())
-    }
-
-    @Test
-    fun `recents exclude favourites`() {
-        val result = resolveNavShortcuts(
-            favourites = listOf("Pods"),
-            recents = listOf("Pods", "Nodes"),
-            kinds = kinds,
-            crds = null,
-        )
-        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!)), result.recents)
+        assertTrue(result.isEmpty())
     }
 
     @Test
     fun `favourites preserve their input order`() {
-        val result = resolveNavShortcuts(favourites = listOf("Nodes", "Pods"), recents = emptyList(), kinds = kinds, crds = null)
-        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!), NavShortcut.BuiltIn(navKind("Pods")!!)), result.favourites)
-    }
-
-    @Test
-    fun `recents preserve their input order`() {
-        val result = resolveNavShortcuts(favourites = emptyList(), recents = listOf("Nodes", "Pods"), kinds = kinds, crds = null)
-        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!), NavShortcut.BuiltIn(navKind("Pods")!!)), result.recents)
-    }
-
-    // ── navShortcutKey / currentKey ─────────────────────────────────────
-
-    @Test
-    fun `navShortcutKey uses the simple name for a built-in and group-slash-kind for a CRD`() {
-        assertEquals("Pods", navShortcutKey(Screen.Main.Pods()))
-        assertEquals("Pods", navShortcutKey(Screen.Main.Pods(statusFilter = setOf("Failed"))))
-        assertEquals(
-            "example.io/Widget",
-            navShortcutKey(Screen.Main.CustomResource("example.io", "v1", "Widget", "widgets", true)),
-        )
-    }
-
-    @Test
-    fun `navShortcutKey is null for screens neither section can point at`() {
-        assertEquals(null, navShortcutKey(Screen.Main.Connecting))
-        assertEquals(null, navShortcutKey(Screen.Main.ConnectionError(null, 0)))
-    }
-
-    @Test
-    fun `resolveNavShortcuts drops the current screen from recents but not from favourites`() {
-        val kinds = NavKinds
-        val result = resolveNavShortcuts(
-            favourites = listOf("Pods"),
-            recents = listOf("Nodes", "Events"),
-            kinds = kinds,
-            crds = null,
-            currentKey = "Nodes",
-        )
-        assertEquals(listOf("Pods"), result.favourites.map { (it as NavShortcut.BuiltIn).kind.key })
-        assertEquals(listOf("Events"), result.recents.map { (it as NavShortcut.BuiltIn).kind.key })
-        val favouritedCurrent = resolveNavShortcuts(listOf("Pods"), emptyList(), kinds, null, currentKey = "Pods")
-        assertEquals(1, favouritedCurrent.favourites.size)
-    }
-
-    // ── the always-visible rule ──────────────────────────────────────────
-
-    @Test
-    fun `the always-visible keys are exactly the header-less Cluster block`() {
-        assertEquals(
-            setOf("ClusterOverview", "ClusterTopology", "Nodes", "Namespaces", "Events"),
-            AlwaysVisibleNavKeys,
-        )
-        assertEquals(NavSections.first().kinds.map { it.key }.toSet(), AlwaysVisibleNavKeys)
-    }
-
-    @Test
-    fun `a visit to an always-visible kind is not recent-worthy, anything else is`() {
-        AlwaysVisibleNavKeys.forEach { assertFalse(isRecentWorthy(it), it) }
-        assertTrue(isRecentWorthy("Pods"))
-        assertTrue(isRecentWorthy("example.io/Widget"))
+        val result = resolveNavFavourites(favourites = listOf("Nodes", "Pods"), kinds = kinds, crds = null)
+        assertEquals(listOf(NavShortcut.BuiltIn(navKind("Nodes")!!), NavShortcut.BuiltIn(navKind("Pods")!!)), result)
     }
 }
