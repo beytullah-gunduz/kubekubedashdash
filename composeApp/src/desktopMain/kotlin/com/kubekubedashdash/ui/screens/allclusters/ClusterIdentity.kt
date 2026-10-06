@@ -28,7 +28,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdDotShape
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.components.StartEllipsisText
 
@@ -45,7 +45,7 @@ internal fun ClusterDot(color: Color, size: Dp = 8.dp, contentDescription: Strin
     Box(
         Modifier
             .size(size)
-            .clip(kdDotShape)
+            .clip(kdRoundShape)
             .background(color)
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
     )

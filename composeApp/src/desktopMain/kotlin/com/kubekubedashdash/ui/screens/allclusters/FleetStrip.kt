@@ -6,7 +6,6 @@ import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -47,7 +46,6 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdSurface
-import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
@@ -64,6 +62,7 @@ import com.kubekubedashdash.resources.keyboard_arrow_up_filled
 import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.components.PodStatusBar
+import com.kubekubedashdash.ui.components.UsageBar
 import com.kubekubedashdash.ui.components.UsageHistoryBar
 import com.kubekubedashdash.ui.components.UsageTierGlyph
 import com.kubekubedashdash.ui.components.color
@@ -254,22 +253,11 @@ private fun MetricRow(label: String, fraction: Float?, valueText: String, detail
     ) {
         Row(Modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1, modifier = Modifier.width(52.dp))
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(6.dp)
-                    .clip(3.dp.kdCorner)
-                    .background(KdSurfaceVariant.copy(alpha = 0.4f)),
-            ) {
-                if (fraction != null) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                            .fillMaxHeight()
-                            .background(usageTier(fraction.coerceIn(0f, 1f)).color()),
-                    )
-                }
-            }
+            UsageBar(
+                fraction,
+                usageTier((fraction ?: 0f).coerceIn(0f, 1f)).color(),
+                Modifier.weight(1f),
+            )
             if (history != null) {
                 Spacer(Modifier.width(6.dp))
                 // 20 bars plus their gaps overflow 44 dp and clip the oldest, so draw the last 12.

@@ -82,8 +82,8 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
@@ -355,7 +355,7 @@ fun DetailFieldsCard(fields: List<DetailField>, modifier: Modifier = Modifier) {
                     Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                     if (f.valueColor != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(6.dp).clip(kdDotShape).background(f.valueColor))
+                            Box(Modifier.size(6.dp).clip(kdRoundShape).background(f.valueColor))
                             Spacer(Modifier.width(5.dp))
                             Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
                         }

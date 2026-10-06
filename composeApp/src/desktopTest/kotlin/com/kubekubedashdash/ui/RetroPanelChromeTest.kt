@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.ThemeStyle
-import com.kubekubedashdash.kdDotShape
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.util.SystemDirectories
@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * [com.kubekubedashdash.kdDotShape], [com.kubekubedashdash.kdStrokeCap] and
+ * [com.kubekubedashdash.kdRoundShape], [com.kubekubedashdash.kdStrokeCap] and
  * [com.kubekubedashdash.retroCaps] (WS10, plan §12.2 "WS10 — Static sweep").
  * Pure — no composition needed. Every switch goes through `sync*`, never a
  * `set*`, so nothing here ever persists. Runs only against the Gradle
@@ -51,12 +51,12 @@ class RetroPanelChromeTest {
     }
 
     @Test
-    fun `kdDotShape is a circle under Default and a square pixel under Retro`() {
+    fun `kdRoundShape is a circle under Default and a square under Retro`() {
         ThemeManager.syncStyleFromPreferences(ThemeStyle.DEFAULT)
-        assertEquals(CircleShape, kdDotShape)
+        assertEquals(CircleShape, kdRoundShape)
 
         ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
-        assertEquals(RectangleShape, kdDotShape)
+        assertEquals(RectangleShape, kdRoundShape)
     }
 
     @Test

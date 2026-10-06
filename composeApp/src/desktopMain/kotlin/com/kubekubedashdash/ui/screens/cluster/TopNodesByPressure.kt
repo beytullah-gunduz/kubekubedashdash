@@ -1,34 +1,28 @@
 package com.kubekubedashdash.ui.screens.cluster
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.kubekubedashdash.KdError
-import com.kubekubedashdash.KdSuccess
-import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.NodeResourceUsage
+import com.kubekubedashdash.ui.components.UsageBar
+import com.kubekubedashdash.ui.components.color
+import com.kubekubedashdash.ui.components.usageTier
 
 @Composable
 internal fun TopNodesByPressure(
@@ -55,11 +49,7 @@ internal fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit, leading: (
     val showCpu = node.cpuFraction >= node.memoryFraction
     val frac = if (showCpu) node.cpuFraction else node.memoryFraction
     val pct = (frac * 100).toInt().coerceAtLeast(0)
-    val barColor = when {
-        frac > 0.85f -> KdError
-        frac > 0.70f -> KdWarning
-        else -> KdSuccess
-    }
+    val barColor = usageTier(frac).color()
     val metricLabel = if (showCpu) "CPU $pct%" else "MEM $pct%"
     Row(
         modifier = Modifier
@@ -78,20 +68,7 @@ internal fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit, leading: (
             maxLines = 1,
         )
         Spacer(Modifier.width(8.dp))
-        Box(
-            modifier = Modifier
-                .weight(0.5f)
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(KdSurfaceVariant.copy(alpha = 0.4f)),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(frac.coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(barColor),
-            )
-        }
+        UsageBar(frac, barColor, Modifier.weight(0.5f), height = 8.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             metricLabel,

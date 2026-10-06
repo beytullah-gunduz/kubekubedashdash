@@ -15,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +53,7 @@ import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
+import com.kubekubedashdash.ui.components.UsageBar
 import com.kubekubedashdash.ui.components.UsageTierGlyph
 import com.kubekubedashdash.ui.components.color
 import com.kubekubedashdash.ui.components.usageTier
@@ -770,16 +769,7 @@ fun UsageBarRow(row: QuotaUsageRow) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        // The card behind this row is already KdSurfaceVariant, so a 4 dp track
-        // in the same colour was invisible and only Material's stop dot showed.
-        LinearProgressIndicator(
-            progress = { row.fraction },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(4.dp.kdCorner),
-            color = barColor,
-            trackColor = KdBorder,
-            strokeCap = kdStrokeCap,
-            gapSize = 0.dp,
-            drawStopIndicator = {},
-        )
+        // The card behind this row is already KdSurfaceVariant, so the track is KdBorder: the default track would vanish.
+        UsageBar(row.fraction, barColor, Modifier.fillMaxWidth(), height = 8.dp, trackColor = KdBorder)
     }
 }

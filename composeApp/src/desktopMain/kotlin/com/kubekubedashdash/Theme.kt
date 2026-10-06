@@ -22,10 +22,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -545,14 +549,41 @@ private val DefaultShapes = Shapes()
 /** Squares in Retro (D5's corner sweep, WS2); a plain [RoundedCornerShape] of this radius in Default. */
 val Dp.kdCorner: RoundedCornerShape get() = RoundedCornerShape(if (ThemeManager.isRetro) 0.dp else this)
 
+/** [kdCorner] with a radius per corner: these radii in Default, square in Retro. */
+fun kdCorners(topStart: Dp = 0.dp, topEnd: Dp = 0.dp, bottomEnd: Dp = 0.dp, bottomStart: Dp = 0.dp): RoundedCornerShape {
+    if (ThemeManager.isRetro) return RoundedCornerShape(0.dp)
+    return RoundedCornerShape(topStart, topEnd, bottomEnd, bottomStart)
+}
+
+/** A `drawRoundRect` corner: [radius] in Default, square in Retro. */
+fun Density.kdCornerRadius(radius: Dp): CornerRadius {
+    if (ThemeManager.isRetro) return CornerRadius.Zero
+    return CornerRadius(radius.toPx())
+}
+
+/** A filled dot of [radius] px at [center]: a circle in Default, a square of side 2 × [radius] in Retro. */
+fun DrawScope.drawKdDot(color: Color, radius: Float, center: Offset) {
+    if (ThemeManager.isRetro) {
+        drawRect(color, topLeft = Offset(center.x - radius, center.y - radius), size = Size(radius * 2f, radius * 2f))
+    } else {
+        drawCircle(color, radius, center)
+    }
+}
+
 /** Width of every card and field outline (D2): 1 dp, 2 dp in High Contrast. */
 val kdOutlineWidth: Dp get() = ThemeManager.spec.outlineWidth
 
 /** This value in Comfortable, [compact] in Compact (D6). Reads ThemeManager state, so it recomposes on a switch. */
 fun Dp.orCompact(compact: Dp): Dp = if (ThemeManager.isCompact) compact else this
 
-/** Status-dot shape (D24): a square pixel in Retro, a circle in Default. */
-val kdDotShape: Shape get() = if (ThemeManager.isRetro) RectangleShape else CircleShape
+/**
+ * Every full round: a circle on a square box and a pill on a wide one in Default, a square in
+ * Retro. Status dots, colour swatches, round hit areas, and the shape of every default-shaped M3
+ * Button / OutlinedButton / TextButton / IconButton: Material 3 resolves their CornerFull token to
+ * CircleShape (Shapes.fromToken, material3 1.12.0-alpha03 Shapes.kt:379), so passing this is
+ * value-identical in Default.
+ */
+val kdRoundShape: Shape get() = if (ThemeManager.isRetro) RectangleShape else CircleShape
 
 /**
  * Line-end cap for charts and progress indicators (D24): flat in Retro, round in Default —

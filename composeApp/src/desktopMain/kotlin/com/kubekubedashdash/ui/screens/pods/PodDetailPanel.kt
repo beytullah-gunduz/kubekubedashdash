@@ -63,7 +63,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdDotShape
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.ContainerTermination
@@ -762,7 +762,7 @@ private fun InfoRow(label: String, value: String, valueColor: Color? = null) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
         if (valueColor != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(6.dp).clip(kdDotShape).background(valueColor))
+                Box(Modifier.size(6.dp).clip(kdRoundShape).background(valueColor))
                 Spacer(Modifier.width(5.dp))
                 Text(value, style = MaterialTheme.typography.bodySmall, color = valueColor, fontWeight = FontWeight.Medium)
             }

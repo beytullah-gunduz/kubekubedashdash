@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdWarning
-import com.kubekubedashdash.kdDotShape
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.warning_filled
@@ -57,7 +57,7 @@ internal fun SeverityDot(color: Color, filled: Boolean, modifier: Modifier = Mod
     Box(
         modifier
             .size(size)
-            .clip(kdDotShape)
-            .then(if (filled) Modifier.background(color) else Modifier.border(1.5.dp, color, kdDotShape)),
+            .clip(kdRoundShape)
+            .then(if (filled) Modifier.background(color) else Modifier.border(1.5.dp, color, kdRoundShape)),
     )
 }

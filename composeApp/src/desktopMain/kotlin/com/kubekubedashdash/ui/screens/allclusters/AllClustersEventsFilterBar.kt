@@ -49,8 +49,8 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.list_filled
@@ -469,7 +469,7 @@ private fun HeatmapToggle(
                 Box(
                     Modifier
                         .size(6.dp)
-                        .clip(kdDotShape)
+                        .clip(kdRoundShape)
                         .background(KdPrimary)
                         .semantics { contentDescription = "Warnings across several clusters" },
                 )
