@@ -18,6 +18,11 @@ data class GkeCluster(
 
 data class GcpProject(val projectId: String, val displayName: String)
 
+internal const val GKE_ACCESS_HINT =
+    "Not found, or your account can't access it (it needs container.clusters.get). Check the project ID, " +
+        "the location (a region such as europe-west1 for a regional cluster, a zone such as europe-west1-b " +
+        "for a zonal one) and the cluster name."
+
 object GkeClusterDiscoverer {
 
     private val log = LoggerFactory.getLogger(GkeClusterDiscoverer::class.java)
@@ -180,6 +185,23 @@ object GkeClusterDiscoverer {
             IllegalArgumentException("Refusing GKE cluster name with unexpected shape: '$clusterName'")
 
         else -> null
+    }
+
+    internal fun isValidProjectId(value: String): Boolean = PROJECT_RX.matches(value)
+
+    internal fun isValidLocation(value: String): Boolean = LOCATION_RX.matches(value)
+
+    internal fun isValidClusterName(value: String): Boolean = CLUSTER_RX.matches(value)
+
+    /**
+     * Puts a plain-language hint in front of a failed `get-credentials` message when gcloud
+     * reports a refusal or a missing cluster. GCP answers 403 both for "no permission" and for
+     * "does not exist", so the hint covers both. The raw message is kept on the next line.
+     */
+    internal fun describeImportFailure(raw: String): String {
+        val accessOrMissing = listOf("PERMISSION_DENIED", "code=403", "NOT_FOUND", "code=404", "Not found: projects/")
+            .any { raw.contains(it) }
+        return if (accessOrMissing) "$GKE_ACCESS_HINT\n$raw" else raw
     }
 
     internal fun parseActiveAccountJson(raw: String): Result<String?> = try {

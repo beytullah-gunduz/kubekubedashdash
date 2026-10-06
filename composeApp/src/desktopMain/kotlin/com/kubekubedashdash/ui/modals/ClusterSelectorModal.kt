@@ -91,8 +91,6 @@ private val EksOrange = Color(0xFFFF9900)
 private val GkeBlue = Color(0xFF4285F4)
 private val MockTeal = Color(0xFF00BFA5)
 
-private val eksPattern = Regex("""arn:aws:eks:([^:]+):(\d+):cluster/(.+)""")
-
 private data class ParsedContext(
     val rawName: String,
     val isEks: Boolean,
@@ -130,14 +128,14 @@ private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
             gcpLocation = location,
         )
     }
-    val match = eksPattern.matchEntire(ctx)
-    return if (match != null) {
+    val eks = EksClusterDiscoverer.parseEksContext(ctx)
+    return if (eks != null) {
         ParsedContext(
             rawName = ctx,
             isEks = true,
-            clusterName = match.groupValues[3],
-            awsRegion = match.groupValues[1],
-            awsAccount = match.groupValues[2],
+            clusterName = eks.clusterName,
+            awsRegion = eks.region,
+            awsAccount = eks.accountId,
             awsProfile = awsProfile,
         )
     } else {

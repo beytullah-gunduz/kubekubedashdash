@@ -46,6 +46,11 @@ interface GkeDiscoveryGateway {
     fun recallProjectSelection(): List<String>
 
     fun rememberProjectSelection(projectIds: List<String>)
+
+    /** The tab the modal showed last; BROWSE when nothing is stored. */
+    fun recallDiscoveryMode(): DiscoveryMode
+
+    fun rememberDiscoveryMode(mode: DiscoveryMode)
 }
 
 /** Delegates every member to the pre-existing singletons — no behavior change. */
@@ -80,4 +85,8 @@ class DefaultGkeDiscoveryGateway : GkeDiscoveryGateway {
     override fun recallProjectSelection(): List<String> = PreferenceRepository.lastGcpProjects.value
 
     override fun rememberProjectSelection(projectIds: List<String>) = PreferenceRepository.setLastGcpProjects(projectIds)
+
+    override fun recallDiscoveryMode(): DiscoveryMode = DiscoveryMode.fromStored(PreferenceRepository.gkeDiscoveryMode.value)
+
+    override fun rememberDiscoveryMode(mode: DiscoveryMode) = PreferenceRepository.setGkeDiscoveryMode(mode.stored)
 }

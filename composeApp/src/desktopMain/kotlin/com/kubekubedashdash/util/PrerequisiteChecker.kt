@@ -56,7 +56,7 @@ object PrerequisiteChecker {
             log.debug("Found {} context(s)", contexts.size)
             checks += checkContextsExist(contexts)
 
-            val needsAws = contexts.any { it.contains("arn:aws:eks") }
+            val needsAws = contexts.any { EksClusterDiscoverer.mentionsEksArn(it) }
             if (needsAws) {
                 checks += checkCommand(
                     "aws",
