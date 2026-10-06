@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +42,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceUsageSummary
@@ -259,7 +259,7 @@ private fun KpiChip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (dotColor != null) {
-                    Box(modifier = Modifier.size(8.dp).background(dotColor, CircleShape))
+                    Box(modifier = Modifier.size(8.dp).background(dotColor, kdRoundShape))
                     Spacer(Modifier.width(4.dp))
                 }
                 Text(kpi.label, style = MaterialTheme.typography.labelMedium, color = contentColor)

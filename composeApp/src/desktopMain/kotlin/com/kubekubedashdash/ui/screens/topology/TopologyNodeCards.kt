@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,7 +29,9 @@ import com.kubekubedashdash.KdBackground
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.components.kindStatusColor
@@ -57,7 +57,7 @@ internal fun GraphNodeCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         color = color.copy(alpha = if (selected) 0.15f else 0.08f).compositeOver(KdBackground),
         border = BorderStroke(borderWidth, color.copy(alpha = borderAlpha * alpha)),
     ) {
@@ -77,7 +77,7 @@ internal fun GraphNodeCard(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
+                Box(Modifier.size(8.dp).clip(kdRoundShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text(
@@ -176,7 +176,7 @@ internal fun WorkloadGroupCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         color = color.copy(alpha = if (selected) 0.15f else 0.08f).compositeOver(KdBackground),
         border = BorderStroke(borderWidth, color.copy(alpha = borderAlpha * alpha)),
     ) {
@@ -194,7 +194,7 @@ internal fun WorkloadGroupCard(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
+                    Box(Modifier.size(8.dp).clip(kdRoundShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(

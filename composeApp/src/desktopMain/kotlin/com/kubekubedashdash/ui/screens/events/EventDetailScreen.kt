@@ -211,7 +211,7 @@ fun EventDetailScreen(
                     }
                 }
                 LocalDetailHostControls.current?.let { controls ->
-                    IconButton(onClick = controls.onToggleExpand, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = controls.onToggleExpand, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
                         Icon(
                             painterResource(Res.drawable.fit_screen_filled),
                             if (controls.expanded) "Restore panel" else "Expand",
@@ -221,7 +221,7 @@ fun EventDetailScreen(
                     }
                 }
                 if (onClose != null) {
-                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
                         Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                     }
                 }

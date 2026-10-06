@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +31,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.theme.kdPaletteSpec
@@ -63,7 +63,7 @@ internal fun ThemePreviewCard(
 ) {
     val borderColor = if (selected) KdPrimary else KdBorder
     val borderWidth = if (selected) 2.dp else 1.dp
-    val frameShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(10.dp)
+    val frameShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(10.dp) // kd-shape-exempt: previews the previewed style, not the current one
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -101,7 +101,7 @@ internal fun ThemePreviewCard(
                 Box(
                     modifier = Modifier
                         .size(18.dp)
-                        .clip(CircleShape)
+                        .clip(kdRoundShape)
                         .background(KdPrimary),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -116,8 +116,8 @@ internal fun ThemePreviewCard(
                 Box(
                     modifier = Modifier
                         .size(18.dp)
-                        .clip(CircleShape)
-                        .border(1.5.dp, KdBorder, CircleShape),
+                        .clip(kdRoundShape)
+                        .border(1.5.dp, KdBorder, kdRoundShape),
                 )
             }
             Text(
@@ -136,8 +136,8 @@ private fun ThemeMockup(
     squared: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val thinBarShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(3.dp)
-    val wideBarShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(4.dp)
+    val thinBarShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(3.dp) // kd-shape-exempt: previews the previewed style, not the current one
+    val wideBarShape = if (squared) RoundedCornerShape(0.dp) else RoundedCornerShape(4.dp) // kd-shape-exempt: previews the previewed style, not the current one
     Row(modifier = modifier) {
         Column(
             modifier = Modifier

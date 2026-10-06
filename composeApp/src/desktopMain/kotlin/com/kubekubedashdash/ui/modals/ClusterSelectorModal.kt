@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -67,6 +66,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
@@ -223,7 +223,7 @@ fun ClusterSelectorModal(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(8.dp.kdCorner)
                             .background(KdPrimary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -259,7 +259,7 @@ fun ClusterSelectorModal(
                             tint = KdTextSecondary,
                             modifier = Modifier
                                 .size(20.dp)
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(4.dp.kdCorner)
                                 .clickable(onClick = onDismiss),
                         )
                     }
@@ -279,6 +279,7 @@ fun ClusterSelectorModal(
                                 modifier = Modifier.size(28.dp),
                                 color = KdPrimary,
                                 strokeWidth = 3.dp,
+                                strokeCap = kdStrokeCap,
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
@@ -432,7 +433,7 @@ fun ClusterSelectorModal(
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(6.dp.kdCorner)
                                 .background(
                                     if (awsCliAvailable) {
                                         EksOrange.copy(alpha = 0.15f)
@@ -492,7 +493,7 @@ fun ClusterSelectorModal(
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(6.dp.kdCorner)
                                 .background(
                                     if (gcloudCliAvailable) {
                                         GkeBlue.copy(alpha = 0.15f)
@@ -537,7 +538,7 @@ fun ClusterSelectorModal(
 @Composable
 private fun ClusterActionTooltip(text: String) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurface,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp,
@@ -573,7 +574,7 @@ private fun LazyItemScope.ClusterRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(bg)
             .clickable {
                 onOpenCluster(ctx, defaultTarget)
@@ -588,7 +589,7 @@ private fun LazyItemScope.ClusterRow(
             Box(
                 modifier = Modifier
                     .size(32.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(6.dp.kdCorner)
                     .background(MockTeal),
                 contentAlignment = Alignment.Center,
             ) {
@@ -603,7 +604,7 @@ private fun LazyItemScope.ClusterRow(
             Box(
                 modifier = Modifier
                     .size(32.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(6.dp.kdCorner)
                     .background(EksOrange),
                 contentAlignment = Alignment.Center,
             ) {
@@ -619,7 +620,7 @@ private fun LazyItemScope.ClusterRow(
             Box(
                 modifier = Modifier
                     .size(32.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(6.dp.kdCorner)
                     .background(GkeBlue),
                 contentAlignment = Alignment.Center,
             ) {
@@ -635,7 +636,7 @@ private fun LazyItemScope.ClusterRow(
             Box(
                 modifier = Modifier
                     .size(32.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(6.dp.kdCorner)
                     .background(
                         if (isSelected) {
                             KdPrimary.copy(alpha = 0.15f)
@@ -715,7 +716,7 @@ private fun LazyItemScope.ClusterRow(
                     Box(
                         modifier = Modifier
                             .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(6.dp.kdCorner)
                             .background(if (hovered) KdSurfaceVariant else Color.Transparent)
                             .clickable {
                                 onOpenCluster(ctx, OpenTarget.NEW_TAB)
@@ -742,7 +743,7 @@ private fun LazyItemScope.ClusterRow(
                 Box(
                     modifier = Modifier
                         .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(6.dp.kdCorner)
                         .background(if (hovered) KdSurfaceVariant else Color.Transparent)
                         .clickable {
                             onOpenCluster(ctx, OpenTarget.NEW_WINDOW)
@@ -788,7 +789,7 @@ private fun AwsAccountSectionHeader(account: String, count: Int, modifier: Modif
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(4.dp.kdCorner)
                 .background(EksOrange.copy(alpha = 0.18f))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         ) {
@@ -826,7 +827,7 @@ private fun GcpProjectSectionHeader(project: String, count: Int, modifier: Modif
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(4.dp.kdCorner)
                 .background(GkeBlue.copy(alpha = 0.18f))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         ) {

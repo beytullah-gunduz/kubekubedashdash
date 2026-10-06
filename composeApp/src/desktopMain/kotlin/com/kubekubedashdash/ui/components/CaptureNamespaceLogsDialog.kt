@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -33,7 +32,9 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.services.logcapture.CaptureOptions
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.NamespaceLogCaptureGateway
@@ -137,7 +138,7 @@ fun CaptureNamespaceLogsDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp))
+                                    .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner)
                                     .clickable { windowMenuExpanded = true }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -190,6 +191,7 @@ fun CaptureNamespaceLogsDialog(
                                         PreferenceRepository.setCaptureDestinationDir(it)
                                     }
                                 },
+                                shape = kdRoundShape,
                             ) {
                                 Text("Choose…")
                             }
@@ -217,12 +219,13 @@ fun CaptureNamespaceLogsDialog(
                     )
                 },
                 enabled = canStart,
+                shape = kdRoundShape,
             ) {
                 Text("Start capture")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = kdRoundShape) {
                 Text("Cancel")
             }
         },

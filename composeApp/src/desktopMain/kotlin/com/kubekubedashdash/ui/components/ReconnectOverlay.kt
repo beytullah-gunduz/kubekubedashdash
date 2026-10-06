@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +37,9 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 
 /**
  * Scrim for a previously-connected session that lost its cluster. The stale
@@ -81,7 +83,7 @@ fun ReconnectOverlay(
                 )
                 Surface(
                     modifier = Modifier.align(Alignment.Center).widthIn(max = 440.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = 12.dp.kdCorner,
                     color = KdSurface,
                     shadowElevation = 8.dp,
                 ) {
@@ -124,6 +126,7 @@ fun ReconnectOverlay(
                                     modifier = Modifier.size(16.dp),
                                     color = KdPrimary,
                                     strokeWidth = 2.dp,
+                                    strokeCap = kdStrokeCap,
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
@@ -138,10 +141,10 @@ fun ReconnectOverlay(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Button(onClick = onRetryNow, enabled = !isConnecting) {
+                            Button(onClick = onRetryNow, enabled = !isConnecting, shape = kdRoundShape) {
                                 Text("Retry now")
                             }
-                            OutlinedButton(onClick = onSwitchCluster) {
+                            OutlinedButton(onClick = onSwitchCluster, shape = kdRoundShape) {
                                 Text("Switch cluster…")
                             }
                         }

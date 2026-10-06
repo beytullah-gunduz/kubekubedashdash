@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +53,8 @@ import com.kubekubedashdash.LocalSystemDensity
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.model.Workspace
@@ -712,7 +713,7 @@ fun App(
                                                 Box(
                                                     modifier = Modifier
                                                         .size(24.dp)
-                                                        .clip(CircleShape)
+                                                        .clip(kdRoundShape)
                                                         .clickable {
                                                             workspace.showClusterSelector(OpenTarget.NEW_TAB)
                                                         },
@@ -1014,6 +1015,7 @@ private fun BootstrapSplash() {
                 modifier = Modifier.size(28.dp),
                 color = KdPrimary,
                 strokeWidth = 2.5.dp,
+                strokeCap = kdStrokeCap,
             )
         }
     }

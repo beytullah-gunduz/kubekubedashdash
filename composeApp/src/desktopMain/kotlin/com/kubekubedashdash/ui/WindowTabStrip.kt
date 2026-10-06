@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +38,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.orCompact
@@ -256,7 +256,7 @@ fun WindowTabStrip(
             Box(
                 modifier = Modifier
                     .size(24.dp)
-                    .clip(CircleShape)
+                    .clip(kdRoundShape)
                     .clickable(onClick = onAddCluster),
                 contentAlignment = Alignment.Center,
             ) {

@@ -639,6 +639,7 @@ private fun WarningsCallout(
                 onClick = onShowAllEvents,
                 colors = ButtonDefaults.textButtonColors(contentColor = KdPrimary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                shape = kdRoundShape,
             ) {
                 Text(if (eventTotal == 1) "All 1 event" else "All $eventTotal events", style = MaterialTheme.typography.labelSmall)
             }

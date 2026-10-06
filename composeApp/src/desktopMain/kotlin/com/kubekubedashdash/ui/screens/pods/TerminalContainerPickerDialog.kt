@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.view_in_ar_filled
@@ -67,14 +68,14 @@ fun TerminalContainerPickerDialog(
                 Spacer(Modifier.height(4.dp))
                 pod.containers.forEach { container ->
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
+                        shape = 6.dp.kdCorner,
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         OutlinedButton(
                             onClick = { onPick(container.name) },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(6.dp),
+                            shape = 6.dp.kdCorner,
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -106,7 +107,7 @@ fun TerminalContainerPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = kdRoundShape) {
                 Text("Cancel")
             }
         },

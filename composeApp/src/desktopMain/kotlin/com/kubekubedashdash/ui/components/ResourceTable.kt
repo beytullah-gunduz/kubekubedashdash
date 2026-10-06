@@ -34,7 +34,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -99,6 +98,9 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_downward_filled
@@ -853,6 +855,7 @@ fun ResourceLoadingIndicator() {
             modifier = Modifier.size(40.dp),
             color = KdPrimary,
             strokeWidth = 3.dp,
+            strokeCap = kdStrokeCap,
         )
     }
 }
@@ -906,6 +909,7 @@ fun ResourceErrorMessage(message: String, onRetry: (() -> Unit)? = null) {
                         onClick = onRetry,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
                         border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = SolidColor(KdBorder)),
+                        shape = kdRoundShape,
                     ) {
                         Text("Retry", style = MaterialTheme.typography.labelMedium)
                     }
@@ -914,6 +918,7 @@ fun ResourceErrorMessage(message: String, onRetry: (() -> Unit)? = null) {
                     onClick = { copyToClipboard(message) },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
                     border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = SolidColor(KdBorder)),
+                    shape = kdRoundShape,
                 ) {
                     Text("Copy error", style = MaterialTheme.typography.labelMedium)
                 }
@@ -946,7 +951,7 @@ internal fun OverflowTooltipText(
         TooltipArea(
             tooltip = {
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = 6.dp.kdCorner,
                     color = KdSurface,
                     shadowElevation = 4.dp,
                     tonalElevation = 2.dp,
@@ -999,7 +1004,7 @@ fun ResourceCountHeader(
                 liveDot()
                 Spacer(Modifier.width(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = 10.dp.kdCorner,
                     color = KdPrimary.copy(alpha = 0.15f),
                 ) {
                     Text(

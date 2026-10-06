@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,6 +37,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
@@ -105,7 +105,7 @@ internal fun ClusterHealthBanner(
                 liveRegion = LiveRegionMode.Polite
                 contentDescription = a11yDescription
             },
-        shape = RoundedCornerShape(10.dp),
+        shape = 10.dp.kdCorner,
         color = visual.accent.copy(
             alpha = if (health.level == HealthLevel.HEALTHY) HEALTHY_TINT_ALPHA else ALERT_TINT_ALPHA,
         ),

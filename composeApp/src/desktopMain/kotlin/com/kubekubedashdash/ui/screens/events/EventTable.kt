@@ -6,7 +6,6 @@ import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -24,6 +23,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.error_filled
@@ -153,7 +153,7 @@ internal fun EventTypeIcon(type: String) {
     TooltipArea(
         tooltip = {
             Surface(
-                shape = RoundedCornerShape(6.dp),
+                shape = 6.dp.kdCorner,
                 color = KdSurface,
                 shadowElevation = 4.dp,
                 tonalElevation = 2.dp,

@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -254,7 +253,7 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(28.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(4.dp.kdCorner)
             .kdFocusRing()
             .pointerInput(Unit) {
                 awaitPointerEventScope {
@@ -287,7 +286,7 @@ private fun SettingsButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(28.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(4.dp.kdCorner)
             .kdFocusRing()
             .pointerInput(Unit) {
                 awaitPointerEventScope {
@@ -353,7 +352,7 @@ private fun MacButton(
     Box(
         modifier = Modifier
             .size(12.dp)
-            .clip(CircleShape)
+            .clip(CircleShape) // kd-shape-exempt: macOS traffic light (Retro plan D9)
             .background(color)
             .semantics { contentDescription = label }
             .kdFocusRing()

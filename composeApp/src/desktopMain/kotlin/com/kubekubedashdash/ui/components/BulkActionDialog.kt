@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
@@ -82,6 +84,7 @@ internal fun <T> BulkActionDialog(
                         LinearProgressIndicator(
                             progress = { runState.done.toFloat() / runState.total },
                             modifier = Modifier.fillMaxWidth(),
+                            strokeCap = kdStrokeCap,
                         )
                         Text(
                             "${verb.progressLabel} ${(runState.done + 1).coerceAtMost(runState.total)} of " +
@@ -121,21 +124,21 @@ internal fun <T> BulkActionDialog(
         confirmButton = {
             when (runState) {
                 null ->
-                    TextButton(onClick = onConfirm) {
+                    TextButton(onClick = onConfirm, shape = kdRoundShape) {
                         Text(verb.actionLabel, color = if (verb.destructive) KdError else KdTextPrimary)
                     }
 
                 is BulkRunState.Running ->
-                    TextButton(onClick = onCancelRun, enabled = !runState.cancelRequested) {
+                    TextButton(onClick = onCancelRun, enabled = !runState.cancelRequested, shape = kdRoundShape) {
                         Text(if (runState.cancelRequested) "Stopping…" else "Stop")
                     }
 
                 is BulkRunState.Finished ->
-                    TextButton(onClick = onDismiss) { Text("Close") }
+                    TextButton(onClick = onDismiss, shape = kdRoundShape) { Text("Close") }
             }
         },
         dismissButton = if (runState == null) {
-            { TextButton(onClick = onDismiss) { Text("Cancel") } }
+            { TextButton(onClick = onDismiss, shape = kdRoundShape) { Text("Cancel") } }
         } else {
             null
         },

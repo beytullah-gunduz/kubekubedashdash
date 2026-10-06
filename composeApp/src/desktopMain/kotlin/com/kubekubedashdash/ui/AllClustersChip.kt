@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.resources.hub
@@ -133,7 +133,7 @@ fun AllClustersChip(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(6.dp.kdCorner)
             .background(background)
             .drawBehind {
                 if (isActive) {
@@ -163,7 +163,7 @@ fun AllClustersChip(
                 .drawBehind {
                     val strokePx = 2.5.dp.toPx()
                     val radius = (size.minDimension / 2f) - strokePx / 2f
-                    drawCircle(
+                    drawCircle( // kd-shape-exempt: ring around the hub icon
                         color = ringAndIconColor,
                         radius = radius,
                         style = Stroke(width = strokePx),
@@ -189,7 +189,7 @@ fun AllClustersChip(
             Box(
                 modifier = Modifier
                     .size(16.dp)
-                    .clip(CircleShape)
+                    .clip(kdRoundShape)
                     .clickable(onClick = onClose),
                 contentAlignment = Alignment.Center,
             ) {

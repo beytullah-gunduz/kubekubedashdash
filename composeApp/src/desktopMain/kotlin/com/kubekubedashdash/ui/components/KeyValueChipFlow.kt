@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 
 internal val NoisyAnnotationKeys = setOf(
     "kubectl.kubernetes.io/last-applied-configuration",
@@ -62,6 +63,7 @@ fun KeyValueChipFlow(
             TextButton(
                 onClick = { showHidden = !showHidden },
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                shape = kdRoundShape,
             ) {
                 Text(
                     if (showHidden) {

@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -70,6 +68,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
@@ -305,6 +304,7 @@ fun LogDrawer(
                             },
                         )
                     },
+                    shape = kdRoundShape,
                 ) {
                     Icon(
                         painter = painterResource(
@@ -398,12 +398,13 @@ fun LogDrawer(
                         // The tabs as they are now — they may have changed while the dialog was up.
                         onCloseAll(closeTargets.map { it.key })
                     },
+                    shape = kdRoundShape,
                 ) {
                     Text("Close all", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmCloseAllFor = null }) { Text("Keep open") }
+                TextButton(onClick = { confirmCloseAllFor = null }, shape = kdRoundShape) { Text("Keep open") }
             },
         )
     }
@@ -477,7 +478,7 @@ internal fun LogTabClusterBadge(badge: LogTabBadge) {
         Box(
             modifier = Modifier
                 .size(14.dp)
-                .clip(CircleShape)
+                .clip(kdRoundShape)
                 .background(badge.color)
                 .semantics { contentDescription = "Cluster ${badge.context}" },
             contentAlignment = Alignment.Center,
@@ -505,7 +506,7 @@ private fun HideDrawerButton(onClick: () -> Unit) {
         tooltip = { ActionTooltip("Hide log drawer", "Log tabs stay open. $logDrawerShortcut shows the drawer again.") },
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(onClick = onClick, shape = kdRoundShape) {
             Icon(
                 painter = painterResource(Res.drawable.left_panel_close),
                 contentDescription = "Hide log drawer",
@@ -545,7 +546,7 @@ private fun DrawerResizeHandle(
             Box(
                 modifier = Modifier
                     .size(width = 28.dp, height = 3.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(2.dp.kdCorner)
                     .background(KdTextSecondary.copy(alpha = 0.45f)),
             )
         }

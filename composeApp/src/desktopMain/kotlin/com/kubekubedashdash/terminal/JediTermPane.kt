@@ -32,6 +32,8 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTerminalBg
 import com.kubekubedashdash.KdTerminalFg
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.model.TerminalSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -105,7 +107,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(text = error!!, color = KdError)
-                    Button(onClick = { connect() }) { Text("Retry") }
+                    Button(onClick = { connect() }, shape = kdRoundShape) { Text("Retry") }
                 }
             }
         } else {
@@ -153,6 +155,7 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                             modifier = Modifier.size(32.dp),
                             color = KdPrimary,
                             strokeWidth = 3.dp,
+                            strokeCap = kdStrokeCap,
                         )
                         Text(
                             text = "Connecting to ${session.displayLabel}…",

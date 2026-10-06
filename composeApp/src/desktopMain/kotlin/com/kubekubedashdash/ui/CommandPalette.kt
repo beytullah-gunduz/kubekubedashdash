@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +59,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.orCompact
@@ -386,7 +386,7 @@ fun CommandPalette(
                     indication = null,
                     onClick = {},
                 ),
-            shape = RoundedCornerShape(10.dp),
+            shape = 10.dp.kdCorner,
             color = KdSurface,
             border = BorderStroke(kdOutlineWidth, KdBorder),
             shadowElevation = 16.dp,
@@ -493,7 +493,7 @@ private fun SearchBar(
 @Composable
 private fun PrefixChip(prefix: String) {
     Surface(
-        shape = RoundedCornerShape(4.dp),
+        shape = 4.dp.kdCorner,
         color = KdPrimary.copy(alpha = 0.15f),
     ) {
         Text(
@@ -528,14 +528,14 @@ private fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(6.dp.kdCorner)
             .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp.orCompact(5.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            shape = RoundedCornerShape(6.dp),
+            shape = 6.dp.kdCorner,
             color = if (isSelected) KdPrimary.copy(alpha = 0.15f) else KdHover.copy(alpha = 0.6f),
             modifier = Modifier.size(28.dp),
         ) {
@@ -607,7 +607,7 @@ private fun Footer() {
 @Composable
 private fun HintKey(label: String) {
     Surface(
-        shape = RoundedCornerShape(3.dp),
+        shape = 3.dp.kdCorner,
         color = KdSurface,
         border = BorderStroke(kdOutlineWidth, KdBorder),
         modifier = Modifier.height(16.dp),

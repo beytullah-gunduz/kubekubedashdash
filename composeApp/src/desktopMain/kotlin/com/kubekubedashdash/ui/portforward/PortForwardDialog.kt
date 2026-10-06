@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.services.portforward.PortForwardKind
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.services.portforward.defaultLocalPort
@@ -158,12 +159,13 @@ fun PortForwardDialog(
                     onConfirm(remote, local)
                 },
                 enabled = canStart,
+                shape = kdRoundShape,
             ) {
                 Text(if (inFlight) "Starting…" else "Start")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !inFlight) {
+            TextButton(onClick = onDismiss, enabled = !inFlight, shape = kdRoundShape) {
                 Text("Cancel")
             }
         },

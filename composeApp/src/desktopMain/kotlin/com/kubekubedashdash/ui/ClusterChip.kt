@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -45,7 +44,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isTertiaryPressed
@@ -67,6 +65,9 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
@@ -207,7 +208,7 @@ fun ClusterChip(
         Modifier.border(
             width = 1.5.dp,
             color = MaterialTheme.colorScheme.primary,
-            shape = RoundedCornerShape(6.dp),
+            shape = 6.dp.kdCorner,
         )
     } else {
         Modifier
@@ -219,7 +220,7 @@ fun ClusterChip(
     ) {
         Row(
             modifier = modifier
-                .clip(RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
                 .background(background)
                 .drawBehind {
                     // Active-tab underline. Drawn after the rounded clip so the
@@ -286,7 +287,7 @@ fun ClusterChip(
                 Box(
                     modifier = Modifier
                         .size(16.dp)
-                        .clip(CircleShape)
+                        .clip(kdRoundShape)
                         .clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -433,7 +434,7 @@ private fun ClusterAvatar(
         Box(
             modifier = Modifier
                 .size(14.dp)
-                .clip(CircleShape)
+                .clip(CircleShape) // kd-shape-exempt: avatar fill inside the round connection ring
                 .background(color),
         )
         Text(
@@ -468,7 +469,7 @@ private fun ClusterAvatar(
                     size = arcSize,
                     style = Stroke(
                         width = stroke,
-                        cap = StrokeCap.Round,
+                        cap = kdStrokeCap,
                         pathEffect = if (isConnected == false) {
                             PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.5.dp.toPx()))
                         } else {
@@ -484,7 +485,7 @@ private fun ClusterAvatar(
 @Composable
 private fun ChipTooltip(label: String) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurface,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp,
