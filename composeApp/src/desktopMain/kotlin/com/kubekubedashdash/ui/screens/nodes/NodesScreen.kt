@@ -316,6 +316,7 @@ fun NodesScreen(
                     onSelectionChange = viewModel.selection::set,
                     pinnedIds = pinnedIds,
                     onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
+                    usages = nodeUsages,
                 )
             }
         }

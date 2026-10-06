@@ -382,6 +382,7 @@ fun PodsScreen(
                             evict.clearError()
                             pendingEvict = pod
                         },
+                        usages = resourceUsage?.podUsages.orEmpty(),
                     )
                 }
             }
