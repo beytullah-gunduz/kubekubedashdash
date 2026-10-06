@@ -27,17 +27,18 @@ private class NodeColumn(
 )
 
 private val nodeColumns = listOf(
-    NodeColumn("Name", 2.0f, 0.dp) { node, _ -> CellData(node.name, KdPrimary) },
+    NodeColumn("Name", 1.8f, 0.dp) { node, _ -> CellData(node.name, KdPrimary) },
     NodeColumn("Status", 0.8f, 0.dp) { node, _ ->
         CellData(text = node.status, sortValue = node.status, content = { StatusCell(node.status) })
     },
-    NodeColumn("Roles", 1.0f, 350.dp) { node, _ -> CellData(node.roles) },
-    NodeColumn("Version", 1.0f, 450.dp) { node, _ -> CellData(node.version) },
-    // Usage vs allocatable (D4); allocatable alone without a sample.
-    NodeColumn("CPU", 1.3f, 550.dp) { node, usage -> nodeUsageCell(nodeCpuModel(node, usage)) },
-    NodeColumn("Memory", 1.5f, 600.dp) { node, usage -> nodeUsageCell(nodeMemoryModel(node, usage)) },
+    NodeColumn("Roles", 0.8f, 350.dp) { node, _ -> CellData(node.roles) },
+    NodeColumn("Version", 0.8f, 450.dp) { node, _ -> CellData(node.version) },
+    // Usage vs allocatable; allocatable alone without a sample. Wide enough
+    // for "81% · 1.6 / 2.0 cores" plus the bar at a 1440 dp window.
+    NodeColumn("CPU", 1.8f, 550.dp) { node, usage -> nodeUsageCell(nodeCpuModel(node, usage)) },
+    NodeColumn("Memory", 2.0f, 600.dp) { node, usage -> nodeUsageCell(nodeMemoryModel(node, usage)) },
     NodeColumn("Pods", 0.5f, 700.dp) { node, _ -> CellData(node.pods, sortNumber = node.pods.toDoubleOrNull()) },
-    NodeColumn("Arch", 0.8f, 800.dp) { node, _ -> CellData(node.arch) },
+    NodeColumn("Arch", 0.6f, 800.dp) { node, _ -> CellData(node.arch) },
     NodeColumn("Age", 0.7f, 0.dp) { node, _ -> CellData(node.age, sortNumber = ageSortKey(node.creationTimestamp)) },
 )
 

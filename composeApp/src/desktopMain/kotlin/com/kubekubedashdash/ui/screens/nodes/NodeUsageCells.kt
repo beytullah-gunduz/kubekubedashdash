@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -68,7 +69,8 @@ private fun NodeUsageCellContent(text: String, fraction: Float) {
         UsageLevel.WARNING -> KdWarning
         UsageLevel.NORMAL -> KdSuccess
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // End padding: a value as wide as its column must not run into the next one.
+    Row(modifier = Modifier.padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .width(32.dp)
