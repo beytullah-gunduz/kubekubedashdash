@@ -231,7 +231,9 @@ val generateEmptyKubeconfig = tasks.register("generateEmptyKubeconfig") {
 // Likewise keep it off the developer's real preferences store and session
 // file: SystemDirectories honours this property, so every DataStore-backed
 // repository object and SessionStore.default() land in a build directory that
-// is wiped before each run.
+// is wiped before each run. SystemDirectories puts the logs directory inside it
+// too, but nothing in a test JVM copies that into LOG_DIR (only main() does), so
+// logback's app.log is pointed at the same place here.
 val testDataDir = layout.buildDirectory.dir("test-data").get().asFile
 
 tasks.withType<Test>().configureEach {
@@ -241,6 +243,7 @@ tasks.withType<Test>().configureEach {
     // build script (the configuration cache cannot serialise script objects).
     val dataDir = testDataDir
     systemProperty("kkdd.dataDir", dataDir.absolutePath)
+    systemProperty("LOG_DIR", dataDir.resolve("logs").absolutePath)
     doFirst { dataDir.deleteRecursively() }
 }
 
@@ -258,13 +261,17 @@ tasks.named<JavaExec>("generateScreenshots") {
     environment("KUBECONFIG", emptyKubeconfig.get().asFile.absolutePath)
     val dataDir = screenshotDataDir
     systemProperty("kkdd.dataDir", dataDir.absolutePath)
+    // The generator's top-level logger starts logback before its main() sets LOG_DIR, so
+    // the log directory SystemDirectories derives from kkdd.dataDir is set here as well.
+    systemProperty("LOG_DIR", dataDir.resolve("logs").absolutePath)
     doFirst { dataDir.deleteRecursively() }
 }
 
 // Hot reload (dev only): the screenshot generator's demo-only seam. An empty kubeconfig lists
 // no real context, so the Demo Cluster is the only cluster; a separate data directory
-// (build/hot-run-data, reset by `clean`) keeps the developer's preferences, session and cluster
-// colours untouched. `hotMcpServerDesktop` then lets an agent drive this instance.
+// (build/hot-run-data, reset by `clean`) keeps the developer's preferences, session, cluster
+// colours and app.log untouched (main() points LOG_DIR at SystemDirectories.logsDirectory,
+// which follows kkdd.dataDir). `hotMcpServerDesktop` then lets an agent drive this instance.
 val hotRunDataDir = layout.buildDirectory.dir("hot-run-data").get().asFile
 tasks.matching { it.name.startsWith("hotRun") }.configureEach {
     if (this is JavaExec) {
