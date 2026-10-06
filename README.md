@@ -64,6 +64,8 @@ Supported resource types:
 
 Lists are sortable tables that refresh automatically (live via Kubernetes watch/informers where available, otherwise polled). They support keyboard navigation (arrow keys, Home/End to jump), show the full value on hover when a cell is truncated, format large counts with thousands separators, and — on the Pods screen — let you pin rows to the top.
 
+With a Metrics Server installed, the Pods table shows each pod's CPU and memory use (hover for its requests and limits; memory turns orange from 80 % and red from 90 % of a container's limit), and the Nodes table's CPU and Memory columns show use against allocatable with a bar. Hide either column from the table's ⋮ menu.
+
 ### Custom resources (CRDs)
 
 - CRDs are **discovered automatically** when you connect and listed in a dedicated **Custom Resources** sidebar section, searchable and grouped by API group

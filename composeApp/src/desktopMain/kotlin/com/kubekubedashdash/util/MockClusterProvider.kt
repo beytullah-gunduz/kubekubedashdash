@@ -19,6 +19,8 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.PodSpecBuilder
 import io.fabric8.kubernetes.api.model.PodStatusBuilder
 import io.fabric8.kubernetes.api.model.Quantity
+import io.fabric8.kubernetes.api.model.ResourceRequirements
+import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder
 import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
@@ -252,6 +254,19 @@ object MockClusterProvider {
         .endStatus()
         .build()
 
+    /**
+     * Requests/limits every demo container carries, so the Pods table's usage
+     * tooltip has something to show. The 1 GiB memory limit sits well above
+     * the simulator's random usage ceiling (512 MiB), so only the pods in
+     * DemoClusterSimulator's memory-pressure list ever come near it.
+     */
+    internal fun demoContainerResources(): ResourceRequirements = ResourceRequirementsBuilder()
+        .addToRequests("cpu", Quantity("50m"))
+        .addToRequests("memory", Quantity("128Mi"))
+        .addToLimits("cpu", Quantity("500m"))
+        .addToLimits("memory", Quantity("1Gi"))
+        .build()
+
     internal fun buildPod(
         name: String,
         ns: String,
@@ -263,6 +278,7 @@ object MockClusterProvider {
         restartCount: Int = 0,
         creationTimestamp: String = now(),
         owner: HasMetadata? = null,
+        resources: ResourceRequirements? = demoContainerResources(),
     ): Pod {
         val isRunning = phase == "Running"
         val ownerRefs = owner?.let { listOf(ownerRefOf(it)) } ?: emptyList()
@@ -282,6 +298,7 @@ object MockClusterProvider {
                             .withName(app)
                             .withImage(image)
                             .withPorts(ContainerPortBuilder().withContainerPort(8080).build())
+                            .withResources(resources)
                             .build(),
                     )
                     .build(),
