@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +61,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -223,6 +225,14 @@ fun LogDrawer(
                             selectedTabIndex = selectedIndex,
                             edgePadding = 0.dp,
                             modifier = Modifier.fillMaxWidth(),
+                            // Material's default indicator, but squared in Retro (its 3 dp radius is the default's).
+                            indicator = {
+                                TabRowDefaults.PrimaryIndicator(
+                                    Modifier.tabIndicatorOffset(selectedIndex, matchContentSize = true),
+                                    width = Dp.Unspecified,
+                                    shape = 3.dp.kdCorner,
+                                )
+                            },
                         ) {
                             tabList.forEach { tab ->
                                 key(tab.key) {

@@ -4,13 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -82,6 +90,22 @@ class UsageBarTest {
             abs(actual.blue - expected.blue) < 0.05f &&
             abs(actual.alpha - expected.alpha) < 0.05f
         assertTrue(close, "pixel ($x, $y) should be $expected but is $actual")
+    }
+
+    @Test
+    fun `a bar with a fraction is exposed as progress and a null one is not`() = runSkikoComposeUiTest(size = HostSize, density = Density(1f)) {
+        ThemeManager.syncStyleFromPreferences(ThemeStyle.DEFAULT)
+        var fraction by mutableStateOf<Float?>(0.5f)
+        setContent { UsageBar(fraction, Fill, Modifier.width(100.dp), trackColor = Track) }
+        onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo(0.5f, 0f..1f))).assertExists()
+
+        fraction = 1.7f
+        waitForIdle()
+        onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo(1f, 0f..1f))).assertExists()
+
+        fraction = null
+        waitForIdle()
+        onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)).assertCountEquals(0)
     }
 
     @Test

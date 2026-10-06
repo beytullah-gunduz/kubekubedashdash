@@ -15,6 +15,12 @@ import kotlin.test.fail
  * A line that must stay round in Retro (the macOS traffic lights, the connection ring, the theme
  * preview mockup) carries the marker `// kd-shape-exempt: <reason>`; the reason is mandatory.
  *
+ * Material 3 defaults that are round whatever the theme's shape scale (CornerFull, or a radius
+ * equal to half the height) are guarded too: an M3 button without `shape =`, a
+ * `ButtonDefaults`/`IconButtonDefaults` shape, `SegmentedButtonDefaults.itemShape` without
+ * `baseShape =`, a `PrimaryTabRow`/`PrimaryScrollableTabRow` without `indicator =`, and a
+ * `TabRowDefaults.PrimaryIndicator` without `shape =`.
+ *
  * Deliberately NOT guarded:
  *  - `Switch`, `Checkbox`, `RadioButton` and `RangeSlider` stay round by user decision (2026-10-06,
  *    D4): their round internals are not routed through the Retro tokens.
@@ -215,7 +221,6 @@ class RetroShapeGuardTest {
     fun `lookalike names declarations and defaults are not buttons`() {
         assertEquals(emptyList(), hits("fun SettingsButton(onClick: () -> Unit) {"))
         assertEquals(emptyList(), hits("SettingsButton(onClick = {})"))
-        assertEquals(emptyList(), hits("val s = IconButtonDefaults.standardShape"))
         assertEquals(emptyList(), hits("private fun TextButton(x: Int) = Unit"))
     }
 
@@ -247,11 +252,83 @@ class RetroShapeGuardTest {
             "FilledIconButton",
             "FilledTonalIconButton",
             "OutlinedIconButton",
+            "IconToggleButton",
+            "FilledIconToggleButton",
+            "FilledTonalIconToggleButton",
+            "OutlinedIconToggleButton",
         )
         names.forEach { name ->
             assertEquals(listOf(1 to "button-shape"), hits("$name(onClick = {}) {}"), name)
             assertEquals(emptyList(), hits("$name(onClick = {}, shape = kdRoundShape) {}"), name)
         }
+    }
+
+    @Test
+    fun `Material's default button shapes fire`() {
+        assertEquals(listOf(1 to "m3-default-shape"), hits("val s = IconButtonDefaults.standardShape"))
+        assertEquals(
+            listOf(1 to "m3-default-shape"),
+            hits("TextButton(onClick = {}, shape = ButtonDefaults.textShape) {}"),
+        )
+        assertEquals(emptyList(), hits("val p = ButtonDefaults.ContentPadding"))
+    }
+
+    @Test
+    fun `segmented items need a base shape`() {
+        assertEquals(
+            listOf(1 to "segmented-base-shape"),
+            hits(src("shape = SegmentedButtonDefaults.itemShape(", "  index = 0,", "  count = 2,", "),")),
+        )
+        assertEquals(
+            emptyList(),
+            hits("shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2, baseShape = kdRoundShape),"),
+        )
+    }
+
+    @Test
+    fun `primary tab rows need a squared indicator`() {
+        assertEquals(listOf(1 to "tab-indicator"), hits("PrimaryScrollableTabRow(selectedTabIndex = 0) {}"))
+        assertEquals(listOf(1 to "tab-indicator"), hits("PrimaryTabRow(selectedTabIndex = 0) {}"))
+        assertEquals(
+            listOf(3 to "indicator-shape"),
+            hits(
+                src(
+                    "PrimaryTabRow(",
+                    "  selectedTabIndex = 0,",
+                    "  indicator = { TabRowDefaults.PrimaryIndicator(Modifier, width = Dp.Unspecified) },",
+                    ") {}",
+                ),
+            ),
+        )
+        assertEquals(
+            emptyList(),
+            hits(
+                src(
+                    "PrimaryTabRow(",
+                    "  selectedTabIndex = 0,",
+                    "  indicator = { TabRowDefaults.PrimaryIndicator(Modifier, shape = 3.dp.kdCorner) },",
+                    ") {}",
+                ),
+            ),
+        )
+        assertEquals(emptyList(), hits("SecondaryTabRow(selectedTabIndex = 0) {}"))
+    }
+
+    @Test
+    fun `a marker inside a string does not exempt the line`() {
+        assertEquals(
+            listOf(1 to "circle-shape"),
+            hits("val s = \"// kd-shape-exempt: x\"; Modifier.clip(CircleShape)"),
+        )
+        assertEquals(emptyList(), hits("/* kd */ Modifier.clip(CircleShape) // kd-shape-exempt: traffic light"))
+    }
+
+    @Test
+    fun `a raw string closed by extra quotes ends at the last quote`() {
+        assertEquals(
+            listOf(1 to "circle-shape"),
+            hits("val r = ${TQ}a$TQ\"; Modifier.clip(CircleShape)"),
+        )
     }
 
     @Test
@@ -316,6 +393,11 @@ internal object RetroShapeScanner {
         TokenRule("round-cap", Regex("""\bStrokeCap\.Round\b"""), "use kdStrokeCap"),
         TokenRule("corner-radius", Regex("""\bCornerRadius\s*\("""), "use kdCornerRadius(radius)"),
         TokenRule("draw-circle", Regex("""\bdrawCircle\s*\("""), "use drawKdDot(color, radius, center)"),
+        TokenRule(
+            "m3-default-shape",
+            Regex("""\b(ButtonDefaults|IconButtonDefaults)\.\w*[sS]hapes?\b"""),
+            "M3's default button shapes are CornerFull (round in Retro): use kdRoundShape",
+        ),
     )
 
     private val callRules = listOf(
@@ -329,10 +411,29 @@ internal object RetroShapeScanner {
             "button-shape",
             Regex(
                 """(?<!\w)(Button|OutlinedButton|TextButton|ElevatedButton|FilledTonalButton|""" +
-                    """IconButton|FilledIconButton|FilledTonalIconButton|OutlinedIconButton)\s*\(""",
+                    """IconButton|FilledIconButton|FilledTonalIconButton|OutlinedIconButton|""" +
+                    """IconToggleButton|FilledIconToggleButton|FilledTonalIconToggleButton|OutlinedIconToggleButton)\s*\(""",
             ),
             "shape",
             "pass shape = kdRoundShape (or N.dp.kdCorner)",
+        ),
+        CallRule(
+            "segmented-base-shape",
+            Regex("""\bSegmentedButtonDefaults\.itemShape\s*\("""),
+            "baseShape",
+            "pass baseShape = kdRoundShape",
+        ),
+        CallRule(
+            "tab-indicator",
+            Regex("""(?<!\w)(PrimaryTabRow|PrimaryScrollableTabRow)\s*\("""),
+            "indicator",
+            "pass indicator = { TabRowDefaults.PrimaryIndicator(..., shape = 3.dp.kdCorner) }",
+        ),
+        CallRule(
+            "indicator-shape",
+            Regex("""\bTabRowDefaults\.PrimaryIndicator\s*\("""),
+            "shape",
+            "pass shape = 3.dp.kdCorner",
         ),
     )
 
@@ -343,9 +444,10 @@ internal object RetroShapeScanner {
 
     fun scan(file: String, source: String): List<Violation> {
         val masked = mask(source)
-        val originalLines = source.split('\n')
+        // Strings masked, comments kept: a marker-shaped string never exempts a line.
+        val commentLines = mask(source, keepComments = true).split('\n')
         val maskedLines = masked.split('\n')
-        val exempt = originalLines.map { exemptMarker.containsMatchIn(it) }
+        val exempt = commentLines.map { exemptMarker.containsMatchIn(it) }
         val skipped = maskedLines.map { it.trim().let { text -> text.startsWith("import ") || text.startsWith("package ") } }
         val lineStarts = lineStarts(masked)
 
@@ -383,9 +485,9 @@ internal object RetroShapeScanner {
      * A copy of [source] of identical length with every string, char literal and comment character
      * replaced by a space. Newlines are kept. A plain string or char literal also ends at its line's
      * end, and template expressions are not parsed, so a stray quote can never swallow the rest of
-     * the file.
+     * the file. With [keepComments], comment characters are copied instead of blanked.
      */
-    fun mask(source: String): String {
+    fun mask(source: String, keepComments: Boolean = false): String {
         val n = source.length
         val out = CharArray(n)
         var state = State.CODE
@@ -394,6 +496,10 @@ internal object RetroShapeScanner {
         fun blank(index: Int) {
             val c = source[index]
             out[index] = if (c == '\n' || c == '\r') c else ' '
+        }
+
+        fun comment(index: Int) {
+            if (keepComments) out[index] = source[index] else blank(index)
         }
 
         while (i < n) {
@@ -419,13 +525,13 @@ internal object RetroShapeScanner {
                     }
 
                     source.startsWith("//", i) -> {
-                        repeat(2) { blank(i + it) }
+                        repeat(2) { comment(i + it) }
                         i += 2
                         state = State.LINE_COMMENT
                     }
 
                     source.startsWith("/*", i) -> {
-                        repeat(2) { blank(i + it) }
+                        repeat(2) { comment(i + it) }
                         i += 2
                         state = State.BLOCK_COMMENT
                     }
@@ -465,8 +571,10 @@ internal object RetroShapeScanner {
                 }
 
                 State.RAW -> if (source.startsWith(TRIPLE_QUOTE, i)) {
-                    repeat(3) { blank(i + it) }
-                    i += 3
+                    while (i < n && source[i] == '"') {
+                        blank(i)
+                        i++
+                    }
                     state = State.CODE
                 } else {
                     blank(i)
@@ -475,16 +583,16 @@ internal object RetroShapeScanner {
 
                 State.LINE_COMMENT -> {
                     if (c == '\n') state = State.CODE
-                    blank(i)
+                    comment(i)
                     i++
                 }
 
                 State.BLOCK_COMMENT -> if (source.startsWith("*/", i)) {
-                    repeat(2) { blank(i + it) }
+                    repeat(2) { comment(i + it) }
                     i += 2
                     state = State.CODE
                 } else {
-                    blank(i)
+                    comment(i)
                     i++
                 }
             }

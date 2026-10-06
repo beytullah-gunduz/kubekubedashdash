@@ -1,8 +1,9 @@
 package com.kubekubedashdash.ui
 
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
 import com.kubekubedashdash.ThemeStyle
@@ -56,7 +57,7 @@ class RetroPanelChromeTest {
         assertEquals(CircleShape, kdRoundShape)
 
         ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
-        assertEquals(RectangleShape, kdRoundShape)
+        assertEquals(RoundedCornerShape(0.dp), kdRoundShape)
     }
 
     @Test

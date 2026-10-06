@@ -6,6 +6,7 @@ import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -26,8 +27,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
@@ -578,12 +577,13 @@ fun Dp.orCompact(compact: Dp): Dp = if (ThemeManager.isCompact) compact else thi
 
 /**
  * Every full round: a circle on a square box and a pill on a wide one in Default, a square in
- * Retro. Status dots, colour swatches, round hit areas, and the shape of every default-shaped M3
- * Button / OutlinedButton / TextButton / IconButton: Material 3 resolves their CornerFull token to
- * CircleShape (Shapes.fromToken, material3 1.12.0-alpha03 Shapes.kt:379), so passing this is
- * value-identical in Default.
+ * Retro. Status dots, colour swatches, round hit areas, the shape of every default-shaped M3
+ * Button / OutlinedButton / TextButton / IconButton, and the `baseShape` of
+ * SegmentedButtonDefaults.itemShape: Material 3 resolves their CornerFull token to CircleShape
+ * (Shapes.fromToken, material3 1.12.0-alpha03 Shapes.kt:379), so passing this is value-identical
+ * in Default. A [CornerBasedShape] (0 dp corners in Retro) so the APIs that need one take it.
  */
-val kdRoundShape: Shape get() = if (ThemeManager.isRetro) RectangleShape else CircleShape
+val kdRoundShape: CornerBasedShape get() = if (ThemeManager.isRetro) RoundedCornerShape(0.dp) else CircleShape
 
 /**
  * Line-end cap for charts and progress indicators (D24): flat in Retro, round in Default —

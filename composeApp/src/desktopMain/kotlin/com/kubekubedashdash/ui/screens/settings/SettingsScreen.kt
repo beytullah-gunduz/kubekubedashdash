@@ -833,6 +833,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = UiScaleSteps.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text("$step%", maxLines = 1, softWrap = false)
@@ -859,6 +860,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = LayoutDensity.entries.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(
@@ -955,6 +957,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = tabFocusOptions.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(label, maxLines = 1, softWrap = false)
@@ -988,6 +991,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = tabStripOptions.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(label, maxLines = 1, softWrap = false)
@@ -1047,6 +1051,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = TopologyRefreshOptionsSec.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(formatTopologyRefresh(sec), maxLines = 1, softWrap = false)
