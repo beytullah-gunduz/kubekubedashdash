@@ -3,7 +3,9 @@ package com.kubekubedashdash.ui.modals.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.util.AwsProfile
+import com.kubekubedashdash.util.ClusterReferenceParser
 import com.kubekubedashdash.util.EksCluster
+import com.kubekubedashdash.util.EksClusterDiscoverer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -12,8 +14,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -57,6 +62,46 @@ sealed class ImportRowState {
 }
 
 data class ImportRow(val cluster: EksCluster, val state: ImportRowState)
+
+private const val MAX_SUGGESTIONS = 8
+
+internal const val EKS_PROFILE_ERROR = "This profile isn't in your AWS config."
+internal const val EKS_REGION_ERROR = "Use an AWS region such as us-east-1 or us-gov-west-1."
+internal const val EKS_CLUSTER_ERROR =
+    "A cluster name has up to 100 letters, digits, hyphens or underscores and starts with a letter or digit."
+internal const val EKS_PASTE_NOT_RECOGNIZED = "Not recognized. Paste an aws eks update-kubeconfig command or a cluster ARN."
+
+data class EksByNameState(
+    val profileError: String?,
+    val regionError: String?,
+    val clusterError: String?,
+    val alreadyImported: Boolean,
+    val canImport: Boolean,
+) {
+    companion object {
+        val EMPTY = EksByNameState(null, null, null, alreadyImported = false, canImport = false)
+    }
+}
+
+/** Inputs already trimmed. [existing] holds (cluster name, region) of EKS contexts. */
+internal fun eksByNameState(
+    profile: String,
+    region: String,
+    cluster: String,
+    existing: Set<Pair<String, String>>,
+    profileNames: Set<String>,
+): EksByNameState {
+    val profileOk = profile in profileNames
+    val regionOk = EksClusterDiscoverer.isValidRegion(region)
+    val clusterOk = EksClusterDiscoverer.isValidClusterName(cluster)
+    return EksByNameState(
+        profileError = EKS_PROFILE_ERROR.takeIf { profile.isNotEmpty() && !profileOk },
+        regionError = EKS_REGION_ERROR.takeIf { region.isNotEmpty() && !regionOk },
+        clusterError = EKS_CLUSTER_ERROR.takeIf { cluster.isNotEmpty() && !clusterOk },
+        alreadyImported = (cluster to region) in existing,
+        canImport = profileOk && regionOk && clusterOk,
+    )
+}
 
 class EksDiscoveryViewModel(
     private val gateway: EksDiscoveryGateway = DefaultEksDiscoveryGateway(),
@@ -109,8 +154,53 @@ class EksDiscoveryViewModel(
     private val _cancelRequested = MutableStateFlow(false)
     val cancelRequested: StateFlow<Boolean> = _cancelRequested.asStateFlow()
 
+    private val _mode = MutableStateFlow(gateway.recallDiscoveryMode())
+    val mode: StateFlow<DiscoveryMode> = _mode.asStateFlow()
+
+    private val _byNameProfile = MutableStateFlow("")
+    val byNameProfile: StateFlow<String> = _byNameProfile.asStateFlow()
+
+    private val _byNameRegion = MutableStateFlow("")
+    val byNameRegion: StateFlow<String> = _byNameRegion.asStateFlow()
+
+    private val _byNameCluster = MutableStateFlow("")
+    val byNameCluster: StateFlow<String> = _byNameCluster.asStateFlow()
+
+    private val _pasteText = MutableStateFlow("")
+    val pasteText: StateFlow<String> = _pasteText.asStateFlow()
+
+    private val _pasteNotice = MutableStateFlow<PasteNotice?>(null)
+    val pasteNotice: StateFlow<PasteNotice?> = _pasteNotice.asStateFlow()
+
+    /** (cluster name, region) of every EKS context already in the kubeconfig. */
+    private val existingKeys = MutableStateFlow<Set<Pair<String, String>>>(emptySet())
+
+    private val contextRegions = MutableStateFlow<List<String>>(emptyList())
+
+    /** Selected profile's default region first, then regions of EKS contexts, then the common list. */
+    val byNameRegionSuggestions: StateFlow<List<String>> =
+        combine(_byNameProfile, _profiles, contextRegions) { profile, profiles, regions ->
+            (listOfNotNull(profiles.firstOrNull { it.name == profile }?.defaultRegion) + regions + gateway.commonRegions)
+                .distinct()
+                .take(MAX_SUGGESTIONS)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, gateway.commonRegions.take(MAX_SUGGESTIONS))
+
+    val byNameState: StateFlow<EksByNameState> =
+        combine(_byNameProfile, _byNameRegion, _byNameCluster, existingKeys, _profiles) { profile, region, cluster, keys, profiles ->
+            eksByNameState(profile.trim(), region.trim(), cluster.trim(), keys, profiles.map { it.name }.toSet())
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, EksByNameState.EMPTY)
+
+    /**
+     * Sticky "something reached the kubeconfig since the modal opened". [addAnotherByName] and
+     * [cancel] keep it, so closing the modal after several by-name runs still refreshes the
+     * parent's cluster list; only [reset] (modal open) clears it. Written on IO, read on Main.
+     */
+    @Volatile
+    private var importedSinceOpen = false
+
     init {
         loadProfiles()
+        refreshExistingContexts()
     }
 
     fun loadProfiles() {
@@ -124,6 +214,100 @@ class EksDiscoveryViewModel(
                 list.isNotEmpty() -> setOf(list.first().name)
                 else -> emptySet()
             }
+            if (list.none { it.name == _byNameProfile.value }) {
+                _byNameProfile.value = remembered.firstOrNull() ?: list.firstOrNull()?.name ?: ""
+            }
+        }
+    }
+
+    /** Called from the tab row. Persists the tab; the browse tab runs no command until "Next". */
+    fun setMode(mode: DiscoveryMode) {
+        if (_mode.value == mode) return
+        _mode.value = mode
+        gateway.rememberDiscoveryMode(mode)
+        _errorMessage.value = null
+    }
+
+    /** From a dead end in the browse flow (no clusters found, failed scans). */
+    fun switchToByName() {
+        cancel()
+        setMode(DiscoveryMode.BY_NAME)
+    }
+
+    fun setByNameProfile(value: String) {
+        _byNameProfile.value = value
+    }
+
+    fun setByNameRegion(value: String) {
+        _byNameRegion.value = value
+    }
+
+    fun setByNameCluster(value: String) {
+        _byNameCluster.value = value
+    }
+
+    /** Live: every change is parsed; recognized values overwrite the fields. Never executed. */
+    fun onPasteTextChange(text: String) {
+        _pasteText.value = text
+        if (text.isBlank()) {
+            _pasteNotice.value = null
+            return
+        }
+        val ref = ClusterReferenceParser.parseEks(text)
+        if (ref == null) {
+            _pasteNotice.value = PasteNotice(EKS_PASTE_NOT_RECOGNIZED, recognized = false)
+            return
+        }
+        val filled = mutableListOf<String>()
+        var profileNote = ""
+        ref.profile?.let { pasted ->
+            if (_profiles.value.any { it.name == pasted }) {
+                _byNameProfile.value = pasted
+                filled += "profile"
+            } else {
+                profileNote = " The profile “$pasted” isn't in your AWS config, so it was not selected."
+            }
+        }
+        ref.region?.let {
+            _byNameRegion.value = it
+            filled += "region"
+        }
+        ref.clusterName?.let {
+            _byNameCluster.value = it
+            filled += "cluster"
+        }
+        val missing = listOfNotNull("region".takeIf { ref.region == null }, "cluster".takeIf { ref.clusterName == null })
+        _pasteNotice.value = PasteNotice(filledNotice(filled, missing) + profileNote, recognized = true)
+    }
+
+    fun startByNameImport() {
+        if (_busy.value) return
+        val profile = _byNameProfile.value.trim()
+        val region = _byNameRegion.value.trim()
+        val name = _byNameCluster.value.trim()
+        val state = eksByNameState(profile, region, name, existingKeys.value, _profiles.value.map { it.name }.toSet())
+        if (!state.canImport) return
+        val cluster = EksCluster(name = name, region = region, profile = profile)
+        _candidates.value = listOf(ClusterCandidate(cluster = cluster, alreadyImported = state.alreadyImported, selected = true))
+        startImport()
+    }
+
+    /** DONE of a by-name run → back to the form, keeping profile and region. */
+    fun addAnotherByName() {
+        if (_step.value != EksDiscoveryStep.DONE) return
+        resetRun()
+        _byNameCluster.value = ""
+        _pasteText.value = ""
+        _pasteNotice.value = null
+        refreshExistingContexts()
+    }
+
+    private fun refreshExistingContexts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val refs = runCatching { gateway.existingContexts() }.getOrElse { emptyList() }
+                .mapNotNull { gateway.parseContext(it) }
+            existingKeys.value = refs.map { it.clusterName to it.region }.toSet()
+            contextRegions.value = refs.map { it.region }.distinct().sorted()
         }
     }
 
@@ -243,11 +427,10 @@ class EksDiscoveryViewModel(
     }
 
     private fun buildCandidates() {
-        val existingArns = gateway.existingContexts().toSet()
-        val pattern = Regex("""arn:aws:eks:([^:]+):\d+:cluster/(.+)""")
-        val existingByNameAndRegion: Set<Pair<String, String>> = existingArns.mapNotNull { ctx ->
-            pattern.matchEntire(ctx)?.let { it.groupValues[2] to it.groupValues[1] }
-        }.toSet()
+        val existingByNameAndRegion: Set<Pair<String, String>> = gateway.existingContexts()
+            .mapNotNull { gateway.parseContext(it) }
+            .map { it.clusterName to it.region }
+            .toSet()
 
         val clusters = _scanRows.value.flatMap { row ->
             (row.state as? RegionScanState.Done)?.clusters ?: emptyList()
@@ -308,11 +491,13 @@ class EksDiscoveryViewModel(
                     }
                     result.fold(
                         onSuccess = { ctx ->
+                            importedSinceOpen = true
                             updateImportRow(gen, cluster) { ImportRowState.Done(ctx) }
                         },
                         onFailure = { e ->
                             val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
-                            updateImportRow(gen, cluster) { ImportRowState.Failed(msg) }
+                            val described = EksClusterDiscoverer.describeImportFailure(msg, cluster.region)
+                            updateImportRow(gen, cluster) { ImportRowState.Failed(described) }
                         },
                     )
                 }
@@ -361,7 +546,8 @@ class EksDiscoveryViewModel(
         }
     }
 
-    fun reset() {
+    /** Clears wizard progress and returns to the first step; the by-name fields and [importedSinceOpen] stay. */
+    private fun resetRun() {
         // Bump BEFORE cancelling: any in-flight callback that re-checks the
         // generation is then already stale.
         runGeneration.incrementAndGet()
@@ -376,10 +562,26 @@ class EksDiscoveryViewModel(
         _step.value = EksDiscoveryStep.PICK_PROFILE
     }
 
-    fun cancel() = reset()
+    /**
+     * Modal open: clears wizard progress, returns to the first step, forgets earlier imports and
+     * the by-name region, cluster and paste text. The by-name profile is kept. The view model
+     * outlives the modal (it is scoped to the window), so this does not reload the profiles.
+     */
+    fun reset() {
+        resetRun()
+        importedSinceOpen = false
+        _byNameRegion.value = ""
+        _byNameCluster.value = ""
+        _pasteText.value = ""
+        _pasteNotice.value = null
+        refreshExistingContexts()
+    }
+
+    /** Stops the current run and returns to the first step; keeps [importedSinceOpen] and the fields. */
+    fun cancel() = resetRun()
 
     val anyImportSucceeded: Boolean
-        get() = _importRows.value.any { it.state is ImportRowState.Done }
+        get() = importedSinceOpen || _importRows.value.any { it.state is ImportRowState.Done }
 
     override fun onCleared() {
         activeJob?.cancel()

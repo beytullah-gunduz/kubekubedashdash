@@ -122,6 +122,12 @@ data class CellData(
     val color: Color? = null,
     val sortValue: String? = null,
     val content: (@Composable () -> Unit)? = null,
+    /**
+     * Numeric sort key. When any row's cell in the sorted column has one, the
+     * column sorts by number and rows without one go last in both directions
+     * (see [sortTableRows]). Null in every row keeps the text sort.
+     */
+    val sortNumber: Double? = null,
 )
 
 /** kubectl's placeholder for an absent value; rendered as [EMPTY_DASH]. */
@@ -918,7 +924,7 @@ fun ResourceErrorMessage(message: String, onRetry: (() -> Unit)? = null) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun OverflowTooltipText(
+internal fun OverflowTooltipText(
     text: String,
     style: TextStyle,
     color: Color,

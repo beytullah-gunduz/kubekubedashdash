@@ -61,6 +61,8 @@ object PreferenceRepository {
     private val MCP_REQUIRE_AUTH by lazy { booleanPreferencesKey("mcp_require_auth") }
     private val LAST_AWS_PROFILES by lazy { stringPreferencesKey("last_aws_profiles") }
     private val LAST_GCP_PROJECTS by lazy { stringPreferencesKey("last_gcp_projects") }
+    private val GKE_DISCOVERY_MODE by lazy { stringPreferencesKey("gke_discovery_mode") }
+    private val EKS_DISCOVERY_MODE by lazy { stringPreferencesKey("eks_discovery_mode") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
     private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
     private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
@@ -129,6 +131,12 @@ object PreferenceRepository {
 
     private val _lastGcpProjects = MutableStateFlow<List<String>>(emptyList())
     val lastGcpProjects: StateFlow<List<String>> = _lastGcpProjects.asStateFlow()
+
+    private val _gkeDiscoveryMode = MutableStateFlow<String?>(null)
+    val gkeDiscoveryMode: StateFlow<String?> = _gkeDiscoveryMode.asStateFlow()
+
+    private val _eksDiscoveryMode = MutableStateFlow<String?>(null)
+    val eksDiscoveryMode: StateFlow<String?> = _eksDiscoveryMode.asStateFlow()
 
     private val _closeTabFocus = MutableStateFlow(CloseTabFocus.LEFT_NEIGHBOR)
     val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
@@ -289,6 +297,8 @@ object PreferenceRepository {
                     _lastGcpProjects.value = p[LAST_GCP_PROJECTS]
                         ?.split(",")?.filter { it.isNotBlank() }
                         ?: emptyList()
+                    _gkeDiscoveryMode.value = p[GKE_DISCOVERY_MODE]
+                    _eksDiscoveryMode.value = p[EKS_DISCOVERY_MODE]
                     _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
                     _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
                     _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
@@ -399,6 +409,16 @@ object PreferenceRepository {
                 if (cleaned.isEmpty()) it.remove(LAST_GCP_PROJECTS) else it[LAST_GCP_PROJECTS] = cleaned.joinToString(",")
             }
         }
+    }
+
+    fun setGkeDiscoveryMode(value: String) {
+        _gkeDiscoveryMode.value = value
+        ioScope.launch { dataStore.edit { it[GKE_DISCOVERY_MODE] = value } }
+    }
+
+    fun setEksDiscoveryMode(value: String) {
+        _eksDiscoveryMode.value = value
+        ioScope.launch { dataStore.edit { it[EKS_DISCOVERY_MODE] = value } }
     }
 
     fun setTopologyPacketAnimationEnabled(value: Boolean) {

@@ -2,8 +2,10 @@ package com.kubekubedashdash.ui.modals.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.util.ClusterReferenceParser
 import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
+import com.kubekubedashdash.util.GkeClusterDiscoverer
 import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -33,12 +36,23 @@ import java.util.concurrent.atomic.AtomicInteger
 // hundreds-of-process scan.
 private const val MAX_SCAN_PROJECTS = 25
 
+private const val MAX_SUGGESTIONS = 8
+
 enum class GkeDiscoveryStep { PICK_PROJECTS, SCANNING, PICK_CLUSTERS, IMPORTING, DONE }
 
 sealed class ProjectLoadState {
     object Loading : ProjectLoadState()
+
+    /** Signed in, but the project list is not loaded because the by-name tab is shown. */
+    object NotRequested : ProjectLoadState()
+
     object NotSignedIn : ProjectLoadState()
-    data class Failed(val message: String) : ProjectLoadState()
+
+    /**
+     * The account check ([signIn] = true) or the project list failed. The by-name tab only
+     * needs the first, so it warns about a failed sign-in check and ignores a refused list.
+     */
+    data class Failed(val message: String, val signIn: Boolean = false) : ProjectLoadState()
     data class Loaded(val projects: List<GcpProject>) : ProjectLoadState()
 }
 
@@ -66,6 +80,48 @@ sealed class GkeImportRowState {
 }
 
 data class GkeImportRow(val cluster: GkeCluster, val state: GkeImportRowState)
+
+internal const val GKE_PROJECT_ERROR =
+    "A project ID has 6 to 30 lowercase letters, digits or hyphens and starts with a letter."
+internal const val GKE_LOCATION_ERROR = "Use a region such as europe-west1 or a zone such as europe-west1-b."
+internal const val GKE_CLUSTER_ERROR =
+    "A cluster name has up to 40 lowercase letters, digits or hyphens and starts with a letter."
+internal const val GKE_PASTE_NOT_RECOGNIZED =
+    "Not recognized. Paste a gcloud … get-credentials command, a gke_… context name " +
+        "or a projects/…/locations/…/clusters/… path."
+
+data class GkeByNameSuggestions(val projects: List<String>, val locations: List<String>)
+
+data class GkeByNameState(
+    val projectError: String?,
+    val locationError: String?,
+    val clusterError: String?,
+    val alreadyImported: Boolean,
+    val canImport: Boolean,
+) {
+    companion object {
+        val EMPTY = GkeByNameState(null, null, null, alreadyImported = false, canImport = false)
+    }
+}
+
+/** Field checks for the by-name tab. Inputs are already trimmed. A blank field has no error. */
+internal fun gkeByNameState(
+    project: String,
+    location: String,
+    cluster: String,
+    existing: Set<Triple<String, String, String>>,
+): GkeByNameState {
+    val projectOk = GkeClusterDiscoverer.isValidProjectId(project)
+    val locationOk = GkeClusterDiscoverer.isValidLocation(location)
+    val clusterOk = GkeClusterDiscoverer.isValidClusterName(cluster)
+    return GkeByNameState(
+        projectError = GKE_PROJECT_ERROR.takeIf { project.isNotEmpty() && !projectOk },
+        locationError = GKE_LOCATION_ERROR.takeIf { location.isNotEmpty() && !locationOk },
+        clusterError = GKE_CLUSTER_ERROR.takeIf { cluster.isNotEmpty() && !clusterOk },
+        alreadyImported = Triple(project, location, cluster) in existing,
+        canImport = projectOk && locationOk && clusterOk,
+    )
+}
 
 class GkeDiscoveryViewModel(
     private val gateway: GkeDiscoveryGateway = DefaultGkeDiscoveryGateway(),
@@ -148,11 +204,52 @@ class GkeDiscoveryViewModel(
     private val _cancelRequested = MutableStateFlow(false)
     val cancelRequested: StateFlow<Boolean> = _cancelRequested.asStateFlow()
 
+    private val _mode = MutableStateFlow(gateway.recallDiscoveryMode())
+    val mode: StateFlow<DiscoveryMode> = _mode.asStateFlow()
+
+    private val _byNameProject = MutableStateFlow("")
+    val byNameProject: StateFlow<String> = _byNameProject.asStateFlow()
+
+    private val _byNameLocation = MutableStateFlow("")
+    val byNameLocation: StateFlow<String> = _byNameLocation.asStateFlow()
+
+    private val _byNameCluster = MutableStateFlow("")
+    val byNameCluster: StateFlow<String> = _byNameCluster.asStateFlow()
+
+    private val _pasteText = MutableStateFlow("")
+    val pasteText: StateFlow<String> = _pasteText.asStateFlow()
+
+    private val _pasteNotice = MutableStateFlow<PasteNotice?>(null)
+    val pasteNotice: StateFlow<PasteNotice?> = _pasteNotice.asStateFlow()
+
+    /** (project, location, cluster) of every GKE context already in the kubeconfig. */
+    private val existingKeys = MutableStateFlow<Set<Triple<String, String, String>>>(emptySet())
+
+    private val _byNameSuggestions = MutableStateFlow(GkeByNameSuggestions(emptyList(), emptyList()))
+    val byNameSuggestions: StateFlow<GkeByNameSuggestions> = _byNameSuggestions.asStateFlow()
+
+    val byNameState: StateFlow<GkeByNameState> =
+        combine(_byNameProject, _byNameLocation, _byNameCluster, existingKeys) { project, location, cluster, keys ->
+            gkeByNameState(project.trim(), location.trim(), cluster.trim(), keys)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, GkeByNameState.EMPTY)
+
+    /**
+     * Sticky "something reached the kubeconfig since the modal opened". [addAnotherByName] and
+     * [cancel] keep it, so closing the modal after several by-name runs still refreshes the
+     * parent's cluster list; only [reset] (modal open) clears it. Written on IO, read on Main.
+     */
+    @Volatile
+    private var importedSinceOpen = false
+
     init {
+        refreshExistingContexts()
         retryLoad()
     }
 
-    /** Re-runs the account check, and the project list if signed in. Backs D4's "Try again". */
+    /**
+     * Re-runs the account check, and the project list if signed in and the Browse tab is shown.
+     * Backs D4's "Try again".
+     */
     fun retryLoad() {
         loadJob?.cancel()
         _errorMessage.value = null
@@ -165,12 +262,20 @@ class GkeDiscoveryViewModel(
                         _projectLoadState.value = ProjectLoadState.NotSignedIn
                         return@launch
                     }
-                    loadProjects()
+                    _projectLoadState.value = ProjectLoadState.NotRequested
+                    // Publish, then check: setMode publishes _mode and then tries the same
+                    // compare-and-set, so whichever side runs second sees the other's write and
+                    // exactly one of them wins the load.
+                    if (_mode.value == DiscoveryMode.BROWSE &&
+                        _projectLoadState.compareAndSet(ProjectLoadState.NotRequested, ProjectLoadState.Loading)
+                    ) {
+                        loadProjects()
+                    }
                 },
                 onFailure = { e ->
                     val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
                     log.warn("Failed to resolve active gcloud account: {}", msg)
-                    _projectLoadState.value = ProjectLoadState.Failed(msg)
+                    _projectLoadState.value = ProjectLoadState.Failed(msg, signIn = true)
                 },
             )
         }
@@ -190,6 +295,98 @@ class GkeDiscoveryViewModel(
                 _projectLoadState.value = ProjectLoadState.Failed(msg)
             },
         )
+    }
+
+    /** Called from the tab row. Persists the tab; the Browse tab loads projects on first show. */
+    fun setMode(mode: DiscoveryMode) {
+        if (_mode.value == mode) return
+        _mode.value = mode
+        gateway.rememberDiscoveryMode(mode)
+        _errorMessage.value = null
+        // Pairs with the compare-and-set in retryLoad: exactly one side starts the load.
+        if (mode == DiscoveryMode.BROWSE &&
+            _projectLoadState.compareAndSet(ProjectLoadState.NotRequested, ProjectLoadState.Loading)
+        ) {
+            loadJob = viewModelScope.launch(Dispatchers.IO) { loadProjects() }
+        }
+    }
+
+    /** From a dead end in the browse flow (no clusters found, failed scans). */
+    fun switchToByName() {
+        cancel()
+        setMode(DiscoveryMode.BY_NAME)
+    }
+
+    fun setByNameProject(value: String) {
+        _byNameProject.value = value
+    }
+
+    fun setByNameLocation(value: String) {
+        _byNameLocation.value = value
+    }
+
+    fun setByNameCluster(value: String) {
+        _byNameCluster.value = value
+    }
+
+    /** Live: every change is parsed; recognized values overwrite the fields. Never executed. */
+    fun onPasteTextChange(text: String) {
+        _pasteText.value = text
+        if (text.isBlank()) {
+            _pasteNotice.value = null
+            return
+        }
+        val ref = ClusterReferenceParser.parseGke(text)
+        if (ref == null) {
+            _pasteNotice.value = PasteNotice(GKE_PASTE_NOT_RECOGNIZED, recognized = false)
+            return
+        }
+        ref.projectId?.let { _byNameProject.value = it }
+        ref.location?.let { _byNameLocation.value = it }
+        ref.clusterName?.let { _byNameCluster.value = it }
+        val filled = listOfNotNull(
+            "project".takeIf { ref.projectId != null },
+            "location".takeIf { ref.location != null },
+            "cluster".takeIf { ref.clusterName != null },
+        )
+        val missing = listOf("project", "location", "cluster") - filled.toSet()
+        _pasteNotice.value = PasteNotice(filledNotice(filled, missing), recognized = true)
+    }
+
+    fun startByNameImport() {
+        if (_busy.value) return
+        val project = _byNameProject.value.trim()
+        val location = _byNameLocation.value.trim()
+        val name = _byNameCluster.value.trim()
+        // Computed from the fields, not read from byNameState: that flow updates one dispatch later.
+        val state = gkeByNameState(project, location, name, existingKeys.value)
+        if (!state.canImport) return
+        val cluster = GkeCluster(name = name, location = location, projectId = project, status = null)
+        _candidates.value = listOf(GkeClusterCandidate(cluster = cluster, alreadyImported = state.alreadyImported, selected = true))
+        launchImport(returnStep = GkeDiscoveryStep.PICK_PROJECTS)
+    }
+
+    /** DONE of a by-name run → back to the form, keeping project and location. */
+    fun addAnotherByName() {
+        if (_step.value != GkeDiscoveryStep.DONE) return
+        resetRun()
+        _byNameCluster.value = ""
+        _pasteText.value = ""
+        _pasteNotice.value = null
+        refreshExistingContexts()
+    }
+
+    private fun refreshExistingContexts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val keys = runCatching { gateway.existingContexts() }.getOrElse { emptyList() }
+                .mapNotNull { gateway.parseContext(it) }
+                .toSet()
+            existingKeys.value = keys
+            _byNameSuggestions.value = GkeByNameSuggestions(
+                projects = keys.map { it.first }.distinct().sorted().take(MAX_SUGGESTIONS),
+                locations = keys.map { it.second }.distinct().sorted().take(MAX_SUGGESTIONS),
+            )
+        }
     }
 
     fun setProjectFilter(text: String) {
@@ -316,7 +513,9 @@ class GkeDiscoveryViewModel(
         _candidates.update { list -> list.map { it.copy(selected = value) } }
     }
 
-    fun startImport() {
+    fun startImport() = launchImport(returnStep = GkeDiscoveryStep.PICK_CLUSTERS)
+
+    private fun launchImport(returnStep: GkeDiscoveryStep) {
         val toImport = _candidates.value.filter { it.selected }.map { it.cluster }
         if (toImport.isEmpty()) {
             _errorMessage.value = "Select at least one cluster to import."
@@ -352,7 +551,7 @@ class GkeDiscoveryViewModel(
                         _errorMessage.value = "Could not back up ${displayPath(kubeconfigPath)}. " +
                             "gcloud rewrites the whole kubeconfig, so the import was cancelled."
                         _busy.value = false
-                        _step.value = GkeDiscoveryStep.PICK_CLUSTERS
+                        _step.value = returnStep
                     }
                     return@launch
                 }
@@ -373,11 +572,12 @@ class GkeDiscoveryViewModel(
                     }
                     result.fold(
                         onSuccess = { ctx ->
+                            importedSinceOpen = true
                             updateImportRow(gen, cluster) { GkeImportRowState.Done(ctx) }
                         },
                         onFailure = { e ->
                             val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
-                            updateImportRow(gen, cluster) { GkeImportRowState.Failed(msg) }
+                            updateImportRow(gen, cluster) { GkeImportRowState.Failed(GkeClusterDiscoverer.describeImportFailure(msg)) }
                         },
                     )
                 }
@@ -426,12 +626,8 @@ class GkeDiscoveryViewModel(
         }
     }
 
-    /**
-     * Clears wizard progress and returns to the first step. Deliberately does NOT cancel
-     * [loadJob] — the modal calls this on open, and killing the in-flight sign-in check
-     * would strand [_projectLoadState] on `Loading`.
-     */
-    fun reset() {
+    /** Clears wizard progress and returns to the first step; the by-name fields and [importedSinceOpen] stay. */
+    private fun resetRun() {
         // Bump BEFORE cancelling: any in-flight callback that re-checks the
         // generation is then already stale.
         runGeneration.incrementAndGet()
@@ -447,10 +643,30 @@ class GkeDiscoveryViewModel(
         _step.value = GkeDiscoveryStep.PICK_PROJECTS
     }
 
-    fun cancel() = reset()
+    /**
+     * Modal open: clears wizard progress, returns to the first step, forgets earlier imports and
+     * the by-name fields. Deliberately does NOT cancel [loadJob] — the modal calls this on open,
+     * and killing the in-flight sign-in check would strand [_projectLoadState] on `Loading`.
+     * Nor does it re-run [retryLoad]: the view model outlives the modal (it is scoped to the
+     * window), so the account check runs once per window; "Try again" re-runs it. Do not add a
+     * retryLoad() call here.
+     */
+    fun reset() {
+        resetRun()
+        importedSinceOpen = false
+        _byNameProject.value = ""
+        _byNameLocation.value = ""
+        _byNameCluster.value = ""
+        _pasteText.value = ""
+        _pasteNotice.value = null
+        refreshExistingContexts()
+    }
+
+    /** Stops the current run and returns to the first step; keeps [importedSinceOpen] and the fields. */
+    fun cancel() = resetRun()
 
     val anyImportSucceeded: Boolean
-        get() = _importRows.value.any { it.state is GkeImportRowState.Done }
+        get() = importedSinceOpen || _importRows.value.any { it.state is GkeImportRowState.Done }
 
     override fun onCleared() {
         activeJob?.cancel()

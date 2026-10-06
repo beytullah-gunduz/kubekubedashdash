@@ -2,6 +2,7 @@ package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ContainerInfo
 import com.kubekubedashdash.models.ContainerPortInfo
+import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.ContainerTermination
 import com.kubekubedashdash.models.CrdColumnSpec
 import com.kubekubedashdash.models.CrdInfo
@@ -148,7 +149,31 @@ object ResourceMappers {
             schedulingMessage = pod.status?.conditions
                 ?.firstOrNull { it.type == "PodScheduled" && it.status == "False" }
                 ?.message.orEmpty().trim(),
+            resources = containerResources(pod),
         )
+    }
+
+    /**
+     * Requests/limits of the containers that run for the pod's lifetime: its
+     * containers plus native sidecars (init containers with
+     * `restartPolicy: Always`), which run beside the app and appear in
+     * `PodMetrics`. Run-to-completion init containers are left out.
+     */
+    fun containerResources(pod: Pod): List<ContainerResources> {
+        val running = pod.spec?.containers.orEmpty() +
+            pod.spec?.initContainers.orEmpty().filter { it.restartPolicy == "Always" }
+        return running.mapNotNull { c ->
+            val name = c.name?.ifBlank { null } ?: return@mapNotNull null
+            val requests = c.resources?.requests.orEmpty()
+            val limits = c.resources?.limits.orEmpty()
+            ContainerResources(
+                name = name,
+                cpuRequestMillis = requests["cpu"]?.let { parseCpuToMillis(it.toString()) }?.takeIf { it > 0 },
+                cpuLimitMillis = limits["cpu"]?.let { parseCpuToMillis(it.toString()) }?.takeIf { it > 0 },
+                memoryRequestBytes = requests["memory"]?.let { parseMemoryToBytes(it.toString()) }?.takeIf { it > 0 },
+                memoryLimitBytes = limits["memory"]?.let { parseMemoryToBytes(it.toString()) }?.takeIf { it > 0 },
+            )
+        }
     }
 
     fun mapServicePortSpecs(ports: List<ServicePort>?): List<ServicePortInfo> = ports.orEmpty().mapNotNull { p ->

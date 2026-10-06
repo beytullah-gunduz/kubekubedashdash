@@ -123,6 +123,13 @@ class DemoClusterSimulator(
         "default/data-migration-job-lm4n8",
     )
 
+    // Two protected pods held near their 1 GiB memory limit, so the Pods
+    // table's memory alert always has a critical and a warning example.
+    private val memoryPressureTargets = mapOf(
+        "default/backend-api-6c4f8d9b2-xyz99" to 0.95,
+        "default/frontend-7b9d5c8f4-def34" to 0.85,
+    )
+
     private val appPool = listOf("frontend", "worker", "cron", "nginx", "redis", "api", "scheduler", "processor")
     private val imagePool = mapOf(
         "frontend" to "nginx:1.25",
@@ -885,6 +892,10 @@ class DemoClusterSimulator(
                 .coerceIn(POD_CPU_MIN_MILLIS, POD_CPU_MAX_MILLIS)
             cState.memBytes = (cState.memBytes + random.nextLong(-(8L * 1024 * 1024), 9L * 1024 * 1024))
                 .coerceIn(POD_MEM_MIN_BYTES, POD_MEM_MAX_BYTES)
+            memoryPressureTargets[key]?.let { target ->
+                val limit = quantityToBytes(c.resources?.limits?.get("memory"))
+                if (limit > 0L) cState.memBytes = (limit * (target + random.nextDouble(-0.01, 0.01))).toLong()
+            }
             Triple(cName, cState.cpuMillis, cState.memBytes)
         }
 

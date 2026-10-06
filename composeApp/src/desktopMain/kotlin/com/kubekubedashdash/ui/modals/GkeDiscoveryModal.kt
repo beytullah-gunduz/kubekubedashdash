@@ -57,6 +57,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,6 +90,7 @@ import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
+import com.kubekubedashdash.ui.modals.viewmodel.DiscoveryMode
 import com.kubekubedashdash.ui.modals.viewmodel.GkeClusterCandidate
 import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryStep
 import com.kubekubedashdash.ui.modals.viewmodel.GkeDiscoveryViewModel
@@ -108,10 +110,12 @@ fun GkeDiscoveryModal(
     onCompleted: () -> Unit,
     launchedFromClusterSelector: Boolean = false,
     crtGhost: CrtGhost? = null,
+    vm: GkeDiscoveryViewModel = viewModel { GkeDiscoveryViewModel() },
 ) {
-    val viewModel: GkeDiscoveryViewModel = viewModel { GkeDiscoveryViewModel() }
+    val viewModel = vm
     LaunchedEffect(Unit) { viewModel.reset() }
     val step by viewModel.step.collectAsState()
+    val mode by viewModel.mode.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
@@ -122,9 +126,12 @@ fun GkeDiscoveryModal(
     // (the in-flight get-credentials is never killed — see the viewmodel kdoc).
     val closeOrComplete: () -> Unit = {
         when (step) {
+            // A scan can run after an earlier by-name import in the same session, so a scan
+            // closed mid-run still reports that import.
             GkeDiscoveryStep.SCANNING -> {
+                val imported = viewModel.anyImportSucceeded
                 viewModel.cancel()
-                onDismiss()
+                if (imported) onCompleted() else onDismiss()
             }
 
             // DECIDED BY THE PLAN OWNER — do not substitute your own judgement.
@@ -173,14 +180,14 @@ fun GkeDiscoveryModal(
             shadowElevation = 24.dp,
         ) {
             Column {
-                ModalHeader(step = step, onClose = closeOrComplete)
+                ModalHeader(step = step, mode = mode, onClose = closeOrComplete)
                 HorizontalDivider(color = KdBorder)
 
                 if (!viewModel.gcloudCliAvailable) {
                     GcloudMissing(onDismiss)
                 } else {
                     when (step) {
-                        GkeDiscoveryStep.PICK_PROJECTS -> ProjectStep(viewModel)
+                        GkeDiscoveryStep.PICK_PROJECTS -> FirstStep(viewModel, mode)
                         GkeDiscoveryStep.SCANNING -> ScanningStep(viewModel)
                         GkeDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
                         GkeDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
@@ -215,7 +222,7 @@ fun GkeDiscoveryModal(
 }
 
 @Composable
-private fun ModalHeader(step: GkeDiscoveryStep, onClose: () -> Unit) {
+private fun ModalHeader(step: GkeDiscoveryStep, mode: DiscoveryMode, onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -240,7 +247,7 @@ private fun ModalHeader(step: GkeDiscoveryStep, onClose: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                stepSubtitle(step),
+                stepSubtitle(step, mode),
                 style = MaterialTheme.typography.labelSmall,
                 color = KdTextSecondary,
             )
@@ -257,12 +264,20 @@ private fun ModalHeader(step: GkeDiscoveryStep, onClose: () -> Unit) {
     }
 }
 
-private fun stepSubtitle(step: GkeDiscoveryStep): String = when (step) {
-    GkeDiscoveryStep.PICK_PROJECTS -> "Step 1 of 3 · Choose GCP projects"
-    GkeDiscoveryStep.SCANNING -> "Step 2 of 3 · Scanning projects"
-    GkeDiscoveryStep.PICK_CLUSTERS -> "Step 2 of 3 · Choose clusters to import"
-    GkeDiscoveryStep.IMPORTING -> "Step 3 of 3 · Importing clusters"
-    GkeDiscoveryStep.DONE -> "Step 3 of 3 · Done"
+private fun stepSubtitle(step: GkeDiscoveryStep, mode: DiscoveryMode): String = when {
+    mode == DiscoveryMode.BY_NAME && step == GkeDiscoveryStep.PICK_PROJECTS -> "Enter a cluster by name"
+
+    mode == DiscoveryMode.BY_NAME && step == GkeDiscoveryStep.IMPORTING -> "Importing cluster"
+
+    mode == DiscoveryMode.BY_NAME && step == GkeDiscoveryStep.DONE -> "Done"
+
+    else -> when (step) {
+        GkeDiscoveryStep.PICK_PROJECTS -> "Step 1 of 3 · Choose GCP projects"
+        GkeDiscoveryStep.SCANNING -> "Step 2 of 3 · Scanning projects"
+        GkeDiscoveryStep.PICK_CLUSTERS -> "Step 2 of 3 · Choose clusters to import"
+        GkeDiscoveryStep.IMPORTING -> "Step 3 of 3 · Importing clusters"
+        GkeDiscoveryStep.DONE -> "Step 3 of 3 · Done"
+    }
 }
 
 @Composable
@@ -299,12 +314,23 @@ private fun GcloudMissing(onDismiss: () -> Unit) {
 }
 
 @Composable
+private fun FirstStep(viewModel: GkeDiscoveryViewModel, mode: DiscoveryMode) {
+    Column {
+        DiscoveryModeTabs(mode = mode, browseLabel = "Browse projects", onSelect = viewModel::setMode)
+        when (mode) {
+            DiscoveryMode.BROWSE -> ProjectStep(viewModel)
+            DiscoveryMode.BY_NAME -> GkeByNameStep(viewModel)
+        }
+    }
+}
+
+@Composable
 private fun ProjectStep(viewModel: GkeDiscoveryViewModel) {
     val loadState by viewModel.projectLoadState.collectAsState()
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         when (val state = loadState) {
-            ProjectLoadState.Loading -> {
+            ProjectLoadState.Loading, ProjectLoadState.NotRequested -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
@@ -363,11 +389,26 @@ private fun LoadFailed(message: String, viewModel: GkeDiscoveryViewModel) {
     Spacer(Modifier.height(6.dp))
     Text(message, color = KdTextSecondary, style = MaterialTheme.typography.bodySmall)
     Spacer(Modifier.height(16.dp))
+    Row {
+        OutlinedButton(
+            onClick = { viewModel.retryLoad() },
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(kdOutlineWidth, KdBorder),
+        ) { Text("Try again", color = KdTextPrimary) }
+        Spacer(Modifier.width(8.dp))
+        EnterByNameButton(onClick = { viewModel.setMode(DiscoveryMode.BY_NAME) })
+    }
+}
+
+/** The way out of a dead end in the browse flow: the "Enter by name" tab. */
+@Composable
+private fun EnterByNameButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     OutlinedButton(
-        onClick = { viewModel.retryLoad() },
+        onClick = onClick,
+        modifier = modifier,
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(kdOutlineWidth, KdBorder),
-    ) { Text("Try again", color = KdTextPrimary) }
+    ) { Text("Enter a cluster by name", color = KdTextPrimary) }
 }
 
 @Composable
@@ -382,6 +423,14 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
             color = KdTextPrimary,
             fontWeight = FontWeight.Medium,
         )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "If you can access a cluster whose project isn't listed, enter it by name.",
+            color = KdTextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(12.dp))
+        EnterByNameButton(onClick = { viewModel.setMode(DiscoveryMode.BY_NAME) })
         return
     }
 
@@ -472,6 +521,94 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
             adapter = rememberScrollbarAdapter(listState),
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
         )
+    }
+}
+
+@Composable
+private fun GkeByNameStep(viewModel: GkeDiscoveryViewModel) {
+    val projectLoadState by viewModel.projectLoadState.collectAsState()
+    val pasteText by viewModel.pasteText.collectAsState()
+    val pasteNotice by viewModel.pasteNotice.collectAsState()
+    val project by viewModel.byNameProject.collectAsState()
+    val location by viewModel.byNameLocation.collectAsState()
+    val cluster by viewModel.byNameCluster.collectAsState()
+    val state by viewModel.byNameState.collectAsState()
+    val suggestions by viewModel.byNameSuggestions.collectAsState()
+    // Advisory, like on the clusters step: the plugin check never blocks.
+    val authPluginMissing = remember { !viewModel.authPluginAvailable }
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+        ByNameInfoLine(
+            "Import a cluster you can access without listing projects or clusters. " +
+                "It needs only permission to read that cluster.",
+        )
+        Spacer(Modifier.height(12.dp))
+        // D10: a missing sign-in warns but never blocks Import; gcloud's own error shows if it fails.
+        when (val s = projectLoadState) {
+            ProjectLoadState.NotSignedIn -> {
+                ByNameWarningBanner(
+                    "No active gcloud account. Run gcloud auth login in a terminal; the import will fail until you do.",
+                    action = "Try again" to { viewModel.retryLoad() },
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // A refused project list (signIn = false) does not matter here: this tab never lists.
+            is ProjectLoadState.Failed -> if (s.signIn) {
+                ByNameWarningBanner(
+                    "Could not check the gcloud sign-in: ${s.message}",
+                    action = "Try again" to { viewModel.retryLoad() },
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            else -> {}
+        }
+        if (authPluginMissing) {
+            AuthPluginWarningBanner()
+            Spacer(Modifier.height(12.dp))
+        }
+        PasteReferenceField(
+            value = pasteText,
+            onValueChange = viewModel::onPasteTextChange,
+            placeholder = "gcloud container clusters get-credentials …  or  gke_project_location_cluster",
+            notice = pasteNotice,
+        )
+        Spacer(Modifier.height(16.dp))
+        ByNameTextField(
+            label = "Project ID",
+            value = project,
+            onValueChange = viewModel::setByNameProject,
+            placeholder = "example-project",
+            error = state.projectError,
+            tag = ByNameTags.field("project"),
+            suggestionsLabel = "From your kubeconfig:",
+            suggestions = suggestions.projects,
+        )
+        Spacer(Modifier.height(8.dp))
+        ByNameTextField(
+            label = "Location",
+            value = location,
+            onValueChange = viewModel::setByNameLocation,
+            placeholder = "europe-west1 or europe-west1-b",
+            error = state.locationError,
+            tag = ByNameTags.field("location"),
+            suggestionsLabel = "From your kubeconfig:",
+            suggestions = suggestions.locations,
+        )
+        Spacer(Modifier.height(8.dp))
+        ByNameTextField(
+            label = "Cluster name",
+            value = cluster,
+            onValueChange = viewModel::setByNameCluster,
+            placeholder = "example-cluster",
+            error = state.clusterError,
+            tag = ByNameTags.field("cluster"),
+        )
+        if (state.alreadyImported) {
+            Spacer(Modifier.height(8.dp))
+            ByNameInfoLine("Already in your kubeconfig. Importing it again refreshes its credentials.")
+        }
     }
 }
 
@@ -600,6 +737,7 @@ private fun ScanRow(row: ProjectScanRow) {
 @Composable
 private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
     val candidates by viewModel.candidates.collectAsState()
+    val scanRows by viewModel.scanRows.collectAsState()
     val selectedCount = candidates.count { it.selected }
 
     // D7: the gke-gcloud-auth-plugin check is advisory, not blocking. Surface it here
@@ -614,13 +752,49 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
 
         if (candidates.isEmpty()) {
             Text("No GKE clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
+            // An empty list after refused scans is not an empty project: say so here too, not
+            // only next to a list of clusters found elsewhere.
+            val failedScans = scanRows.count { it.state is ProjectScanState.Failed }
+            if (failedScans > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    (if (failedScans == 1) "1 project could not be scanned" else "$failedScans projects could not be scanned") +
+                        ", often because the account can't list its clusters.",
+                    color = KdWarning,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Try selecting different GCP projects.",
+                "Try selecting different GCP projects. If you can't list clusters but can access one, enter it by name.",
                 color = KdTextSecondary,
                 style = MaterialTheme.typography.bodySmall,
             )
+            Spacer(Modifier.height(12.dp))
+            EnterByNameButton(onClick = viewModel::switchToByName, modifier = Modifier.testTag(ByNameTags.SWITCH_TO_BY_NAME))
         } else {
+            val failedScans = scanRows.count { it.state is ProjectScanState.Failed }
+            if (failedScans > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (failedScans == 1) "1 project could not be scanned." else "$failedScans projects could not be scanned.",
+                        color = KdWarning,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Enter a cluster by name",
+                        color = KdPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { viewModel.switchToByName() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .testTag(ByNameTags.SWITCH_TO_BY_NAME),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "$selectedCount of ${candidates.size} selected",
@@ -840,7 +1014,7 @@ private fun ImportRowView(row: GkeImportRow) {
                     s.message,
                     color = KdError,
                     style = MaterialTheme.typography.labelSmall,
-                    maxLines = 2,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
 
@@ -947,6 +1121,9 @@ private fun Footer(
     val exceedsCap by viewModel.projectSelectionExceedsCap.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
     val cancelRequested by viewModel.cancelRequested.collectAsState()
+    val mode by viewModel.mode.collectAsState()
+    val byNameState by viewModel.byNameState.collectAsState()
+    val importRows by viewModel.importRows.collectAsState()
 
     Row(
         modifier = Modifier
@@ -963,6 +1140,15 @@ private fun Footer(
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Back", color = KdTextPrimary) }
+            Spacer(Modifier.width(8.dp))
+        }
+        if (step == GkeDiscoveryStep.DONE && mode == DiscoveryMode.BY_NAME) {
+            OutlinedButton(
+                onClick = { viewModel.addAnotherByName() },
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(kdOutlineWidth, KdBorder),
+                modifier = Modifier.testTag(ByNameTags.ADD_ANOTHER),
+            ) { Text("Add another", color = KdTextPrimary) }
             Spacer(Modifier.width(8.dp))
         }
         Spacer(Modifier.weight(1f))
@@ -1003,7 +1189,16 @@ private fun Footer(
         Spacer(Modifier.width(8.dp))
 
         when (step) {
-            GkeDiscoveryStep.PICK_PROJECTS -> {
+            GkeDiscoveryStep.PICK_PROJECTS -> if (mode == DiscoveryMode.BY_NAME) {
+                val importEnabled = byNameState.canImport && !busy
+                Button(
+                    onClick = { viewModel.startByNameImport() },
+                    enabled = importEnabled,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
+                    modifier = Modifier.testTag(ByNameTags.IMPORT),
+                ) { Text("Import", color = if (importEnabled) KdOnPrimary else Color.Unspecified) }
+            } else {
                 val scanEnabled = selectedProjects.isNotEmpty() && !exceedsCap
                 Button(
                     onClick = { viewModel.startScan() },
@@ -1052,6 +1247,9 @@ private fun Footer(
             }
 
             GkeDiscoveryStep.DONE -> if (!hideOpenClustersButton) {
+                // The action reads the sticky anyImportSucceeded (an earlier by-name run may have
+                // imported); the label reads this run only, so a failed run never says "Open clusters".
+                val rowsDone = importRows.any { it.state is GkeImportRowState.Done }
                 Button(
                     onClick = {
                         val anySuccess = viewModel.anyImportSucceeded
@@ -1062,7 +1260,7 @@ private fun Footer(
                 ) {
                     Icon(painterResource(Res.drawable.cloud_filled), null, tint = KdOnPrimary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (viewModel.anyImportSucceeded) "Open clusters" else "Close", color = KdOnPrimary)
+                    Text(if (rowsDone) "Open clusters" else "Close", color = KdOnPrimary)
                 }
             }
         }

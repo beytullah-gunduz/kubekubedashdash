@@ -6,8 +6,8 @@ object SystemDirectories {
     private val osName: String = System.getProperty("os.name", "").lowercase()
     private val home: String = System.getProperty("user.home", "")
 
-    private val isWindows: Boolean = osName.startsWith("windows")
-    private val isMac: Boolean = osName.contains("mac") || osName.contains("darwin")
+    private val isWindows: Boolean = isWindowsOs(osName)
+    private val isMac: Boolean = isMacOs(osName)
 
     val dataDirectory: String by lazy {
         resolveDataDir().also { ensureDir(it) }
@@ -20,9 +20,13 @@ object SystemDirectories {
     /**
      * Test seam: the Gradle test task points this at a build directory so the
      * suite never opens the developer's real preferences store or session
-     * file. Blank or unset in production.
+     * file. Blank or unset in production. The logs directory follows it.
      */
     private const val DATA_DIR_OVERRIDE_PROPERTY = "kkdd.dataDir"
+
+    private fun isWindowsOs(osName: String): Boolean = osName.lowercase().startsWith("windows")
+
+    private fun isMacOs(osName: String): Boolean = osName.lowercase().let { it.contains("mac") || it.contains("darwin") }
 
     private fun resolveDataDir(): String = when {
         dataDirOverride() != null -> dataDirOverride()!!
@@ -40,26 +44,39 @@ object SystemDirectories {
         }
     }
 
-    private fun resolveLogsDir(): String = when {
-        isWindows -> {
-            val localAppData = envOrNull("LOCALAPPDATA") ?: "$home\\AppData\\Local"
-            validateUnderHome("$localAppData\\KubeKubeDashDash\\Logs", "$home\\AppData\\Local\\KubeKubeDashDash\\Logs")
-        }
+    /**
+     * With the data directory overridden, the logs go to its `logs` subdirectory, so a test,
+     * screenshot or hot-run JVM never appends to the developer's real app.log. The parameters
+     * let the tests pin each platform's path against a fake home; production passes none.
+     */
+    internal fun resolveLogsDir(
+        dataDirProperty: String? = System.getProperty(DATA_DIR_OVERRIDE_PROPERTY),
+        os: String = osName,
+        userHome: String = home,
+        env: (String) -> String? = ::envOrNull,
+    ): String {
+        dataDirOverride(dataDirProperty)?.let { return File(it, "logs").path }
+        return when {
+            isWindowsOs(os) -> {
+                val localAppData = env("LOCALAPPDATA") ?: "$userHome\\AppData\\Local"
+                validateUnderHome("$localAppData\\KubeKubeDashDash\\Logs", "$userHome\\AppData\\Local\\KubeKubeDashDash\\Logs", userHome)
+            }
 
-        isMac -> "$home/Library/Logs/KubeKubeDashDash"
+            isMacOs(os) -> "$userHome/Library/Logs/KubeKubeDashDash"
 
-        else -> {
-            val xdg = envOrNull("XDG_STATE_HOME") ?: "$home/.local/state"
-            validateUnderHome("$xdg/kubekubedashdash/logs", "$home/.local/state/kubekubedashdash/logs")
+            else -> {
+                val xdg = env("XDG_STATE_HOME") ?: "$userHome/.local/state"
+                validateUnderHome("$xdg/kubekubedashdash/logs", "$userHome/.local/state/kubekubedashdash/logs", userHome)
+            }
         }
     }
 
     private fun envOrNull(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
 
-    private fun dataDirOverride(): String? = System.getProperty(DATA_DIR_OVERRIDE_PROPERTY)?.takeIf { it.isNotBlank() }
+    private fun dataDirOverride(property: String? = System.getProperty(DATA_DIR_OVERRIDE_PROPERTY)): String? = property?.takeIf { it.isNotBlank() }
 
-    private fun validateUnderHome(candidate: String, fallback: String): String = try {
-        val homePath = File(home).toPath().toRealPath()
+    private fun validateUnderHome(candidate: String, fallback: String, userHome: String = home): String = try {
+        val homePath = File(userHome).toPath().toRealPath()
         val candidatePath = File(candidate).toPath()
         val resolved = if (candidatePath.toFile().exists()) candidatePath.toRealPath() else candidatePath.normalize()
         if (resolved.startsWith(homePath)) candidate else fallback

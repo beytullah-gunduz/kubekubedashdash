@@ -1,6 +1,7 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ClusterInfo
+import com.kubekubedashdash.models.ContainerUsage
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
@@ -9,10 +10,12 @@ import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
+import com.kubekubedashdash.models.PodUsage
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.models.ServiceInfo
+import com.kubekubedashdash.models.podUsageKey
 import com.kubekubedashdash.services.LogStreamOptions
 import com.kubekubedashdash.services.logcapture.CapturePodMapper
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
@@ -1300,10 +1303,23 @@ class ReactiveKubeClient(
             }
             var cpuUsed = 0L
             var memUsed = 0L
+            val podUsages = mutableMapOf<String, PodUsage>()
             for (pm in podMetricItems) {
-                for (c in pm.containers ?: emptyList()) {
-                    cpuUsed += parseCpuToMillis(c.usage?.get("cpu")?.toString() ?: "0")
-                    memUsed += parseMemoryToBytes(c.usage?.get("memory")?.toString() ?: "0")
+                val containers = (pm.containers ?: emptyList()).map { c ->
+                    ContainerUsage(
+                        name = c.name.orEmpty(),
+                        cpuMillis = parseCpuToMillis(c.usage?.get("cpu")?.toString() ?: "0"),
+                        memoryBytes = parseMemoryToBytes(c.usage?.get("memory")?.toString() ?: "0"),
+                    )
+                }
+                val podCpu = containers.sumOf { it.cpuMillis }
+                val podMem = containers.sumOf { it.memoryBytes }
+                cpuUsed += podCpu
+                memUsed += podMem
+                val podName = pm.metadata?.name
+                val podNamespace = pm.metadata?.namespace ?: ns
+                if (podName != null && podNamespace != null) {
+                    podUsages[podUsageKey(podNamespace, podName)] = PodUsage(podCpu, podMem, containers)
                 }
             }
             val nodeItems = try {
@@ -1318,7 +1334,7 @@ class ReactiveKubeClient(
                 cpuCap += parseCpuToMillis(alloc["cpu"]?.toString() ?: "0")
                 memCap += parseMemoryToBytes(alloc["memory"]?.toString() ?: "0")
             }
-            ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true)
+            ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true, podUsages = podUsages)
         },
     )
 

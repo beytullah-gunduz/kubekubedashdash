@@ -10,13 +10,12 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -91,6 +90,31 @@ class EksDiscoveryViewModelTest {
     }
 
     private fun rowStates(): Map<String, ImportRowState> = vm.importRows.value.associate { it.cluster.name to it.state }
+
+    /**
+     * `setUp()` builds [vm] before each test body runs, so its `init` has already loaded profiles
+     * and read contexts from the default fake. Tests that need a differently configured fake
+     * rebuild both; counters and lists are then asserted on the rebuilt fake only.
+     */
+    private fun rebuild(configure: FakeEksDiscoveryGateway.() -> Unit) {
+        shutdownCleanly(vm.viewModelScope, label = "EksDiscoveryViewModelTest")
+        fake = FakeEksDiscoveryGateway(kubeconfigFile).apply {
+            clusters = mapOf(("example-profile" to "us-east-1") to listOf(clusterA, clusterB, clusterC))
+            configure()
+        }
+        vm = EksDiscoveryViewModel(fake)
+    }
+
+    /** Waits until `loadProfiles()` has landed: the by-name profile is set after the profile list. */
+    private suspend fun awaitProfilesLoaded() {
+        withTimeout(5_000) { vm.byNameProfile.first { it.isNotEmpty() } }
+    }
+
+    private fun fillValidByNameFields(region: String = "us-east-1") {
+        vm.setByNameProfile("example-profile")
+        vm.setByNameRegion(region)
+        vm.setByNameCluster("example-cluster")
+    }
 
     // Probe mirroring WS1 step 1: proves the ViewModel constructs and its
     // init-time load completes in a plain JVM test without Dispatchers.setMain.
@@ -230,83 +254,131 @@ class EksDiscoveryViewModelTest {
         // proceedFromProfile persisted the selection through the gateway, not the real DataStore.
         assertEquals(listOf(listOf("example-profile", "seed-profile")), fake.rememberedSelections.toList())
     }
-}
 
-/**
- * In-memory [EksDiscoveryGateway]. `importCluster` records its calls in order
- * and, when the test installed a [gate] for the cluster, suspends until the
- * test completes it — letting tests cancel while an import is in flight.
- * Without a gate it returns success immediately.
- */
-private class FakeEksDiscoveryGateway(
-    private val kubeconfig: File,
-) : EksDiscoveryGateway {
+    // ── "Enter by name" tab ────────────────────────────────────────────────
 
-    override val awsCliAvailable: Boolean = true
-    override val commonRegions: List<String> = listOf("us-east-1", "us-west-2")
-
-    var profiles: List<AwsProfile> = listOf(
-        AwsProfile("example-profile", "us-east-1", AwsProfile.Source.BOTH),
-        AwsProfile("seed-profile", "us-east-1", AwsProfile.Source.CONFIG),
-    )
-    var clusters: Map<Pair<String, String>, List<EksCluster>> = emptyMap()
-    var backupResult: (String) -> File? = { File("$it.backup") }
-
-    val importCalls: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
-    val importPaths: MutableList<String> = Collections.synchronizedList(mutableListOf())
-    val backupRequests: MutableList<String> = Collections.synchronizedList(mutableListOf())
-    val rememberedSelections: MutableList<List<String>> = Collections.synchronizedList(mutableListOf())
-
-    private val gates = ConcurrentHashMap<String, CompletableDeferred<Result<String>>>()
-    private val started = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
-    private val selectionRemembered = CompletableDeferred<Unit>()
-
-    /** Install (or fetch) the gate `importCluster` will await for [clusterName]. */
-    fun gate(clusterName: String): CompletableDeferred<Result<String>> = gates.getOrPut(clusterName) { CompletableDeferred() }
-
-    /** Suspends until `importCluster` has been entered for [clusterName]. */
-    suspend fun awaitImportStarted(clusterName: String) {
-        started.getOrPut(clusterName) { CompletableDeferred() }.await()
+    @Test
+    fun `by-name profile defaults to the remembered profile`() = runBlocking {
+        val profile = withTimeout(5_000) { vm.byNameProfile.first { it.isNotEmpty() } }
+        assertEquals("seed-profile", profile)
     }
 
-    /** Suspends until `rememberProfileSelection` has been called at least once. */
-    suspend fun awaitSelectionRemembered() = selectionRemembered.await()
+    @Test
+    fun `paste of an ARN fills region and cluster, an unknown pasted profile is not selected`() = runBlocking {
+        awaitProfilesLoaded()
+        vm.onPasteTextChange("arn:aws-us-gov:eks:us-gov-west-1:000000000000:cluster/example-cluster")
+        assertEquals("us-gov-west-1", vm.byNameRegion.value)
+        assertEquals("example-cluster", vm.byNameCluster.value)
+        assertEquals(PasteNotice("Filled the region and cluster.", recognized = true), vm.pasteNotice.value)
 
-    override fun listProfiles(): List<AwsProfile> = profiles
+        vm.onPasteTextChange("aws eks update-kubeconfig --name example-cluster --region us-east-1 --profile ghost-profile")
+        assertEquals("seed-profile", vm.byNameProfile.value)
+        assertEquals("us-east-1", vm.byNameRegion.value)
+        val notice = vm.pasteNotice.value
+        assertNotNull(notice)
+        assertTrue(notice.recognized)
+        assertTrue(notice.text.endsWith("isn't in your AWS config, so it was not selected."))
 
-    override suspend fun listEnabledRegions(profile: String): Result<List<String>> = Result.success(listOf("us-east-1"))
-
-    override suspend fun listClusters(
-        profile: String,
-        region: String,
-    ): Result<List<EksCluster>> = Result.success(clusters[profile to region].orEmpty())
-
-    override suspend fun importCluster(
-        profile: String,
-        region: String,
-        clusterName: String,
-        kubeconfigPath: String,
-    ): Result<String> {
-        importCalls.add(Triple(profile, region, clusterName))
-        importPaths.add(kubeconfigPath)
-        started.getOrPut(clusterName) { CompletableDeferred() }.complete(Unit)
-        val gate = gates[clusterName]
-        return gate?.await() ?: Result.success("arn:aws:eks:$region:000000000000:cluster/$clusterName")
+        vm.onPasteTextChange("hello")
+        assertEquals(PasteNotice(EKS_PASTE_NOT_RECOGNIZED, recognized = false), vm.pasteNotice.value)
+        vm.onPasteTextChange("")
+        assertNull(vm.pasteNotice.value)
     }
 
-    override fun kubeconfigPath(): String = kubeconfig.absolutePath
-
-    override fun backupKubeconfig(kubeconfigPath: String): File? {
-        backupRequests.add(kubeconfigPath)
-        return backupResult(kubeconfigPath)
+    @Test
+    fun `GovCloud region can be imported by name`() = runBlocking {
+        awaitProfilesLoaded()
+        fillValidByNameFields(region = "us-gov-west-1")
+        withTimeout(5_000) { vm.byNameState.first { it.canImport } }
+        vm.startByNameImport()
+        awaitStep(EksDiscoveryStep.DONE)
+        assertEquals(listOf(Triple("example-profile", "us-gov-west-1", "example-cluster")), fake.importCalls.toList())
+        assertTrue(vm.anyImportSucceeded)
     }
 
-    override fun existingContexts(): List<String> = emptyList()
+    @Test
+    fun `region suggestions put the profile default first`() = runBlocking {
+        rebuild {
+            contexts = listOf("arn:aws:eks:eu-west-1:000000000000:cluster/example-cluster")
+            profiles = listOf(
+                AwsProfile("example-profile", "us-east-1", AwsProfile.Source.BOTH),
+                AwsProfile("other-profile", "ap-south-1", AwsProfile.Source.CONFIG),
+            )
+        }
+        awaitProfilesLoaded()
+        vm.setByNameProfile("example-profile")
+        val first = withTimeout(5_000) {
+            vm.byNameRegionSuggestions.first { it.firstOrNull() == "us-east-1" && "eu-west-1" in it }
+        }
+        assertEquals(listOf("us-east-1", "eu-west-1", "us-west-2"), first)
 
-    override fun recallProfileSelection(): List<String> = listOf("seed-profile", "not-a-real-profile")
+        vm.setByNameProfile("other-profile")
+        val second = withTimeout(5_000) { vm.byNameRegionSuggestions.first { it.firstOrNull() == "ap-south-1" } }
+        assertEquals(listOf("ap-south-1", "eu-west-1", "us-east-1", "us-west-2"), second)
+        assertTrue(second.size <= 8)
+    }
 
-    override fun rememberProfileSelection(profileNames: List<String>) {
-        rememberedSelections.add(profileNames)
-        selectionRemembered.complete(Unit)
+    @Test
+    fun `add another keeps profile and region and the sticky import flag`() = runBlocking {
+        awaitProfilesLoaded()
+        fillValidByNameFields()
+        vm.startByNameImport()
+        awaitStep(EksDiscoveryStep.DONE)
+
+        vm.addAnotherByName()
+        assertEquals(EksDiscoveryStep.PICK_PROFILE, vm.step.value)
+        assertEquals("", vm.byNameCluster.value)
+        assertEquals("example-profile", vm.byNameProfile.value)
+        assertEquals("us-east-1", vm.byNameRegion.value)
+        assertTrue(vm.anyImportSucceeded)
+
+        vm.cancel()
+        assertTrue(vm.anyImportSucceeded)
+
+        vm.reset()
+        assertFalse(vm.anyImportSucceeded)
+        assertEquals("", vm.byNameRegion.value)
+        assertEquals("", vm.byNameCluster.value)
+        // reset() keeps the profile.
+        assertEquals("example-profile", vm.byNameProfile.value)
+    }
+
+    @Test
+    fun `an access-denied import shows the profile hint`() = runBlocking {
+        fake.gate("example-cluster").complete(
+            Result.failure(
+                RuntimeException(
+                    "An error occurred (AccessDeniedException) when calling the DescribeCluster operation: " +
+                        "User: example is not authorized to perform: eks:DescribeCluster",
+                ),
+            ),
+        )
+        awaitProfilesLoaded()
+        fillValidByNameFields()
+        vm.startByNameImport()
+        awaitStep(EksDiscoveryStep.DONE)
+        val state = rowStates()["example-cluster"]
+        assertTrue(state is ImportRowState.Failed)
+        assertTrue(state.message.startsWith("This profile isn't allowed to read the cluster"))
+        assertTrue(state.message.contains("AccessDeniedException"))
+    }
+
+    @Test
+    fun `a GovCloud context counts as already imported in the browse flow`() = runBlocking {
+        rebuild {
+            contexts = listOf("arn:aws-us-gov:eks:us-gov-west-1:000000000000:cluster/cluster-a")
+            profiles = listOf(AwsProfile("example-profile", "us-gov-west-1", AwsProfile.Source.BOTH))
+            clusters = mapOf(
+                ("example-profile" to "us-gov-west-1") to listOf(EksCluster("cluster-a", "us-gov-west-1", "example-profile")),
+            )
+        }
+        withTimeout(5_000) { vm.selectedProfiles.first { it == setOf("example-profile") } }
+        vm.proceedFromProfile()
+        vm.startDiscovery()
+        awaitStep(EksDiscoveryStep.PICK_CLUSTERS)
+        val candidate = vm.candidates.value.single()
+        assertEquals("cluster-a", candidate.cluster.name)
+        assertTrue(candidate.alreadyImported)
+        assertFalse(candidate.selected)
     }
 }
