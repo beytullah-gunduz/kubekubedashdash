@@ -53,14 +53,23 @@ internal class FakeGkeDiscoveryGateway(
         started.getOrPut(clusterName) { CompletableDeferred() }.await()
     }
 
-    override suspend fun activeAccount(): Result<String?> = Result.success("dev@example.com")
+    /** What `gcloud auth list` answers; a failure stands for a broken gcloud. */
+    var accountResult: Result<String?> = Result.success("dev@example.com")
+
+    /** When set, `gcloud projects list` fails with it. */
+    var projectsFailure: Throwable? = null
+
+    /** Projects whose `clusters list` is refused, with the error gcloud would give. */
+    var clusterFailures: Map<String, Throwable> = emptyMap()
+
+    override suspend fun activeAccount(): Result<String?> = accountResult
 
     override suspend fun listProjects(): Result<List<GcpProject>> {
         listProjectsCalls.incrementAndGet()
-        return Result.success(projects)
+        return projectsFailure?.let { Result.failure(it) } ?: Result.success(projects)
     }
 
-    override suspend fun listClusters(projectId: String): Result<List<GkeCluster>> = Result.success(clusters[projectId].orEmpty())
+    override suspend fun listClusters(projectId: String): Result<List<GkeCluster>> = clusterFailures[projectId]?.let { Result.failure(it) } ?: Result.success(clusters[projectId].orEmpty())
 
     override suspend fun importCluster(
         projectId: String,

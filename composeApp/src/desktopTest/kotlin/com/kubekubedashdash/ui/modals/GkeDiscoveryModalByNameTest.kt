@@ -148,4 +148,40 @@ class GkeDiscoveryModalByNameTest {
         waitForIdle()
         assertEquals("example-project", vm.byNameProject.value)
     }
+
+    @Test
+    fun `a refused cluster scan says so and leads to the by-name tab`() = runComposeUiTest {
+        fake = FakeGkeDiscoveryGateway(kubeconfigFile).apply {
+            clusterFailures = mapOf(
+                "example-project" to RuntimeException(
+                    "ERROR: (gcloud.container.clusters.list) ResponseError: code=403, message=Required " +
+                        "\"container.clusters.list\" permission(s) for \"projects/example-project\".",
+                ),
+            )
+        }
+        vm = GkeDiscoveryViewModel(fake)
+        setContent {
+            MaterialTheme { GkeDiscoveryModal(onDismiss = {}, onCompleted = {}, vm = vm) }
+        }
+
+        // The remembered selection lands after the list; toggle only once it has.
+        waitUntil(timeoutMillis = 5_000) { vm.selectedProjects.value == setOf("seed-project") }
+        waitForIdle()
+        onNodeWithText("example-project").performClick()
+        waitUntil(timeoutMillis = 5_000) { "example-project" in vm.selectedProjects.value }
+        waitForIdle()
+        onNodeWithText("Scan").performClick()
+
+        waitUntil(timeoutMillis = 5_000) { vm.step.value == GkeDiscoveryStep.PICK_CLUSTERS }
+        waitForIdle()
+        onNodeWithText("1 project could not be scanned, often because the account can't list its clusters.")
+            .assertExists()
+
+        onNodeWithTag(ByNameTags.SWITCH_TO_BY_NAME).performClick()
+        waitUntil(timeoutMillis = 5_000) {
+            vm.step.value == GkeDiscoveryStep.PICK_PROJECTS && vm.mode.value == DiscoveryMode.BY_NAME
+        }
+        waitForIdle()
+        awaitTag(ByNameTags.PASTE)
+    }
 }

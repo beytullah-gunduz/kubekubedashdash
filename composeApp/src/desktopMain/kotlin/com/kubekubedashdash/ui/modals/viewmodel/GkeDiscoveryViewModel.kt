@@ -47,7 +47,12 @@ sealed class ProjectLoadState {
     object NotRequested : ProjectLoadState()
 
     object NotSignedIn : ProjectLoadState()
-    data class Failed(val message: String) : ProjectLoadState()
+
+    /**
+     * The account check ([signIn] = true) or the project list failed. The by-name tab only
+     * needs the first, so it warns about a failed sign-in check and ignores a refused list.
+     */
+    data class Failed(val message: String, val signIn: Boolean = false) : ProjectLoadState()
     data class Loaded(val projects: List<GcpProject>) : ProjectLoadState()
 }
 
@@ -270,7 +275,7 @@ class GkeDiscoveryViewModel(
                 onFailure = { e ->
                     val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
                     log.warn("Failed to resolve active gcloud account: {}", msg)
-                    _projectLoadState.value = ProjectLoadState.Failed(msg)
+                    _projectLoadState.value = ProjectLoadState.Failed(msg, signIn = true)
                 },
             )
         }

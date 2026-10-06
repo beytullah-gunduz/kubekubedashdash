@@ -370,4 +370,15 @@ class GkeDiscoveryViewModelTest {
         assertEquals(listOf("another-project", "example-project"), suggestions.projects)
         assertEquals(listOf("us-central1"), suggestions.locations)
     }
+
+    @Test
+    fun `a failed sign-in check is marked as such, a refused project list is not`() = runBlocking {
+        rebuild { accountResult = Result.failure(RuntimeException("gcloud crashed")) }
+        val signIn = withTimeout(5_000) { vm.projectLoadState.first { it is ProjectLoadState.Failed } }
+        assertEquals(ProjectLoadState.Failed("gcloud crashed", signIn = true), signIn)
+
+        rebuild { projectsFailure = RuntimeException("code=403 projects list refused") }
+        val projects = withTimeout(5_000) { vm.projectLoadState.first { it is ProjectLoadState.Failed } }
+        assertEquals(ProjectLoadState.Failed("code=403 projects list refused", signIn = false), projects)
+    }
 }

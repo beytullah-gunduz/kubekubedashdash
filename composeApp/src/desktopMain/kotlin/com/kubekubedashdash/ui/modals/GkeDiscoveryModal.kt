@@ -553,7 +553,8 @@ private fun GkeByNameStep(viewModel: GkeDiscoveryViewModel) {
                 Spacer(Modifier.height(12.dp))
             }
 
-            is ProjectLoadState.Failed -> {
+            // A refused project list (signIn = false) does not matter here: this tab never lists.
+            is ProjectLoadState.Failed -> if (s.signIn) {
                 ByNameWarningBanner(
                     "Could not check the gcloud sign-in: ${s.message}",
                     action = "Try again" to { viewModel.retryLoad() },
