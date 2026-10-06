@@ -1,5 +1,8 @@
 package com.kubekubedashdash.ui.components
 
+import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdSuccess
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.util.SystemDirectories
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -8,9 +11,10 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
- * The one usage-tier rule shared by every gauge, usage bar and quota row, and the
- * shape difference between the two "good" status badges (D18). Asserts no colours,
- * so it needs no theme setup; the dots and rings are covered by the live smoke.
+ * The status colour of each usage level (its thresholds are pinned by UsageLevelsTest), and
+ * the shape difference between the two "good" status badges (D18). The colours are compared
+ * with the same theme tokens, so no theme setup is needed; the dots and rings are covered by
+ * the live smoke.
  */
 class SeverityMarksTest {
 
@@ -23,21 +27,10 @@ class SeverityMarksTest {
     }
 
     @Test
-    fun `usageTier treats exactly 0_70 as OK and anything above as WARN`() {
-        assertEquals(UsageTier.OK, usageTier(0.70f))
-        assertEquals(UsageTier.WARN, usageTier(0.7001f))
-    }
-
-    @Test
-    fun `usageTier treats exactly 0_85 as WARN and anything above as CRITICAL`() {
-        assertEquals(UsageTier.WARN, usageTier(0.85f))
-        assertEquals(UsageTier.CRITICAL, usageTier(0.8501f))
-    }
-
-    @Test
-    fun `usageTier covers the ends of the range`() {
-        assertEquals(UsageTier.OK, usageTier(0f))
-        assertEquals(UsageTier.CRITICAL, usageTier(1f))
+    fun `each usage level takes its status colour`() {
+        assertEquals(KdSuccess, UsageLevel.NORMAL.color())
+        assertEquals(KdWarning, UsageLevel.WARNING.color())
+        assertEquals(KdError, UsageLevel.CRITICAL.color())
     }
 
     @Test

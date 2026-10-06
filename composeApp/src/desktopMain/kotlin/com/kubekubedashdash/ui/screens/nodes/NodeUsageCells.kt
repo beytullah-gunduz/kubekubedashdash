@@ -9,17 +9,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.kubekubedashdash.KdError
-import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdTextPrimary
-import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.ui.components.CellData
 import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.OverflowTooltipText
 import com.kubekubedashdash.ui.components.UsageBar
-import com.kubekubedashdash.ui.components.UsageLevel
+import com.kubekubedashdash.ui.components.color
 import com.kubekubedashdash.ui.components.formatUsagePair
 import com.kubekubedashdash.ui.components.usageLevel
 import com.kubekubedashdash.util.formatCpuCores
@@ -57,11 +54,7 @@ internal fun nodeUsageCell(model: NodeUsageCellModel): CellData {
 /** A 32 dp bar coloured by [usageLevel], then the text (full text on hover when truncated). */
 @Composable
 private fun NodeUsageCellContent(text: String, fraction: Float) {
-    val barColor = when (usageLevel(fraction)) {
-        UsageLevel.CRITICAL -> KdError
-        UsageLevel.WARNING -> KdWarning
-        UsageLevel.NORMAL -> KdSuccess
-    }
+    val barColor = usageLevel(fraction).color()
     // End padding: a value as wide as its column must not run into the next one.
     Row(modifier = Modifier.padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         UsageBar(fraction, barColor, Modifier.width(32.dp))

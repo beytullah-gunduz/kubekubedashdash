@@ -64,10 +64,10 @@ import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.ui.components.PodStatusBar
 import com.kubekubedashdash.ui.components.UsageBar
 import com.kubekubedashdash.ui.components.UsageHistoryBar
-import com.kubekubedashdash.ui.components.UsageTierGlyph
+import com.kubekubedashdash.ui.components.UsageLevelGlyph
 import com.kubekubedashdash.ui.components.color
 import com.kubekubedashdash.ui.components.horizontalScrollFade
-import com.kubekubedashdash.ui.components.usageTier
+import com.kubekubedashdash.ui.components.usageLevel
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
 import com.kubekubedashdash.ui.screens.cluster.TopNodeRow
 import com.kubekubedashdash.ui.screens.cluster.UsageScope
@@ -255,7 +255,7 @@ private fun MetricRow(label: String, fraction: Float?, valueText: String, detail
             Text(label, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1, modifier = Modifier.width(52.dp))
             UsageBar(
                 fraction,
-                usageTier((fraction ?: 0f).coerceIn(0f, 1f)).color(),
+                usageLevel((fraction ?: 0f).coerceIn(0f, 1f)).color(),
                 Modifier.weight(1f),
             )
             if (history != null) {
@@ -265,7 +265,7 @@ private fun MetricRow(label: String, fraction: Float?, valueText: String, detail
             }
             Spacer(Modifier.width(6.dp))
             Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) {
-                if (fraction != null) UsageTierGlyph(usageTier(fraction.coerceIn(0f, 1f)))
+                if (fraction != null) UsageLevelGlyph(usageLevel(fraction.coerceIn(0f, 1f)))
             }
             Text(
                 valueText,

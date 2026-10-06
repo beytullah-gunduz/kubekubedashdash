@@ -22,7 +22,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.ui.components.UsageBar
 import com.kubekubedashdash.ui.components.color
-import com.kubekubedashdash.ui.components.usageTier
+import com.kubekubedashdash.ui.components.usageLevel
 
 @Composable
 internal fun TopNodesByPressure(
@@ -49,7 +49,7 @@ internal fun TopNodeRow(node: NodeResourceUsage, onClick: () -> Unit, leading: (
     val showCpu = node.cpuFraction >= node.memoryFraction
     val frac = if (showCpu) node.cpuFraction else node.memoryFraction
     val pct = (frac * 100).toInt().coerceAtLeast(0)
-    val barColor = usageTier(frac).color()
+    val barColor = usageLevel(frac).color()
     val metricLabel = if (showCpu) "CPU $pct%" else "MEM $pct%"
     Row(
         modifier = Modifier

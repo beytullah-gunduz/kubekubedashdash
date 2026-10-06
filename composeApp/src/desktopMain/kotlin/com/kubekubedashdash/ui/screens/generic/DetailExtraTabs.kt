@@ -54,9 +54,9 @@ import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.UsageBar
-import com.kubekubedashdash.ui.components.UsageTierGlyph
+import com.kubekubedashdash.ui.components.UsageLevelGlyph
 import com.kubekubedashdash.ui.components.color
-import com.kubekubedashdash.ui.components.usageTier
+import com.kubekubedashdash.ui.components.usageLevel
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.OverviewSection
 import com.kubekubedashdash.ui.screens.relatedOverviewSection
@@ -742,8 +742,8 @@ private fun OwnedPodItem(pod: PodInfo, onClick: () -> Unit) {
 
 @Composable
 fun UsageBarRow(row: QuotaUsageRow) {
-    val tier = usageTier(row.fraction)
-    val barColor = tier.color()
+    val level = usageLevel(row.fraction)
+    val barColor = level.color()
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -760,7 +760,7 @@ fun UsageBarRow(row: QuotaUsageRow) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                UsageTierGlyph(tier)
+                UsageLevelGlyph(level)
                 Text(
                     "${row.used} / ${row.hard}",
                     style = MaterialTheme.typography.bodySmall,

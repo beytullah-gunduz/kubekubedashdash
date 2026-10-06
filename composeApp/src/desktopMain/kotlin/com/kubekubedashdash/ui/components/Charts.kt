@@ -104,8 +104,8 @@ fun CircularUsageIndicator(
         targetValue = clamped,
         animationSpec = tween(durationMillis = 800),
     )
-    val tier = usageTier(clamped)
-    val gaugeColor = tier.color()
+    val level = usageLevel(clamped)
+    val gaugeColor = level.color()
 
     Column(
         modifier = modifier,
@@ -159,7 +159,7 @@ fun CircularUsageIndicator(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            UsageTierGlyph(tier)
+            UsageLevelGlyph(level)
             Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
         }
         Text(
@@ -183,8 +183,8 @@ fun HalfCircularUsageIndicator(
         targetValue = clamped,
         animationSpec = tween(durationMillis = 800),
     )
-    val tier = usageTier(clamped)
-    val gaugeColor = tier.color()
+    val level = usageLevel(clamped)
+    val gaugeColor = level.color()
 
     Column(
         modifier = modifier,
@@ -239,7 +239,7 @@ fun HalfCircularUsageIndicator(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            UsageTierGlyph(tier)
+            UsageLevelGlyph(level)
             Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
         }
         Text(
@@ -281,7 +281,7 @@ fun UsageHistoryBar(
                 val y = size.height - barHeight
 
                 val fade = 0.4f + 0.6f * (index.toFloat() / (barCount - 1).coerceAtLeast(1))
-                val barColor = usageTier(clamped).color()
+                val barColor = usageLevel(clamped).color()
 
                 drawRoundRect(
                     color = barColor.copy(alpha = fade),

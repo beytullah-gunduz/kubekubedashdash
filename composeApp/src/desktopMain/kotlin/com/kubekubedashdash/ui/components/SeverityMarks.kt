@@ -20,33 +20,25 @@ import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.warning_filled
 import org.jetbrains.compose.resources.painterResource
 
-/** One threshold rule for every gauge, usage bar and quota row (was two: `> 0.70f` vs `< 0.7f`). */
-internal enum class UsageTier { OK, WARN, CRITICAL }
-
-internal fun usageTier(fraction: Float): UsageTier = when {
-    fraction > 0.85f -> UsageTier.CRITICAL
-    fraction > 0.70f -> UsageTier.WARN
-    else -> UsageTier.OK
+/** A usage level's status colour, the same three tokens as every other status mark. */
+internal fun UsageLevel.color(): Color = when (this) {
+    UsageLevel.NORMAL -> KdSuccess
+    UsageLevel.WARNING -> KdWarning
+    UsageLevel.CRITICAL -> KdError
 }
 
-internal fun UsageTier.color(): Color = when (this) {
-    UsageTier.OK -> KdSuccess
-    UsageTier.WARN -> KdWarning
-    UsageTier.CRITICAL -> KdError
-}
-
-/** Says the tier without colour (D18); draws nothing for OK. */
+/** Says the level without colour (D18); draws nothing for NORMAL. */
 @Composable
-internal fun UsageTierGlyph(tier: UsageTier, size: Dp = 12.dp) {
-    val icon = when (tier) {
-        UsageTier.OK -> return
-        UsageTier.WARN -> Res.drawable.warning_filled
-        UsageTier.CRITICAL -> Res.drawable.error_filled
+internal fun UsageLevelGlyph(level: UsageLevel, size: Dp = 12.dp) {
+    val icon = when (level) {
+        UsageLevel.NORMAL -> return
+        UsageLevel.WARNING -> Res.drawable.warning_filled
+        UsageLevel.CRITICAL -> Res.drawable.error_filled
     }
     Icon(
         painterResource(icon),
-        contentDescription = if (tier == UsageTier.WARN) "High usage" else "Critical usage",
-        tint = tier.color(),
+        contentDescription = if (level == UsageLevel.WARNING) "High usage" else "Critical usage",
+        tint = level.color(),
         modifier = Modifier.size(size),
     )
 }
