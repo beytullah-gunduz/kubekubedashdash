@@ -96,11 +96,10 @@ internal fun memoryTooltip(usage: PodUsage, resources: List<ContainerResources>)
 internal fun cpuCell(pod: PodInfo, usage: PodUsage?): CellData {
     if (usage == null) return CellData(NONE_PLACEHOLDER)
     val text = formatCpuCores(usage.cpuMillis)
-    val tooltip = cpuTooltip(usage, pod.resources)
     return CellData(
         text = text,
         sortNumber = usage.cpuMillis.toDouble(),
-        content = { UsageCellContent(text, "CPU", tooltip, UsageLevel.NORMAL) },
+        content = { UsageCellContent(text, "CPU", { cpuTooltip(usage, pod.resources) }, UsageLevel.NORMAL) },
     )
 }
 
@@ -109,28 +108,29 @@ internal fun memoryCell(pod: PodInfo, usage: PodUsage?): CellData {
     if (usage == null) return CellData(NONE_PLACEHOLDER)
     val text = formatMemorySize(usage.memoryBytes)
     val level = memoryLevel(usage, pod.resources)
-    val tooltip = memoryTooltip(usage, pod.resources)
     return CellData(
         text = text,
         sortNumber = usage.memoryBytes.toDouble(),
-        content = { UsageCellContent(text, "Memory", tooltip, level) },
+        content = { UsageCellContent(text, "Memory", { memoryTooltip(usage, pod.resources) }, level) },
     )
 }
 
 /**
  * Value + hover tooltip; a WARNING/CRITICAL level adds a glyph (so the alert
- * reads without colour — CVD and Mono palettes) and tints the value.
+ * reads without colour — CVD and Mono palettes) and tints the value. The
+ * tooltip text is built only when the tooltip shows, not for every row on
+ * every 10 s refresh.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UsageCellContent(text: String, title: String, tooltip: String, level: UsageLevel) {
+private fun UsageCellContent(text: String, title: String, tooltip: () -> String, level: UsageLevel) {
     val color = when (level) {
         UsageLevel.CRITICAL -> KdError
         UsageLevel.WARNING -> KdWarning
         UsageLevel.NORMAL -> KdTextPrimary
     }
     TooltipArea(
-        tooltip = { ActionTooltip(title, tooltip) },
+        tooltip = { ActionTooltip(title, tooltip()) },
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

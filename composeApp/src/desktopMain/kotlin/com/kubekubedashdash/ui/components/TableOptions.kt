@@ -126,13 +126,14 @@ fun sortTableRows(
 
 /**
  * [CellData.sortNumber] for an Age column. Ascending Age means youngest
- * first, so the key is the NEGATED creation time. Blank or unparseable →
- * null (the row sorts last).
+ * first, so the key is the NEGATED creation time, in seconds (Kubernetes
+ * timestamps have whole seconds; epochSecond, unlike toEpochMilli, cannot
+ * overflow on an absurd year). Blank or unparseable → null (the row sorts last).
  */
 fun ageSortKey(creationTimestamp: String): Double? {
     if (creationTimestamp.isBlank()) return null
     return try {
-        -Instant.parse(creationTimestamp).toEpochMilli().toDouble()
+        -Instant.parse(creationTimestamp).epochSecond.toDouble()
     } catch (_: DateTimeParseException) {
         null
     }

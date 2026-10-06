@@ -365,5 +365,7 @@ class TableOptionsTest {
         assertTrue(ageSortKey("2026-06-01T00:00:00Z")!! < ageSortKey("2026-01-01T00:00:00Z")!!)
         assertNull(ageSortKey(""))
         assertNull(ageSortKey("yesterday"))
+        // An in-range but absurd year must not overflow (toEpochMilli would throw).
+        assertTrue(ageSortKey("+1000000000-12-31T23:59:59Z")!! < ageSortKey("2026-06-01T00:00:00Z")!!)
     }
 }
