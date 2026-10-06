@@ -139,10 +139,8 @@ fun Sidebar(
     val connected = LocalIsConnected.current
     val favouritesContext = if (connected) DemoContext.preferenceKey(client.getCurrentContext()) else ""
     val favouritesByContext by NavPreferenceRepository.favouritesByContext.collectAsState()
-    val recentsByContext by NavPreferenceRepository.recentsByContext.collectAsState()
     val hiddenByContext by CrdPreferenceRepository.hiddenByContext.collectAsState()
     val favouriteKeys = favouritesByContext[favouritesContext].orEmpty()
-    val recentKeys = recentsByContext[favouritesContext].orEmpty()
     val hiddenCrdKeys = hiddenByContext[favouritesContext].orEmpty()
     val favouriteKeySet = remember(favouriteKeys) { favouriteKeys.toSet() }
 
@@ -156,9 +154,8 @@ fun Sidebar(
         client.crds.mapNotNull { (it as? ResourceState.Success)?.data }
     }.collectAsState(null)
     val crdsForShortcuts = knownCrds?.filterNot { it.key in hiddenCrdKeys }
-    val currentKey = navShortcutKey(currentScreen)
-    val shortcuts = remember(favouriteKeys, recentKeys, crdsForShortcuts, currentKey) {
-        resolveNavShortcuts(favouriteKeys, recentKeys, NavKinds, crdsForShortcuts, currentKey)
+    val favouriteShortcuts = remember(favouriteKeys, crdsForShortcuts) {
+        resolveNavFavourites(favouriteKeys, NavKinds, crdsForShortcuts)
     }
     // Null while disconnected: no context to write under, so no menu item
     // that would silently do nothing.
@@ -225,53 +222,35 @@ fun Sidebar(
                     )
                 }
             } else {
-                // Favourites and Recent sit above the Cluster block. They
-                // duplicate rows from the sections below rather than moving
-                // them — a favourited kind keeps its place in its own
-                // section. Hidden entirely while disconnected: resolution
-                // depends on a real cluster context.
-                if (favouritesContext.isNotBlank()) {
-                    if (shortcuts.favourites.isNotEmpty()) {
-                        SidebarSection("Favourites", collapsed) {
-                            shortcuts.favourites.forEach { shortcut ->
-                                NavShortcutRow(
-                                    shortcut,
-                                    currentScreen,
-                                    collapsed,
-                                    clusterHealth,
-                                    counts,
-                                    favouriteKeySet,
-                                    onToggleKindFavourite,
-                                    onToggleCrdFavourite,
-                                    onNavigate,
-                                )
-                            }
-                        }
-                    }
-                    if (shortcuts.recents.isNotEmpty()) {
-                        SidebarSection("Recent", collapsed) {
-                            shortcuts.recents.forEach { shortcut ->
-                                NavShortcutRow(
-                                    shortcut,
-                                    currentScreen,
-                                    collapsed,
-                                    clusterHealth,
-                                    counts,
-                                    favouriteKeySet,
-                                    onToggleKindFavourite,
-                                    onToggleCrdFavourite,
-                                    onNavigate,
-                                )
-                            }
+                // Favourites sit above the Cluster block. They duplicate rows
+                // from the sections below rather than moving them — a
+                // favourited kind keeps its place in its own section. Hidden
+                // entirely while disconnected: resolution depends on a real
+                // cluster context. There is deliberately no Recent section
+                // here: a most-recent-first list above the catalogue changed
+                // height on most navigations and moved every row below it.
+                // The command palette keeps its own Recent group.
+                if (favouritesContext.isNotBlank() && favouriteShortcuts.isNotEmpty()) {
+                    SidebarSection("Favourites", collapsed) {
+                        favouriteShortcuts.forEach { shortcut ->
+                            NavShortcutRow(
+                                shortcut,
+                                currentScreen,
+                                collapsed,
+                                clusterHealth,
+                                counts,
+                                favouriteKeySet,
+                                onToggleKindFavourite,
+                                onToggleCrdFavourite,
+                                onNavigate,
+                            )
                         }
                     }
                     // The Cluster block below has no header — it was the top of
-                    // the rail before Favourites/Recent existed — so with a
-                    // section above it, its first row reads as that section's
-                    // tail. One rule marks "yours" from "the catalogue".
-                    if (shortcuts.favourites.isNotEmpty() || shortcuts.recents.isNotEmpty()) {
-                        SidebarTierDivider(collapsed)
-                    }
+                    // the rail before Favourites existed — so with a section
+                    // above it, its first row reads as that section's tail. One
+                    // rule marks "yours" from "the catalogue".
+                    SidebarTierDivider(collapsed)
                 }
 
                 NavSections.first().kinds.forEach { kind ->
@@ -356,9 +335,9 @@ private fun FavouriteMenuItem(key: String, favourites: Set<String>, onToggle: ()
     )
 }
 
-// Renders one row of the Favourites/Recent sections — a duplicate of a
-// catalogue or CRD row (they don't move out of their own section). Dispatches
-// on which kind of key resolved, per resolveNavShortcuts.
+// Renders one row of the Favourites section — a duplicate of a catalogue or
+// CRD row (they don't move out of their own section). Dispatches on which kind
+// of key resolved, per resolveNavFavourites.
 @Composable
 private fun NavShortcutRow(
     shortcut: NavShortcut,
@@ -380,7 +359,7 @@ private fun NavShortcutRow(
     }
 }
 
-// A CRD favourite/recent row. CrdRow (CustomResourcesSection.kt) is
+// A CRD favourite row. CrdRow (CustomResourcesSection.kt) is
 // file-private and cannot be called here, so this is a plain SidebarItem with
 // only the favourite toggle in its context menu — no pin/hide, which stay
 // exclusive to the main Custom Resources section.
@@ -417,11 +396,11 @@ private fun CrdShortcutRow(
     )
 }
 
-// The one horizontal rule in the rail: between the shortcut tier (Favourites,
-// Recent) and the catalogue. Expanded, it spans the rounded-row width (8 dp
-// outer margin, matching SidebarItem's). Collapsed, headers are gone and the
-// icons run together, so it becomes a short centred stub — the activity-bar
-// separator idiom — rather than vanishing with them.
+// The one horizontal rule in the rail: between Favourites and the catalogue.
+// Expanded, it spans the rounded-row width (8 dp outer margin, matching
+// SidebarItem's). Collapsed, headers are gone and the icons run together, so
+// it becomes a short centred stub — the activity-bar separator idiom — rather
+// than vanishing with them.
 @Composable
 private fun SidebarTierDivider(collapsed: Boolean) {
     if (collapsed) {

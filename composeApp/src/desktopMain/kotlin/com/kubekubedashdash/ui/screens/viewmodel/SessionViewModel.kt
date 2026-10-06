@@ -1,11 +1,8 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.data.repository.NavPreferenceRepository
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.ResourceState
-import com.kubekubedashdash.ui.isRecentWorthy
-import com.kubekubedashdash.ui.navShortcutKey
 import com.kubekubedashdash.ui.paneContentKey
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.clusterHealthFlow
@@ -505,20 +502,6 @@ class SessionViewModel(
         // Opening or closing a detail pane keeps the main screen and the filter.
         if (target.screen != _currentScreen.value) {
             _searchQuery.value = ""
-            // A genuine visit to a catalogue kind or CRD — not a detail pane
-            // opening/closing (target.screen == _currentScreen.value there)
-            // and not Back/Forward (they never call navigate()).
-            // Only while connected: on the ConnectionError screen the rail is
-            // live, but getCurrentContext() then falls back to the kubeconfig's
-            // current-context, and nothing would ever display a list under it.
-            // The always-visible Cluster block is excluded at RECORD time, not
-            // at render time: the store caps Recent at five, so a render-time
-            // filter would let those visits silently burn the slots.
-            if (_isConnected.value) {
-                navShortcutKey(target.screen)
-                    ?.takeIf { isRecentWorthy(it) }
-                    ?.let { NavPreferenceRepository.recordRecent(reactiveClient.getCurrentContext(), it) }
-            }
         }
         recordCurrent()
         // Close the pane before switching the main screen (order preserved
