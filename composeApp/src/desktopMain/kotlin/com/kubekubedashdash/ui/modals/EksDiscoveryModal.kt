@@ -742,6 +742,18 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         if (candidates.isEmpty()) {
             Text("No EKS clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
+            // An empty list after refused scans is not an empty region: say so here too, not
+            // only next to a list of clusters found elsewhere.
+            val failedScans = scanRows.count { it.state is RegionScanState.Failed }
+            if (failedScans > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    (if (failedScans == 1) "1 region could not be scanned" else "$failedScans regions could not be scanned") +
+                        ", often because the profile can't list its clusters.",
+                    color = KdWarning,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 "Try widening the region scope, or pick different AWS profiles. " +

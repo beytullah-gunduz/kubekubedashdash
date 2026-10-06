@@ -751,6 +751,18 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
 
         if (candidates.isEmpty()) {
             Text("No GKE clusters found.", color = KdTextPrimary, fontWeight = FontWeight.Medium)
+            // An empty list after refused scans is not an empty project: say so here too, not
+            // only next to a list of clusters found elsewhere.
+            val failedScans = scanRows.count { it.state is ProjectScanState.Failed }
+            if (failedScans > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    (if (failedScans == 1) "1 project could not be scanned" else "$failedScans projects could not be scanned") +
+                        ", often because the account can't list its clusters.",
+                    color = KdWarning,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 "Try selecting different GCP projects. If you can't list clusters but can access one, enter it by name.",
