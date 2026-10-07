@@ -30,8 +30,9 @@ object ScreenshotHooks {
     val crtTimeScale = MutableStateFlow(1)
 
     /**
-     * Screenshot-only: the topology graph expands the pod groups whose "<Kind>/<name>" key is in this
-     * set (Kind = the card's kind label, e.g. "Deployment/frontend"). Empty in normal use.
+     * Screenshot-only: while non-empty, the topology graph's expanded pod groups are exactly those whose
+     * "<Kind>/<name>" key is in this set (Kind = the card's kind label, e.g. "Deployment/frontend"),
+     * replacing any the user expanded. Empty in normal use.
      */
     val topologyExpand = MutableStateFlow<Set<String>>(emptySet())
 
