@@ -44,6 +44,7 @@ import com.kubekubedashdash.ui.screens.deployments.DeploymentsScreen
 import com.kubekubedashdash.ui.screens.events.EventDetailScreen
 import com.kubekubedashdash.ui.screens.events.EventsScreen
 import com.kubekubedashdash.ui.screens.generic.GenericResourceScreen
+import com.kubekubedashdash.ui.screens.helm.HelmReleasesScreen
 import com.kubekubedashdash.ui.screens.namespaces.NamespaceDetailScreen
 import com.kubekubedashdash.ui.screens.namespaces.NamespacesScreen
 import com.kubekubedashdash.ui.screens.nodes.NodeDetailPanel
@@ -302,6 +303,8 @@ fun ContentRouter(
                 is Screen.Main.ConfigMaps -> genericKind("ConfigMap", reactiveClient.configMaps, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 
                 is Screen.Main.Secrets -> genericKind("Secret", reactiveClient.secrets, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
+
+                is Screen.Main.HelmReleases -> HelmReleasesScreen(searchQuery = searchQuery, onNavigate = onNavigate)
 
                 is Screen.Main.Ingresses -> genericKind("Ingress", reactiveClient.ingresses, true, searchQuery, labelQuery, onLabelQueryChange, annotationQuery, onAnnotationQueryChange, pulseLabelsOnEntry, pulseAnnotationsOnEntry, onNavigate = onNavigate)
 

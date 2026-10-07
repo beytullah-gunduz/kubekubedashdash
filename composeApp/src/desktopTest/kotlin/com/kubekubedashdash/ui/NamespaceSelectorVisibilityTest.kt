@@ -18,6 +18,7 @@ class NamespaceSelectorVisibilityTest {
         assertTrue(Screen.Main.ClusterOverview.showsNamespaceSelector())
         assertTrue(Screen.Main.ClusterTopology.showsNamespaceSelector())
         assertTrue(Screen.Main.Pods().showsNamespaceSelector())
+        assertTrue(Screen.Main.HelmReleases.showsNamespaceSelector())
     }
 
     @Test

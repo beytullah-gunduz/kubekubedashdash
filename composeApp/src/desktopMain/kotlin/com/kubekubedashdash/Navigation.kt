@@ -52,6 +52,7 @@ sealed class Screen(val title: String) {
 
         data object ConfigMaps : Main("ConfigMaps")
         data object Secrets : Main("Secrets")
+        data object HelmReleases : Main("Helm Releases")
 
         data object Services : Main("Services")
         data object Ingresses : Main("Ingresses")

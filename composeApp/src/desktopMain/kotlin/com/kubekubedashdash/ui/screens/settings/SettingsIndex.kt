@@ -51,7 +51,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Tab behavior", "Restore last session", listOf("launch", "startup", "open")),
     SettingsEntry("Live data", "Topology auto-refresh", listOf("refresh", "interval", "poll", "update", "topology")),
     SettingsEntry("Keyboard shortcuts", "Keyboard shortcuts", listOf("hotkey", "cheat sheet", "cmd")),
-    SettingsEntry("Privacy", "Secret values", listOf("mask", "reveal", "hide")),
+    SettingsEntry("Privacy", "Secret values", listOf("mask", "reveal", "hide", "helm")),
     SettingsEntry("Integrations", "MCP Server", listOf("port", "token", "integration")),
     SettingsEntry("Cluster discovery", "AWS EKS", listOf("discover", "aws")),
     SettingsEntry("Cluster discovery", "Google Cloud GKE", listOf("discover", "gcp")),

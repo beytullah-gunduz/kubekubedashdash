@@ -1140,7 +1140,7 @@ fun SettingsScreen(
                                 SettingsRowTitle("Secret values")
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Hide Secret data in the YAML viewer. Reveal it per-resource when you need it.",
+                                    "Hide Secret data in the YAML viewer, and Helm release values, notes and rendered Secrets. Reveal it per resource when you need it.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = KdTextSecondary,
                                 )

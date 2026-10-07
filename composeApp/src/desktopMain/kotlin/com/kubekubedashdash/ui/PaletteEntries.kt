@@ -80,6 +80,7 @@ internal fun rememberPaletteEntries(
             paletteScreen("CronJobs", Res.drawable.schedule_filled, Screen.Main.CronJobs, "Workloads", onNavigate),
             paletteScreen("ConfigMaps", Res.drawable.description_filled, Screen.Main.ConfigMaps, "Config", onNavigate),
             paletteScreen("Secrets", Res.drawable.lock_filled, Screen.Main.Secrets, "Config", onNavigate),
+            paletteScreen("Helm Releases", Res.drawable.category_filled, Screen.Main.HelmReleases, "Config", onNavigate),
             paletteScreen("Services", Res.drawable.cloud_filled, Screen.Main.Services, "Network", onNavigate),
             paletteScreen("Ingresses", Res.drawable.language_filled, Screen.Main.Ingresses, "Network", onNavigate),
             paletteScreen("Endpoints", Res.drawable.settings_ethernet_filled, Screen.Main.Endpoints, "Network", onNavigate),

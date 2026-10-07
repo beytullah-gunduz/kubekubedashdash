@@ -196,6 +196,7 @@ fun ResourceDetailPanel(
     actions: List<DetailAction> = emptyList(),
     ownerChain: List<RelatedRef> = emptyList(),
     onOwnerClick: ((RelatedRef) -> Unit)? = null,
+    showYamlTab: Boolean = true,
 ) {
     var activeTab by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -204,9 +205,9 @@ fun ResourceDetailPanel(
     val tabs = buildList {
         add(TabDef("Overview", Res.drawable.info_filled))
         extraTabs.forEach { add(TabDef(it.label, it.icon, it.badgeCount, it.isLoading)) }
-        add(TabDef("YAML", Res.drawable.code_filled))
+        if (showYamlTab) add(TabDef("YAML", Res.drawable.code_filled))
     }
-    val yamlIndex = tabs.lastIndex
+    val yamlIndex = if (showYamlTab) tabs.lastIndex else -1
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val tabCut = rememberCrtTabCut()
 

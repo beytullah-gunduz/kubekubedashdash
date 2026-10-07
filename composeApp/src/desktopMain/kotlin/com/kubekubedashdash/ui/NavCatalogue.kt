@@ -83,6 +83,7 @@ val NavSections: List<NavSection> = listOf(
         kinds = listOf(
             NavKind("ConfigMaps", "ConfigMaps", Res.drawable.description_filled) { Screen.Main.ConfigMaps },
             NavKind("Secrets", "Secrets", Res.drawable.lock_filled) { Screen.Main.Secrets },
+            NavKind("HelmReleases", "Helm Releases", Res.drawable.category_filled, listOf("helm", "chart", "release")) { Screen.Main.HelmReleases },
         ),
     ),
     NavSection(

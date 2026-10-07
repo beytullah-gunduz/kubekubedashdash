@@ -18,6 +18,7 @@ class ScreenCodecTest {
             Screen.Main.CronJobs,
             Screen.Main.ConfigMaps,
             Screen.Main.Secrets,
+            Screen.Main.HelmReleases,
             Screen.Main.Services,
             Screen.Main.Ingresses,
             Screen.Main.Endpoints,

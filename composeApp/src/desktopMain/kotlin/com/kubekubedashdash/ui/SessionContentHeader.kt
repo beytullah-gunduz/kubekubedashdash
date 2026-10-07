@@ -246,6 +246,7 @@ internal fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.CronJobs,
     is Screen.Main.ConfigMaps,
     is Screen.Main.Secrets,
+    is Screen.Main.HelmReleases,
     is Screen.Main.Services,
     is Screen.Main.Ingresses,
     is Screen.Main.Endpoints,

@@ -52,6 +52,8 @@ object ScreenCodec {
 
         "Secrets" -> Screen.Main.Secrets
 
+        "HelmReleases" -> Screen.Main.HelmReleases
+
         "Services" -> Screen.Main.Services
 
         "Ingresses" -> Screen.Main.Ingresses
