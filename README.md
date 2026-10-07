@@ -55,7 +55,7 @@ Supported resource types:
 |----------|-----------|
 | Cluster | Nodes, Namespaces, Events |
 | Workloads | Pods, Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs |
-| Config | ConfigMaps, Secrets |
+| Config | ConfigMaps, Secrets, Helm Releases |
 | Network | Services, Ingresses, IngressClasses, Endpoints, EndpointSlices, Network Policies |
 | Storage | PersistentVolumes, PersistentVolumeClaims, StorageClasses, CSIDrivers |
 | Access Control (RBAC) | ServiceAccounts, Roles, ClusterRoles, RoleBindings, ClusterRoleBindings, CertificateSigningRequests |
@@ -74,6 +74,14 @@ With a Metrics Server installed, the Pods table shows each pod's CPU and memory 
 - **Per-cluster pin/hide** preferences persist across sessions (right-click a CRD to pin or hide it)
 - Custom resources render through the same generic table and detail UI, appear in the command palette, and group under their owner in the topology graph
 
+### Helm releases (read-only)
+
+- **Helm Releases** (Config section) lists one row per release — its latest revision, whatever its status — with chart, app version, revision, status and when it was updated; it follows the namespace selector, the status filter and the search box
+- The detail panel has an **Overview** (with the release's **NOTES**), **Values** (user-supplied, or computed the way `helm get values --all` prints them), **Manifest** (the YAML viewer, with search), **History** (every stored revision) and **Resources** (each object the chart rendered, opening its screen where it has one)
+- Releases are read straight from Helm's own storage (Secrets, or ConfigMaps for `HELM_DRIVER=configmap`; Helm 3 and 4), so no `helm` binary is needed; it needs permission to list and watch Secrets, and says so plainly when it doesn't have it
+- With Secret masking on, Values and NOTES stay hidden until you **Reveal** them and the Manifest masks every Secret it renders
+- It is a viewer only: there is no install, upgrade, rollback or uninstall
+
 ### Command palette (⌘K)
 
 Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scoring) that jumps to any screen, switches between open clusters, or navigates to a namespace, a cached pod, a node, or a discovered CRD. A prefix narrows the search (`pod:`, `node:`, `ns:`, `dep:`, `crd:`, `go:`), and with an empty query a **Recent** group lists what you picked lately.
@@ -86,7 +94,7 @@ Type `>` for actions: pick a verb, then its target. The verbs are **Cordon / Unc
 - The header labels its actions (e.g. **Scale**, **Rollout restart**, **Trigger now**, **Delete**); those that don't fit move into an **Actions** menu
 - A **Related** section links pods, ReplicaSets, Deployments, StatefulSets, DaemonSets, Jobs and CronJobs to their owners and children (and a pod to its Services) — click one to open it — and a breadcrumb under the title shows the owner chain (e.g. `Deployment redis › ReplicaSet …`)
 - YAML view with syntax highlighting, line numbers, selectable text, search (Enter / Shift+Enter step through the matches) and copy-to-clipboard (read-only)
-- **Secret values are masked** in the YAML view by default (Settings → Privacy → Secret values): **Reveal** shows one Secret's decoded values, and with masking off **Decode** / **Raw** switch between decoded and base64 values. **Copy** always copies the raw YAML, base64 values included
+- **Secret values are masked** in the YAML view by default (Settings → Privacy → Secret values): **Reveal** shows one Secret's decoded values, and with masking off **Decode** / **Raw** switch between decoded and base64 values. **Copy** always copies the raw YAML, base64 values included. The same setting hides Helm release values and NOTES until Reveal and masks Secrets in a release's manifest; there, Copy copies what is shown.
 - Labels and annotations shown as chips; click a chip to toggle it into the active label/annotation filter
 - Many kinds have resource-specific detail tabs — e.g. RBAC Roles show their resolved rules and bindings, ResourceQuotas show usage bars, EndpointSlices link through to their backing Service, and CertificateSigningRequests expose Approve/Deny
 
@@ -290,7 +298,7 @@ The application checks for these at startup and reports any missing prerequisite
 
 ## Demo cluster
 
-If you don't have a Kubernetes cluster handy, the application ships with a built-in demo cluster simulator. Select **Demo Cluster** in the cluster picker to explore every screen with synthetic resources — nodes, pods, deployments, jobs, seeded CRDs (e.g. Spark and Argo), live-updating metrics, and a steady trickle of events. Each Demo Cluster pick gets its own independent mock instance, and the simulator can be paused, scaled, reset, and stopped from Settings → Demo cluster simulator.
+If you don't have a Kubernetes cluster handy, the application ships with a built-in demo cluster simulator. Select **Demo Cluster** in the cluster picker to explore every screen with synthetic resources — nodes, pods, deployments, jobs, seeded CRDs (e.g. Spark and Argo), a few made-up Helm releases (one with a failed upgrade in its history, one mid-upgrade, one stored in ConfigMaps), live-updating metrics, and a steady trickle of events. Each Demo Cluster pick gets its own independent mock instance, and the simulator can be paused, scaled, reset, and stopped from Settings → Demo cluster simulator.
 
 ## Keyboard shortcuts
 
@@ -368,7 +376,8 @@ When launched from a DMG-installed `.app` bundle, macOS GUI apps inherit a minim
 ## Limitations
 
 - Desktop only (no web or mobile targets)
-- No RBAC-aware UI — errors from insufficient permissions are shown as-is
+- Little RBAC-aware UI — apart from the Helm releases view, errors from insufficient permissions are shown as-is
+- Helm support is read-only: no install, upgrade, rollback or uninstall, and hooks are not shown
 - No blanket resource creation or free-form YAML editing — YAML is read-only, and writes are limited to the targeted actions listed above
 - Metrics require a running Metrics Server in the cluster
 - Log streaming relies on fabric8's `watchLog` and may not handle all edge cases (e.g., very large log volumes)

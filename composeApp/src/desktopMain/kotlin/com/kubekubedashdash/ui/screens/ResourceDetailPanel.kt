@@ -63,14 +63,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kubekubedashdash.KdBorder
-import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
@@ -434,7 +432,6 @@ internal fun GenericYamlTab(
     plural: String? = null,
 ) {
     val kubeClient = LocalReactiveKubeClient.current
-    val copyToClipboard = rememberCopyToClipboard()
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
     LaunchedEffect(kind, name, namespace, apiGroup, apiVersion) {
@@ -464,9 +461,47 @@ internal fun GenericYamlTab(
             else -> raw
         }
     }
+
+    // Masked mode → Reveal/Hide (shield); unmasked mode → Decode/Raw (swap).
+    val (buttonIcon, buttonLabel) = when {
+        maskPref && showDecoded -> Res.drawable.security_filled to "Hide"
+        maskPref -> Res.drawable.security_filled to "Reveal"
+        showDecoded -> Res.drawable.swap_horiz_filled to "Raw"
+        else -> Res.drawable.swap_horiz_filled to "Decode"
+    }
+
+    // Copy still copies the raw YAML, whatever is shown.
+    YamlTextPane(
+        identity = Triple(kind, name, namespace),
+        displayText = displayText,
+        copyText = yaml,
+        loading = loading,
+        toggle = if (isSecret) YamlToolbarToggle(buttonLabel, buttonIcon) { showDecoded = !showDecoded } else null,
+    )
+}
+
+/** A toolbar button rendered before Copy: Reveal/Hide, Decode/Raw. */
+internal class YamlToolbarToggle(val label: String, val icon: DrawableResource, val onClick: () -> Unit)
+
+/**
+ * The YAML viewer body: search field, match navigation, an optional toggle, Copy, then
+ * the line-numbered, selectable, scrollable text. [identity] keys the search query and
+ * both scroll positions: a new identity resets them, a new [displayText] alone does not.
+ * Copy copies [copyText] (nothing while it is null), which need not be what is shown.
+ */
+@Composable
+internal fun YamlTextPane(
+    identity: Any,
+    displayText: String,
+    copyText: String?,
+    loading: Boolean,
+    toggle: YamlToolbarToggle? = null,
+) {
+    val copyToClipboard = rememberCopyToClipboard()
+
     val lines = remember(displayText) { displayText.lines() }
 
-    var query by remember(kind, name, namespace) { mutableStateOf("") }
+    var query by remember(identity) { mutableStateOf("") }
     val matches = remember(lines, query) { findYamlMatches(lines, query) }
     var current by remember(lines, query) { mutableIntStateOf(0) }
     val goNext = { if (matches.isNotEmpty()) current = (current + 1) % matches.size }
@@ -476,8 +511,8 @@ internal fun GenericYamlTab(
     // reset the scroll (an active search may still re-centre its match), while selecting
     // a different resource does — this composable is recomposed in place, never
     // recreated, on selection change.
-    val vScroll = remember(kind, name, namespace) { ScrollState(0) }
-    val hScroll = remember(kind, name, namespace) { ScrollState(0) }
+    val vScroll = remember(identity) { ScrollState(0) }
+    val hScroll = remember(identity) { ScrollState(0) }
 
     // Set from the first content line's onTextLayout; used to scroll a match into view
     // without measuring the viewport (ScrollState.viewportSize is already the viewport).
@@ -547,27 +582,20 @@ internal fun GenericYamlTab(
                     tint = KdTextSecondary.copy(alpha = if (matches.isEmpty()) 0.3f else 1f),
                 )
             }
-            if (isSecret) {
-                // Masked mode → Reveal/Hide (shield); unmasked mode → Decode/Raw (swap).
-                val (buttonIcon, buttonLabel) = when {
-                    maskPref && showDecoded -> Res.drawable.security_filled to "Hide"
-                    maskPref -> Res.drawable.security_filled to "Reveal"
-                    showDecoded -> Res.drawable.swap_horiz_filled to "Raw"
-                    else -> Res.drawable.swap_horiz_filled to "Decode"
-                }
+            if (toggle != null) {
                 TextButton(
-                    onClick = { showDecoded = !showDecoded },
+                    onClick = toggle.onClick,
                     colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     shape = kdRoundShape,
                 ) {
-                    Icon(painterResource(buttonIcon), null, Modifier.size(13.dp))
+                    Icon(painterResource(toggle.icon), null, Modifier.size(13.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(buttonLabel, style = MaterialTheme.typography.labelSmall)
+                    Text(toggle.label, style = MaterialTheme.typography.labelSmall)
                 }
             }
             TextButton(
-                onClick = { yaml?.let { text -> copyToClipboard(text) } },
+                onClick = { copyText?.let { text -> copyToClipboard(text) } },
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                 shape = kdRoundShape,
