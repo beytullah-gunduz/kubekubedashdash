@@ -76,6 +76,7 @@ class ResourceColorsTest {
     fun `a kind keeps its identity colour under the style's own palette`() {
         assertEquals(Color(0xFF48C744), kindColor("Pod"))
         assertEquals(Color(0xFF3D90CE), kindColor("Deployment"))
+        assertEquals(Color(0xFF1565C0), kindColor("HelmRelease"))
     }
 
     @Test

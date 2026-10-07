@@ -103,6 +103,8 @@ object SecretYamlMasking {
                 val key = match.groupValues[2]
                 val value = match.groupValues[4]
                 val trimmedKey = key.trim()
+                // A quoted key (`"data":`, `'stringData':`) is the same key to a YAML parser.
+                val bareKey = trimmedKey.removeSurrounding("\"").removeSurrounding("'")
                 when {
                     trimmedKey in SENSITIVE_ANNOTATION_KEYS -> {
                         // Defense-in-depth: this annotation re-embeds the full base64
@@ -113,7 +115,7 @@ object SecretYamlMasking {
                         fullMaskIndent = lead.length
                     }
 
-                    trimmedKey == "data" || trimmedKey == "stringData" -> {
+                    bareKey == "data" || bareKey == "stringData" -> {
                         val trimmedValue = value.trim()
                         when {
                             trimmedValue.isBlank() -> {
@@ -130,8 +132,11 @@ object SecretYamlMasking {
 
                             else -> {
                                 // Inline non-empty value (e.g. `data: {a: YQ==}`).
-                                // Fail-safe: mask the whole inline value.
+                                // Fail-safe: mask the whole inline value, and every deeper
+                                // line: the rest of a `data: |`, `data: >` or multi-line
+                                // flow `data: {` value.
                                 result.add("$lead$key: $PLACEHOLDER")
+                                fullMaskIndent = lead.length
                             }
                         }
                     }

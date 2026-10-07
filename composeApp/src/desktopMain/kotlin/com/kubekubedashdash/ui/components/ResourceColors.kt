@@ -38,6 +38,8 @@ private fun baseKindColor(kind: String): Color = when (kind) {
 
     "Secret" -> Color(0xFFFF7043)
 
+    "HelmRelease" -> Color(0xFF1565C0)
+
     "PVC" -> Color(0xFF8D6E63)
 
     "ServiceAccount" -> Color(0xFF78909C)

@@ -1,5 +1,11 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.helm.HelmDecodeException
+import com.kubekubedashdash.helm.HelmDriver
+import com.kubekubedashdash.helm.HelmReleaseCodec
+import com.kubekubedashdash.helm.HelmReleaseRepository
+import com.kubekubedashdash.helm.HelmRevisionRef
+import com.kubekubedashdash.helm.HelmRevisions
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.ContainerUsage
 import com.kubekubedashdash.models.CrdInfo
@@ -21,11 +27,13 @@ import com.kubekubedashdash.services.LogStreamOptions
 import com.kubekubedashdash.services.logcapture.CapturePodMapper
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.LogQuery
+import io.fabric8.kubernetes.api.model.ConfigMap
 import io.fabric8.kubernetes.api.model.DeletionPropagation
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.Secret
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
@@ -379,6 +387,51 @@ class ReactiveKubeClient(
             )
         },
     )
+
+    // ── Helm releases (read-only) ───────────────────────────────────────────────
+
+    // Label-selected and metadata-only (ReducedStateItemStore): the payload stays out of
+    // the informer cache and is fetched per revision by helmRepository when shown.
+    val helmReleaseSecrets: StateFlow<ResourceState<List<HelmRevisionRef>>> = informers.namespacedInformer(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.secrets().inNamespace(ns).withLabel(HelmRevisions.OWNER_LABEL, HelmRevisions.OWNER_VALUE)
+                    .runnableInformer(0L).itemStore(HelmRevisions.reducedStore(k, Secret::class.java)).addEventHandler(h)
+            } else {
+                k.secrets().inAnyNamespace().withLabel(HelmRevisions.OWNER_LABEL, HelmRevisions.OWNER_VALUE)
+                    .runnableInformer(0L).itemStore(HelmRevisions.reducedStore(k, Secret::class.java)).addEventHandler(h)
+            }
+        },
+        mapper = { s -> HelmRevisions.refOf(HelmDriver.SECRET, s.metadata, _connectionVersion.value) },
+    )
+
+    val helmReleaseConfigMaps: StateFlow<ResourceState<List<HelmRevisionRef>>> = informers.namespacedInformer(
+        inform = { k, ns, h ->
+            if (ns != null) {
+                k.configMaps().inNamespace(ns).withLabel(HelmRevisions.OWNER_LABEL, HelmRevisions.OWNER_VALUE)
+                    .runnableInformer(0L).itemStore(HelmRevisions.reducedStore(k, ConfigMap::class.java)).addEventHandler(h)
+            } else {
+                k.configMaps().inAnyNamespace().withLabel(HelmRevisions.OWNER_LABEL, HelmRevisions.OWNER_VALUE)
+                    .runnableInformer(0L).itemStore(HelmRevisions.reducedStore(k, ConfigMap::class.java)).addEventHandler(h)
+            }
+        },
+        mapper = { cm -> HelmRevisions.refOf(HelmDriver.CONFIGMAP, cm.metadata, _connectionVersion.value) },
+    )
+
+    /** Decoded Helm payloads for this session, cached; see HelmReleaseRepository. */
+    val helmRepository = HelmReleaseRepository(scope, ::fetchHelmPayload)
+
+    /** Blocking GET of one stored revision's payload text; null when the object is gone. */
+    internal fun fetchHelmPayload(ref: HelmRevisionRef): String? = when (ref.driver) {
+        HelmDriver.SECRET -> k8s.secrets().inNamespace(ref.namespace).withName(ref.objectName).get()?.let { s ->
+            val wire = s.data?.get(HelmReleaseCodec.DATA_KEY) ?: throw HelmDecodeException("This revision has no release data.")
+            HelmReleaseCodec.secretDataToPayload(wire)
+        }
+
+        HelmDriver.CONFIGMAP -> k8s.configMaps().inNamespace(ref.namespace).withName(ref.objectName).get()?.let { cm ->
+            cm.data?.get(HelmReleaseCodec.DATA_KEY) ?: throw HelmDecodeException("This revision has no release data.")
+        }
+    }
 
     // ── StatefulSets ────────────────────────────────────────────────────────────
 

@@ -280,6 +280,12 @@
 -dontwarn org.yaml.snakeyaml.**
 
 # ---------------------------------------------------------------------------
+# snakeyaml-engine — fabric8's YAML serializer, and the Helm view's values/manifest YAML.
+# ---------------------------------------------------------------------------
+-keep class org.snakeyaml.engine.** { *; }
+-dontwarn org.snakeyaml.engine.**
+
+# ---------------------------------------------------------------------------
 # JediTerm — embedded terminal widget used by the pod console.
 # TextStyle.<clinit> calls EnumSet.noneOf(TextStyle$Option.class), which
 # reflectively reads values()/$VALUES off the enum. ProGuard strips those
