@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -34,9 +33,9 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ReactiveKubeClient
@@ -201,7 +200,7 @@ private fun JobLogsAlertDialog(
 private fun LoadingDialog(job: GenericResourceInfo, onDismiss: () -> Unit) {
     JobLogsAlertDialog(job = job, onDismiss = onDismiss, dismissLabel = "Cancel") {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeCap = kdStrokeCap)
+            BusyIndicator(modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             Text(
                 "Looking up pods…",

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,7 +46,6 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.PodInfo
@@ -64,6 +62,7 @@ import com.kubekubedashdash.resources.view_list_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
@@ -454,7 +453,7 @@ private fun NodeOverviewCombinedTab(
         if (podsLoading) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
+                    BusyIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
                 }
             }
         } else if (pods.isEmpty()) {
@@ -476,7 +475,7 @@ private fun NodeOverviewCombinedTab(
         if (eventsLoading) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
+                    BusyIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
                 }
             }
         } else if (events.isEmpty()) {
@@ -561,7 +560,7 @@ private fun NodeDetailsOnlyTab(
 private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (PodInfo) -> Unit) {
     if (podsLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
+            BusyIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
         }
     } else if (pods.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)), contentAlignment = Alignment.Center) {
@@ -589,7 +588,7 @@ private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (
 private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
     if (eventsLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
+            BusyIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
         }
     } else if (events.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)), contentAlignment = Alignment.Center) {

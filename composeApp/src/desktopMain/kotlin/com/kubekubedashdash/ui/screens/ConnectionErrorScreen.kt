@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -22,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
+import com.kubekubedashdash.ui.components.BusyIndicator
 
 /**
  * Full-pane connection-failure state. [retryCountdown] > 0 means an automatic
@@ -62,11 +61,10 @@ fun ConnectionErrorScreen(
             if (retryCountdown > 0) {
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
+                    BusyIndicator(
                         modifier = Modifier.size(16.dp),
                         color = KdPrimary,
                         strokeWidth = 2.dp,
-                        strokeCap = kdStrokeCap,
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(

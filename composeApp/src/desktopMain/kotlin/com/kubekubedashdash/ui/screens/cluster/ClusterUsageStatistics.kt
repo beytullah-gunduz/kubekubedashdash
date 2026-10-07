@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,7 +40,6 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodPhaseCounts
@@ -49,6 +47,7 @@ import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.HalfCircularUsageIndicator
 import com.kubekubedashdash.ui.components.PodStatusBar
 import com.kubekubedashdash.ui.components.UsageHistoryBar
@@ -207,11 +206,10 @@ private fun PodStatusSection(phaseCounts: PodPhaseCounts?, modifier: Modifier) {
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(
+                BusyIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
                     color = KdPrimary,
-                    strokeCap = kdStrokeCap,
                 )
             }
         } else {
@@ -340,7 +338,7 @@ private fun GaugePlaceholder(loading: Boolean, message: String? = null) {
         contentAlignment = Alignment.Center,
     ) {
         if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
+            BusyIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
         } else if (message != null) {
             Text(message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
         }

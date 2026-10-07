@@ -30,7 +30,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -77,7 +76,6 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -88,6 +86,7 @@ import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.DiscoveryMode
@@ -332,7 +331,7 @@ private fun ProjectStep(viewModel: GkeDiscoveryViewModel) {
         when (val state = loadState) {
             ProjectLoadState.Loading, ProjectLoadState.NotRequested -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
+                    BusyIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                     Text("Checking gcloud sign-in…", color = KdTextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
@@ -682,11 +681,10 @@ private fun ScanRow(row: ProjectScanRow) {
                     modifier = Modifier.size(14.dp),
                 )
 
-                ProjectScanState.Scanning -> CircularProgressIndicator(
+                ProjectScanState.Scanning -> BusyIndicator(
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
-                    strokeCap = kdStrokeCap,
                 )
 
                 is ProjectScanState.Done -> Icon(
@@ -973,11 +971,10 @@ private fun ImportRowView(row: GkeImportRow) {
                     modifier = Modifier.size(14.dp),
                 )
 
-                GkeImportRowState.Importing -> CircularProgressIndicator(
+                GkeImportRowState.Importing -> BusyIndicator(
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
-                    strokeCap = kdStrokeCap,
                 )
 
                 GkeImportRowState.Cancelled -> Icon(
@@ -1216,7 +1213,7 @@ private fun Footer(
                 shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text("Scanning…")
             }
@@ -1243,7 +1240,7 @@ private fun Footer(
                 shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text("Importing…")
             }

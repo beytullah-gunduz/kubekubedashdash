@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -39,7 +38,6 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 
 /**
  * Scrim for a previously-connected session that lost its cluster. The stale
@@ -122,11 +120,10 @@ fun ReconnectOverlay(
                                 else -> "Automatic retry stopped"
                             }
                             if (retryArmed) {
-                                CircularProgressIndicator(
+                                BusyIndicator(
                                     modifier = Modifier.size(16.dp),
                                     color = KdPrimary,
                                     strokeWidth = 2.dp,
-                                    strokeCap = kdStrokeCap,
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }

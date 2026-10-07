@@ -30,7 +30,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -75,7 +74,6 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -85,6 +83,7 @@ import com.kubekubedashdash.resources.error
 import com.kubekubedashdash.resources.error_filled
 import com.kubekubedashdash.resources.hourglass_empty_filled
 import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.modals.viewmodel.ClusterCandidate
@@ -685,11 +684,10 @@ private fun ScanRow(row: RegionScanRow) {
                     modifier = Modifier.size(14.dp),
                 )
 
-                RegionScanState.Scanning -> CircularProgressIndicator(
+                RegionScanState.Scanning -> BusyIndicator(
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
-                    strokeCap = kdStrokeCap,
                 )
 
                 is RegionScanState.Done -> Icon(
@@ -938,11 +936,10 @@ private fun ImportRowView(row: ImportRow) {
                     modifier = Modifier.size(14.dp),
                 )
 
-                ImportRowState.Importing -> CircularProgressIndicator(
+                ImportRowState.Importing -> BusyIndicator(
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
-                    strokeCap = kdStrokeCap,
                 )
 
                 ImportRowState.Cancelled -> Icon(
@@ -1182,7 +1179,7 @@ private fun Footer(
                 shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text("Scanning…")
             }
@@ -1209,7 +1206,7 @@ private fun Footer(
                 shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text("Importing…")
             }
