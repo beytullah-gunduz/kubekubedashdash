@@ -18,9 +18,11 @@ import java.util.concurrent.ConcurrentHashMap
  * Fetches and decodes Helm payloads on demand and keeps the results.
  *
  * The informers hold metadata only; the payload of one revision (up to about 1 MiB of base64)
- * is fetched when a screen needs it. At most [maxConcurrentFetches] loads run at once, loads
- * for one revision are shared, and results are cached by [HelmRevisionRef.cacheKey] in two
- * LRU maps (summaries for list rows and History, full details for the open panel).
+ * is fetched when a screen needs it. At most [maxConcurrentFetches] summary loads run at once,
+ * plus [maxConcurrentDetails] detail loads on permits of their own, so the open panel never
+ * waits behind a list's queue of summaries. Loads for one revision are shared, and results are
+ * cached by [HelmRevisionRef.cacheKey] in two LRU maps (summaries for list rows and History,
+ * full details for the open panel).
  *
  * Logging stays at the fixed messages below: never a payload, never a decode exception's text.
  */
@@ -32,25 +34,27 @@ class HelmReleaseRepository(
     summaryCapacity: Int = 1_024,
     detailCapacity: Int = 4,
     maxConcurrentFetches: Int = 4,
+    maxConcurrentDetails: Int = 2,
 ) {
     private val log = LoggerFactory.getLogger(HelmReleaseRepository::class.java)
 
     private val lock = Any()
     private val summaries = lruMap<HelmCacheKey, HelmDecoded<HelmReleaseSummary>>(summaryCapacity)
     private val details = lruMap<HelmCacheKey, HelmDecoded<HelmReleaseDetail>>(detailCapacity)
-    private val semaphore = Semaphore(maxConcurrentFetches)
+    private val summaryPermits = Semaphore(maxConcurrentFetches)
+    private val detailPermits = Semaphore(maxConcurrentDetails)
     private val inFlight = ConcurrentHashMap<Pair<String, HelmCacheKey>, Deferred<HelmDecoded<*>>>()
 
     suspend fun summary(ref: HelmRevisionRef): HelmDecoded<HelmReleaseSummary> {
         val key = ref.cacheKey
         cachedSummary(key)?.let { return it }
-        return guarded { dedupe(SUMMARY to key) { loadSummary(ref, key) } }
+        return guarded { dedupe(SUMMARY to key, summaryPermits) { loadSummary(ref, key) } }
     }
 
     suspend fun detail(ref: HelmRevisionRef): HelmDecoded<HelmReleaseDetail> {
         val key = ref.cacheKey
         cachedDetail(key)?.let { return it }
-        return guarded { dedupe(DETAIL to key) { loadDetail(ref, key) } }
+        return guarded { dedupe(DETAIL to key, detailPermits) { loadDetail(ref, key) } }
     }
 
     /** Non-suspending peek, for a row that was decoded before. */
@@ -64,12 +68,16 @@ class HelmReleaseRepository(
      * Runs [load] once per key however many callers ask. A caller that stops waiting does
      * not cancel the load.
      */
-    private suspend fun <T> dedupe(key: Pair<String, HelmCacheKey>, load: suspend () -> HelmDecoded<T>): HelmDecoded<T> {
+    private suspend fun <T> dedupe(
+        key: Pair<String, HelmCacheKey>,
+        permits: Semaphore,
+        load: suspend () -> HelmDecoded<T>,
+    ): HelmDecoded<T> {
         val deferred = inFlight.computeIfAbsent(key) {
             // LAZY: nothing can complete before the completion handler below is attached
             // (attaching it inside computeIfAbsent could run it at once on a finished
             // Deferred and trip the map's "Recursive update" check).
-            scope.async(dispatcher, start = CoroutineStart.LAZY) { semaphore.withPermit { load() } }
+            scope.async(dispatcher, start = CoroutineStart.LAZY) { permits.withPermit { load() } }
         }
         // The two-argument remove: a stale handler never evicts a newer entry. Several
         // callers may each attach one; harmless.

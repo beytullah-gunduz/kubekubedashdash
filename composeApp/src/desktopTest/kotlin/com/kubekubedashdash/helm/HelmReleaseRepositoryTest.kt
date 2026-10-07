@@ -8,6 +8,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -70,6 +72,28 @@ class HelmReleaseRepositoryTest {
 
         assertEquals("web-1.0.0", result.value.chart)
         assertEquals("deployed", result.value.status)
+    }
+
+    @Test
+    fun `a detail load does not wait behind summaries that hold every summary permit`() = runBlocking {
+        // The open panel's detail has permits of its own: a list's queue of summaries (here one
+        // stuck fetch holding the only summary permit) must not delay it.
+        val gate = CountDownLatch(1)
+        val repo = repository(maxConcurrentFetches = 1) { r ->
+            if (r.releaseName == "stuck") gate.await()
+            payload
+        }
+        val stuck = scope.async { repo.summary(ref(name = "stuck")) }
+        try {
+            val detail = withTimeout(10_000) { repo.detail(ref(name = "open")) }
+
+            assertIs<HelmDecoded.Ok<HelmReleaseDetail>>(detail)
+            assertTrue(stuck.isActive, "the summary is still waiting on its fetch")
+        } finally {
+            gate.countDown()
+        }
+        assertIs<HelmDecoded.Ok<HelmReleaseSummary>>(stuck.await())
+        Unit
     }
 
     @Test

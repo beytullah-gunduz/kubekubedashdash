@@ -172,7 +172,7 @@ internal fun HelmRevealGate(what: String, onReveal: () -> Unit) {
 
 /**
  * The YAML viewer over [text], capped at [HELM_YAML_LINE_CAP] lines until "Show all". Copy
- * copies exactly what is shown. [identity] keys the viewer's search and scroll and the cap.
+ * copies all of [text] — masked or revealed exactly as shown, never a hidden secret. [identity] keys the viewer's search and scroll and the cap.
  */
 @Composable
 internal fun HelmYamlTab(identity: Any, text: String, toggle: YamlToolbarToggle?) {
@@ -200,7 +200,8 @@ internal fun HelmYamlTab(identity: Any, text: String, toggle: YamlToolbarToggle?
                 }
             }
         }
-        YamlTextPane(identity = identity, displayText = shown, copyText = shown, loading = false, toggle = toggle)
+        // Copy copies the whole text in its current masked or revealed state, not just the capped part.
+        YamlTextPane(identity = identity, displayText = shown, copyText = text, loading = false, toggle = toggle)
     }
 }
 

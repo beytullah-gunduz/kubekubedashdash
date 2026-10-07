@@ -131,6 +131,15 @@ class MockHelmReleasesTest {
             listOf("ConfigMap", "Deployment", "Secret", "Service"),
             frontend.resources.map { it.kind },
         )
+
+        // The masker's checks are strict enough to hide what they can't verify; the demo's
+        // ordinary Secrets must still come out masked, not hidden.
+        val backend = decodeAll().single { it.ref.objectName == "sh.helm.release.v1.backend-api.v1" }.detail
+        assertTrue("name: db-credentials" in backend.maskedManifest)
+        assertFalse(base64Of("password123") in backend.maskedManifest)
+        decodeAll().forEach { d ->
+            assertFalse(HelmManifest.HIDDEN_DOCUMENT_NOTE in d.detail.maskedManifest, "${d.ref.objectName} has a hidden document")
+        }
     }
 
     @Test

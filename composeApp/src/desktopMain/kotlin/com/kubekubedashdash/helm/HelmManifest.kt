@@ -32,10 +32,20 @@ object HelmManifest {
         "FlowSchema", "PriorityLevelConfiguration",
     )
 
+    /** For listing resources: a duplicate key keeps its last value. */
     private val loadSettings: LoadSettings = LoadSettings.builder()
         .setAllowDuplicateKeys(true)
         .setCodePointLimit(HelmReleaseCodec.MAX_DECOMPRESSED_BYTES)
         .build()
+
+    /** For masking: a duplicate key could hide a data block behind an empty twin, so it fails the parse. */
+    private val strictLoadSettings: LoadSettings = LoadSettings.builder()
+        .setAllowDuplicateKeys(false)
+        .setCodePointLimit(HelmReleaseCodec.MAX_DECOMPRESSED_BYTES)
+        .build()
+
+    /** An original secret string this long that still appears in the masked text hides the document. */
+    private const val SURVIVING_SECRET_MIN_LENGTH = 6
 
     /** Splits on `---` lines. [join] gives back exactly the input. */
     fun split(manifest: String): List<Doc> {
@@ -72,11 +82,11 @@ object HelmManifest {
         // 2. A separator carrying content (`--- {kind: Secret}`) is a document the splitter can't model.
         if (doc.separator != null && !separatorIsClean(doc.separator)) return hide(doc)
 
-        // 3. Parse; anything unparsable or not a mapping is hidden.
+        // 3. Parse strictly; anything unparsable, with a duplicate key, or not a mapping is hidden.
+        // So is a non-empty document that parses to null (a `!!null`-tagged mapping, say): step 1
+        // already let the genuinely empty ones through.
         val text = doc.lines.joinToString("\n")
-        val parsed = parse(text) ?: return hide(doc)
-        val map = parsed.value ?: return doc
-        if (map !is Map<*, *>) return hide(doc)
+        val map = parse(text, strictLoadSettings)?.value as? Map<*, *> ?: return hide(doc)
 
         val kind = map["kind"] as? String ?: return hide(doc)
         return when {
@@ -100,9 +110,36 @@ object HelmManifest {
         // An odd top-level key (a mid-stream BOM glued to `data`, say) may be a data block the masker can't see.
         if (map.keys.any { it !is String || it !in SECRET_KEYS }) return hide(doc)
         val masked = SecretYamlMasking.maskSecretYaml(text)
-        val maskedMap = parse(masked)?.value as? Map<*, *> ?: return hide(doc)
+        val maskedMap = parse(masked, strictLoadSettings)?.value as? Map<*, *> ?: return hide(doc)
+        // The masker works line by line and the parser has the last word: the masked text must be
+        // the same document with only its secret values replaced. A quoted value or a flow mapping
+        // that continues at column 0 would otherwise turn its tail into a new top-level key the
+        // masker never saw.
+        if (maskedMap.keys != map.keys) return hide(doc)
+        if (listOf("apiVersion", "kind", "type", "immutable").any { maskedMap[it] != map[it] }) return hide(doc)
+        if (withoutLastApplied(maskedMap["metadata"]) != withoutLastApplied(map["metadata"])) return hide(doc)
         if (!leavesNoSecret(maskedMap)) return hide(doc)
+        // Nor may a secret string survive anywhere else (an anchor in an annotation that a data
+        // value aliases, say). Short values are skipped: they match ordinary words by chance.
+        val survivors = (secretStrings(map["data"]) + secretStrings(map["stringData"]))
+            .filter { it.length >= SURVIVING_SECRET_MIN_LENGTH }
+        if (survivors.any { it in masked }) return hide(doc)
         return Doc(doc.separator, masked.split("\n"))
+    }
+
+    /** [metadata] without the last-applied annotation, which the masker replaces on purpose. */
+    private fun withoutLastApplied(metadata: Any?): Any? {
+        if (metadata !is Map<*, *>) return metadata
+        val annotations = metadata["annotations"] as? Map<*, *> ?: return metadata
+        return metadata + ("annotations" to (annotations - LAST_APPLIED))
+    }
+
+    /** Every String leaf under [value], recursing through Maps and Lists. */
+    private fun secretStrings(value: Any?): List<String> = when (value) {
+        is String -> listOf(value)
+        is Map<*, *> -> value.values.flatMap { secretStrings(it) }
+        is List<*> -> value.flatMap { secretStrings(it) }
+        else -> emptyList()
     }
 
     /** True when `data` and `stringData` hold nothing but placeholders, and so does the last-applied annotation. */
@@ -141,8 +178,8 @@ object HelmManifest {
     /** Boxes the parse result so a document that is just `null` isn't mistaken for a parse failure. */
     private class Parsed(val value: Any?)
 
-    private fun parse(text: String): Parsed? = try {
-        Parsed(Load(loadSettings).loadFromString(text))
+    private fun parse(text: String, settings: LoadSettings = loadSettings): Parsed? = try {
+        Parsed(Load(settings).loadFromString(text))
     } catch (_: Exception) {
         null
     } catch (_: StackOverflowError) {

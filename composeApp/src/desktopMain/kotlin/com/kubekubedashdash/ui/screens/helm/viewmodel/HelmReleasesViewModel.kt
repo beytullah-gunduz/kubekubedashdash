@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -96,19 +97,19 @@ class HelmReleasesViewModel(
     /** Decode state of each listed release's latest revision, keyed by that revision's cache key. */
     private val summaries = MutableStateFlow<Map<HelmCacheKey, HelmSummaryState>>(emptyMap())
 
+    // Grouped once per source emission: each landing summary below only re-maps the groups.
     private val sources = combine(secrets, configMaps, ::combineHelmSources)
-        .onEach { s -> if (s is HelmSourceState.Ready) requestSummaries(HelmRevisions.group(s.refs)) }
+        .map { s -> s to if (s is HelmSourceState.Ready) HelmRevisions.group(s.refs) else emptyList() }
+        .onEach { (s, groups) -> if (s is HelmSourceState.Ready) requestSummaries(groups) }
 
-    val state: StateFlow<HelmListState> = combine(sources, summaries) { s, sums ->
+    val state: StateFlow<HelmListState> = combine(sources, summaries) { (s, groups), sums ->
         when (s) {
             HelmSourceState.Loading -> HelmListState.Loading
 
             is HelmSourceState.Failed -> HelmListState.Failed(s.message, s.forbidden)
 
             is HelmSourceState.Ready -> HelmListState.Ready(
-                rows = HelmRevisions.group(s.refs).map { g ->
-                    HelmReleaseRow(g, sums[g.latest.cacheKey] ?: HelmSummaryState.Decoding)
-                },
+                rows = groups.map { g -> HelmReleaseRow(g, sums[g.latest.cacheKey] ?: HelmSummaryState.Decoding) },
                 warning = s.warning,
             )
         }

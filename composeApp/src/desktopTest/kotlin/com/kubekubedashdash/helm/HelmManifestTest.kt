@@ -252,6 +252,86 @@ class HelmManifestTest {
     }
 
     @Test
+    fun `a merge key alone in a Secret is hidden`() {
+        // `<<` is the only odd thing here: `data` is an allowed key holding the merge target.
+        val merge = "apiVersion: v1\nkind: Secret\ndata: &base\n  k: $SECRET_VALUE\n<<: *base"
+
+        assertHidden(HelmManifest.mask(manifest(merge)), SECRET_VALUE)
+    }
+
+    // ── masking: shapes the line masker can't see (result audit, 2026-10-07) ──
+
+    @Test
+    fun `a quoted value that continues at column 0 is hidden`() {
+        // A template line like `app.conf: "{{ .Values.conf }}"` with a multi-line value renders
+        // continuation lines at column 0; the masker's region closes there.
+        val secret = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\nstringData:\n" +
+            "  app.conf: \"listen: 80\ndb_password: $SECRET_TEXT\""
+
+        assertHidden(HelmManifest.mask(manifest(secret)), SECRET_TEXT)
+    }
+
+    @Test
+    fun `a flow mapping that continues at column 0 is hidden`() {
+        val newKey = "apiVersion: v1\nkind: Secret\nstringData: {user: admin,\npassword: $SECRET_TEXT}"
+        val onType = "apiVersion: v1\nkind: Secret\ntype: Opaque\nstringData: {user: admin,\ntype: $SECRET_TEXT}"
+        val onTypeOnly = "apiVersion: v1\nkind: Secret\nstringData: {user: admin,\ntype: $SECRET_TEXT}"
+
+        assertHidden(HelmManifest.mask(manifest(newKey)), SECRET_TEXT)
+        assertHidden(HelmManifest.mask(manifest(onType)), SECRET_TEXT)
+        assertHidden(HelmManifest.mask(manifest(onTypeOnly)), SECRET_TEXT)
+    }
+
+    @Test
+    fun `a data block followed by an empty twin is hidden`() {
+        val twins = listOf(
+            "? data\n: {k: $SECRET_VALUE}\ndata: {}",
+            "!!str data: {k: $SECRET_VALUE}\ndata: {}",
+            "&a data: {k: $SECRET_VALUE}\ndata: {}",
+            "\"d\\x61ta\": {k: $SECRET_VALUE}\ndata: {}",
+            "data:\n  k: $SECRET_VALUE\ndata: {}",
+        )
+        for (twin in twins) {
+            val output = HelmManifest.mask(manifest("apiVersion: v1\nkind: Secret\n$twin"))
+            assertHidden(output, SECRET_VALUE)
+        }
+    }
+
+    @Test
+    fun `a duplicate kind key hides the document`() {
+        val secret = "apiVersion: v1\nkind: Secret\ndata:\n  k: $SECRET_VALUE\nkind: ConfigMap"
+
+        assertHidden(HelmManifest.mask(manifest(secret)), SECRET_VALUE)
+    }
+
+    @Test
+    fun `a null-tagged root mapping is hidden`() {
+        val secret = "!!null\napiVersion: v1\nkind: Secret\ndata:\n  k: $SECRET_VALUE"
+
+        assertHidden(HelmManifest.mask(manifest(secret)), SECRET_VALUE)
+    }
+
+    @Test
+    fun `a secret value anchored in an annotation and aliased by stringData is hidden`() {
+        val secret = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\n  annotations:\n" +
+            "    note: &s $SECRET_TEXT\nstringData:\n  password: *s"
+
+        assertHidden(HelmManifest.mask(manifest(secret)), SECRET_TEXT)
+    }
+
+    @Test
+    fun `an ordinary Secret with a short value equal to a metadata word is still masked, not hidden`() {
+        // Survivor matching skips values shorter than six characters, so `app` matching the name doesn't hide the document.
+        val secret = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\nstringData:\n  user: app\n  password: $SECRET_TEXT"
+
+        val output = HelmManifest.mask(manifest(secret))
+
+        assertFalse(NOTE in output, "the document is masked, not hidden:\n$output")
+        assertMasked(output, SECRET_TEXT)
+        assertTrue("user: $PLACEHOLDER" in output)
+    }
+
+    @Test
     fun `the last-applied-configuration annotation is masked`() {
         val secret = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: annotated\n  annotations:\n" +
             "    kubectl.kubernetes.io/last-applied-configuration: '{\"data\":{\"k\":\"$SECRET_VALUE\"}}'\n" +

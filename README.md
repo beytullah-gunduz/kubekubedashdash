@@ -79,7 +79,7 @@ With a Metrics Server installed, the Pods table shows each pod's CPU and memory 
 - **Helm Releases** (Config section) lists one row per release — its latest revision, whatever its status — with chart, app version, revision, status and when it was updated; it follows the namespace selector, the status filter and the search box
 - The detail panel has an **Overview** (with the release's **NOTES**), **Values** (user-supplied, or computed the way `helm get values --all` prints them), **Manifest** (the YAML viewer, with search), **History** (every stored revision) and **Resources** (each object the chart rendered, opening its screen where it has one)
 - Releases are read straight from Helm's own storage (Secrets, or ConfigMaps for `HELM_DRIVER=configmap`; Helm 3 and 4), so no `helm` binary is needed; it needs permission to list and watch Secrets, and says so plainly when it doesn't have it
-- With Secret masking on, Values and NOTES stay hidden until you **Reveal** them and the Manifest masks every Secret it renders
+- With Secret masking on, Values and NOTES stay hidden until you **Reveal** them, and the Manifest masks every Secret it renders (a document it can't check safely is hidden whole)
 - It is a viewer only: there is no install, upgrade, rollback or uninstall
 
 ### Command palette (⌘K)
