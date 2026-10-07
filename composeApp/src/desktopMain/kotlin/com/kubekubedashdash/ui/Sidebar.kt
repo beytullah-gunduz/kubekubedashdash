@@ -55,14 +55,17 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdHover
@@ -76,6 +79,7 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.data.repository.NavPreferenceRepository
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -231,7 +235,7 @@ fun Sidebar(
                 // height on most navigations and moved every row below it.
                 // The command palette keeps its own Recent group.
                 if (favouritesContext.isNotBlank() && favouriteShortcuts.isNotEmpty()) {
-                    SidebarSection("Favourites", collapsed) {
+                    SidebarSection("Favourites", collapsed, separated = false) {
                         favouriteShortcuts.forEach { shortcut ->
                             NavShortcutRow(
                                 shortcut,
@@ -267,8 +271,9 @@ fun Sidebar(
 
                 SidebarSection("More", collapsed, defaultExpanded = false) {
                     NavSections.filter { it.tier == NavTier.MORE }.forEach { section ->
+                        // Text only: the 56 dp rail would cram it into icons.
                         if (!collapsed) {
-                            MoreGroupLabel(section.title)
+                            SidebarSubLabel(section.title)
                         }
                         section.kinds.forEach { kind ->
                             NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, favouriteKeySet, onToggleKindFavourite, onNavigate)
@@ -396,11 +401,12 @@ private fun CrdShortcutRow(
     )
 }
 
-// The one horizontal rule in the rail: between Favourites and the catalogue.
-// Expanded, it spans the rounded-row width (8 dp outer margin, matching
-// SidebarItem's). Collapsed, headers are gone and the icons run together, so
-// it becomes a short centred stub — the activity-bar separator idiom — rather
-// than vanishing with them.
+// The full-width rule between Favourites and the catalogue — wider than the
+// hairline after each section title, which starts after the text. Expanded,
+// it spans the rounded-row width (8 dp outer margin, matching SidebarItem's).
+// Collapsed, headers are gone and the icons run together, so it becomes a
+// short centred stub — the activity-bar separator idiom — which collapsed
+// SidebarSections also draw in place of their headers.
 @Composable
 private fun SidebarTierDivider(collapsed: Boolean) {
     if (collapsed) {
@@ -417,29 +423,6 @@ private fun SidebarTierDivider(collapsed: Boolean) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp.orCompact(3.dp)),
             color = KdBorder,
             thickness = 1.dp,
-        )
-    }
-}
-
-// Small uppercase sub-group label used inside the More section to separate
-// its three source sections. Mirrors CustomResourcesSection's file-private
-// MiniHeader, which Sidebar.kt cannot call. Rendered only when !collapsed:
-// SidebarSection hides its own header in the 56 dp rail but still renders
-// its content, so a text label here would otherwise be crammed into icons.
-@Composable
-private fun MoreGroupLabel(title: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 4.dp.orCompact(2.dp)),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            title.uppercase(),
-            style = MaterialTheme.typography.labelSmall
-                .copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                .retroChrome(8.sp),
-            color = KdTextSecondary,
         )
     }
 }
@@ -765,38 +748,67 @@ private fun SidebarItemTooltip(text: String) {
     }
 }
 
+// A section header has to read as "the start of a group", not as one more
+// row, so it differs from SidebarItem by layout as well as by type (Retro's
+// retroChrome strips the bold and tracking): space above it but not below,
+// so it binds to its own rows; title text in the rows' icon column (18 dp),
+// left of their labels; a hairline after the title; the chevron at the
+// trailing edge, where it no longer sits in the icon column. The title is the
+// brightest text in the rail: the heading accent in Retro, like TitleBar and
+// SessionContentHeader; textPrimary elsewhere, where the accent is the
+// selection blue and would read as selected or as a link.
+// [separated] is false only for a section that opens the rail (Favourites):
+// space or a stub above it would separate it from nothing. Collapsed, the
+// header gives way to the activity-bar stub SidebarTierDivider uses.
+// The expanded state is stored under [title] — renaming a title resets it.
 @Composable
 fun SidebarSection(
     title: String,
     collapsed: Boolean = false,
     defaultExpanded: Boolean = true,
+    separated: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val expandedOverrides by PreferenceRepository.sidebarSectionsExpanded.collectAsState()
     val expanded = expandedOverrides[title] ?: defaultExpanded
+    var hovered by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (!collapsed) {
+        if (collapsed) {
+            if (separated) SidebarTierDivider(collapsed = true)
+        } else {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { PreferenceRepository.setSidebarSectionExpanded(title, !expanded) }
-                    .padding(horizontal = 18.dp, vertical = 6.dp.orCompact(3.dp)),
+                    .padding(top = if (separated) 8.dp.orCompact(4.dp) else 0.dp)
+                    .padding(horizontal = 8.dp)
+                    .clip(6.dp.kdCorner)
+                    .background(if (hovered) KdHover else Color.Transparent)
+                    .clickable(role = Role.Button) { PreferenceRepository.setSidebarSectionExpanded(title, !expanded) }
+                    .onPointerEvent(PointerEventType.Enter) { hovered = true }
+                    .onPointerEvent(PointerEventType.Exit) { hovered = false }
+                    .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+                    .padding(horizontal = 10.dp, vertical = 6.dp.orCompact(3.dp)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    painterResource(if (expanded) Res.drawable.expand_more_filled else Res.drawable.chevron_right_filled),
-                    contentDescription = if (expanded) "Collapse section" else "Expand section",
-                    modifier = Modifier.size(14.dp),
-                    tint = KdTextSecondary,
-                )
-                Spacer(Modifier.width(6.dp))
                 Text(
                     title.uppercase(),
                     style = MaterialTheme.typography.labelSmall
                         .copy(fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                         .retroChrome(8.sp),
-                    color = KdTextSecondary,
+                    // Hovered, textPrimary in Retro too: G1 holds it on KdHover in every
+                    // palette, where accent drops below 4.5:1 in several (PaletteGateTest G6).
+                    color = if (ThemeManager.isRetro && !hovered) KdAccent else KdTextPrimary,
+                )
+                Spacer(Modifier.width(8.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = KdBorder, thickness = 1.dp)
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    painterResource(if (expanded) Res.drawable.expand_more_filled else Res.drawable.chevron_right_filled),
+                    // The state is announced by stateDescription above.
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = KdTextSecondary,
                 )
             }
         }
@@ -805,6 +817,42 @@ fun SidebarSection(
             Column(content = content)
         }
     }
+}
+
+// The row-label column: SidebarItem's 8 dp margin + 10 dp padding + 16 dp
+// icon + 10 dp gap. SidebarSubLabel starts here; SidebarSectionTest pins it
+// to the rendered label so the two cannot drift apart.
+private val SidebarLabelInset = 44.dp
+
+// Second-level label inside a section: More's three source groups, and the
+// Custom Resources section's Pinned and per-API-group blocks. It must read as
+// neither a section header (icon column, hairline, chevron, accent in Retro)
+// nor a row (icon, body text), so it starts in the row-label column, is small
+// and secondary, and has less space above it than a header (8 dp, not 14).
+// [chrome] is app wording: uppercased, pixel voice in Retro. Pass false for
+// cluster data such as a CRD API group, which keeps its own spelling and the
+// reading font — retroChrome's contract excludes data.
+@Composable
+internal fun SidebarSubLabel(text: String, chrome: Boolean = true) {
+    Text(
+        if (chrome) text.uppercase() else text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = SidebarLabelInset,
+                end = 18.dp,
+                top = 8.dp.orCompact(4.dp),
+                bottom = 4.dp.orCompact(2.dp),
+            ),
+        style = if (chrome) {
+            MaterialTheme.typography.labelSmall
+                .copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                .retroChrome(8.sp)
+        } else {
+            MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium)
+        },
+        color = KdTextSecondary,
+    )
 }
 
 // Maps a cluster health snapshot to the dot color on the Cluster nav item.

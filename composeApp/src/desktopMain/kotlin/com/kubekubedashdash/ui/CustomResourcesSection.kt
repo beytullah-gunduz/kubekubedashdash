@@ -1,23 +1,9 @@
 package com.kubekubedashdash.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.resources.Res
@@ -96,7 +82,7 @@ fun CustomResourcesSection(
             }
         } else {
             if (pinnedCrds.isNotEmpty()) {
-                MiniHeader("Pinned")
+                SidebarSubLabel("Pinned")
                 pinnedCrds.forEach { crd ->
                     CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
                 }
@@ -121,24 +107,6 @@ fun CustomResourcesSection(
 }
 
 @Composable
-private fun MiniHeader(title: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = KdTextSecondary,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp,
-        )
-    }
-}
-
-@Composable
 private fun GroupBlock(
     groupName: String,
     items: List<CrdInfo>,
@@ -150,26 +118,12 @@ private fun GroupBlock(
     onToggleHide: (CrdInfo) -> Unit,
     onToggleFavourite: (CrdInfo) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            groupName,
-            style = MaterialTheme.typography.labelSmall,
-            color = KdTextSecondary,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = 8.dp),
-            fontWeight = FontWeight.Medium,
-        )
-    }
+    // An API group is cluster data, so it keeps its own spelling. The gap
+    // between groups is the label's own space above it.
+    SidebarSubLabel(groupName, chrome = false)
     items.forEach { crd ->
         CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
     }
-    Spacer(Modifier.height(4.dp))
 }
 
 @Composable
