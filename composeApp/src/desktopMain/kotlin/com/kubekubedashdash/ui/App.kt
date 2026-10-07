@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,7 +100,6 @@ import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ShellEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 import java.awt.EventQueue
@@ -202,49 +200,17 @@ fun App(
         // the first-run screen, which would hide the scrim (and its exits).
         val showFirstRun = !hasRealContexts && !isConnected && !isReconnecting
 
-        // Pager state mirrors workspace.activeTabKey. Tab clicks / drag-drop
-        // / close events drive activeTabKey externally and the LaunchedEffect
-        // animates the pager toward that page; user swipes on the pager flip
-        // the direction by calling workspace.setActive once the page settles.
+        // Pager state mirrors workspace.activeTabKey, one way: tab clicks /
+        // drag-drop / close events drive activeTabKey and FollowActiveTab moves
+        // the pager to that page. The pager never sets the active tab — it
+        // takes no swipes, so a page it settles on by any other route is not
+        // a user choice.
         val activeIndex = tabs.indexOfFirst { it.key == activeTabKey }.coerceAtLeast(0)
         val pagerState = rememberPagerState(
             initialPage = activeIndex,
             pageCount = { tabs.size },
         )
-
-        // Track the previous tab count so we can detect "a tab was just
-        // inserted" and snap to it instead of animating. animateScrollToPage
-        // forces composition of every intermediate page during the scroll —
-        // when opening the 2nd cluster (tabs grow 1→2 or 1→3 with the
-        // AllClusters tab) that would compose multiple full session panes at
-        // once. scrollToPage limits composition to the destination page.
-        val prevTabsSize = remember { mutableStateOf(tabs.size) }
-        LaunchedEffect(activeIndex, tabs.size) {
-            val grew = tabs.size > prevTabsSize.value
-            prevTabsSize.value = tabs.size
-            if (pagerState.currentPage != activeIndex) {
-                if (grew) {
-                    pagerState.scrollToPage(activeIndex)
-                } else {
-                    pagerState.animateScrollToPage(activeIndex)
-                }
-            }
-        }
-
-        LaunchedEffect(pagerState, tabs) {
-            // Drop the first emission. snapshotFlow re-emits the current
-            // settledPage every time this effect re-launches — including when
-            // `tabs` changes from addTab(). At that moment the pager hasn't
-            // started animating to the new active page yet, so the emitted
-            // value is still the *old* index, and acting on it would call
-            // workspace.setActive(oldTab.key), undoing the just-set active tab.
-            // We only want to react to genuine user-driven settle events.
-            snapshotFlow { pagerState.settledPage }.drop(1).collect { idx ->
-                tabs.getOrNull(idx)?.let { settled ->
-                    if (settled.key != activeTabKey) workspace.setActive(settled.key)
-                }
-            }
-        }
+        FollowActiveTab(pagerState, activeIndex, tabs.size)
 
         val settingsOpen by workspace.showSettings.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
@@ -818,30 +784,33 @@ fun App(
                             // swipe to an adjacent tab.
                             userScrollEnabled = false,
                         ) { page ->
-                            when (val tab = tabs.getOrNull(page)) {
-                                is WorkspaceTab.Cluster -> SessionPaneContent(
-                                    session = tab.session,
-                                    sidebarCollapsed = sidebarCollapsed,
-                                    onSelectCluster = { workspace.showClusterSelector() },
-                                    onOpenLogs = onOpenLogs,
-                                    onOpenTerminal = onOpenTerminal,
-                                    onCaptureLogs = onCaptureLogs,
-                                    onTailLogs = onTailLogs,
-                                    onTailPods = onTailPods,
-                                    onPortForward = onPortForward,
-                                    bottomSlot = if (tab.key == drawerHostKey) logDrawer else null,
-                                )
+                            // A page passed mid-slide must not stop the pager on itself.
+                            Box(Modifier.containBringIntoView(), propagateMinConstraints = true) {
+                                when (val tab = tabs.getOrNull(page)) {
+                                    is WorkspaceTab.Cluster -> SessionPaneContent(
+                                        session = tab.session,
+                                        sidebarCollapsed = sidebarCollapsed,
+                                        onSelectCluster = { workspace.showClusterSelector() },
+                                        onOpenLogs = onOpenLogs,
+                                        onOpenTerminal = onOpenTerminal,
+                                        onCaptureLogs = onCaptureLogs,
+                                        onTailLogs = onTailLogs,
+                                        onTailPods = onTailPods,
+                                        onPortForward = onPortForward,
+                                        bottomSlot = if (tab.key == drawerHostKey) logDrawer else null,
+                                    )
 
-                                WorkspaceTab.AllClusters -> AllClustersScreen()
+                                    WorkspaceTab.AllClusters -> AllClustersScreen()
 
-                                is WorkspaceTab.Terminal -> JediTermPane(
-                                    session = tab.session,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                    is WorkspaceTab.Terminal -> JediTermPane(
+                                        session = tab.session,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
 
-                                // Index past the (just-shrunk) tab list; the pager
-                                // settles to a valid page on the next frame.
-                                null -> Unit
+                                    // Index past the (just-shrunk) tab list; the pager
+                                    // settles to a valid page on the next frame.
+                                    null -> Unit
+                                }
                             }
                         }
                         if (drawerHostKey == null) logDrawer()
