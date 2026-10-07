@@ -282,6 +282,9 @@ internal class ReactiveInformerFactory(
                         // post-sync snapshot below and this collector's subscription.
                         relay = launch { namespaceScope.collect { emitSignal.trySend(Unit) } }
                         awaitInformerSync(informer, "Namespaced informer for namespace=$nsLabel")
+                        // Unlike the debounced path, no server-namespace guard here: a
+                        // selection that moves away and back unseen restarts nothing,
+                        // and skipping this first send would leave the list on Loading.
                         val items = snapshot()
                         log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
                         send(ResourceState.Success(items))

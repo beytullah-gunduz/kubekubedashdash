@@ -445,7 +445,7 @@ class AllClustersViewModel internal constructor(
     /**
      * Summed CPU and memory totals across all open sessions. Updates CPU/mem history as a side-effect.
      *
-     * Used figures follow each tab's selected namespace while capacity is
+     * Used figures follow each tab's namespace selection while capacity is
      * whole-cluster, so the sum covers a (tab, namespace) set; when that set
      * changes — a namespace selection change, a tab reloading or opening or closing —
      * the histories start over rather than join two sums into one trend.

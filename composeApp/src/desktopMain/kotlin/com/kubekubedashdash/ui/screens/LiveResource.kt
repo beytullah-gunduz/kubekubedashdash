@@ -60,8 +60,8 @@ fun isResourceRemoved(
  *
  * [inScope] must be true only when the resource could appear in [state] given
  * the current namespace selection (always true for cluster-scoped resources;
- * for namespaced ones, the selected namespace is "all" or matches the
- * resource's namespace). When out of scope the panel keeps showing the last
+ * for namespaced ones, the namespace selection contains the resource's
+ * namespace). When out of scope the panel keeps showing the last
  * known copy and never claims the resource was removed.
  */
 @Composable

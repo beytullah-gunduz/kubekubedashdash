@@ -57,6 +57,8 @@ import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -539,7 +541,12 @@ private fun NamespaceCheckRow(
                     checked = checked,
                     onCheckedChange = { onToggle() },
                     colors = CheckboxDefaults.colors(checkedColor = KdPrimary),
-                    modifier = Modifier.scale(0.75f).testTag(NamespaceSelectorTags.check(namespace)),
+                    // Named for screen readers: the row's text is merged into the
+                    // row, not into this separately focusable box.
+                    modifier = Modifier
+                        .scale(0.75f)
+                        .testTag(NamespaceSelectorTags.check(namespace))
+                        .semantics { contentDescription = namespace },
                 )
             }
         }

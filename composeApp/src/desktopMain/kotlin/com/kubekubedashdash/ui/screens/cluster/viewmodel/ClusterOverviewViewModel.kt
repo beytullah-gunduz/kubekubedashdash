@@ -98,10 +98,10 @@ class ClusterOverviewViewModel(
     val namespaceScope: StateFlow<NamespaceScope> = reactiveClient.namespaceScope
 
     init {
-        // Pod counts and usage follow the selected namespace, but this
-        // ViewModel lives as long as the session. Clear the series on a selection change
-        // so the old namespace's readings don't run into the new one's as a
-        // cliff. drop(1): the value current at construction is not a switch.
+        // Pod counts and usage follow the namespace selection, but this
+        // ViewModel lives as long as the session. Clear the series on a selection
+        // change so the old selection's readings don't run into the new one's as
+        // a cliff. drop(1): the value current at construction is not a change.
         viewModelScope.launch {
             reactiveClient.namespaceScope.drop(1).collect {
                 _cpuHistory.value = emptyList()
