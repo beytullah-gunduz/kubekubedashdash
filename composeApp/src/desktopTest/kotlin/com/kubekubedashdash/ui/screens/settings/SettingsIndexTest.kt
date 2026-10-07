@@ -194,4 +194,10 @@ class SettingsIndexTest {
         val results = settingsSearchResults("scanlines")
         assertTrue(results.any { it.title == "CRT scanlines" })
     }
+
+    @Test
+    fun `rolling finds CRT refresh bar`() {
+        val results = settingsSearchResults("rolling")
+        assertTrue(results.any { it.title == "CRT refresh bar" })
+    }
 }

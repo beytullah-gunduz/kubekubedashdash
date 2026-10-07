@@ -80,9 +80,13 @@ import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
 import com.kubekubedashdash.ui.components.stepUiScale
 import com.kubekubedashdash.ui.crt.CrtGhostExit
+import com.kubekubedashdash.ui.crt.CrtRefreshBarDriver
+import com.kubekubedashdash.ui.crt.CrtRefreshBarMode
+import com.kubekubedashdash.ui.crt.crtRefreshBar
 import com.kubekubedashdash.ui.crt.crtScanlines
 import com.kubekubedashdash.ui.crt.crtScreenPowerOn
 import com.kubekubedashdash.ui.crt.rememberCrtGhost
+import com.kubekubedashdash.ui.crt.rememberCrtRefreshBar
 import com.kubekubedashdash.ui.crt.rememberCrtScreenPowerOn
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
@@ -495,11 +499,18 @@ fun App(
         val settingsGhost = rememberCrtGhost()
         val shortcutsGhost = rememberCrtGhost()
         val scanlines by PreferenceRepository.crtScanlines.collectAsState()
+        val refreshBarMode by PreferenceRepository.crtRefreshBar.collectAsState()
+        val refreshBarBackground by PreferenceRepository.crtRefreshBarBackground.collectAsState()
+        val refreshBar = rememberCrtRefreshBar()
+        CrtRefreshBarDriver(refreshBar, crtPowerOn, active = ThemeManager.isRetro && scanlines, mode = refreshBarMode, rollInBackground = refreshBarBackground)
         MaybeProvideSessionLocals(titleSession) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .crtScanlines { ThemeManager.isRetro && scanlines }
+                    .crtRefreshBar(refreshBar) {
+                        ThemeManager.isRetro && scanlines && refreshBarMode != CrtRefreshBarMode.OFF
+                    }
                     .crtScreenPowerOn(crtPowerOn)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

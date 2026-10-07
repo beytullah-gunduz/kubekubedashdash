@@ -14,6 +14,7 @@ import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.ui.components.clampUiScale
+import com.kubekubedashdash.ui.crt.CrtRefreshBarMode
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.DemoContext
@@ -55,6 +56,8 @@ object PreferenceRepository {
     private val THEME_PALETTE by lazy { stringPreferencesKey("theme_palette") }
     private val CVD_SAFE_STATUS by lazy { booleanPreferencesKey("cvd_safe_status") }
     private val CRT_SCANLINES by lazy { booleanPreferencesKey("crt_scanlines") }
+    private val CRT_REFRESH_BAR by lazy { stringPreferencesKey("crt_refresh_bar") }
+    private val CRT_REFRESH_BAR_BACKGROUND by lazy { booleanPreferencesKey("crt_refresh_bar_background") }
     private val MCP_SERVER_ENABLED by lazy { booleanPreferencesKey("mcp_server_enabled") }
     private val MCP_SERVER_PORT by lazy { intPreferencesKey("mcp_server_port") }
     private val MCP_LOCALHOST_ONLY by lazy { booleanPreferencesKey("mcp_localhost_only") }
@@ -113,6 +116,17 @@ object PreferenceRepository {
     // by default — it is the most recognisable "CRT" cue, but it dims dense small text.
     private val _crtScanlines = MutableStateFlow(false)
     val crtScanlines: StateFlow<Boolean> = _crtScanlines.asStateFlow()
+
+    // The CRT refresh bar, drawn with the scanline overlay (Retro + scanlines only). Off by
+    // default. ROLLING is the one opt-in exception to D7 (nothing animates continuously), and it
+    // pauses while the window is unfocused.
+    private val _crtRefreshBar = MutableStateFlow(CrtRefreshBarMode.OFF)
+    val crtRefreshBar: StateFlow<CrtRefreshBarMode> = _crtRefreshBar.asStateFlow()
+
+    // Keeps ROLLING going while the window is in the background. Off by default, so an
+    // unfocused window left open all day does not redraw.
+    private val _crtRefreshBarBackground = MutableStateFlow(false)
+    val crtRefreshBarBackground: StateFlow<Boolean> = _crtRefreshBarBackground.asStateFlow()
 
     private val _mcpServerEnabled = MutableStateFlow(false)
     val mcpServerEnabled: StateFlow<Boolean> = _mcpServerEnabled.asStateFlow()
@@ -287,6 +301,10 @@ object PreferenceRepository {
                         ?: ThemePalette.STYLE
                     _cvdSafeStatus.value = p[CVD_SAFE_STATUS] ?: false
                     _crtScanlines.value = p[CRT_SCANLINES] ?: false
+                    _crtRefreshBar.value = p[CRT_REFRESH_BAR]
+                        ?.let { runCatching { CrtRefreshBarMode.valueOf(it) }.getOrNull() }
+                        ?: CrtRefreshBarMode.OFF
+                    _crtRefreshBarBackground.value = p[CRT_REFRESH_BAR_BACKGROUND] ?: false
                     _mcpServerEnabled.value = p[MCP_SERVER_ENABLED] ?: false
                     _mcpServerPort.value = p[MCP_SERVER_PORT] ?: 3001
                     _mcpLocalhostOnly.value = p[MCP_LOCALHOST_ONLY] ?: true
@@ -369,6 +387,16 @@ object PreferenceRepository {
     fun setCrtScanlines(value: Boolean) {
         _crtScanlines.value = value
         ioScope.launch { dataStore.edit { it[CRT_SCANLINES] = value } }
+    }
+
+    fun setCrtRefreshBar(value: CrtRefreshBarMode) {
+        _crtRefreshBar.value = value
+        ioScope.launch { dataStore.edit { it[CRT_REFRESH_BAR] = value.name } }
+    }
+
+    fun setCrtRefreshBarBackground(value: Boolean) {
+        _crtRefreshBarBackground.value = value
+        ioScope.launch { dataStore.edit { it[CRT_REFRESH_BAR_BACKGROUND] = value } }
     }
 
     fun setMcpServerEnabled(value: Boolean) {
