@@ -204,7 +204,7 @@ object McpServerManager {
             }
             ktorServer.start(wait = false)
             server = ktorServer
-            log.info("MCP server started on http://{}:{}/sse", bindHost, port)
+            log.info("MCP server started on http://{}:{}/ (SSE)", bindHost, port)
         } catch (e: Exception) {
             log.error("Failed to start MCP server: {}", e.message, e)
             server = null

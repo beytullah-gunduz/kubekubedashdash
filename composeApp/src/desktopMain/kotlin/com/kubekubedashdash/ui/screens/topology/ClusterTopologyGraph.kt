@@ -88,6 +88,7 @@ import com.kubekubedashdash.resources.rotate_left_filled
 import com.kubekubedashdash.resources.rotate_right_filled
 import com.kubekubedashdash.resources.zoom_in_filled
 import com.kubekubedashdash.resources.zoom_out_filled
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.ui.components.kindColor
 import com.kubekubedashdash.ui.screens.topology.viewmodel.ClusterTopologyViewModel
 import kotlinx.coroutines.flow.first
@@ -365,7 +366,7 @@ private fun TopologyGraphContent(
     )
 
     // Build list of nodes to display: for WorkloadGroup nodes that are expanded,
-    // also show their pod children from the graph. Groups with >20 pods don't expand.
+    // also show their pod children from the graph.
     val podsByGroupId = remember(graph) {
         val podNodes = graph.nodes.filter { it.kind == "Pod" }
         val groupToPodsMap = mutableMapOf<String, MutableList<ResourceGraphNode>>()
@@ -387,6 +388,22 @@ private fun TopologyGraphContent(
         expandedGroups.value
             .flatMap { groupId -> (podsByGroupId[groupId] ?: emptyList()).map { it.id } }
             .toSet()
+    }
+
+    // Screenshot-only (ScreenshotHooks): both hooks are empty in normal use, so this does nothing there.
+    val shotExpand by ScreenshotHooks.topologyExpand.collectAsState()
+    val shotSelect by ScreenshotHooks.topologySelect.collectAsState()
+    LaunchedEffect(graph, shotExpand, shotSelect) {
+        fun hookKey(node: ResourceGraphNode) = "${node.subKind ?: node.kind}/${node.name}"
+        if (shotExpand.isNotEmpty()) {
+            expandedGroups.value = graph.nodes
+                .filter { hookKey(it) in shotExpand && it.id in podsByGroupId }
+                .map { it.id }
+                .toSet()
+        }
+        if (shotSelect.isNotEmpty()) {
+            graph.nodes.firstOrNull { hookKey(it) == shotSelect }?.let { selectedNodeId = it.id }
+        }
     }
 
     val outerHorizontalScroll = rememberScrollState()

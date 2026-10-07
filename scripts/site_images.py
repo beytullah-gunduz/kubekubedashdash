@@ -73,7 +73,7 @@ CROPS: dict[str, Box | list[Box] | None] = {
 # Phone-width crops of the wide tiles, written as img/<name>-mobile.webp. These are dp boxes of
 # the same capture, not output sizes; the page's width/height attributes follow the output.
 MOBILE_CROPS: dict[str, Box | list[Box]] = {
-    "fleet": (0, 405, 900, 1040),  # cluster cards + the event feed's left columns
+    "fleet": (0, 84, 658, 711),  # Total + first cluster panel, heatmap, the event feed's left columns
     "bulk": (292, 40, 1020, 600),  # checkboxes, names, statuses, "6 pods selected"
     "tail": [(0, 808, 620, 911), (0, 923, 620, 1160)],
 }

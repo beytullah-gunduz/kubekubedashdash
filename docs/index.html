@@ -121,7 +121,7 @@
                     <ul class="hero-trust">
                         <li><strong>MIT licensed</strong></li>
                         <li>macOS (Apple Silicon) · Windows · Linux</li>
-                        <li>One installer — nothing else to install</li>
+                        <li>One installer, Java runtime included</li>
                     </ul>
                 </div>
 
@@ -228,13 +228,13 @@
                     <article class="tile tile-wide">
                         <div class="tile-text">
                             <h3>Triage the whole fleet</h3>
-                            <p>The All Clusters tab adds up CPU, memory and pods across every open cluster, ranks clusters by recent errors, and merges their events into one filterable feed — with saved presets and a reason heatmap.</p>
+                            <p>The All Clusters tab puts a fleet total, one panel per open cluster and the busiest nodes side by side, counts each cluster's warnings, and merges their events into one filterable feed — with saved presets and a reason heatmap.</p>
                         </div>
                         <picture>
-                            <source media="(max-width: 899px)" srcset="img/fleet-mobile.webp" width="900" height="635" />
+                            <source media="(max-width: 899px)" srcset="img/fleet-mobile.webp" width="900" height="858" />
                             <img
                                 src="img/fleet.webp"
-                                alt="All Clusters tab: combined usage, one card per cluster, and a merged warning-event feed"
+                                alt="All Clusters tab: a fleet total, one usage panel per cluster, top nodes, and a merged warning-event feed"
                                 width="1600"
                                 height="1132"
                                 loading="lazy"
@@ -330,13 +330,13 @@
                     <article class="tile tile-wide">
                         <div class="tile-text">
                             <h3>Tail a whole namespace</h3>
-                            <p>A stern-style merged tail follows every running pod in a namespace, color-coded per pod — next to per-container log tabs with filter, wrap, timestamps and previous-run logs.</p>
+                            <p>A stern-style merged tail follows a namespace's running pods (up to 40 streams), color-coded per pod — next to per-container log tabs with filter, wrap, timestamps and previous-run logs.</p>
                         </div>
                         <picture>
                             <source media="(max-width: 899px)" srcset="img/tail-mobile.webp" width="900" height="494" />
                             <img
                                 src="img/tail.webp"
-                                alt="Logs drawer tailing every pod in a namespace, color-coded per pod"
+                                alt="Logs drawer tailing a namespace's pods, color-coded per pod"
                                 width="1600"
                                 height="495"
                                 loading="lazy"
@@ -431,7 +431,7 @@
                     </p>
 
                     <details class="kinds-details">
-                        <summary>Show all 36 resource kinds</summary>
+                        <summary>Show all 35 resource kinds, plus any CRD</summary>
                         <div class="kind-groups">
                             <div class="kind-group">
                                 <h3>Cluster</h3>

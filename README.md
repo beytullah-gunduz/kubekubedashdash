@@ -13,8 +13,10 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 ### Cluster management
 
 - Switch between kubeconfig contexts from the sidebar or the command palette
-- Filter all views by namespace or browse across all namespaces
-- Cluster overview with a health banner, pod status breakdown, node count, and namespace count
+- Scope the namespaced views to one namespace, to several (tick their checkboxes, or Cmd/Ctrl-click a name), or to all namespaces
+- **Cluster overview** — a health banner, five summary cards (nodes, namespaces, pods, deployments, services), CPU / memory / pod gauges with a short history, the pod status breakdown, the top nodes by pressure (with at least 3 nodes and a Metrics Server), and the most recent nodes, pods and events. With namespaces selected, a note says what follows them; nodes and capacity always cover the whole cluster
+- A **default namespace** per cluster (Settings → Default namespace) is selected when a cluster connects fresh
+- When a cluster drops, its screen stays in place under a **Connection lost** overlay that counts down to the next automatic retry, with **Retry now** and **Switch cluster…**
 - A liveness probe detects silent disconnects and reflects connection state in the tab
 
 ### Multi-cluster workspaces
@@ -28,9 +30,9 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 
 A dedicated tab (alongside your per-cluster tabs) that aggregates everything you have open into one screen:
 
-- **Combined statistics** — pod-phase breakdown, aggregated CPU/memory usage with history sparklines, pod-count gauges, and top nodes across every connected cluster
-- **Cluster summary cards** — sorted by recent error count, with inline issue badges; click a card to activate that cluster's tab (in this window or another)
-- **Event triage** — a filterable event stream spanning all clusters; filter by cluster, namespace, reason, and type, save and reapply filter presets, group related events, and toggle a reason **heatmap** across clusters
+- **Fleet strip** — a Total panel and, when node usage is known, the top nodes by pressure, with one panel per open cluster (in tab order) between them once two or more clusters are open. Each panel shows CPU, memory and pod usage and a pod-phase bar (hover for exact figures); the Total panel adds a short usage history. When the panels don't fit, the cluster panels scroll between the pinned Total and Top nodes
+- **Warnings and navigation** — the warnings chip on the Total and cluster panels counts the Warning and Error events of the chosen time window and narrows the event table to them; click a cluster panel to open its tab (in this window or another), or a top node to open it in its cluster's tab
+- **Event triage** — a filterable event stream spanning all clusters; filter by cluster, namespace, reason, and type, save and reapply filter presets, group related events, and toggle a reason **heatmap** across clusters (it opens by itself once per visit when, as the tab opens, three or more clusters have warnings of two or more reasons and the event table keeps enough room; close it and it stays closed until you open it yourself)
 
 ### Cluster topology
 
@@ -39,9 +41,9 @@ A whole-cluster graph that visualizes how resources relate, with workload cards,
 ![Cluster topology graph](docs/screenshots/topology.png)
 
 - Columns are pyramid-arranged by upstream connection count, and the viewport centers on the graph on landing
-- Viewport controls: **zoom** in/out, **pan** (drag), **rotate** the flow direction through four orientations, and **fit to screen**
+- Viewport controls: **zoom** in/out, **pan** (drag), **rotate** the flow direction through four orientations, and **reset** zoom and pan
 - Click a node to highlight the entire connected pipe
-- Configurable **auto-refresh** (Off / 5s / 15s / 30s / 60s / 2m / 5m, default 60s), paused automatically when you leave the screen
+- Configurable **auto-refresh** (Off / 5s / 15s / 30s / 1m / 2m / 5m, default 1m), paused automatically when you leave the screen
 - Namespace selector, a dynamic legend of the kinds in view, and an optional packet-animation toggle
 - Custom resources group their owned pods under the CRD root
 
@@ -62,7 +64,7 @@ Supported resource types:
 | Admission | ValidatingWebhookConfigurations, MutatingWebhookConfigurations |
 | Custom | Any CRD discovered on the cluster (see below) |
 
-Lists are sortable tables that refresh automatically (live via Kubernetes watch/informers where available, otherwise polled). They support keyboard navigation (arrow keys, Home/End to jump), show the full value on hover when a cell is truncated, format large counts with thousands separators, and — on the Pods screen — let you pin rows to the top.
+Lists are sortable tables that refresh automatically (live via Kubernetes watch/informers where available, otherwise polled). They support keyboard navigation (arrow keys, Home/End to jump), show the full value on hover when a cell is truncated, format large counts with thousands separators, and — on the Pods screen — let you pin rows to the top. Click a header to sort; on the Pods and Nodes tables, Restarts, CPU, Memory and Age sort by value rather than as text. Use the header's ⋮ menu to show or hide columns or switch the table between Comfortable and Compact density.
 
 With a Metrics Server installed, the Pods table shows each pod's CPU and memory use (hover for its requests and limits; memory turns orange from 80 % and red from 90 % of a container's limit), and the Nodes table's CPU and Memory columns show use against allocatable with a bar. Hide either column from the table's ⋮ menu.
 
@@ -74,12 +76,17 @@ With a Metrics Server installed, the Pods table shows each pod's CPU and memory 
 
 ### Command palette (⌘K)
 
-Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scoring) that jumps to any screen, switches between open clusters, or navigates to a namespace, a cached pod, a node, or a discovered CRD.
+Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scoring) that jumps to any screen, switches between open clusters, or navigates to a namespace, a cached pod, a node, or a discovered CRD. A prefix narrows the search (`pod:`, `node:`, `ns:`, `dep:`, `crd:`, `go:`), and with an empty query a **Recent** group lists what you picked lately.
+
+Type `>` for actions: pick a verb, then its target. The verbs are **Cordon / Uncordon node**, **Drain node**, **Scale…**, **Rollout restart**, **Evict pod**, **Force delete pod**, **Trigger now**, **Suspend / Resume** (CronJobs) and **Delete…**, and each one asks for confirmation. Esc, or Backspace in an empty query, backs out of a verb. The palette can also start a namespace's log tail or log capture (`Tail logs: <namespace>`, `Capture logs: <namespace>`).
 
 ### Resource details
 
-- Side panel with **Overview** and **YAML** tabs for inspected resources
-- YAML view with syntax highlighting, line numbers, and copy-to-clipboard (read-only)
+- Side panel with **Overview** and **YAML** tabs for inspected resources; **Expand** widens it over the list, and Esc closes it
+- The header labels its actions (e.g. **Scale**, **Rollout restart**, **Trigger now**, **Delete**); those that don't fit move into an **Actions** menu
+- A **Related** section links pods, ReplicaSets, Deployments, StatefulSets, DaemonSets, Jobs and CronJobs to their owners and children (and a pod to its Services) — click one to open it — and a breadcrumb under the title shows the owner chain (e.g. `Deployment redis › ReplicaSet …`)
+- YAML view with syntax highlighting, line numbers, selectable text, search (Enter / Shift+Enter step through the matches) and copy-to-clipboard (read-only)
+- **Secret values are masked** in the YAML view by default (Settings → Privacy → Secret values): **Reveal** shows one Secret's decoded values, and with masking off **Decode** / **Raw** switch between decoded and base64 values. **Copy** always copies the raw YAML, base64 values included
 - Labels and annotations shown as chips; click a chip to toggle it into the active label/annotation filter
 - Many kinds have resource-specific detail tabs — e.g. RBAC Roles show their resolved rules and bindings, ResourceQuotas show usage bars, EndpointSlices link through to their backing Service, and CertificateSigningRequests expose Approve/Deny
 
@@ -94,7 +101,7 @@ Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scorin
 ### Deployment details
 
 - Resource graph tab that visualizes the ownership chain (Deployment → ReplicaSet → Pods) along with related Services, Ingresses, ConfigMaps, Secrets, and HPAs
-- **Scale** and **Rollout Restart** actions
+- **Scale** and **Rollout restart** actions
 
 ### Pod details
 
@@ -103,8 +110,8 @@ Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scorin
 - A **warnings** section at the top of Overview with the newest three warnings, shown while the pod is unhealthy or a warning is still recurring (seen in the last 10 minutes); healthy pods keep a clean Overview
 - Container cards say *why*: the waiting message, the exit code, and the previous run's end (e.g. `OOMKilled · exit 137`, finished 5m ago); a Pending pod shows the scheduler's reason, an evicted pod the eviction message
 - CPU and memory usage gauges when a Metrics Server is installed
-- One-click **View logs** (streamed into the bottom drawer) and **Open shell** (interactive terminal — see below)
-- **Evict**, **Force-Delete**, and **Delete** actions
+- One-click **Logs** (streamed into the bottom drawer) and **Terminal** (an interactive shell — see below)
+- **Evict**, **Force delete**, and **Delete** actions
 
 ### Resource actions
 
@@ -112,16 +119,31 @@ Beyond browsing, KubeKubeDashDash can perform a focused set of write operations:
 
 | Resource | Actions |
 |----------|---------|
-| Pods | View logs, Open shell (exec), Port forward, Evict, Force-Delete, Delete |
+| Pods | Logs, Terminal (exec), Port forward, Evict, Force delete, Delete |
 | Services | Port forward |
 | Nodes | Cordon, Uncordon, Drain |
 | Deployments, StatefulSets, ReplicaSets | Scale |
-| Deployments, StatefulSets, DaemonSets | Rollout Restart |
-| CronJobs | Trigger Now, Suspend, Resume |
+| Deployments, StatefulSets, DaemonSets | Rollout restart |
+| CronJobs | Trigger now, Suspend, Resume |
 | CertificateSigningRequests | Approve, Deny |
 | Most other kinds + custom resources | Delete |
 
 Delete is available both from a resource's detail-panel header and from a right-click context menu in the lists. Destructive actions go through a confirmation dialog. There is no generic create or YAML-edit capability.
+
+A toast in the bottom-right corner confirms each action. Cordon / Uncordon, Scale and CronJob Suspend / Resume offer **Undo** in that toast for 10 seconds.
+
+### Bulk actions
+
+Select several rows and a bar above the table offers actions for all of them: tick their checkboxes (Shift-click one to extend a range), Cmd/Ctrl-click a row to toggle it, or press <kbd>⌘A</kbd> / <kbd>Ctrl+A</kbd> for all.
+
+| Screen | Bulk actions |
+|--------|--------------|
+| Pods | Tail logs, Evict, Delete |
+| Deployments | Restart, Delete |
+| Nodes | Cordon, Uncordon, Drain |
+| Other kinds except Namespaces, Services and Events, custom resources included | Delete |
+
+Every bulk action except Tail logs asks for confirmation, can be stopped while it runs, lists what failed, and keeps the failed rows selected so you can retry. **Tail logs** streams the selected pods into one merged, colour-coded tab (up to 10 namespaces and 40 container streams at once); a single pod opens its own log tab.
 
 ### Pod shell (terminal)
 
@@ -139,19 +161,28 @@ Forward a local port to a pod or a service — **Port forward** in a pod's or se
 
 ### Logs
 
-Pod and application logs share a resizable **bottom drawer**, toggled with <kbd>⌘J</kbd> / <kbd>Ctrl+J</kbd>:
+Pod and application logs share a resizable **bottom drawer**, toggled with <kbd>⌘J</kbd> / <kbd>Ctrl+J</kbd>. Settings → Appearance → **Log panel beside sidebar** opens it to the right of a full-height sidebar instead of across the whole window (off by default).
 
-- One tab per streamed pod/container, plus a persistent **Application logs** tab for the app's own diagnostics
-- Per-tab **text filter** with the matching substring highlighted in the lines
-- Auto-follows the tail as new lines arrive; selectable, copyable text (drag to select, ⌘/Ctrl+C, or copy the visible lines)
+- One tab per streamed pod/container; Jobs stream their pods' logs too (**Logs** in a Job's header, **View logs** in its row menu). The app's own log opens as an **Application logs** tab from Settings → Diagnostics
+- Per-tab **filter** with the matches highlighted: plain text or a regular expression (`.*`), case-sensitive on request (`Aa`)
+- In a pod tab, **Follow** keeps the newest line in view, **Wrap** wraps long lines, **Timestamps** prefixes each line with its Kubernetes timestamp, **Prev** shows the previous (crashed) container's log, **Since** limits the history (5m to 24h), and a container picker switches between a pod's containers
+- Selectable, copyable text (drag to select, ⌘/Ctrl+C), plus buttons to copy the visible lines or save them to a file
+- A pod tab keeps the newest 5,000 lines (a namespace or multi-pod tail 20,000) and says how many older lines it dropped
 - Logs for terminated pods (Succeeded/Failed) are read once as history instead of opening a live stream
+- Hide the drawer (**Hide log drawer**) and its tabs stay open (a title-bar chip counts them; click it or press <kbd>⌘J</kbd> to bring them back). **Close all (N)** closes every tab — except Port forwards while a forward runs — and offers **Undo** for 10 seconds (it asks first while a log capture is still running)
+
+**Namespace tail.** **Tail all pods…** in a namespace's row menu (or `Tail logs: <namespace>` in the palette) streams a stern-style merged tail of the namespace: one colour per workload, new and restarted pods attach on their own, and up to 40 container streams run at once. One tail runs per cluster tab. To tail exactly the pods you choose, select them on the Pods screen and use **Tail logs** (see [Bulk actions](#bulk-actions)); a crash-looping container then also shows the output of its last crashed run.
+
+**Log capture.** **Capture logs…** in a namespace's row menu (or `Capture logs: <namespace>` in the palette) saves the logs of every container in the namespace — init, main and ephemeral, optionally with the previous runs of restarted ones — for a time window you pick. It writes a folder (`<namespace>-logs-<date>-<time>/<pod>/<container>.log` plus `capture-summary.txt`), in your Downloads folder by default. Cancelling keeps what was already saved.
 
 ### Filtering & search
 
-- **Status filter** — multi-select chip on the Pods, Nodes, and generic resource lists
-- **Label** and **annotation** selector chips (`key=value`, comma-separated) shared across screens
+- **Status filter** — multi-select menu (with All / None) on the Pods, Nodes, and generic resource lists
+- **Labels** and **Annotations** pickers list the `key = value` pairs in view with their counts — search them and click one to filter — or take comma-separated `key=value` pairs typed by hand; the selection is shared across screens
 - Click a label/annotation chip in a detail panel to toggle it into the filter
-- Per-screen text search across the relevant fields, plus a single **Clear** chip when any filter is active
+- Every active filter shows as a removable pill above the table (Nodes add **Under pressure**, Deployments **Degraded only**), and a single **Clear** chip resets them all
+- Per-screen text search across the relevant fields; <kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd> focuses it
+- The Pods screen opens with a summary strip (pods, failing, pending, CPU, memory); click **failing** or **pending** to show only those pods
 
 ### Startup prerequisites check
 
@@ -159,20 +190,25 @@ On launch the application verifies that the required tools are available before 
 
 - **Kubeconfig** — checks that `~/.kube/config` (or `$KUBECONFIG`) exists and is readable
 - **Cluster contexts** — ensures at least one context is defined
-- **Cloud CLI tools** — checks for `aws`, `gcloud`, or `kubelogin`/`az` only when the kubeconfig contains EKS, GKE, or AKS contexts respectively
+- **Cloud CLI tools** — checks for `aws`, `gcloud` (with `gke-gcloud-auth-plugin`), or `kubelogin`/`az` only when the kubeconfig contains EKS, GKE, or AKS contexts respectively
 
-CLIs are re-scanned on each check, so a retry after installing a missing tool succeeds without restarting. If all checks pass the modal is dismissed automatically. If any required check fails, you can quit, ignore the warning and continue, or run **EKS cluster discovery** to populate the kubeconfig from AWS without leaving the app. When no kubeconfig contexts exist at all, the app shows a dedicated first-run welcome screen.
+CLIs are re-scanned on each check, so a retry after installing a missing tool succeeds without restarting. If all checks pass the modal is dismissed automatically. If any required check fails, you can quit, ignore the warning and continue, or run **cluster discovery** (EKS or GKE) to populate the kubeconfig without leaving the app. When no kubeconfig contexts exist at all, the app shows a dedicated first-run welcome screen.
 
-### EKS cluster discovery
+### Cluster discovery (EKS and GKE)
 
-A built-in wizard finds EKS clusters in your AWS account and adds them to your kubeconfig. Available from:
+Built-in wizards find EKS and GKE clusters and add them to your kubeconfig. They are available from:
 
 - The system check / welcome screen when no kubeconfig is found
-- The **Settings** dialog → Cluster discovery → AWS EKS at any time
+- The cluster selector
+- The **Settings** dialog → Cluster discovery → AWS EKS or Google Cloud GKE, at any time
 
-The flow lets you pick one or more AWS profiles, choose a region scope (default region only, common regions, or all enabled regions), and select which clusters to import; results are grouped by profile. Each import calls `aws eks update-kubeconfig --profile <name>`, which embeds `AWS_PROFILE` into the kubeconfig user exec block — so the profile binding travels with the cluster entry and `aws eks get-token` always uses the right profile at connection time. The bound profile is shown in the cluster selector for every EKS context.
+**EKS.** Pick one or more AWS profiles, choose a region scope (default region only, common regions, or all enabled regions), and select which clusters to import; results are grouped by profile. Each import calls `aws eks update-kubeconfig --profile <name>`, which embeds `AWS_PROFILE` into the kubeconfig user exec block — so the profile binding travels with the cluster entry and `aws eks get-token` always uses the right profile at connection time. The bound profile is shown in the cluster selector for every EKS context. Requires the AWS CLI v2 on `PATH`.
 
-If `~/.kube/config` does not exist, the directory and file are created on demand; an existing config is backed up before clusters are imported. The feature requires the AWS CLI v2 to be installed and on `PATH`.
+**GKE.** Using your active `gcloud` account, choose GCP projects, let the wizard scan them, and pick the clusters to import. Each import runs `gcloud container clusters get-credentials <name> --location=<location> --project=<project>`. Requires the Google Cloud SDK with `gke-gcloud-auth-plugin`.
+
+**Enter by name.** For an account that can read a cluster but cannot list clusters or projects, the **Enter by name** tab on the first step imports one cluster directly: AWS profile, region and cluster name for EKS; project ID, location and cluster name for GKE — or paste an `update-kubeconfig` / `get-credentials` command, a cluster ARN or a context name.
+
+If `~/.kube/config` does not exist, the directory and file are created on demand; an existing config is backed up before clusters are imported.
 
 ### Settings
 
@@ -183,14 +219,23 @@ Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> 
 - **Palette** — the style's own colours, High contrast (AAA text, thicker outlines and focus ring), Monochrome, or an editor palette: Solarized, Gruvbox, Catppuccin, Nord or Dracula
 - **Colour-blind-safe status colours** — blue / gold / crimson status colours for every palette, tuned against protanopia, deuteranopia and tritanopia simulations
 - **CRT scanlines** — optional faint scanlines and darkened corners in the Retro style (off by default; does not cover dialogs, menus, tooltips or the terminal)
+- **CRT refresh bar** — with scanlines on, a bright line that sweeps down the window: Off (default), Once after each CRT power-on, or Rolling every 8 s (paused while the window is in the background unless you keep it rolling)
+- **UI zoom** — 80 %, 100 %, 125 % or 150 % (also <kbd>⌘+</kbd> / <kbd>⌘-</kbd> / <kbd>⌘0</kbd>)
 - **Density** — Comfortable or Compact spacing across the app (rows, headers, panels, palette); text size is unchanged
+- **Log panel beside sidebar** — a widescreen layout: the sidebar keeps its full height and the log panel opens to its right (off by default)
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
-- **Tab behaviour** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and choose whether the tab strip shows always or only with multiple tabs
-- **Integrations → MCP server** — enable/disable the embedded MCP server, set its port (default 3001), restrict it to localhost, require authentication, and copy the generated bearer token
-- **Cluster discovery** — AWS EKS wizard
+- **Default namespace** — the namespace a cluster opens in when it connects fresh
+- **Tab behavior** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; choose whether the tab strip shows always or only with multiple tabs; and **Restore last session** (on by default) reopens the windows, clusters, namespaces and screens you had when you last quit
+- **Live data → Topology auto-refresh** — how often the topology graph re-fetches (lists and detail panels update live)
+- **Keyboard shortcuts** — the shortcut sheet, also on <kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd>
+- **Privacy → Secret values** — mask Secret data in the YAML view (the default) or show it in clear
+- **Integrations → MCP Server** — enable/disable the embedded MCP server, set its port (default 3001), restrict it to localhost, require authentication, and copy the generated bearer token
+- **Cluster discovery** — AWS EKS and Google Cloud GKE wizards
 - **Demo cluster simulator** — pause/resume, adjust node and pod count ranges, reset to baseline, or stop the simulator
-- **Diagnostics** — open the application log in the bottom drawer
+- **Diagnostics** — open the application log in the bottom drawer, and **Preferences storage**, which says whether settings were read and saved correctly
 - **About** — version and app details
+
+A search box at the top finds any setting by name or keyword (e.g. "zoom", "token", "scanlines") and jumps to it.
 
 ### MCP server
 
@@ -208,7 +253,12 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 - Bundled **Inter**, **JetBrains Mono**, **Sixtyfour** (retro headings) and **Departure Mono** (retro text) fonts for consistent rendering across platforms
 - Status badges paired with a glyph so state is legible without relying on color; optional colour-blind-safe status colours
 - Status is never colour alone: glyphs, filled vs hollow dots, dashed rings and usage-tier icons
-- Collapsible sidebar — toggle from the title bar; state is persisted across sessions
+- **Sidebar** — a search box filters it (aliases such as `pv`, `pvc` and `csr` work, and CRDs match on kind, plural, group or short name); right-click a row to add it to **Favourites**; less common kinds sit under **More**; badges count failing pods, NotReady nodes and recent warning events, and clicking one opens the pre-filtered list
+- Collapsible sidebar — toggle from the title bar; collapsed, it becomes an icon rail where More and Custom Resources open as menus; state is persisted across sessions
+- **Back / Forward** in each cluster tab's header (<kbd>⌘[</kbd> / <kbd>⌘]</kbd>, <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd>) step through the screens and detail panels you visited
+- **Session restore** (on by default) — the next launch reopens your windows with their size and position, cluster tabs, namespaces and screens
+- Toasts confirm actions, with **Undo** where it applies
+- **UI zoom** (80–150 %) and a keyboard shortcut sheet (<kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd>)
 - macOS window tiling — supports half-screen and other Sonoma tiling arrangements
 - Resizable detail panels and a resizable logs drawer; widths/heights persist across tab switches
 - Cross-resource navigation (e.g. node → pod) and themed right-click context menus
@@ -247,8 +297,16 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 | Shortcut | Action |
 |----------|--------|
 | <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> | Open the command palette |
-| <kbd>⌘J</kbd> / <kbd>Ctrl+J</kbd> | Toggle the logs drawer |
+| <kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd> | Show the shortcut sheet (it also lists the shortcuts for tables, the palette, YAML search and dialogs) |
 | <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> | Open Settings |
+| <kbd>⌘J</kbd> / <kbd>Ctrl+J</kbd> | Toggle the logs drawer |
+| <kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd> | Focus the list filter |
+| <kbd>⌘[</kbd> / <kbd>Ctrl+[</kbd> | Back |
+| <kbd>⌘]</kbd> / <kbd>Ctrl+]</kbd> | Forward |
+| <kbd>⌘+</kbd> / <kbd>⌘-</kbd> (<kbd>Ctrl++</kbd> / <kbd>Ctrl+-</kbd>) | Zoom in / out |
+| <kbd>⌘0</kbd> / <kbd>Ctrl+0</kbd> | Reset zoom |
+| <kbd>Esc</kbd> | Close the detail panel |
+| <kbd>⌘A</kbd> / <kbd>Ctrl+A</kbd> | Select all rows in a table with bulk actions |
 
 ## Running
 
@@ -256,7 +314,7 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 ./gradlew :composeApp:run
 ```
 
-The application opens a 1440×900 window, runs a prerequisites check, and presents the cluster selector.
+The application opens a 1440×960 window on first launch (later launches restore the last window size and position while **Restore last session** is on), runs a prerequisites check, and presents the cluster selector.
 
 ## Building distributable packages
 
@@ -291,7 +349,7 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Logging | Logback Classic 1.6.3 (via SLF4J) |
 | Code formatting | Spotless 8.10.2 + ktlint |
 | Build tool | Gradle 9.7.1, Temurin 21 (daemon JVM criteria) |
-| Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
+| Screenshot generation | `./gradlew generateScreenshots` — drives the live app against the demo cluster via `WorkspaceManager` and captures each window's own Skia frame in-process (no Screen Recording permission); `scripts/site_images.py` then crops and converts the captures for the site and this README |
 
 ## CI
 
