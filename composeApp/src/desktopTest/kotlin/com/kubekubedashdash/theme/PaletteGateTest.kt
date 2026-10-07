@@ -79,6 +79,10 @@ class PaletteGateTest {
         listOf("primary" to c.primary, "accent" to c.accent).forEach { (fgName, fg) ->
             backgroundSurface.forEach { (bgName, bg) -> rule("G6", fgName, fg, bgName, bg, t) }
         }
+        // ...and accent on the rail: Retro's sidebar section titles are accent text
+        // (Sidebar.kt SidebarSection), and Retro combines with every palette. Not on hover:
+        // a hovered title turns textPrimary, which G1 already holds there.
+        rule("G6", "accent", c.accent, "sidebarBg", c.sidebarBg, t)
         // G7: the on-colours on their fills.
         rule("G7", "onPrimary", c.onPrimary, "primary", c.primary, t)
         rule("G7", "onError", c.onError, "error", c.error, t)
