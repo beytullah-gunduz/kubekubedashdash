@@ -213,6 +213,20 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 - Resizable detail panels and a resizable logs drawer; widths/heights persist across tab switches
 - Cross-resource navigation (e.g. node → pod) and themed right-click context menus
 
+## Installing
+
+Installers for macOS (Apple Silicon), Windows and Linux (amd64 `.deb`) are on the [latest release](https://github.com/beytullah-gunduz/kubekubedashdash/releases/latest).
+
+On an Apple Silicon Mac you can install it with [Homebrew](https://brew.sh) instead, and `brew upgrade` then keeps it up to date:
+
+```bash
+brew install --cask beytullah-gunduz/tap/kubekubedashdash
+```
+
+Keep the `beytullah-gunduz/tap/` prefix: Homebrew trusts a third-party cask only when you name it in full. If you installed the DMG before, delete `/Applications/KubeKubeDashDash.app` first, because Homebrew won't replace it. Your settings are kept.
+
+The app isn't notarized yet, so macOS blocks its first launch, and again after each Homebrew upgrade. Open it once, then click **Open Anyway** in System Settings → Privacy & Security.
+
 ## Prerequisites
 
 - **JDK 17** or later to start the Gradle wrapper (only for building from source; the packaged DMG/MSI/DEB bundles its own JVM). The build itself runs on **Temurin 21**, pinned in `gradle/gradle-daemon-jvm.properties`: Gradle uses an installed Temurin 21, or downloads one on macOS and Windows. On Linux, install Temurin 21 yourself.
@@ -281,7 +295,7 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 
 ## CI
 
-Every push and PR to `main` checks formatting, compiles, runs the desktop test suite and verifies the release build on Linux. Pushing a `v*` tag runs the same checks on macOS, Linux and Windows, builds the installers (DMG, DEB, MSI) and creates a GitHub Release with them.
+Every push and PR to `main` checks formatting, compiles, runs the desktop test suite and verifies the release build on Linux. Pushing a `v*` tag runs the same checks on macOS, Linux and Windows, builds the installers (DMG, DEB, MSI) and creates a GitHub Release with them. For a stable tag it then points the Homebrew cask at the new DMG (see [packaging/homebrew](packaging/homebrew/README.md)).
 
 The installers ship ProGuard-shrunk jars, which no unit test runs. `verifyReleaseBuild` checks them: a bytecode scan fails on any `invokespecial` of an interface method through an indirect superinterface (the JVM verifier rejects those at class load), and a headless canary boots the shrunk jars — logging, JSONPath, JediTerm, the demo cluster and a full MCP session — once on the full JDK and once limited to the packaged runtime's modules. It runs in a scratch sandbox and never reads your kubeconfig, preferences or logs:
 
