@@ -36,13 +36,22 @@ data class LiveResource<T>(val value: T, val removed: Boolean)
  * namespace selection. That rules out three false positives: the pre-load
  * window (state not yet `Success`), a transient `Loading` blip, and a namespace
  * switch that merely moves the resource out of the currently-watched list.
+ * [listUpdatedSinceScopeChange] is false while the list in hand is still the one from before
+ * [inScope] last changed: a namespace joining the selection flips [inScope] at once, while
+ * the list re-filters on its own flow one emission later, so absence proves nothing yet.
+ * Limitation: a re-filter whose result equals the list in hand emits nothing
+ * (ResourceState.Success is a data class and the list flow is
+ * distinctUntilChanged), so a resource deleted while out of scope, in a
+ * namespace with no other objects, is reported removed only by the next list
+ * change. Preferred over the false "deleted" banner this guard removes.
  */
 fun isResourceRemoved(
     state: ResourceState<*>,
     presentNow: Boolean,
     everSeenLive: Boolean,
     inScope: Boolean,
-): Boolean = inScope && everSeenLive && !presentNow && state is ResourceState.Success
+    listUpdatedSinceScopeChange: Boolean = true,
+): Boolean = inScope && everSeenLive && !presentNow && state is ResourceState.Success && listUpdatedSinceScopeChange
 
 /**
  * Re-resolve a detail panel's resource against the live list [state] by [uid] so
@@ -66,6 +75,8 @@ fun <T> rememberLiveResource(
     val live = (state as? ResourceState.Success)?.data?.firstOrNull { uidOf(it) == uid }
     var lastKnown by remember(uid) { mutableStateOf(initial) }
     var everSeenLive by remember(uid) { mutableStateOf(false) }
+    // The list in hand when inScope last changed; see isResourceRemoved.
+    val stateAtScopeChange = remember(uid, inScope) { state }
     LaunchedEffect(live, inScope) {
         if (inScope && live != null) {
             lastKnown = live
@@ -74,7 +85,7 @@ fun <T> rememberLiveResource(
     }
     return LiveResource(
         value = if (inScope) (live ?: lastKnown) else lastKnown,
-        removed = isResourceRemoved(state, live != null, everSeenLive, inScope),
+        removed = isResourceRemoved(state, live != null, everSeenLive, inScope, listUpdatedSinceScopeChange = state !== stateAtScopeChange),
     )
 }
 

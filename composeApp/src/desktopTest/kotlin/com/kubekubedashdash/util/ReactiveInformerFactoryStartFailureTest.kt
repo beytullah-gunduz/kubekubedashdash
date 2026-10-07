@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -102,7 +103,7 @@ class ReactiveInformerFactoryStartFailureTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var manager: KubeConnectionManager
-    private lateinit var selectedNamespace: MutableStateFlow<String?>
+    private lateinit var selectedNamespace: MutableStateFlow<NamespaceScope>
     private lateinit var factory: ReactiveInformerFactory
     private val informers = CopyOnWriteArrayList<FakeInformer>()
 
@@ -116,7 +117,7 @@ class ReactiveInformerFactoryStartFailureTest {
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         manager = KubeConnectionManager()
         manager.connectWithClient(unusedClient(), "cluster-a").getOrThrow()
-        selectedNamespace = MutableStateFlow(null)
+        selectedNamespace = MutableStateFlow<NamespaceScope>(NamespaceScope.All)
         factory = ReactiveInformerFactory(scope, manager, selectedNamespace)
     }
 

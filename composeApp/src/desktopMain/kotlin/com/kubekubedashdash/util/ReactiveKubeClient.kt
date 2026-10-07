@@ -6,6 +6,7 @@ import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodInfo
@@ -117,15 +118,25 @@ class ReactiveKubeClient(
 
     // ── Namespace selector ──────────────────────────────────────────────────────
 
+    private val _namespaceScope = MutableStateFlow<NamespaceScope>(NamespaceScope.All)
+
+    /** The namespaces this cluster's namespaced lists, pod usage, events and topology follow. */
+    val namespaceScope: StateFlow<NamespaceScope> = _namespaceScope.asStateFlow()
+
+    // Transitional single-namespace view for readers that still take a String?:
+    // the one server-side namespace, null for all namespaces and for two or more.
     private val _selectedNamespace = MutableStateFlow<String?>(null)
     val selectedNamespace: StateFlow<String?> = _selectedNamespace.asStateFlow()
 
-    fun setSelectedNamespace(namespace: String?) {
-        log.info("Namespace selection changed to: {}", namespace ?: "<all namespaces>")
-        _selectedNamespace.value = namespace
+    fun setNamespaceScope(selection: NamespaceScope) {
+        log.info("Namespace selection changed to: {}", selection)
+        _namespaceScope.value = selection
+        _selectedNamespace.value = selection.serverNamespace
     }
 
-    private val informers = ReactiveInformerFactory(scope, connectionManager, selectedNamespace)
+    fun setSelectedNamespace(namespace: String?) = setNamespaceScope(namespace?.let { NamespaceScope.single(it) } ?: NamespaceScope.All)
+
+    private val informers = ReactiveInformerFactory(scope, connectionManager, namespaceScope)
 
     fun reportSuccess() = connectionManager.reportSuccess()
     fun reportError(message: String) = connectionManager.reportError(message)
@@ -1291,7 +1302,8 @@ class ReactiveKubeClient(
 
     val resourceUsage: StateFlow<ResourceState<ResourceUsageSummary>> = informers.namespacedPolling(
         intervalMs = 10_000,
-        fetch = { ns ->
+        fetch = { selection ->
+            val ns = selection.serverNamespace
             val podMetricItems = try {
                 if (ns != null) {
                     k8s.top().pods().inNamespace(ns).metrics().items ?: emptyList()
@@ -1305,6 +1317,10 @@ class ReactiveKubeClient(
             var memUsed = 0L
             val podUsages = mutableMapOf<String, PodUsage>()
             for (pm in podMetricItems) {
+                val podNamespace = pm.metadata?.namespace ?: ns
+                // Two or more selected namespaces sample every namespace (see
+                // NamespaceScope.serverNamespace); keep only the selected ones.
+                if (!selection.contains(podNamespace)) continue
                 val containers = (pm.containers ?: emptyList()).map { c ->
                     ContainerUsage(
                         name = c.name.orEmpty(),
@@ -1317,7 +1333,6 @@ class ReactiveKubeClient(
                 cpuUsed += podCpu
                 memUsed += podMem
                 val podName = pm.metadata?.name
-                val podNamespace = pm.metadata?.namespace ?: ns
                 if (podName != null && podNamespace != null) {
                     podUsages[podUsageKey(podNamespace, podName)] = PodUsage(podCpu, podMem, containers)
                 }

@@ -53,6 +53,18 @@ class PodsScreenViewModel(
     private val staleTracker = StaleTracker(viewModelScope, { it.uid }, ::ttlFor, now)
     val stalePods: StateFlow<Map<String, PodInfo>> get() = staleTracker.stale
 
+    init {
+        // A namespace dropped from the selection takes its lingering rows with
+        // it: they left the list because the scope moved, not because they were
+        // deleted. processPodUpdate drops such departures as they happen; this
+        // clears the ones already lingering when the selection changes.
+        viewModelScope.launch {
+            reactiveClient.namespaceScope.collect { selection ->
+                staleTracker.retain { selection.contains(it.namespace) }
+            }
+        }
+    }
+
     // null = "no explicit allowlist" (= show every status). Non-null Set is
     // the explicit allowlist. Survives screen navigation (session-scoped VM).
     private val _statusFilter = MutableStateFlow<Set<String>?>(null)
@@ -108,7 +120,8 @@ class PodsScreenViewModel(
 
     private fun processPodUpdate(current: List<PodInfo>) {
         val currentByUid = current.associateBy { it.uid }
-        val updatedStale = staleTracker.onSnapshot(currentByUid)
+        val selection = reactiveClient.namespaceScope.value
+        val updatedStale = staleTracker.onSnapshot(currentByUid) { selection.contains(it.namespace) }
 
         val uid = pendingSelectUid
         if (uid != null) {

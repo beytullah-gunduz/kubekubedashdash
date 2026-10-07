@@ -59,12 +59,19 @@ internal class StaleTracker<T>(
 
     /**
      * Diff a fresh snapshot in; returns the updated [StaleEntry] map so the caller can resolve a
-     * just-vanished selection against it. Commits new previous + stale state.
+     * just-vanished selection against it. Commits new previous + stale state. Entries failing
+     * [keep] are dropped instead of lingering: a row that left because the namespace selection
+     * stopped covering it was not deleted.
      */
-    fun onSnapshot(currentByKey: Map<String, T>): Map<String, StaleEntry<T>> {
-        val updated = reduceStale(_stale.value, currentByKey, previousByKey, now(), ttlFor)
+    fun onSnapshot(currentByKey: Map<String, T>, keep: (T) -> Boolean = { true }): Map<String, StaleEntry<T>> {
+        val updated = reduceStale(_stale.value, currentByKey, previousByKey, now(), ttlFor).filterValues { keep(it.info) }
         previousByKey = currentByKey
         _stale.value = updated
         return updated
+    }
+
+    /** Drops the lingering entries failing [keep] now, without waiting for the next snapshot. */
+    fun retain(keep: (T) -> Boolean) {
+        _stale.update { m -> m.filterValues { keep(it.info) } }
     }
 }
