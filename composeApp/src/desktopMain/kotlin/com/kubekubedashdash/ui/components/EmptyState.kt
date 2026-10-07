@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -71,7 +72,7 @@ fun EmptyState(
         )
         if (namespace != null && onSwitchNamespace != null) {
             Spacer(Modifier.height(12.dp))
-            TextButton(onClick = onSwitchNamespace) {
+            TextButton(onClick = onSwitchNamespace, shape = kdRoundShape) {
                 Text("Switch namespace")
             }
         }

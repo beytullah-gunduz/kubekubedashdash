@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
@@ -83,7 +84,7 @@ fun BulkVerbButton(
         tooltip = { ActionTooltip(tooltipTitle, description) },
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
-        TextButton(onClick = onClick) {
+        TextButton(onClick = onClick, shape = kdRoundShape) {
             Icon(painterResource(icon), null, Modifier.size(16.dp), tint = tint)
             Spacer(Modifier.width(4.dp))
             Text(label, color = tint)

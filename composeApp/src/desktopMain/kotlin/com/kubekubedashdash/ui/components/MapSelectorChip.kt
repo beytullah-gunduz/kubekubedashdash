@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -46,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
@@ -195,7 +195,7 @@ fun MapSelectorChip(
 
     Box(modifier = modifier) {
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = 16.dp.kdCorner,
             color = surfaceColor,
             modifier = Modifier
                 .clickable {
@@ -203,7 +203,7 @@ fun MapSelectorChip(
                     expanded = !expanded
                 }
                 .pointerHoverIcon(PointerIcon.Hand)
-                .border(1.5.dp, borderColor, RoundedCornerShape(16.dp)),
+                .border(1.5.dp, borderColor, 16.dp.kdCorner),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp.orCompact(3.dp)),
@@ -423,7 +423,7 @@ fun ClearFiltersChip(
     compact: Boolean = false,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = 16.dp.kdCorner,
         color = KdSurfaceVariant,
         modifier = modifier
             .clickable(onClick = onClick)

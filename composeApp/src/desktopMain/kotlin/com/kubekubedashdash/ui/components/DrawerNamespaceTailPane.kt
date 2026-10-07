@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -50,8 +49,10 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.expand_more_filled
@@ -342,6 +343,7 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, viewState: LogPaneViewStat
                     },
                     modifier = Modifier.size(28.dp),
                     enabled = visibleLines.isNotEmpty(),
+                    shape = kdRoundShape,
                 ) {
                     Icon(
                         painterResource(Res.drawable.save_filled),
@@ -361,6 +363,7 @@ fun DrawerNamespaceTailPane(tab: ActiveNamespaceTail, viewState: LogPaneViewStat
                     },
                     modifier = Modifier.size(28.dp),
                     enabled = visibleLines.isNotEmpty(),
+                    shape = kdRoundShape,
                 ) {
                     Icon(
                         painterResource(Res.drawable.content_copy_filled),
@@ -507,8 +510,8 @@ private fun PodMuteMenu(
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .border(width = kdOutlineWidth, color = KdBorder, shape = RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
+                .border(width = kdOutlineWidth, color = KdBorder, shape = 6.dp.kdCorner)
                 .clickable(enabled = pods.isNotEmpty()) { expanded = true }
                 .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,

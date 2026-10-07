@@ -1,6 +1,10 @@
 package com.kubekubedashdash.ui.components
 
-/** How close a sampled usage is to its ceiling (a container's limit, a node's allocatable). */
+/**
+ * How close a usage is to its ceiling: a node's allocatable, a container's limit, a cluster's
+ * capacity or a quota's hard limit. The one threshold rule for every usage gauge, bar, quota row
+ * and table column, so a colour means the same thing on every screen.
+ */
 enum class UsageLevel { NORMAL, WARNING, CRITICAL }
 
 /** From this fraction of the ceiling a usage reads as [UsageLevel.WARNING]. */

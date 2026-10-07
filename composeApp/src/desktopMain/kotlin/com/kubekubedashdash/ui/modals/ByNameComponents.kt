@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +34,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
@@ -175,7 +175,7 @@ internal fun ByNameTextField(
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { onValueChange(suggestion) }
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                         .testTag(ByNameTags.suggestion(suggestion)),
@@ -196,7 +196,7 @@ internal fun ByNameWarningBanner(text: String, action: Pair<String, () -> Unit>?
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(KdWarning.copy(alpha = 0.12f))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -216,7 +216,7 @@ internal fun ByNameWarningBanner(text: String, action: Pair<String, () -> Unit>?
                 color = KdPrimary,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(4.dp.kdCorner)
                     .clickable(onClick = action.second)
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )

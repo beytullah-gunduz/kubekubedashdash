@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,7 +48,9 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.save_filled
@@ -81,7 +82,7 @@ internal fun AllClustersPresetMenu(
         // Trigger button — matches ViewModeToggle chrome
         Row(
             modifier = Modifier
-                .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp))
+                .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner)
                 .clickable { expanded = !expanded }
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -172,8 +173,8 @@ internal fun AllClustersPresetMenu(
                     Column(
                         modifier = Modifier
                             .widthIn(min = 220.dp, max = 300.dp)
-                            .background(KdSurface, RoundedCornerShape(6.dp))
-                            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(6.dp))
+                            .background(KdSurface, 6.dp.kdCorner)
+                            .border(kdOutlineWidth, KdBorder, 6.dp.kdCorner)
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -243,6 +244,7 @@ internal fun AllClustersPresetMenu(
                                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                 modifier = Modifier.height(28.dp),
+                                shape = kdRoundShape,
                             ) {
                                 Text(
                                     "Save",
@@ -256,6 +258,7 @@ internal fun AllClustersPresetMenu(
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 modifier = Modifier.height(28.dp),
+                                shape = kdRoundShape,
                             ) {
                                 Text(
                                     "Cancel",

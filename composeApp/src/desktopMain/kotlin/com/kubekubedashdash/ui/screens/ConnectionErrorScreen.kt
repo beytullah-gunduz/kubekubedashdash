@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 
 /**
  * Full-pane connection-failure state. [retryCountdown] > 0 means an automatic
@@ -54,8 +56,8 @@ fun ConnectionErrorScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = onRetryNow) { Text("Retry now") }
-                OutlinedButton(onClick = onSwitchCluster) { Text("Switch cluster…") }
+                Button(onClick = onRetryNow, shape = kdRoundShape) { Text("Retry now") }
+                OutlinedButton(onClick = onSwitchCluster, shape = kdRoundShape) { Text("Switch cluster…") }
             }
             if (retryCountdown > 0) {
                 Spacer(Modifier.height(16.dp))
@@ -64,6 +66,7 @@ fun ConnectionErrorScreen(
                         modifier = Modifier.size(16.dp),
                         color = KdPrimary,
                         strokeWidth = 2.dp,
+                        strokeCap = kdStrokeCap,
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(

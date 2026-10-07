@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,6 +37,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
@@ -289,7 +289,7 @@ private fun issueBadgeFor(count: Int?, label: String, color: Color): (@Composabl
 @Composable
 private fun IssueBadge(count: Int, label: String, color: Color) {
     Surface(
-        shape = RoundedCornerShape(4.dp),
+        shape = 4.dp.kdCorner,
         color = color.copy(alpha = 0.12f),
     ) {
         Text(
@@ -313,7 +313,7 @@ private fun IssueBadge(count: Int, label: String, color: Color) {
 private fun NamespaceScopeNote(namespace: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Surface(
-            shape = RoundedCornerShape(4.dp),
+            shape = 4.dp.kdCorner,
             color = KdInfo.copy(alpha = 0.12f),
         ) {
             Text(

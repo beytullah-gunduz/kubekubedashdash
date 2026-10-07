@@ -49,6 +49,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.close_filled
@@ -187,11 +188,11 @@ private fun ToastCard(toast: Toast, onUndo: () -> Unit, onDismiss: () -> Unit) {
             }
             if (toast.undo != null) {
                 Spacer(Modifier.width(4.dp))
-                TextButton(onClick = onUndo, enabled = !toast.undoInFlight) {
+                TextButton(onClick = onUndo, enabled = !toast.undoInFlight, shape = kdRoundShape) {
                     Text(if (toast.undoInFlight) "Undoing…" else "Undo")
                 }
             }
-            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
                 Icon(
                     painter = painterResource(Res.drawable.close_filled),
                     contentDescription = "Dismiss",

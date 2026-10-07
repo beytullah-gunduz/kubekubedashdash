@@ -62,8 +62,8 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
@@ -211,7 +211,7 @@ fun EventDetailScreen(
                     }
                 }
                 LocalDetailHostControls.current?.let { controls ->
-                    IconButton(onClick = controls.onToggleExpand, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = controls.onToggleExpand, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
                         Icon(
                             painterResource(Res.drawable.fit_screen_filled),
                             if (controls.expanded) "Restore panel" else "Expand",
@@ -221,7 +221,7 @@ fun EventDetailScreen(
                     }
                 }
                 if (onClose != null) {
-                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
                         Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
                     }
                 }
@@ -339,7 +339,7 @@ private fun EventOverviewTab(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.size(8.dp).clip(kdDotShape).background(KdPrimary))
+                        Box(Modifier.size(8.dp).clip(kdRoundShape).background(KdPrimary))
                         Spacer(Modifier.width(10.dp))
                         Text(
                             event.node,
@@ -592,7 +592,7 @@ private fun NodeEventItem(event: EventInfo) {
                 Modifier
                     .padding(top = 4.dp)
                     .size(8.dp)
-                    .clip(kdDotShape)
+                    .clip(kdRoundShape)
                     .background(evTypeColor),
             )
             Spacer(Modifier.width(10.dp))

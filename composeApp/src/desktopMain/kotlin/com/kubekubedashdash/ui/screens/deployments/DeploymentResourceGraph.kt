@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,7 +46,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -62,8 +59,13 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdGraphEdge
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.drawKdDot
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdCorners
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
@@ -169,7 +171,7 @@ private fun ResourceGraphContent(graph: ResourceGraph, namespace: String) {
             ) {
                 graph.nodes.map { it.kind }.distinct().sortedBy { DeploymentResourceGraphViewModel.kindLayerOrder[it] ?: 99 }.forEach { kind ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(kindColor(kind)))
+                        Box(Modifier.size(8.dp).clip(kdRoundShape).background(kindColor(kind)))
                         Spacer(Modifier.width(4.dp))
                         Text(kind, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                     }
@@ -247,7 +249,7 @@ private fun ResourceGraphContent(graph: ResourceGraph, namespace: String) {
                         drawPath(
                             path,
                             color = edgeColor.copy(alpha = edgeColor.alpha * 0.3f),
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                            style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                         )
 
                         if (!isDimmed) {
@@ -258,7 +260,7 @@ private fun ResourceGraphContent(graph: ResourceGraph, namespace: String) {
                                 color = edgeColor,
                                 style = Stroke(
                                     width = strokeWidth,
-                                    cap = StrokeCap.Round,
+                                    cap = kdStrokeCap,
                                     pathEffect = PathEffect.dashPathEffect(
                                         floatArrayOf(dashLen, gapLen),
                                         phase = dashPhase,
@@ -267,7 +269,7 @@ private fun ResourceGraphContent(graph: ResourceGraph, namespace: String) {
                             )
                         }
 
-                        drawCircle(
+                        drawKdDot(
                             color = edgeColor,
                             radius = if (isHighlighted) 4f else 3f,
                             center = Offset(endX, endY),
@@ -359,7 +361,7 @@ private fun GraphNodeCard(
         modifier = modifier
             .widthIn(min = 120.dp, max = 180.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         color = color.copy(alpha = if (selected) 0.15f else 0.08f),
         border = BorderStroke(borderWidth, color.copy(alpha = borderAlpha * alpha)),
     ) {
@@ -367,7 +369,7 @@ private fun GraphNodeCard(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
+            Box(Modifier.size(8.dp).clip(kdRoundShape).background((sColor ?: KdTextSecondary).copy(alpha = alpha)))
             Spacer(Modifier.width(8.dp))
             Column {
                 Text(
@@ -409,7 +411,7 @@ private fun GraphYamlPanel(
     Surface(
         modifier = modifier,
         color = kindCol.copy(alpha = 0.06f),
-        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+        shape = kdCorners(topStart = 8.dp, topEnd = 8.dp),
         border = BorderStroke(kdOutlineWidth, kindCol.copy(alpha = 0.2f)),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -417,7 +419,7 @@ private fun GraphYamlPanel(
                 modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(kindCol))
+                Box(Modifier.size(8.dp).clip(kdRoundShape).background(kindCol))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "${node.kind} / ${node.name}",
@@ -428,10 +430,10 @@ private fun GraphYamlPanel(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { yaml?.let { copyToClipboard(it) } }) {
+                IconButton(onClick = { yaml?.let { copyToClipboard(it) } }, shape = kdRoundShape) {
                     Icon(painterResource(Res.drawable.content_copy_filled), "Copy", Modifier.size(14.dp), tint = KdTextSecondary)
                 }
-                IconButton(onClick = onClose) {
+                IconButton(onClick = onClose, shape = kdRoundShape) {
                     Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(14.dp), tint = KdTextSecondary)
                 }
             }

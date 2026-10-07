@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +26,8 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.CLUSTER_OVERVIEW_RECENT_LIMIT
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.RecentSlice
 
@@ -42,7 +43,7 @@ internal fun <T> RecentResourceCard(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = 10.dp.kdCorner,
         color = KdSurface,
         border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = SolidColor(KdBorder)),
     ) {
@@ -67,6 +68,7 @@ internal fun <T> RecentResourceCard(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
                         color = KdPrimary,
+                        strokeCap = kdStrokeCap,
                     )
                 }
 

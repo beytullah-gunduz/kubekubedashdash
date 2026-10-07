@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.ui.crt.crtCardReveal
 
 /**
@@ -55,7 +56,7 @@ fun ConfirmActionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm, enabled = canConfirm) {
+            TextButton(onClick = onConfirm, enabled = canConfirm, shape = kdRoundShape) {
                 val labelColor = when {
                     destructive && canConfirm -> MaterialTheme.colorScheme.error
                     destructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
@@ -68,7 +69,7 @@ fun ConfirmActionDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !inFlight) {
+            TextButton(onClick = onDismiss, enabled = !inFlight, shape = kdRoundShape) {
                 Text("Cancel")
             }
         },

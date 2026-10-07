@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
@@ -66,7 +65,9 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_back_filled
@@ -261,7 +262,7 @@ private fun HistoryNavButton(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(22.dp)) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(22.dp), shape = kdRoundShape) {
         Icon(
             painter = painterResource(icon),
             contentDescription = contentDescription,
@@ -317,7 +318,7 @@ private fun CompactSearchField(
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp)) {
+                        IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(14.dp), shape = kdRoundShape) {
                             Icon(painterResource(Res.drawable.close_filled), "Clear search", Modifier.size(12.dp), tint = KdTextSecondary)
                         }
                     }
@@ -330,7 +331,7 @@ private fun CompactSearchField(
                         isError = false,
                         interactionSource = interactionSource,
                         colors = colors,
-                        shape = RoundedCornerShape(4.dp),
+                        shape = 4.dp.kdCorner,
                     )
                 },
             )
@@ -352,7 +353,7 @@ private fun CompactNamespaceSelector(
         OutlinedButton(
             onClick = { expanded = !expanded },
             modifier = Modifier.height(buttonHeight).width(NamespaceSelectorWidth),
-            shape = RoundedCornerShape(4.dp),
+            shape = 4.dp.kdCorner,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
             border = ButtonDefaults.outlinedButtonBorder(true).copy(
                 brush = SolidColor(KdBorder),
@@ -392,8 +393,8 @@ private fun CompactNamespaceSelector(
                     modifier = Modifier
                         .widthIn(min = 220.dp, max = 320.dp)
                         .height(menuHeight)
-                        .background(KdSurface, RoundedCornerShape(4.dp))
-                        .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp)),
+                        .background(KdSurface, 4.dp.kdCorner)
+                        .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner),
                 ) {
                     Column(
                         modifier = Modifier

@@ -27,8 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +66,8 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
@@ -123,7 +123,7 @@ fun PrerequisitesModal(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(8.dp.kdCorner)
                             .background(KdPrimary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -191,7 +191,7 @@ fun PrerequisitesModal(
                                 Spacer(Modifier.weight(1f))
                                 Button(
                                     onClick = onIgnore,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = 8.dp.kdCorner,
                                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                                 ) {
                                     Text("Close", color = KdOnPrimary)
@@ -228,7 +228,7 @@ fun PrerequisitesModal(
                                 Button(
                                     onClick = onDiscoverEks,
                                     enabled = awsCliAvailable,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = 8.dp.kdCorner,
                                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                                 ) {
                                     Icon(
@@ -252,7 +252,7 @@ fun PrerequisitesModal(
                                 Button(
                                     onClick = onDiscoverGke,
                                     enabled = gcloudCliAvailable,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = 8.dp.kdCorner,
                                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                                 ) {
                                     Icon(
@@ -275,7 +275,7 @@ fun PrerequisitesModal(
                                 Spacer(Modifier.weight(1f))
                                 OutlinedButton(
                                     onClick = onIgnore,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = 8.dp.kdCorner,
                                     border = BorderStroke(kdOutlineWidth, KdBorder),
                                 ) {
                                     Text("Continue", color = KdTextSecondary)
@@ -283,7 +283,7 @@ fun PrerequisitesModal(
                                 Spacer(Modifier.width(8.dp))
                                 Button(
                                     onClick = onQuit,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = 8.dp.kdCorner,
                                     colors = ButtonDefaults.buttonColors(containerColor = KdError),
                                 ) {
                                     Text("Quit", color = KdOnError)
@@ -325,7 +325,7 @@ private fun LogOutputPanel() {
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 80.dp, max = 150.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
                 .background(KdTerminalBg),
         ) {
             Box(
@@ -388,7 +388,7 @@ private fun CheckRow(check: PrerequisiteCheck) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(statusColor.copy(alpha = 0.06f))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -402,12 +402,13 @@ private fun CheckRow(check: PrerequisiteCheck) {
                     modifier = Modifier.size(16.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
+                    strokeCap = kdStrokeCap,
                 )
 
                 CheckStatus.PASSED -> Box(
                     modifier = Modifier
                         .size(20.dp)
-                        .clip(CircleShape)
+                        .clip(kdRoundShape)
                         .background(KdSuccess.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -417,7 +418,7 @@ private fun CheckRow(check: PrerequisiteCheck) {
                 CheckStatus.WARN -> Box(
                     modifier = Modifier
                         .size(20.dp)
-                        .clip(CircleShape)
+                        .clip(kdRoundShape)
                         .background(KdWarning.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -427,7 +428,7 @@ private fun CheckRow(check: PrerequisiteCheck) {
                 CheckStatus.FAILED -> Box(
                     modifier = Modifier
                         .size(20.dp)
-                        .clip(CircleShape)
+                        .clip(kdRoundShape)
                         .background(KdError.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {

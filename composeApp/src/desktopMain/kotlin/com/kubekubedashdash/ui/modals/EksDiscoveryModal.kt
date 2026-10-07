@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -76,6 +75,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -229,7 +229,7 @@ private fun ModalHeader(step: EksDiscoveryStep, mode: DiscoveryMode, onClose: ()
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(8.dp.kdCorner)
                 .background(EksOrange.copy(alpha = 0.18f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -255,7 +255,7 @@ private fun ModalHeader(step: EksDiscoveryStep, mode: DiscoveryMode, onClose: ()
             tint = KdTextSecondary,
             modifier = Modifier
                 .size(20.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(4.dp.kdCorner)
                 .clickable(onClick = onClose),
         )
     }
@@ -304,7 +304,7 @@ private fun AwsCliMissing(onDismiss: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             OutlinedButton(
                 onClick = onDismiss,
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Close", color = KdTextPrimary) }
         }
@@ -358,7 +358,7 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { viewModel.selectAllProfiles(true) }
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
@@ -368,7 +368,7 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { viewModel.selectAllProfiles(false) }
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
@@ -382,7 +382,7 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(8.dp.kdCorner)
                                 .background(if (isSelected) KdSelected else Color.Transparent)
                                 .clickable { viewModel.toggleProfile(profile.name) }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -431,7 +431,7 @@ private fun EnterByNameButton(onClick: () -> Unit, modifier: Modifier = Modifier
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Enter a cluster by name", color = KdTextPrimary) }
 }
@@ -471,7 +471,7 @@ private fun EksByNameStep(viewModel: EksDiscoveryViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(8.dp.kdCorner)
                             .background(if (isSelected) KdSelected else Color.Transparent)
                             .clickable { viewModel.setByNameProfile(p.name) }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -582,7 +582,7 @@ private fun RegionOption(label: String, sub: String, selected: Boolean, onClick:
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(if (selected) KdSelected else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -689,6 +689,7 @@ private fun ScanRow(row: RegionScanRow) {
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
+                    strokeCap = kdStrokeCap,
                 )
 
                 is RegionScanState.Done -> Icon(
@@ -778,7 +779,7 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
                         color = KdPrimary,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(4.dp.kdCorner)
                             .clickable { viewModel.switchToByName() }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                             .testTag(ByNameTags.SWITCH_TO_BY_NAME),
@@ -798,7 +799,7 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { viewModel.selectAll(true) }
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
@@ -808,7 +809,7 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { viewModel.selectAll(false) }
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
@@ -844,7 +845,7 @@ private fun CandidateRow(candidate: ClusterCandidate, viewModel: EksDiscoveryVie
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(if (candidate.selected) KdHover else Color.Transparent)
             .clickable { viewModel.toggleSelection(candidate.cluster) }
             .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -862,7 +863,7 @@ private fun CandidateRow(candidate: ClusterCandidate, viewModel: EksDiscoveryVie
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
                 .background(EksOrange),
             contentAlignment = Alignment.Center,
         ) {
@@ -941,6 +942,7 @@ private fun ImportRowView(row: ImportRow) {
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
+                    strokeCap = kdStrokeCap,
                 )
 
                 ImportRowState.Cancelled -> Icon(
@@ -1097,7 +1099,7 @@ private fun Footer(
                         },
                     )
                 },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Back", color = KdTextPrimary) }
             Spacer(Modifier.width(8.dp))
@@ -1105,7 +1107,7 @@ private fun Footer(
         if (step == EksDiscoveryStep.DONE && mode == DiscoveryMode.BY_NAME) {
             OutlinedButton(
                 onClick = { viewModel.addAnotherByName() },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
                 modifier = Modifier.testTag(ByNameTags.ADD_ANOTHER),
             ) { Text("Add another", color = KdTextPrimary) }
@@ -1131,7 +1133,7 @@ private fun Footer(
                     }
                 }
             },
-            shape = RoundedCornerShape(8.dp),
+            shape = 8.dp.kdCorner,
             border = BorderStroke(kdOutlineWidth, KdBorder),
             enabled = if (step == EksDiscoveryStep.IMPORTING) {
                 !cancelRequested
@@ -1154,7 +1156,7 @@ private fun Footer(
                 Button(
                     onClick = { viewModel.startByNameImport() },
                     enabled = importEnabled,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                     modifier = Modifier.testTag(ByNameTags.IMPORT),
                 ) { Text("Import", color = if (importEnabled) KdOnPrimary else Color.Unspecified) }
@@ -1163,24 +1165,24 @@ private fun Footer(
                 Button(
                     onClick = { viewModel.proceedFromProfile() },
                     enabled = nextEnabled,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) { Text("Next", color = if (nextEnabled) KdOnPrimary else Color.Unspecified) }
             }
 
             EksDiscoveryStep.PICK_REGIONS -> Button(
                 onClick = { viewModel.startDiscovery() },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) { Text("Scan", color = KdOnPrimary) }
 
             EksDiscoveryStep.SCANNING -> Button(
                 onClick = {},
                 enabled = false,
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
                 Spacer(Modifier.width(8.dp))
                 Text("Scanning…")
             }
@@ -1191,7 +1193,7 @@ private fun Footer(
                 Button(
                     onClick = { viewModel.startImport() },
                     enabled = importEnabled,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
                     Text(
@@ -1204,10 +1206,10 @@ private fun Footer(
             EksDiscoveryStep.IMPORTING -> Button(
                 onClick = {},
                 enabled = false,
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
                 Spacer(Modifier.width(8.dp))
                 Text("Importing…")
             }
@@ -1221,7 +1223,7 @@ private fun Footer(
                         val anySuccess = viewModel.anyImportSucceeded
                         if (anySuccess) onCompleted() else onDismiss()
                     },
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
                     Icon(painterResource(Res.drawable.cloud_filled), null, tint = KdOnPrimary, modifier = Modifier.size(14.dp))

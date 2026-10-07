@@ -10,7 +10,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,6 +25,7 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.kdCorner
 
 private const val PULSE_HALF_CYCLE_MS = 800
 
@@ -65,7 +65,7 @@ fun LiveDataDot(isConnected: Boolean, errorMessage: String?, modifier: Modifier 
         TooltipArea(
             tooltip = {
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = 6.dp.kdCorner,
                     color = KdSurface,
                     shadowElevation = 4.dp,
                     tonalElevation = 2.dp,

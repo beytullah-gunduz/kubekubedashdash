@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,6 +77,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.check_filled
@@ -232,7 +232,7 @@ private fun ModalHeader(step: GkeDiscoveryStep, mode: DiscoveryMode, onClose: ()
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(8.dp.kdCorner)
                 .background(GkeBlue.copy(alpha = 0.18f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -258,7 +258,7 @@ private fun ModalHeader(step: GkeDiscoveryStep, mode: DiscoveryMode, onClose: ()
             tint = KdTextSecondary,
             modifier = Modifier
                 .size(20.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(4.dp.kdCorner)
                 .clickable(onClick = onClose),
         )
     }
@@ -306,7 +306,7 @@ private fun GcloudMissing(onDismiss: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             OutlinedButton(
                 onClick = onDismiss,
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Close", color = KdTextPrimary) }
         }
@@ -332,7 +332,7 @@ private fun ProjectStep(viewModel: GkeDiscoveryViewModel) {
         when (val state = loadState) {
             ProjectLoadState.Loading, ProjectLoadState.NotRequested -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = KdPrimary, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
                     Spacer(Modifier.width(10.dp))
                     Text("Checking gcloud sign-in…", color = KdTextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
@@ -367,14 +367,14 @@ private fun NotSignedIn(viewModel: GkeDiscoveryViewModel) {
         fontFamily = kdMonoFamily(),
         style = MaterialTheme.typography.bodySmall,
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(6.dp.kdCorner)
             .background(KdSurfaceVariant)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     )
     Spacer(Modifier.height(16.dp))
     OutlinedButton(
         onClick = { viewModel.retryLoad() },
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Try again", color = KdTextPrimary) }
 }
@@ -392,7 +392,7 @@ private fun LoadFailed(message: String, viewModel: GkeDiscoveryViewModel) {
     Row {
         OutlinedButton(
             onClick = { viewModel.retryLoad() },
-            shape = RoundedCornerShape(8.dp),
+            shape = 8.dp.kdCorner,
             border = BorderStroke(kdOutlineWidth, KdBorder),
         ) { Text("Try again", color = KdTextPrimary) }
         Spacer(Modifier.width(8.dp))
@@ -406,7 +406,7 @@ private fun EnterByNameButton(onClick: () -> Unit, modifier: Modifier = Modifier
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = 8.dp.kdCorner,
         border = BorderStroke(kdOutlineWidth, KdBorder),
     ) { Text("Enter a cluster by name", color = KdTextPrimary) }
 }
@@ -457,7 +457,7 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
             color = KdPrimary,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(4.dp.kdCorner)
                 .clickable { viewModel.selectAllProjects(true) }
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
@@ -467,7 +467,7 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
             color = KdPrimary,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(4.dp.kdCorner)
                 .clickable { viewModel.selectAllProjects(false) }
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
@@ -485,7 +485,7 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(8.dp.kdCorner)
                         .background(if (isSelected) KdSelected else Color.Transparent)
                         .clickable { viewModel.toggleProject(project.projectId) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -686,6 +686,7 @@ private fun ScanRow(row: ProjectScanRow) {
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
+                    strokeCap = kdStrokeCap,
                 )
 
                 is ProjectScanState.Done -> Icon(
@@ -787,7 +788,7 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
                         color = KdPrimary,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(4.dp.kdCorner)
                             .clickable { viewModel.switchToByName() }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                             .testTag(ByNameTags.SWITCH_TO_BY_NAME),
@@ -807,7 +808,7 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { viewModel.selectAll(true) }
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
@@ -817,7 +818,7 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
                     color = KdPrimary,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(4.dp.kdCorner)
                         .clickable { viewModel.selectAll(false) }
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
@@ -847,7 +848,7 @@ private fun AuthPluginWarningBanner() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(KdWarning.copy(alpha = 0.12f))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -868,7 +869,7 @@ private fun CandidateRow(candidate: GkeClusterCandidate, viewModel: GkeDiscovery
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(8.dp.kdCorner)
             .background(if (candidate.selected) KdHover else Color.Transparent)
             .clickable { viewModel.toggleSelection(candidate.cluster) }
             .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -886,7 +887,7 @@ private fun CandidateRow(candidate: GkeClusterCandidate, viewModel: GkeDiscovery
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
                 .background(GkeBlue),
             contentAlignment = Alignment.Center,
         ) {
@@ -976,6 +977,7 @@ private fun ImportRowView(row: GkeImportRow) {
                     modifier = Modifier.size(14.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
+                    strokeCap = kdStrokeCap,
                 )
 
                 GkeImportRowState.Cancelled -> Icon(
@@ -1137,7 +1139,7 @@ private fun Footer(
                     viewModel.cancel()
                     viewModel.goToStep(GkeDiscoveryStep.PICK_PROJECTS)
                 },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) { Text("Back", color = KdTextPrimary) }
             Spacer(Modifier.width(8.dp))
@@ -1145,7 +1147,7 @@ private fun Footer(
         if (step == GkeDiscoveryStep.DONE && mode == DiscoveryMode.BY_NAME) {
             OutlinedButton(
                 onClick = { viewModel.addAnotherByName() },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
                 modifier = Modifier.testTag(ByNameTags.ADD_ANOTHER),
             ) { Text("Add another", color = KdTextPrimary) }
@@ -1171,7 +1173,7 @@ private fun Footer(
                     }
                 }
             },
-            shape = RoundedCornerShape(8.dp),
+            shape = 8.dp.kdCorner,
             border = BorderStroke(kdOutlineWidth, KdBorder),
             enabled = if (step == GkeDiscoveryStep.IMPORTING) {
                 !cancelRequested
@@ -1194,7 +1196,7 @@ private fun Footer(
                 Button(
                     onClick = { viewModel.startByNameImport() },
                     enabled = importEnabled,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                     modifier = Modifier.testTag(ByNameTags.IMPORT),
                 ) { Text("Import", color = if (importEnabled) KdOnPrimary else Color.Unspecified) }
@@ -1203,7 +1205,7 @@ private fun Footer(
                 Button(
                     onClick = { viewModel.startScan() },
                     enabled = scanEnabled,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) { Text("Scan", color = if (scanEnabled) KdOnPrimary else Color.Unspecified) }
             }
@@ -1211,10 +1213,10 @@ private fun Footer(
             GkeDiscoveryStep.SCANNING -> Button(
                 onClick = {},
                 enabled = false,
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
                 Spacer(Modifier.width(8.dp))
                 Text("Scanning…")
             }
@@ -1225,7 +1227,7 @@ private fun Footer(
                 Button(
                     onClick = { viewModel.startImport() },
                     enabled = importEnabled,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
                     Text(
@@ -1238,10 +1240,10 @@ private fun Footer(
             GkeDiscoveryStep.IMPORTING -> Button(
                 onClick = {},
                 enabled = false,
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = LocalContentColor.current, strokeWidth = 2.dp, strokeCap = kdStrokeCap)
                 Spacer(Modifier.width(8.dp))
                 Text("Importing…")
             }
@@ -1255,7 +1257,7 @@ private fun Footer(
                         val anySuccess = viewModel.anyImportSucceeded
                         if (anySuccess) onCompleted() else onDismiss()
                     },
-                    shape = RoundedCornerShape(8.dp),
+                    shape = 8.dp.kdCorner,
                     colors = ButtonDefaults.buttonColors(containerColor = KdPrimary),
                 ) {
                     Icon(painterResource(Res.drawable.cloud_filled), null, tint = KdOnPrimary, modifier = Modifier.size(14.dp))

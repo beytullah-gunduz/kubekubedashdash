@@ -45,6 +45,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.retroChrome
@@ -232,7 +233,7 @@ fun ShortcutSheet(onDismiss: () -> Unit, crtGhost: CrtGhost? = null) {
                         style = MaterialTheme.typography.headlineSmall.retroChrome(13.sp),
                         color = KdTextPrimary,
                     )
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss, shape = kdRoundShape) {
                         Icon(
                             painterResource(Res.drawable.close),
                             contentDescription = "Close",

@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.delete_filled
@@ -76,6 +77,7 @@ fun DrawerAppLogPane(modifier: Modifier = Modifier) {
             IconButton(
                 onClick = { openLogsFolder() },
                 modifier = Modifier.size(28.dp),
+                shape = kdRoundShape,
             ) {
                 Icon(
                     painterResource(Res.drawable.folder_open_filled),
@@ -87,6 +89,7 @@ fun DrawerAppLogPane(modifier: Modifier = Modifier) {
             IconButton(
                 onClick = { AppLogStore.clear() },
                 modifier = Modifier.size(28.dp),
+                shape = kdRoundShape,
             ) {
                 Icon(
                     painterResource(Res.drawable.delete_filled),

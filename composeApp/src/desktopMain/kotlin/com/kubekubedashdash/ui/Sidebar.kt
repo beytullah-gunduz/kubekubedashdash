@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
@@ -81,6 +80,7 @@ import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.data.repository.NavPreferenceRepository
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdCorners
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.orCompact
@@ -497,7 +497,7 @@ fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: Str
                         isError = false,
                         interactionSource = interactionSource,
                         colors = colors,
-                        shape = RoundedCornerShape(6.dp),
+                        shape = 6.dp.kdCorner,
                     )
                 },
             )
@@ -583,7 +583,7 @@ fun SidebarItem(
                 .fillMaxWidth()
                 .height(32.dp.orCompact(26.dp))
                 .padding(horizontal = if (collapsed) 4.dp else 8.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
                 .background(bg)
                 .clickable(onClick = onClick)
                 .onPointerEvent(PointerEventType.Enter) { hovered = true }
@@ -614,7 +614,7 @@ fun SidebarItem(
                         .align(Alignment.CenterStart)
                         .height(18.dp)
                         .width(3.dp)
-                        .clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
+                        .clip(kdCorners(topEnd = 2.dp, bottomEnd = 2.dp))
                         .background(KdPrimary),
                 )
             }
@@ -751,7 +751,7 @@ fun SidebarItem(
 @Composable
 private fun SidebarItemTooltip(text: String) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurface,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp,

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add_filled
 import com.kubekubedashdash.resources.remove_filled
@@ -79,6 +80,7 @@ fun ScaleDialog(
                             if (cur > 0) rawInput = (cur - 1).toString()
                         },
                         enabled = !inFlight && (rawInput.toIntOrNull() ?: 0) > 0,
+                        shape = kdRoundShape,
                     ) {
                         Icon(painterResource(Res.drawable.remove_filled), contentDescription = "Decrease")
                     }
@@ -98,6 +100,7 @@ fun ScaleDialog(
                             rawInput = (cur + 1).toString()
                         },
                         enabled = !inFlight,
+                        shape = kdRoundShape,
                     ) {
                         Icon(painterResource(Res.drawable.add_filled), contentDescription = "Increase")
                     }
@@ -120,12 +123,12 @@ fun ScaleDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { parsed?.let { onConfirm(it) } }, enabled = canConfirm) {
+            TextButton(onClick = { parsed?.let { onConfirm(it) } }, enabled = canConfirm, shape = kdRoundShape) {
                 Text(if (inFlight) "Scaling…" else "Scale")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !inFlight) {
+            TextButton(onClick = onDismiss, enabled = !inFlight, shape = kdRoundShape) {
                 Text("Cancel")
             }
         },

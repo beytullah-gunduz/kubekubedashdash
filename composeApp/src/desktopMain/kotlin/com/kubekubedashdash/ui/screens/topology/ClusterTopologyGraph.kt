@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -59,7 +58,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -76,6 +74,9 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
 import com.kubekubedashdash.data.repository.formatTopologyRefresh
+import com.kubekubedashdash.drawKdDot
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
@@ -122,7 +123,7 @@ fun ClusterTopologyGraph(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            IconButton(onClick = { viewModel.load(namespace) }) {
+            IconButton(onClick = { viewModel.load(namespace) }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.refresh_24),
                     contentDescription = "Refresh topology",
@@ -130,7 +131,7 @@ fun ClusterTopologyGraph(
                     tint = KdTextSecondary,
                 )
             }
-            IconButton(onClick = { direction = direction.rotateLeft() }) {
+            IconButton(onClick = { direction = direction.rotateLeft() }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.rotate_left_filled),
                     contentDescription = "Rotate topology left",
@@ -138,7 +139,7 @@ fun ClusterTopologyGraph(
                     tint = KdTextSecondary,
                 )
             }
-            IconButton(onClick = { direction = direction.rotateRight() }) {
+            IconButton(onClick = { direction = direction.rotateRight() }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.rotate_right_filled),
                     contentDescription = "Rotate topology right",
@@ -146,7 +147,7 @@ fun ClusterTopologyGraph(
                     tint = KdTextSecondary,
                 )
             }
-            IconButton(onClick = { scale = (scale * 1.2f).coerceAtMost(3f) }) {
+            IconButton(onClick = { scale = (scale * 1.2f).coerceAtMost(3f) }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.zoom_in_filled),
                     contentDescription = "Zoom in",
@@ -154,7 +155,7 @@ fun ClusterTopologyGraph(
                     tint = KdTextSecondary,
                 )
             }
-            IconButton(onClick = { scale = (scale / 1.2f).coerceAtLeast(0.3f) }) {
+            IconButton(onClick = { scale = (scale / 1.2f).coerceAtLeast(0.3f) }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.zoom_out_filled),
                     contentDescription = "Zoom out",
@@ -167,6 +168,7 @@ fun ClusterTopologyGraph(
                     scale = 1f
                     panOffset = Offset.Zero
                 },
+                shape = kdRoundShape,
             ) {
                 Icon(
                     painterResource(Res.drawable.fit_screen_filled),
@@ -204,7 +206,7 @@ fun ClusterTopologyGraph(
                     }
                 }
             }
-            IconButton(onClick = { PreferenceRepository.setTopologyPacketAnimationEnabled(!packetAnimationEnabled) }) {
+            IconButton(onClick = { PreferenceRepository.setTopologyPacketAnimationEnabled(!packetAnimationEnabled) }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.graph_3_24),
                     contentDescription = if (packetAnimationEnabled) "Packets on" else "Packets off",
@@ -238,7 +240,7 @@ fun ClusterTopologyGraph(
                 .sortedBy { it.second }
                 .forEach { (label, _) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(kindColor(label)))
+                        Box(Modifier.size(8.dp).clip(kdRoundShape).background(kindColor(label)))
                         Spacer(Modifier.width(4.dp))
                         Text(label, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                         Spacer(Modifier.width(8.dp))
@@ -600,7 +602,7 @@ private fun TopologyGraphContent(
                     drawPath(
                         path,
                         color = edgeColor.copy(alpha = edgeColor.alpha * 0.3f),
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                        style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                     )
 
                     if (!isDimmed) {
@@ -611,7 +613,7 @@ private fun TopologyGraphContent(
                                 color = edgeColor.copy(alpha = 0.4f),
                                 style = Stroke(
                                     width = strokeWidth,
-                                    cap = StrokeCap.Round,
+                                    cap = kdStrokeCap,
                                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 6f), phase = 0f),
                                 ),
                             )
@@ -623,7 +625,7 @@ private fun TopologyGraphContent(
                                 color = edgeColor,
                                 style = Stroke(
                                     width = strokeWidth,
-                                    cap = StrokeCap.Round,
+                                    cap = kdStrokeCap,
                                     pathEffect = PathEffect.dashPathEffect(
                                         floatArrayOf(dashLen, gapLen),
                                         phase = dashPhase,
@@ -633,7 +635,7 @@ private fun TopologyGraphContent(
                         }
                     }
 
-                    drawCircle(
+                    drawKdDot(
                         color = edgeColor,
                         radius = if (isHighlighted) 4f else 3f,
                         center = endOffset,
@@ -644,8 +646,8 @@ private fun TopologyGraphContent(
                         val edgePhase = (edgeIndex * 0.37f) % 1f
                         val t = (packetT + edgePhase) % 1f
                         val pos = cubicBezier(t, startOffset, cp1, cp2, endOffset)
-                        drawCircle(color = edgeColor.copy(alpha = 0.9f), radius = 4.5f, center = pos)
-                        drawCircle(color = edgeColor.copy(alpha = 0.25f), radius = 9f, center = pos)
+                        drawKdDot(color = edgeColor.copy(alpha = 0.9f), radius = 4.5f, center = pos)
+                        drawKdDot(color = edgeColor.copy(alpha = 0.25f), radius = 9f, center = pos)
                     }
                 }
             }

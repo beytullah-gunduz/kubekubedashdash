@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,6 +45,7 @@ import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.resources.Res
@@ -133,7 +133,7 @@ fun LogFilterField(
                             isError = invalid,
                             interactionSource = interactionSource,
                             colors = colors,
-                            shape = RoundedCornerShape(6.dp),
+                            shape = 6.dp.kdCorner,
                         )
                     },
                 )
@@ -183,8 +183,8 @@ fun LogToolbarToggle(
         Box(
             modifier = modifier
                 .height(28.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .border(kdOutlineWidth, KdBorder, RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
+                .border(kdOutlineWidth, KdBorder, 6.dp.kdCorner)
                 .clickable(enabled = enabled, onClick = onToggle)
                 .padding(horizontal = 8.dp),
             contentAlignment = Alignment.Center,
@@ -218,8 +218,8 @@ fun LogToolbarMenu(
             Box(
                 modifier = Modifier
                     .height(28.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .border(kdOutlineWidth, KdBorder, RoundedCornerShape(6.dp))
+                    .clip(6.dp.kdCorner)
+                    .border(kdOutlineWidth, KdBorder, 6.dp.kdCorner)
                     .clickable(enabled = items.isNotEmpty()) { expanded = true }
                     .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.Center,
