@@ -7,6 +7,7 @@ import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.EventInfo
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodPhaseCounts
@@ -74,9 +75,8 @@ class AllClustersViewModel internal constructor(
         val nodeCount: Int,
         val namespaceCount: Int,
         val recentErrorCount: Int,
-        // The tab's selected namespace, which its pods, usage and events follow;
-        // null is all namespaces.
-        val namespace: String? = null,
+        // The tab's namespace selection, which its pods, usage and events follow.
+        val namespaceScope: NamespaceScope = NamespaceScope.All,
         // This tab's own usage reading: used figures follow its namespace,
         // capacity is whole-cluster. Null until the first reading.
         val usage: ResourceUsageSummary? = null,
@@ -93,24 +93,24 @@ class AllClustersViewModel internal constructor(
         val connected: Boolean,
         val connecting: Boolean,
         val info: ClusterInfo?,
-        val namespace: String?,
+        val namespaceScope: NamespaceScope,
     )
 
-    /** One open cluster tab and the namespace it has selected (null = all namespaces). */
-    private data class TabNamespace(val sessionId: SessionId, val namespace: String?)
+    /** One open cluster tab and its namespace selection. */
+    private data class TabNamespace(val sessionId: SessionId, val namespaceScope: NamespaceScope)
 
     /**
      * A sum over the open cluster tabs (or a series of such sums), with the
-     * tabs it covers and the namespace each covered. A tab whose reading is
-     * loading or failed is in neither.
+     * tabs it covers and the namespace selection each covered. A tab whose
+     * reading is loading or failed is in neither.
      */
     private data class ScopedSum<T>(val scope: Set<TabNamespace>, val value: T)
 
     /**
-     * Each tab's successful [read], tagged with the namespace the tab had
-     * selected when the reading arrived. Reading the namespace rather than
-     * combining with it matters: a combine re-emits the old namespace's last
-     * reading under the new namespace the moment the selection changes.
+     * Each tab's successful [read], tagged with the tab's namespace selection
+     * when the reading arrived. Reading the selection rather than combining
+     * with it matters: a combine re-emits the old selection's last reading
+     * under the new one the moment the selection changes.
      */
     private fun <T> loadedReadings(
         tabs: List<WorkspaceTab.Cluster>,
@@ -119,7 +119,7 @@ class AllClustersViewModel internal constructor(
         tabs.map { tab ->
             val client = tab.session.reactiveClient
             read(client).map { state ->
-                (state as? ResourceState.Success)?.let { TabNamespace(tab.session.id, client.selectedNamespace.value) to it.data }
+                (state as? ResourceState.Success)?.let { TabNamespace(tab.session.id, client.namespaceScope.value) to it.data }
             }
         },
     ) { readings -> readings.filterNotNull() }
@@ -295,15 +295,15 @@ class AllClustersViewModel internal constructor(
                         tab.session.viewModel.isConnected,
                         tab.session.viewModel.isConnecting,
                         tab.session.reactiveClient.clusterInfo,
-                        tab.session.reactiveClient.selectedNamespace,
-                    ) { ctx, connected, connecting, clusterState, namespace ->
+                        tab.session.reactiveClient.namespaceScope,
+                    ) { ctx, connected, connecting, clusterState, namespaceScope ->
                         ClusterSummaryBase(
                             sessionId = tab.session.id,
                             ctx = ctx,
                             connected = connected,
                             connecting = connecting,
                             info = (clusterState as? ResourceState.Success)?.data,
-                            namespace = namespace,
+                            namespaceScope = namespaceScope,
                         )
                     }
                     val load = combine(
@@ -327,7 +327,7 @@ class AllClustersViewModel internal constructor(
                             nodeCount = b.info?.nodesCount ?: 0,
                             namespaceCount = b.info?.namespacesCount ?: 0,
                             recentErrorCount = recentErrors,
-                            namespace = b.namespace,
+                            namespaceScope = b.namespaceScope,
                             usage = loaded.first,
                             podsCount = b.info?.podsCount,
                             podsCapacity = loaded.second,
@@ -447,7 +447,7 @@ class AllClustersViewModel internal constructor(
      *
      * Used figures follow each tab's selected namespace while capacity is
      * whole-cluster, so the sum covers a (tab, namespace) set; when that set
-     * changes — a namespace switch, a tab reloading or opening or closing —
+     * changes — a namespace selection change, a tab reloading or opening or closing —
      * the histories start over rather than join two sums into one trend.
      */
     val aggregatedUsage: StateFlow<ResourceUsageSummary?> = clusterTabs

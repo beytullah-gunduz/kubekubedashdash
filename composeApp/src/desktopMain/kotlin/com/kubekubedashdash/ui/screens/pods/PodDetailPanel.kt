@@ -193,8 +193,8 @@ fun PodDetailPanel(
             }
             .distinctUntilChanged()
     }.collectAsState(ResourceState.Loading)
-    val selectedNamespace by kubeClient.selectedNamespace.collectAsState()
-    val eventsInScope = selectedNamespace == null || selectedNamespace == pod.namespace
+    val namespaceScope by kubeClient.namespaceScope.collectAsState()
+    val eventsInScope = namespaceScope.contains(pod.namespace)
     val podEvents = (podEventsState as? ResourceState.Success)?.data.orEmpty()
     val warningCount = if (eventsInScope) warningEventCount(podEvents) else 0
 
@@ -662,7 +662,7 @@ private fun PodEventsTab(
     when {
         !inScope -> CenteredNote(
             title = "Not watching namespace “$podNamespace”",
-            body = "Switch the namespace filter to “$podNamespace” or All Namespaces to see this pod's events.",
+            body = "Add “$podNamespace” to the namespace selection, or pick All Namespaces, to see this pod's events.",
         )
 
         state is ResourceState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

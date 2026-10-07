@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.topology.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.util.ReactiveKubeClient
@@ -28,8 +29,8 @@ class ClusterTopologyViewModel(
 
     private var loadJob: Job? = null
 
-    fun load(namespace: String) {
-        // Cancel any in-flight load so a slow earlier namespace can't finish
+    fun load(selection: NamespaceScope) {
+        // Cancel any in-flight load so a slow earlier selection can't finish
         // after a newer one and overwrite its graph (last-request-wins).
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -37,7 +38,7 @@ class ClusterTopologyViewModel(
             _error.value = null
             try {
                 _graph.value = withContext(Dispatchers.IO) {
-                    reactiveClient.getClusterTopologyGraph(namespace)
+                    reactiveClient.getClusterTopologyGraph(selection)
                 }
             } catch (e: CancellationException) {
                 throw e

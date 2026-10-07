@@ -26,24 +26,23 @@ import kotlinx.coroutines.isActive
 @Composable
 fun ClusterTopologyScreen(onNavigate: (Screen) -> Unit) {
     val reactiveClient = LocalReactiveKubeClient.current
-    val selectedNamespaceRaw by reactiveClient.selectedNamespace.collectAsState()
-    val namespace = selectedNamespaceRaw ?: "All Namespaces"
+    val namespaceScope by reactiveClient.namespaceScope.collectAsState()
     val viewModel = remember(reactiveClient) { ClusterTopologyViewModel(reactiveClient) }
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
     val graph by viewModel.graph.collectAsState()
     val refreshIntervalSec by PreferenceRepository.topologyRefreshIntervalSec.collectAsState()
 
-    LaunchedEffect(namespace) { viewModel.load(namespace) }
+    LaunchedEffect(namespaceScope) { viewModel.load(namespaceScope) }
 
-    // Auto-refresh poll. Restarts whenever namespace or interval changes; cancels
+    // Auto-refresh poll. Restarts whenever the namespace selection or interval changes; cancels
     // when the screen leaves composition (so it pauses while the user is on a
     // different workspace tab). 0 = disabled.
-    LaunchedEffect(namespace, refreshIntervalSec) {
+    LaunchedEffect(namespaceScope, refreshIntervalSec) {
         if (refreshIntervalSec <= 0) return@LaunchedEffect
         while (isActive) {
             delay(refreshIntervalSec * 1000L)
-            viewModel.load(namespace)
+            viewModel.load(namespaceScope)
         }
     }
 
@@ -51,7 +50,7 @@ fun ClusterTopologyScreen(onNavigate: (Screen) -> Unit) {
         // Show the existing graph during refreshes (loading is true mid-fetch); only
         // fall back to the spinner when there's nothing to show yet.
         graph != null && graph!!.nodes.isNotEmpty() && graph!!.edges.isNotEmpty() ->
-            ClusterTopologyGraph(graph!!, viewModel, namespace)
+            ClusterTopologyGraph(graph!!, viewModel, namespaceScope)
 
         loading -> ResourceLoadingIndicator()
 

@@ -77,6 +77,7 @@ import com.kubekubedashdash.data.repository.formatTopologyRefresh
 import com.kubekubedashdash.drawKdDot
 import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceGraph
 import com.kubekubedashdash.models.ResourceGraphNode
 import com.kubekubedashdash.resources.Res
@@ -96,7 +97,7 @@ import org.jetbrains.compose.resources.painterResource
 fun ClusterTopologyGraph(
     graph: ResourceGraph,
     viewModel: ClusterTopologyViewModel,
-    namespace: String,
+    namespaceScope: NamespaceScope,
 ) {
     val packetAnimationEnabled by PreferenceRepository.topologyPacketAnimationEnabled.collectAsState()
     val refreshIntervalSec by PreferenceRepository.topologyRefreshIntervalSec.collectAsState()
@@ -112,7 +113,8 @@ fun ClusterTopologyGraph(
         panOffset = Offset.Zero
     }
     val truncatedNode = graph.nodes.find { it.id == "__truncated__" }
-    val isAllNamespaces = namespace == "All Namespaces"
+    // Names repeat across namespaces whenever more than one is shown.
+    val showNamespaces = namespaceScope.serverNamespace == null
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Toolbar
@@ -123,7 +125,7 @@ fun ClusterTopologyGraph(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            IconButton(onClick = { viewModel.load(namespace) }, shape = kdRoundShape) {
+            IconButton(onClick = { viewModel.load(namespaceScope) }, shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.refresh_24),
                     contentDescription = "Refresh topology",
@@ -271,7 +273,7 @@ fun ClusterTopologyGraph(
             panOffset = panOffset,
             onPan = { delta -> panOffset += delta },
             packetAnimationEnabled = packetAnimationEnabled,
-            showNamespaceLabel = isAllNamespaces,
+            showNamespaceLabel = showNamespaces,
             modifier = Modifier.weight(1f).fillMaxWidth(),
         )
     }

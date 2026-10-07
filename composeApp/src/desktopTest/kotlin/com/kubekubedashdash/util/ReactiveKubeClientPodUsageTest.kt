@@ -102,7 +102,7 @@ class ReactiveKubeClientPodUsageTest {
 
     @Test
     fun `one sample carries per-pod usage whose sum is the namespace total`() = runBlocking {
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
 
         val usage = awaitUsage { it.podUsages.keys == setOf("ns-a/web-0", "ns-a/web-1") }
 
@@ -125,7 +125,7 @@ class ReactiveKubeClientPodUsageTest {
 
     @Test
     fun `all namespaces keys every pod by its own namespace`() = runBlocking {
-        client.setSelectedNamespace(null)
+        client.setNamespaceScope(NamespaceScope.All)
 
         val usage = awaitUsage { it.podUsages.size == 3 }
 

@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewModel
 import com.kubekubedashdash.ui.screens.cluster.UsageScope
@@ -101,7 +102,7 @@ fun AllClustersScreen() {
                     summaries = summaries,
                     topNodes = topNodes,
                     timeWindow = filters.timeWindow,
-                    scope = allClustersUsageScope(summaries.map { it.namespace }),
+                    scope = allClustersUsageScope(summaries.map { it.namespaceScope }),
                     expanded = statsExpanded,
                     onToggleExpanded = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_ALL_CLUSTERS, !statsExpanded) },
                     onOpenCluster = { WorkspaceManager.activateClusterTab(it) },
@@ -169,23 +170,23 @@ fun AllClustersScreen() {
 
 /**
  * Header wording for the All Clusters usage section. A tab with a namespace
- * selected contributes that namespace's pods and usage but its whole
- * cluster's capacity; the panels say which namespace each tab follows.
- * [namespaces] holds one entry per open cluster tab, null for all namespaces.
+ * selection contributes those namespaces' pods and usage but its whole
+ * cluster's capacity; the panels say which namespaces each tab follows.
+ * [scopes] holds one entry per open cluster tab.
  */
-internal fun allClustersUsageScope(namespaces: List<String?>): UsageScope? {
-    val scoped = namespaces.filterNotNull()
-    val total = namespaces.size
+internal fun allClustersUsageScope(scopes: List<NamespaceScope>): UsageScope? {
+    val scoped = scopes.filterIsInstance<NamespaceScope.Only>()
+    val total = scopes.size
     return when {
         scoped.isEmpty() -> null
 
-        total == 1 -> UsageScope.namespace(scoped.single())
+        total == 1 -> UsageScope.of(scoped.single())
 
         else -> {
             val which = when (scoped.size) {
-                1 -> "1 of $total clusters cover one namespace (see its panel)"
-                total -> "all $total clusters cover one namespace each (see their panels)"
-                else -> "${scoped.size} of $total clusters cover one namespace each (see their panels)"
+                1 -> "1 of $total clusters follow a namespace selection (see its panel)"
+                total -> "all $total clusters follow a namespace selection (see their panels)"
+                else -> "${scoped.size} of $total clusters follow a namespace selection (see their panels)"
             }
             UsageScope(
                 title = "Usage Statistics · namespace-scoped",

@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.events.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.EventInfo
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
@@ -118,7 +119,7 @@ class EventsScreenViewModelPendingSelectTest {
 
     @Test
     fun `pending uid resolves from the snapshot already in hand on a quiet cluster`() = runBlocking {
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
         awaitSnapshot { events -> events.any { it.uid == targetUid } }
 
         // No cluster activity after this point: resolution must not depend on
@@ -134,7 +135,7 @@ class EventsScreenViewModelPendingSelectTest {
     @Test
     fun `pending uid survives a snapshot that does not yet contain the event`() = runBlocking {
         // Screen subscribed while a namespace WITHOUT the event is selected.
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
         awaitSnapshot { events -> events.isEmpty() }
 
         vm.setParams(targetUid)
@@ -151,14 +152,14 @@ class EventsScreenViewModelPendingSelectTest {
         assertNull(vm.selected.value, "a non-containing snapshot must not consume the pending uid")
 
         // Now the namespace switch completes and the event appears.
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
 
         assertEquals(targetUid, awaitSelected().uid)
     }
 
     @Test
     fun `resolving a jump clears the type and node allowlists that would hide the event`() = runBlocking {
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
         awaitSnapshot { events -> events.any { it.uid == targetUid } }
         // Left over from an earlier visit: the target is Normal on node-1.
         vm.setTypeFilter(setOf("Warning"))
@@ -173,7 +174,7 @@ class EventsScreenViewModelPendingSelectTest {
 
     @Test
     fun `resolving a jump keeps allowlists that already show the event`() = runBlocking {
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
         awaitSnapshot { events -> events.any { it.uid == targetUid } }
         vm.setTypeFilter(setOf("Normal", "Warning"))
         vm.setNodeFilter(setOf("node-1"))
@@ -187,14 +188,14 @@ class EventsScreenViewModelPendingSelectTest {
 
     @Test
     fun `a manual row click dismisses an unresolved jump`() = runBlocking {
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
         awaitSnapshot { events -> events.isEmpty() }
         vm.setParams(targetUid)
 
         // The user clicks another row before the jump target ever shows up;
         // its later arrival must not hijack the selection.
         vm.dismissPendingSelection()
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
         awaitSnapshot { events -> events.any { it.uid == targetUid } }
 
         assertNull(vm.selected.value)

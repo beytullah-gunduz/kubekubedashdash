@@ -53,6 +53,7 @@ import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.models.ClusterInfo
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.orCompact
@@ -502,17 +503,24 @@ private fun ClusterPanel(
                 tint = KdTextSecondary,
             )
         }
-        summary.namespace?.let { ns ->
-            Surface(shape = 4.dp.kdCorner, color = KdInfo.copy(alpha = 0.12f)) {
-                Text(
-                    "Namespace: $ns",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = KdInfo,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                )
+        (summary.namespaceScope as? NamespaceScope.Only)?.let { selection ->
+            val chip: @Composable () -> Unit = {
+                Surface(shape = 4.dp.kdCorner, color = KdInfo.copy(alpha = 0.12f)) {
+                    Text(
+                        fleetNamespaceChipText(selection),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KdInfo,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            if (selection.namespaces.size == 1) {
+                chip()
+            } else {
+                TooltipArea(tooltip = { TriageTooltip(selection.sortedNames.joinToString("\n")) }) { chip() }
             }
         }
         MetricRows(summary.usage, summary.podsCount, summary.podsCapacity, null, null, null)
@@ -551,3 +559,6 @@ private fun TopNodesPanel(
         }
     }
 }
+
+/** A cluster panel's namespace chip: the one namespace, or how many. */
+internal fun fleetNamespaceChipText(scope: NamespaceScope.Only): String = scope.sortedNames.singleOrNull()?.let { "Namespace: $it" } ?: "${scope.namespaces.size} namespaces"

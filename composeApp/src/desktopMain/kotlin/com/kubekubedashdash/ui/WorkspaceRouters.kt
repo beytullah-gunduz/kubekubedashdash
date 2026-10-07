@@ -438,9 +438,9 @@ fun ExtraPaneRouter(
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
     val reactiveClient = LocalReactiveKubeClient.current
-    // null == "All Namespaces". Authoritative scope the list flows below are
-    // built from, so detail panels re-resolve against exactly the same data.
-    val selectedNamespace by reactiveClient.selectedNamespace.collectAsState()
+    // Authoritative scope the list flows below are built from, so detail
+    // panels re-resolve against exactly the same data.
+    val namespaceScope by reactiveClient.namespaceScope.collectAsState()
     Box(modifier = modifier.crtContentCut(screen.paneContentKey())) {
         when (screen) {
             is Screen.Detail.EventDetail -> EventDetailScreen(screen.event, onNavigate, onOpenLogs, onClose)
@@ -453,7 +453,7 @@ fun ExtraPaneRouter(
                     initial = screen.pod,
                     state = pods,
                     uid = screen.pod.uid,
-                    inScope = selectedNamespace == null || selectedNamespace == screen.pod.namespace,
+                    inScope = namespaceScope.contains(screen.pod.namespace),
                     kind = "Pod",
                     name = screen.pod.name,
                     uidOf = { it.uid },
@@ -504,7 +504,7 @@ fun ExtraPaneRouter(
                     initial = screen.deployment,
                     state = deployments,
                     uid = screen.deployment.uid,
-                    inScope = selectedNamespace == null || selectedNamespace == screen.deployment.namespace,
+                    inScope = namespaceScope.contains(screen.deployment.namespace),
                     kind = "Deployment",
                     name = screen.deployment.name,
                     uidOf = { it.uid },
@@ -527,7 +527,7 @@ fun ExtraPaneRouter(
                     initial = screen.service,
                     state = services,
                     uid = screen.service.uid,
-                    inScope = selectedNamespace == null || selectedNamespace == screen.service.namespace,
+                    inScope = namespaceScope.contains(screen.service.namespace),
                     kind = "Service",
                     name = screen.service.name,
                     uidOf = { it.uid },

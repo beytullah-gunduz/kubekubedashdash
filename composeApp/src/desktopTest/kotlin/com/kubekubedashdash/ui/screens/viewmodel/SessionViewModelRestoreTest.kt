@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.MockClusterProvider
@@ -67,7 +68,7 @@ class SessionViewModelRestoreTest {
 
         assertEquals("production", namespaceAtFlip)
         assertEquals(600f, widthAtFlip)
-        assertEquals("production", reactiveClient.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("production"), reactiveClient.namespaceScope.value)
         assertNull(viewModel.persistedRestoreView)
     }
 
@@ -82,7 +83,7 @@ class SessionViewModelRestoreTest {
         withTimeout(30_000) { viewModel.currentScreen.first { it == Screen.Main.ClusterOverview } }
 
         assertEquals("All Namespaces", viewModel.selectedNamespace.value)
-        assertNull(reactiveClient.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, reactiveClient.namespaceScope.value)
     }
 
     @Test
@@ -92,6 +93,6 @@ class SessionViewModelRestoreTest {
         withTimeout(30_000) { viewModel.currentScreen.first { it == Screen.Main.Nodes() } }
 
         assertEquals(1200f, viewModel.extraPaneWidth.value)
-        assertNull(reactiveClient.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, reactiveClient.namespaceScope.value)
     }
 }

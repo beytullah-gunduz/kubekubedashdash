@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.models.ClusterInfo
 import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.EventInfo
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.NodeInfo
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodInfo
@@ -93,16 +94,16 @@ class ClusterOverviewViewModel(
     private val _podsHistory = MutableStateFlow<List<Float>>(emptyList())
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
 
-    /** The namespace the pods/usage figures are scoped to; null is all namespaces. */
-    val selectedNamespace: StateFlow<String?> = reactiveClient.selectedNamespace
+    /** The namespaces the pods/usage figures are scoped to. */
+    val namespaceScope: StateFlow<NamespaceScope> = reactiveClient.namespaceScope
 
     init {
         // Pod counts and usage follow the selected namespace, but this
-        // ViewModel lives as long as the session. Clear the series on a switch
+        // ViewModel lives as long as the session. Clear the series on a selection change
         // so the old namespace's readings don't run into the new one's as a
         // cliff. drop(1): the value current at construction is not a switch.
         viewModelScope.launch {
-            reactiveClient.selectedNamespace.drop(1).collect {
+            reactiveClient.namespaceScope.drop(1).collect {
                 _cpuHistory.value = emptyList()
                 _memHistory.value = emptyList()
                 _podsHistory.value = emptyList()

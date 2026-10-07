@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.paneContentKey
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
@@ -652,7 +653,7 @@ class SessionViewModel(
                                 PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
                             )
                             _selectedNamespace.value = namespace
-                            reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
+                            reactiveClient.setNamespaceScope(if (namespace == "All Namespaces") NamespaceScope.All else NamespaceScope.single(namespace))
                             restore?.paneWidthDp?.let { setExtraPaneWidth(it) }
                         }
                         emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
@@ -677,7 +678,7 @@ class SessionViewModel(
 
     fun setSelectedNamespace(namespace: String) {
         _selectedNamespace.value = namespace
-        reactiveClient.setSelectedNamespace(if (namespace == "All Namespaces") null else namespace)
+        reactiveClient.setNamespaceScope(if (namespace == "All Namespaces") NamespaceScope.All else NamespaceScope.single(namespace))
     }
 
     fun setSearchQuery(query: String) {

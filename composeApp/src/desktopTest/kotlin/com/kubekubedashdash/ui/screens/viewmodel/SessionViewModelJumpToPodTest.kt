@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
@@ -45,7 +46,7 @@ class SessionViewModelJumpToPodTest {
         viewModel.setSelectedNamespace("ns-a")
         viewModel.navigate(Screen.Main.Pods(selectPodUid = "uid-in-ns-b"))
         assertEquals("All Namespaces", viewModel.selectedNamespace.value)
-        assertEquals(null, client.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, client.namespaceScope.value)
     }
 
     @Test
@@ -53,6 +54,6 @@ class SessionViewModelJumpToPodTest {
         viewModel.setSelectedNamespace("ns-a")
         viewModel.navigate(Screen.Main.Pods())
         assertEquals("ns-a", viewModel.selectedNamespace.value)
-        assertEquals("ns-a", client.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("ns-a"), client.namespaceScope.value)
     }
 }

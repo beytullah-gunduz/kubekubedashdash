@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.MockClusterProvider
@@ -95,7 +96,7 @@ class SessionViewModelReconnectTest {
 
         assertIs<Screen.Main.Pods>(viewModel.currentScreen.value, "loss must not swap the screen")
         assertEquals("production", viewModel.selectedNamespace.value)
-        assertEquals("production", reactiveClient.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("production"), reactiveClient.namespaceScope.value)
         assertFalse(viewModel.isConnected.value)
         assertTrue(viewModel.reconnecting.value)
         assertNotNull(viewModel.reconnectError.value)
@@ -115,7 +116,7 @@ class SessionViewModelReconnectTest {
 
         assertIs<Screen.Main.Pods>(viewModel.currentScreen.value, "reconnect must not navigate")
         assertEquals("production", viewModel.selectedNamespace.value)
-        assertEquals("production", reactiveClient.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("production"), reactiveClient.namespaceScope.value)
         assertNull(viewModel.reconnectError.value)
         assertEquals(0, viewModel.retryCountdown.value)
     }
@@ -152,10 +153,10 @@ class SessionViewModelReconnectTest {
         // Sync on the namespace reset itself, not just the screen: the screen
         // transition is applied by the async reducer and must not be used as a
         // happens-before proxy for the namespace writes.
-        withTimeout(10_000) { reactiveClient.selectedNamespace.first { it == null } }
+        withTimeout(10_000) { reactiveClient.namespaceScope.first { it == NamespaceScope.All } }
 
         assertEquals("All Namespaces", viewModel.selectedNamespace.value)
-        assertNull(reactiveClient.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, reactiveClient.namespaceScope.value)
         assertFalse(viewModel.reconnecting.value)
         assertNull(viewModel.extraPaneScreen.value)
         assertFalse(viewModel.extraPaneExpanded.value)

@@ -123,18 +123,10 @@ class ReactiveKubeClient(
     /** The namespaces this cluster's namespaced lists, pod usage, events and topology follow. */
     val namespaceScope: StateFlow<NamespaceScope> = _namespaceScope.asStateFlow()
 
-    // Transitional single-namespace view for readers that still take a String?:
-    // the one server-side namespace, null for all namespaces and for two or more.
-    private val _selectedNamespace = MutableStateFlow<String?>(null)
-    val selectedNamespace: StateFlow<String?> = _selectedNamespace.asStateFlow()
-
     fun setNamespaceScope(selection: NamespaceScope) {
         log.info("Namespace selection changed to: {}", selection)
         _namespaceScope.value = selection
-        _selectedNamespace.value = selection.serverNamespace
     }
-
-    fun setSelectedNamespace(namespace: String?) = setNamespaceScope(namespace?.let { NamespaceScope.single(it) } ?: NamespaceScope.All)
 
     private val informers = ReactiveInformerFactory(scope, connectionManager, namespaceScope)
 
@@ -2179,104 +2171,107 @@ class ReactiveKubeClient(
 
     // ── On-demand: Cluster Topology Graph ───────────────────────────────────────
 
-    fun getClusterTopologyGraph(namespace: String): ResourceGraph {
-        log.debug("Building cluster topology graph for namespace={}", namespace)
-        val isAllNamespaces = namespace == "All Namespaces"
+    fun getClusterTopologyGraph(selection: NamespaceScope): ResourceGraph {
+        log.debug("Building cluster topology graph for scope={}", selection)
+        val serverNs = selection.serverNamespace
 
         // Fetch only — every list call keeps its previous independent
         // try/catch→emptyList semantics; pure assembly (Ingress→Service→
         // WorkloadGroup, the findRoot owner-ref walk, scale guard) now lives
         // in ResourceGraphBuilder (audit A1).
         val ingresses = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.network().v1().ingresses().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.network().v1().ingresses().inNamespace(namespace).list().items ?: emptyList()
+                k8s.network().v1().ingresses().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch Ingresses for topology graph: {}", e.message)
             emptyList()
         }
         val services = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.services().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.services().inNamespace(namespace).list().items ?: emptyList()
+                k8s.services().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch Services for topology graph: {}", e.message)
             emptyList()
         }
         val allPods = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.pods().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.pods().inNamespace(namespace).list().items ?: emptyList()
+                k8s.pods().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch Pods for topology graph: {}", e.message)
             emptyList()
         }
         val allRS = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.apps().replicaSets().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.apps().replicaSets().inNamespace(namespace).list().items ?: emptyList()
+                k8s.apps().replicaSets().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch ReplicaSets for topology graph: {}", e.message)
             emptyList()
         }
         val allJobs = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.batch().v1().jobs().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.batch().v1().jobs().inNamespace(namespace).list().items ?: emptyList()
+                k8s.batch().v1().jobs().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch Jobs for topology graph: {}", e.message)
             emptyList()
         }
         val allDeployments = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.apps().deployments().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.apps().deployments().inNamespace(namespace).list().items ?: emptyList()
+                k8s.apps().deployments().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch Deployments for topology graph: {}", e.message)
             emptyList()
         }
         val allStatefulSets = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.apps().statefulSets().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.apps().statefulSets().inNamespace(namespace).list().items ?: emptyList()
+                k8s.apps().statefulSets().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch StatefulSets for topology graph: {}", e.message)
             emptyList()
         }
         val allDaemonSets = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.apps().daemonSets().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.apps().daemonSets().inNamespace(namespace).list().items ?: emptyList()
+                k8s.apps().daemonSets().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch DaemonSets for topology graph: {}", e.message)
             emptyList()
         }
         val allCronJobs = try {
-            if (isAllNamespaces) {
+            if (serverNs == null) {
                 k8s.batch().v1().cronjobs().inAnyNamespace().list().items ?: emptyList()
             } else {
-                k8s.batch().v1().cronjobs().inNamespace(namespace).list().items ?: emptyList()
+                k8s.batch().v1().cronjobs().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
             log.warn("Failed to fetch CronJobs for topology graph: {}", e.message)
             emptyList()
         }
+
+        // Two or more selected namespaces list every namespace; keep the selected ones.
+        fun <T : HasMetadata> List<T>.inScope(): List<T> = filter { selection.contains(it.metadata?.namespace) }
 
         val crdKinds: Set<String> = (crds.value as? ResourceState.Success)?.data
             ?.map { it.kind }
@@ -2284,15 +2279,15 @@ class ReactiveKubeClient(
             .orEmpty()
 
         val graph = ResourceGraphBuilder.buildClusterTopology(
-            ingresses = ingresses,
-            services = services,
-            allPods = allPods,
-            allRS = allRS,
-            allJobs = allJobs,
-            allDeployments = allDeployments,
-            allStatefulSets = allStatefulSets,
-            allDaemonSets = allDaemonSets,
-            allCronJobs = allCronJobs,
+            ingresses = ingresses.inScope(),
+            services = services.inScope(),
+            allPods = allPods.inScope(),
+            allRS = allRS.inScope(),
+            allJobs = allJobs.inScope(),
+            allDeployments = allDeployments.inScope(),
+            allStatefulSets = allStatefulSets.inScope(),
+            allDaemonSets = allDaemonSets.inScope(),
+            allCronJobs = allCronJobs.inScope(),
             crdKinds = crdKinds,
         )
         if (graph.nodes.any { it.id == "__truncated__" }) {

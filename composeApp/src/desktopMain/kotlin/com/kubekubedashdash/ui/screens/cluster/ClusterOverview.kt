@@ -38,6 +38,7 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.cloud_filled
@@ -83,7 +84,7 @@ fun ClusterOverviewScreen(
     val deploymentsCount by viewModel.deploymentsCount.collectAsState()
     val servicesCount by viewModel.servicesCount.collectAsState()
     val phaseCounts by viewModel.podPhaseCounts.collectAsState()
-    val namespace by viewModel.selectedNamespace.collectAsState()
+    val namespaceScope by viewModel.namespaceScope.collectAsState()
     val health = clusterHealth
 
     val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
@@ -116,7 +117,7 @@ fun ClusterOverviewScreen(
     ) {
         ClusterHeader(name = clusterName, server = clusterServer, version = clusterVersion)
 
-        namespace?.let {
+        (namespaceScope as? NamespaceScope.Only)?.let {
             Spacer(Modifier.height(8.dp))
             NamespaceScopeNote(it)
         }
@@ -230,7 +231,7 @@ fun ClusterOverviewScreen(
             expanded = statsExpanded,
             onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_CLUSTER, !statsExpanded) },
             onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
-            scope = namespace?.let(UsageScope::namespace),
+            scope = (namespaceScope as? NamespaceScope.Only)?.let { UsageScope.of(it) },
         )
 
         Spacer(Modifier.height(24.dp))
@@ -304,20 +305,36 @@ private fun IssueBadge(count: Int, label: String, color: Color) {
     }
 }
 
+/** The scope chip and the sentence beside it, for a namespace selection. */
+internal fun namespaceScopeNoteText(scope: NamespaceScope.Only): Pair<String, String> {
+    val names = scope.sortedNames
+    return if (names.size == 1) {
+        "Namespace: ${names.single()}" to
+            "Pods, deployments, services, usage and events cover this namespace; nodes and capacity cover the whole cluster."
+    } else {
+        // A long selection would turn the note into a wall of names; the
+        // header selector lists them all.
+        val listed = if (names.size <= 5) names.joinToString(", ") else names.take(5).joinToString(", ") + " and ${names.size - 5} more"
+        "${names.size} namespaces" to
+            "Pods, deployments, services, usage and events cover these namespaces: $listed; nodes and capacity cover the whole cluster."
+    }
+}
+
 /**
- * Says which figures follow the selected namespace. The overview mixes both
+ * Says which figures follow the namespace selection. The overview mixes both
  * scopes — node, namespace and capacity figures are always whole-cluster — so
  * the header's selector alone doesn't tell the user what a number covers.
  */
 @Composable
-private fun NamespaceScopeNote(namespace: String) {
+private fun NamespaceScopeNote(scope: NamespaceScope.Only) {
+    val (chip, note) = namespaceScopeNoteText(scope)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Surface(
             shape = 4.dp.kdCorner,
             color = KdInfo.copy(alpha = 0.12f),
         ) {
             Text(
-                "Namespace: $namespace",
+                chip,
                 style = MaterialTheme.typography.labelSmall,
                 color = KdInfo,
                 fontWeight = FontWeight.Medium,
@@ -326,7 +343,7 @@ private fun NamespaceScopeNote(namespace: String) {
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            "Pods, deployments, services, usage and events cover this namespace; nodes and capacity cover the whole cluster.",
+            note,
             style = MaterialTheme.typography.labelSmall,
             color = KdTextSecondary,
         )
