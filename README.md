@@ -13,7 +13,7 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 ### Cluster management
 
 - Switch between kubeconfig contexts from the sidebar or the command palette
-- Filter all views by namespace or browse across all namespaces
+- Scope the namespaced views to one namespace, to several (tick their checkboxes, or Cmd/Ctrl-click a name), or to all namespaces
 - Cluster overview with a health banner, pod status breakdown, node count, and namespace count
 - A liveness probe detects silent disconnects and reflects connection state in the tab
 
@@ -28,9 +28,9 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 
 A dedicated tab (alongside your per-cluster tabs) that aggregates everything you have open into one screen:
 
-- **Combined statistics** — pod-phase breakdown, aggregated CPU/memory usage with history sparklines, pod-count gauges, and top nodes across every connected cluster
-- **Cluster summary cards** — sorted by recent error count, with inline issue badges; click a card to activate that cluster's tab (in this window or another)
-- **Event triage** — a filterable event stream spanning all clusters; filter by cluster, namespace, reason, and type, save and reapply filter presets, group related events, and toggle a reason **heatmap** across clusters
+- **Fleet strip** — a Total panel, one panel per open cluster in tab order, and the top nodes by pressure, side by side. Each panel shows CPU, memory and pod usage and a pod-phase bar (hover for exact figures); the Total panel adds a short usage history. When the panels don't fit, the cluster panels scroll between the pinned Total and Top nodes
+- **Warnings and navigation** — each panel's warnings chip counts the Warning and Error events of the chosen time window and narrows the event table to them; click a cluster panel to open its tab (in this window or another), or a top node to open it in its cluster's tab
+- **Event triage** — a filterable event stream spanning all clusters; filter by cluster, namespace, reason, and type, save and reapply filter presets, group related events, and toggle a reason **heatmap** across clusters (it opens by itself once per visit when three or more clusters have warnings of two or more reasons; close it and it stays closed until you open it yourself)
 
 ### Cluster topology
 
@@ -39,9 +39,9 @@ A whole-cluster graph that visualizes how resources relate, with workload cards,
 ![Cluster topology graph](docs/screenshots/topology.png)
 
 - Columns are pyramid-arranged by upstream connection count, and the viewport centers on the graph on landing
-- Viewport controls: **zoom** in/out, **pan** (drag), **rotate** the flow direction through four orientations, and **fit to screen**
+- Viewport controls: **zoom** in/out, **pan** (drag), **rotate** the flow direction through four orientations, and **reset** zoom and pan
 - Click a node to highlight the entire connected pipe
-- Configurable **auto-refresh** (Off / 5s / 15s / 30s / 60s / 2m / 5m, default 60s), paused automatically when you leave the screen
+- Configurable **auto-refresh** (Off / 5s / 15s / 30s / 1m / 2m / 5m, default 1m), paused automatically when you leave the screen
 - Namespace selector, a dynamic legend of the kinds in view, and an optional packet-animation toggle
 - Custom resources group their owned pods under the CRD root
 
@@ -103,8 +103,8 @@ Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scorin
 - A **warnings** section at the top of Overview with the newest three warnings, shown while the pod is unhealthy or a warning is still recurring (seen in the last 10 minutes); healthy pods keep a clean Overview
 - Container cards say *why*: the waiting message, the exit code, and the previous run's end (e.g. `OOMKilled · exit 137`, finished 5m ago); a Pending pod shows the scheduler's reason, an evicted pod the eviction message
 - CPU and memory usage gauges when a Metrics Server is installed
-- One-click **View logs** (streamed into the bottom drawer) and **Open shell** (interactive terminal — see below)
-- **Evict**, **Force-Delete**, and **Delete** actions
+- One-click **Logs** (streamed into the bottom drawer) and **Terminal** (an interactive shell — see below)
+- **Evict**, **Force delete**, and **Delete** actions
 
 ### Resource actions
 
@@ -112,7 +112,7 @@ Beyond browsing, KubeKubeDashDash can perform a focused set of write operations:
 
 | Resource | Actions |
 |----------|---------|
-| Pods | View logs, Open shell (exec), Port forward, Evict, Force-Delete, Delete |
+| Pods | Logs, Terminal (exec), Port forward, Evict, Force delete, Delete |
 | Services | Port forward |
 | Nodes | Cordon, Uncordon, Drain |
 | Deployments, StatefulSets, ReplicaSets | Scale |
@@ -256,7 +256,7 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 ./gradlew :composeApp:run
 ```
 
-The application opens a 1440×900 window, runs a prerequisites check, and presents the cluster selector.
+The application opens a 1440×960 window on first launch (later launches restore the last window size and position), runs a prerequisites check, and presents the cluster selector.
 
 ## Building distributable packages
 
@@ -291,7 +291,7 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Logging | Logback Classic 1.6.3 (via SLF4J) |
 | Code formatting | Spotless 8.10.2 + ktlint |
 | Build tool | Gradle 9.7.1, Temurin 21 (daemon JVM criteria) |
-| Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
+| Screenshot generation | `./gradlew generateScreenshots` — drives the live app against the demo cluster via `WorkspaceManager` and captures each window's own Skia frame in-process (no Screen Recording permission); `scripts/site_images.py` then crops and converts the captures for the site and this README |
 
 ## CI
 
