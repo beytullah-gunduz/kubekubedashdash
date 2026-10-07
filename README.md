@@ -215,7 +215,7 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 
 ## Prerequisites
 
-- **JDK 21** or later (only for building from source; the packaged DMG/MSI/DEB bundles its own JVM)
+- **JDK 17** or later to start the Gradle wrapper (only for building from source; the packaged DMG/MSI/DEB bundles its own JVM). The build itself runs on **Temurin 21**, pinned in `gradle/gradle-daemon-jvm.properties`: Gradle uses an installed Temurin 21, or downloads one on macOS and Windows. On Linux, install Temurin 21 yourself.
 - A valid `~/.kube/config` with at least one accessible cluster
 - **AWS CLI** — required when connecting to EKS clusters (`aws eks get-token`)
 - **Google Cloud SDK** — required when connecting to GKE clusters
@@ -276,7 +276,7 @@ The application opens a 1440×900 window, runs a prerequisites check, and presen
 | Native interop | JNA 5.19.1 (macOS shell `PATH` resolution) |
 | Logging | Logback Classic 1.6.3 (via SLF4J) |
 | Code formatting | Spotless 8.10.2 + ktlint |
-| Build tool | Gradle 9.7.1, JDK 21 |
+| Build tool | Gradle 9.7.1, Temurin 21 (daemon JVM criteria) |
 | Screenshot generation | `./gradlew generateScreenshots` — drives the live app via `WorkspaceManager` and captures every screen with `java.awt.Robot` |
 
 ## CI

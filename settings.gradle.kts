@@ -12,6 +12,15 @@ pluginManagement {
     }
 }
 
+// Lets Gradle download the daemon JDK pinned in gradle/gradle-daemon-jvm.properties
+// (Temurin 21, the same as CI) when no matching JDK is installed. The daemon's JDK
+// compiles the code and is the runtime bundled into the installers. Regenerate with
+// `./gradlew updateDaemonJvm --jvm-version 21 --jvm-vendor adoptium`. Foojay listed no
+// Linux Temurin 21 when the file was generated (2026-10-07), so Linux has no download URL.
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 dependencyResolutionManagement {
     repositories {
         google {
