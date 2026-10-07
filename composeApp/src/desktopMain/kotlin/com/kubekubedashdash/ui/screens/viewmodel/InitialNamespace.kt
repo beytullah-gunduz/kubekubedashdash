@@ -1,9 +1,11 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
+import com.kubekubedashdash.models.NamespaceScope
+
 /**
- * The namespace a fresh connect lands on: the restore target, else the
- * cluster's default, else all. Blank counts as absent.
+ * The namespaces a fresh connect lands on: the restore target, else the
+ * cluster's default namespace, else all. A blank default counts as absent.
  */
-fun initialNamespace(restoreNamespace: String?, defaultNamespace: String?): String = restoreNamespace?.takeIf { it.isNotBlank() }
-    ?: defaultNamespace?.takeIf { it.isNotBlank() }
-    ?: "All Namespaces"
+fun initialNamespaceScope(restore: NamespaceScope?, defaultNamespace: String?): NamespaceScope = restore
+    ?: defaultNamespace?.takeIf { it.isNotBlank() }?.let { NamespaceScope.single(it) }
+    ?: NamespaceScope.All

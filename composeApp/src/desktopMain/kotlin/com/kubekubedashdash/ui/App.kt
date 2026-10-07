@@ -59,6 +59,7 @@ import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import com.kubekubedashdash.resources.dashboard_filled
@@ -478,7 +479,7 @@ fun App(
             tabs = tabs,
             onNavigate = { target -> sessionForPalette?.viewModel?.navigate(target) },
             onActivateTab = { key -> workspace.setActive(key) },
-            onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setSelectedNamespace(ns) },
+            onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setNamespaceScope(NamespaceScope.single(ns)) },
             onCaptureLogs = onCaptureLogs,
             onTailLogs = onTailLogs,
         )

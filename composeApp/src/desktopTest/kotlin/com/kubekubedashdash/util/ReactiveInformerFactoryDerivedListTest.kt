@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import io.fabric8.kubernetes.api.model.Pod
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +30,7 @@ class ReactiveInformerFactoryDerivedListTest {
     fun setUp() {
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         manager = KubeConnectionManager()
-        factory = ReactiveInformerFactory(scope, manager, MutableStateFlow(null))
+        factory = ReactiveInformerFactory(scope, manager, MutableStateFlow<NamespaceScope>(NamespaceScope.All))
     }
 
     @AfterTest

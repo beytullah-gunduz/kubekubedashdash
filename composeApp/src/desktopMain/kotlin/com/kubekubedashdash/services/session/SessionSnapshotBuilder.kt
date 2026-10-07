@@ -2,11 +2,12 @@ package com.kubekubedashdash.services.session
 
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.WindowGeometry
+import com.kubekubedashdash.models.NamespaceScope
 
 /** A cluster tab as the live app sees it; [context] is blank for the bootstrap session. */
 data class TabView(
     val context: String,
-    val namespace: String,
+    val namespaceScope: NamespaceScope,
     val screen: Screen,
     val paneWidthDp: Float?,
 )
@@ -31,9 +32,11 @@ object SessionSnapshotBuilder {
             if (kept.isEmpty()) return@mapNotNull null
             SavedWorkspace(
                 tabs = kept.map { (_, tab) ->
+                    val (namespace, namespaces) = NamespaceScopeCodec.encode(tab.namespaceScope)
                     SavedClusterTab(
                         context = tab.context,
-                        namespace = tab.namespace,
+                        namespace = namespace,
+                        namespaces = namespaces,
                         screen = ScreenCodec.encode(tab.screen),
                         paneWidthDp = tab.paneWidthDp,
                     )

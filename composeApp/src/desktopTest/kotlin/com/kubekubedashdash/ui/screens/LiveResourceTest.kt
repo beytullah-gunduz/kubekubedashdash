@@ -43,4 +43,16 @@ class LiveResourceTest {
         // is expected — not a deletion.
         assertFalse(isResourceRemoved(loaded, presentNow = false, everSeenLive = true, inScope = false))
     }
+
+    @Test
+    fun `absence before the list has updated since a scope change is not removal`() {
+        // A namespace joining the selection flips inScope at once, but the list
+        // re-filters one emission later: the list in hand still predates it.
+        assertFalse(isResourceRemoved(ResourceState.Success(emptyList<Any>()), presentNow = false, everSeenLive = true, inScope = true, listUpdatedSinceScopeChange = false))
+    }
+
+    @Test
+    fun `absence once the list has updated since a scope change is removal`() {
+        assertTrue(isResourceRemoved(ResourceState.Success(emptyList<Any>()), presentNow = false, everSeenLive = true, inScope = true, listUpdatedSinceScopeChange = true))
+    }
 }

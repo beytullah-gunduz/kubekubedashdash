@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.allclusters.viewmodel
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -110,12 +111,12 @@ class AllClustersViewModelHistoryTest {
         shutdownCleanly(label = "AllClustersViewModelHistoryTest", servers = listOf(server))
     }
 
-    /** Opens a cluster tab on the mock cluster with [namespace] selected. */
-    private fun openTab(label: String, namespace: String?): ClusterSession {
+    /** Opens a cluster tab on the mock cluster with [scope] selected. */
+    private fun openTab(label: String, scope: NamespaceScope): ClusterSession {
         val session = ClusterSession()
         sessions += session
         session.connectionManager.connectWithClient(server.createClient(), label).getOrThrow()
-        session.reactiveClient.setSelectedNamespace(namespace)
+        session.reactiveClient.setNamespaceScope(scope)
         tabs.value = tabs.value + WorkspaceTab.Cluster(session)
         return session
     }
@@ -126,11 +127,11 @@ class AllClustersViewModelHistoryTest {
 
     @Test
     fun `a namespace switch starts fresh cpu, memory and pods series`() = runBlocking {
-        val tab = openTab("cluster-1", "ns-a")
+        val tab = openTab("cluster-1", NamespaceScope.single("ns-a"))
         vm.podsHistory.awaitLast(2f / 10)
         vm.cpuHistory.awaitLast(200f / 4000)
 
-        tab.reactiveClient.setSelectedNamespace("ns-b")
+        tab.reactiveClient.setNamespaceScope(NamespaceScope.single("ns-b"))
 
         assertEquals(listOf(5f / 10), vm.podsHistory.awaitLast(5f / 10))
         assertEquals(listOf(500f / 4000), vm.cpuHistory.awaitLast(500f / 4000))
@@ -139,13 +140,13 @@ class AllClustersViewModelHistoryTest {
 
     @Test
     fun `a series never starts on the partial sum taken while a tab reloads`() = runBlocking {
-        val first = openTab("cluster-1", "ns-a")
-        openTab("cluster-2", "ns-b")
+        val first = openTab("cluster-1", NamespaceScope.single("ns-a"))
+        openTab("cluster-2", NamespaceScope.single("ns-b"))
         // Both tabs in: (2 + 5) pods over 20 slots.
         vm.podsHistory.awaitLast(7f / 20)
         vm.cpuHistory.awaitLast(700f / 8000)
 
-        first.reactiveClient.setSelectedNamespace("ns-c")
+        first.reactiveClient.setNamespaceScope(NamespaceScope.single("ns-c"))
 
         // While the first tab reloads, the sum is the second tab alone (5 of
         // 10 slots, 500m of 4 cores). That point must not head the new
@@ -156,19 +157,19 @@ class AllClustersViewModelHistoryTest {
 
     @Test
     fun `each cluster summary names the namespace its tab follows`() = runBlocking {
-        val first = openTab("cluster-1", "ns-a")
-        val second = openTab("cluster-2", null)
+        val first = openTab("cluster-1", NamespaceScope.single("ns-a"))
+        val second = openTab("cluster-2", NamespaceScope.All)
 
         val namespaces = withTimeout(10_000) { vm.clusterSummaries.first { it.size == 2 } }
-            .associate { it.sessionId to it.namespace }
+            .associate { it.sessionId to it.namespaceScope }
 
-        assertEquals(mapOf(first.id to "ns-a", second.id to null), namespaces)
+        assertEquals(mapOf(first.id to NamespaceScope.single("ns-a"), second.id to NamespaceScope.All), namespaces)
     }
 
     @Test
     fun `each cluster summary carries its own usage, pods and capacity, in tab order`() = runBlocking {
-        val first = openTab("cluster-1", "ns-a")
-        val second = openTab("cluster-2", "ns-b")
+        val first = openTab("cluster-1", NamespaceScope.single("ns-a"))
+        val second = openTab("cluster-2", NamespaceScope.single("ns-b"))
         val summaries = withTimeout(15_000) {
             vm.clusterSummaries.first { list ->
                 list.size == 2 && list.all { it.usage?.metricsAvailable == true && it.podsCount != null && it.podsCapacity > 0 }

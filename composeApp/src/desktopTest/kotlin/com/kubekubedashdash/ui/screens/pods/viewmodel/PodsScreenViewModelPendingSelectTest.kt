@@ -2,6 +2,7 @@ package com.kubekubedashdash.ui.screens.pods.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
 import com.kubekubedashdash.util.KubeConnectionManager
@@ -103,7 +104,7 @@ class PodsScreenViewModelPendingSelectTest {
 
     @Test
     fun `pending uid resolves from the snapshot already in hand on a quiet cluster`() = runBlocking {
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
         awaitSnapshot { pods -> pods.any { it.uid == targetUid } }
 
         // No cluster activity after this point: resolution must not depend on
@@ -118,7 +119,7 @@ class PodsScreenViewModelPendingSelectTest {
     @Test
     fun `pending uid survives a snapshot that does not yet contain the pod`() = runBlocking {
         // Screen subscribed while a namespace WITHOUT the pod is selected.
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
         awaitSnapshot { pods -> pods.isEmpty() }
 
         vm.setParams(targetUid)
@@ -138,7 +139,7 @@ class PodsScreenViewModelPendingSelectTest {
         awaitSnapshot { pods -> pods.any { it.name == "decoy" } }
 
         // Now the namespace switch completes and the pod appears.
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
 
         val selected = withTimeout(5_000) { vm.selectedPod.first { it != null } }
         assertNotNull(selected)
@@ -150,7 +151,7 @@ class PodsScreenViewModelPendingSelectTest {
         // The node-detail jump: the session is scoped to ns-a and the node's
         // cluster-wide pod list offers the target in ns-b.
         val session = SessionViewModel(client, scope)
-        session.setSelectedNamespace("ns-a")
+        session.setNamespaceScope(NamespaceScope.single("ns-a"))
         awaitSnapshot { pods -> pods.isEmpty() }
 
         session.navigate(Screen.Main.Pods(selectPodUid = targetUid))

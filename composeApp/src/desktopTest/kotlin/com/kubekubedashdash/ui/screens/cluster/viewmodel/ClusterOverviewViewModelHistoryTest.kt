@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.cluster.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
@@ -72,7 +73,7 @@ class ClusterOverviewViewModelHistoryTest {
         manager = KubeConnectionManager()
         manager.connectWithClient(server.createClient(), "test-cluster").getOrThrow()
         client = ReactiveKubeClient(scope, manager)
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
         vm = ClusterOverviewViewModel(client)
         // The screen's collectAsState keeps this upstream alive; the Pods
         // series is only sampled while it is collected.
@@ -106,7 +107,7 @@ class ClusterOverviewViewModelHistoryTest {
     fun `namespace switch starts a fresh series`() = runBlocking {
         awaitLastPodsSample(0.2f)
 
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
 
         // Neither ns-a's 0.2 nor the 0 of the reload gap may survive the switch.
         assertEquals(listOf(0.5f), awaitLastPodsSample(0.5f))

@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
@@ -15,10 +16,9 @@ import kotlin.test.assertEquals
 /**
  * A jump to a pod (`Pods(selectPodUid)`) widens the session to All Namespaces
  * because the pod may live outside the selected one (a node's pod list is
- * cluster-wide). The header flow and the informers' flow must widen together:
- * widening only the header shows "All Namespaces" over a list still scoped to
- * the old namespace, where an out-of-scope pod never appears and the pending
- * selection never resolves.
+ * cluster-wide). The session's flow is the client's flow, so the header and the
+ * informers widen together: a list still scoped to the old namespace would
+ * never show an out-of-scope pod and the pending selection would never resolve.
  */
 class SessionViewModelJumpToPodTest {
 
@@ -42,17 +42,17 @@ class SessionViewModelJumpToPodTest {
 
     @Test
     fun `a jump to a pod widens the informers along with the header`() {
-        viewModel.setSelectedNamespace("ns-a")
+        viewModel.setNamespaceScope(NamespaceScope.single("ns-a"))
         viewModel.navigate(Screen.Main.Pods(selectPodUid = "uid-in-ns-b"))
-        assertEquals("All Namespaces", viewModel.selectedNamespace.value)
-        assertEquals(null, client.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value)
+        assertEquals(NamespaceScope.All, client.namespaceScope.value)
     }
 
     @Test
     fun `opening Pods without a jump keeps the namespace`() {
-        viewModel.setSelectedNamespace("ns-a")
+        viewModel.setNamespaceScope(NamespaceScope.single("ns-a"))
         viewModel.navigate(Screen.Main.Pods())
-        assertEquals("ns-a", viewModel.selectedNamespace.value)
-        assertEquals("ns-a", client.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("ns-a"), viewModel.namespaceScope.value)
+        assertEquals(NamespaceScope.single("ns-a"), client.namespaceScope.value)
     }
 }

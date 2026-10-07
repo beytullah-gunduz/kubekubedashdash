@@ -42,6 +42,7 @@ import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdStrokeCap
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.NodeResourceUsage
 import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.models.ResourceUsageSummary
@@ -61,9 +62,14 @@ import org.jetbrains.compose.resources.painterResource
  */
 data class UsageScope(val title: String, val note: String) {
     companion object {
-        fun namespace(namespace: String) = UsageScope(
-            title = "Usage Statistics · $namespace",
-            note = "This namespace's usage and pods, against whole-cluster capacity",
+        fun of(scope: NamespaceScope.Only): UsageScope = scope.sortedNames.singleOrNull()?.let { ns ->
+            UsageScope(
+                title = "Usage Statistics · $ns",
+                note = "This namespace's usage and pods, against whole-cluster capacity",
+            )
+        } ?: UsageScope(
+            title = "Usage Statistics · ${scope.namespaces.size} namespaces",
+            note = "These namespaces' usage and pods, against whole-cluster capacity",
         )
     }
 }

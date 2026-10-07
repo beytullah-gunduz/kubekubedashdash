@@ -1,6 +1,7 @@
 package com.kubekubedashdash.util
 
 import com.kubekubedashdash.models.ContainerUsage
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.PodUsage
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
@@ -9,6 +10,7 @@ import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.ContainerMetricsBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
+import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.Context
@@ -42,6 +44,23 @@ class ReactiveKubeClientPodUsageTest {
     private lateinit var client: ReactiveKubeClient
     private lateinit var scope: CoroutineScope
 
+    private fun metrics(seed: KubernetesClient, ns: String, name: String, vararg containers: Triple<String, String, String>) {
+        seed.resources(PodMetrics::class.java).inNamespace(ns).resource(
+            PodMetricsBuilder()
+                .withNewMetadata().withName(name).withNamespace(ns).endMetadata()
+                .addToContainers(
+                    *containers.map { (container, cpu, memory) ->
+                        ContainerMetricsBuilder()
+                            .withName(container)
+                            .addToUsage("cpu", Quantity(cpu))
+                            .addToUsage("memory", Quantity(memory))
+                            .build()
+                    }.toTypedArray(),
+                )
+                .build(),
+        ).create()
+    }
+
     @BeforeTest
     fun setUp() {
         server = KubernetesMockServer(Context(), MockWebServer(), HashMap(), KubernetesCrudDispatcher(), false)
@@ -59,26 +78,9 @@ class ReactiveKubeClientPodUsageTest {
                     .build(),
             ).create()
 
-            fun metrics(ns: String, name: String, vararg containers: Triple<String, String, String>) {
-                seed.resources(PodMetrics::class.java).inNamespace(ns).resource(
-                    PodMetricsBuilder()
-                        .withNewMetadata().withName(name).withNamespace(ns).endMetadata()
-                        .addToContainers(
-                            *containers.map { (container, cpu, memory) ->
-                                ContainerMetricsBuilder()
-                                    .withName(container)
-                                    .addToUsage("cpu", Quantity(cpu))
-                                    .addToUsage("memory", Quantity(memory))
-                                    .build()
-                            }.toTypedArray(),
-                        )
-                        .build(),
-                ).create()
-            }
-
-            metrics("ns-a", "web-0", Triple("app", "100m", "200Mi"), Triple("sidecar", "20m", "16Mi"))
-            metrics("ns-a", "web-1", Triple("app", "50m", "100Mi"))
-            metrics("ns-b", "db-0", Triple("db", "300m", "1Gi"))
+            metrics(seed, "ns-a", "web-0", Triple("app", "100m", "200Mi"), Triple("sidecar", "20m", "16Mi"))
+            metrics(seed, "ns-a", "web-1", Triple("app", "50m", "100Mi"))
+            metrics(seed, "ns-b", "db-0", Triple("db", "300m", "1Gi"))
         } finally {
             seed.close()
         }
@@ -100,7 +102,7 @@ class ReactiveKubeClientPodUsageTest {
 
     @Test
     fun `one sample carries per-pod usage whose sum is the namespace total`() = runBlocking {
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
 
         val usage = awaitUsage { it.podUsages.keys == setOf("ns-a/web-0", "ns-a/web-1") }
 
@@ -123,11 +125,27 @@ class ReactiveKubeClientPodUsageTest {
 
     @Test
     fun `all namespaces keys every pod by its own namespace`() = runBlocking {
-        client.setSelectedNamespace(null)
+        client.setNamespaceScope(NamespaceScope.All)
 
         val usage = awaitUsage { it.podUsages.size == 3 }
 
         assertEquals(setOf("ns-a/web-0", "ns-a/web-1", "ns-b/db-0"), usage.podUsages.keys)
         assertEquals(300L, usage.podUsages["ns-b/db-0"]?.cpuMillis)
+    }
+
+    @Test
+    fun `two selected namespaces sample every namespace and keep the selected ones`() = runBlocking {
+        val seed = server.createClient()
+        try {
+            metrics(seed, "ns-c", "batch-0", Triple("batch", "10m", "8Mi"))
+        } finally {
+            seed.close()
+        }
+        client.setNamespaceScope(NamespaceScope.of(listOf("ns-a", "ns-b")))
+
+        val usage = awaitUsage { it.podUsages.keys == setOf("ns-a/web-0", "ns-a/web-1", "ns-b/db-0") }
+
+        assertEquals(470L, usage.cpuUsedMillis)
+        assertEquals(1340 * MIB, usage.memoryUsedBytes)
     }
 }

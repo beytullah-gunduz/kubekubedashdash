@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -25,7 +26,7 @@ import kotlin.test.assertEquals
  * Regression test for the namespace-switch reconnect loop.
  *
  * The bug: namespaced informer / polling flows in [ReactiveKubeClient] used
- * `flatMapLatest(_selectedNamespace)`. Switching namespace cancelled the
+ * `flatMapLatest(namespaceScope)`. Switching namespace cancelled the
  * previous inner flow, which threw `kotlinx.coroutines.flow.internal.ChildCancelledException`
  * ("Child of the scoped flow was cancelled"). The catch blocks caught
  * `Exception` (which includes `CancellationException`) and called
@@ -40,7 +41,7 @@ import kotlin.test.assertEquals
  * so cancellation propagates structurally instead of being misclassified.
  *
  * This test reproduces the original trigger conditions: ≥ 3 namespaced flows
- * subscribed simultaneously, then a single `setSelectedNamespace` call. With
+ * subscribed simultaneously, then a single `setNamespaceScope` call. With
  * the bug present, that one switch trips `connectionError` to a non-null
  * cancellation message; with the fix, it stays null.
  */
@@ -93,7 +94,7 @@ class ReactiveKubeClientCancellationTest {
 
     @Test
     fun `namespace switch with multiple subscribed flows does not register a connection error`() = runBlocking {
-        client.setSelectedNamespace("ns-a")
+        client.setNamespaceScope(NamespaceScope.single("ns-a"))
 
         // Capture every value `connectionError` ever takes on, not just its final
         // value. After a buggy cancellation trips the failure counter, the very
@@ -130,7 +131,7 @@ class ReactiveKubeClientCancellationTest {
         // cancels its inner flow and starts a new one for ns-b. Pre-fix, each
         // cancellation called reportError; six in quick succession tripped the
         // failure threshold and set connectionError.
-        client.setSelectedNamespace("ns-b")
+        client.setNamespaceScope(NamespaceScope.single("ns-b"))
 
         // Wait until the new namespace's data has propagated.
         withTimeout(15_000) {

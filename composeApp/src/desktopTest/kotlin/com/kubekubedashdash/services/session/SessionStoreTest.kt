@@ -4,12 +4,14 @@ import com.kubekubedashdash.model.WindowGeometry
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SessionStoreTest {
 
@@ -98,6 +100,42 @@ class SessionStoreTest {
         store.save(second)
         assertFalse(tempDir.resolve("session.json.tmp").exists())
         assertEquals(second, store.load())
+    }
+
+    @Test
+    fun `a multi-namespace tab round-trips and keeps all namespaces for older builds`() {
+        val snapshot = SessionSnapshot(
+            workspaces = listOf(
+                SavedWorkspace(
+                    tabs = listOf(
+                        SavedClusterTab(
+                            context = "example-context",
+                            namespace = "All Namespaces",
+                            namespaces = listOf("ns-a", "ns-b"),
+                        ),
+                    ),
+                    activeTab = 0,
+                ),
+            ),
+        )
+
+        val store = SessionStore(file)
+        store.save(snapshot)
+
+        assertEquals(snapshot, store.load())
+        val text = file.readText()
+        assertTrue(text.contains("\"namespaces\""), text)
+        assertTrue(text.contains("\"namespace\": \"All Namespaces\""), text)
+    }
+
+    @Test
+    fun `a file saved before the namespaces field still loads`() {
+        file.writeText(
+            """{"version":1,"workspaces":[{"tabs":[{"context":"example-context","namespace":"default","paneWidthDp":800.0}],"activeTab":0}]}""",
+        )
+        val tab = SessionStore(file).load()!!.workspaces[0].tabs[0]
+        assertNull(tab.namespaces)
+        assertEquals("default", tab.namespace)
     }
 
     @Test

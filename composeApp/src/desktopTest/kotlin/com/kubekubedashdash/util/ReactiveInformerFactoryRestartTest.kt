@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -95,7 +96,7 @@ class ReactiveInformerFactoryRestartTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var manager: KubeConnectionManager
-    private lateinit var selectedNamespace: MutableStateFlow<String?>
+    private lateinit var namespaceScope: MutableStateFlow<NamespaceScope>
     private lateinit var factory: ReactiveInformerFactory
     private val informers = CopyOnWriteArrayList<FakeInformer>()
 
@@ -108,8 +109,8 @@ class ReactiveInformerFactoryRestartTest {
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         manager = KubeConnectionManager()
         manager.connectWithClient(unusedClient(), "cluster-a").getOrThrow()
-        selectedNamespace = MutableStateFlow("ns-a")
-        factory = ReactiveInformerFactory(scope, manager, selectedNamespace)
+        namespaceScope = MutableStateFlow(NamespaceScope.single("ns-a"))
+        factory = ReactiveInformerFactory(scope, manager, namespaceScope)
     }
 
     @AfterTest
@@ -117,7 +118,7 @@ class ReactiveInformerFactoryRestartTest {
         shutdownCleanly(scope, label = "ReactiveInformerFactoryRestartTest", manager = manager)
     }
 
-    private fun pod(name: String): Pod = PodBuilder().withNewMetadata().withName(name).withNamespace("default").endMetadata().build()
+    private fun pod(name: String, namespace: String = "default"): Pod = PodBuilder().withNewMetadata().withName(name).withNamespace(namespace).endMetadata().build()
 
     /** The first attempt fails at start; every later one serves [items]. */
     private fun failThenServe(items: List<Pod>): () -> SharedIndexInformer<Pod> = {
@@ -143,7 +144,9 @@ class ReactiveInformerFactoryRestartTest {
 
     @Test
     fun `a namespaced list restarts in the same namespace`() = runBlocking {
-        val next = failThenServe(listOf(pod("p1")))
+        // The pod lives in the selected namespace: the factory keeps only the
+        // selected namespaces' objects, whatever the fake store returns.
+        val next = failThenServe(listOf(pod("p1", "ns-a")))
         val namespacesSeen = CopyOnWriteArrayList<String?>()
         val flow = factory.namespacedInformer<Pod, String>(
             inform = { _, ns, _ ->

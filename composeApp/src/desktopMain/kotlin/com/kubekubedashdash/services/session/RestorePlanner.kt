@@ -3,11 +3,12 @@ package com.kubekubedashdash.services.session
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ScreenBounds
 import com.kubekubedashdash.model.WindowGeometry
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.util.DemoContext
 
 data class PlannedTab(
     val context: String,
-    val namespace: String,
+    val namespaceScope: NamespaceScope,
     val screen: Screen.Main,
     val paneWidthDp: Float?,
 )
@@ -47,7 +48,7 @@ object RestorePlanner {
                 tabs = kept.map { (_, tab) ->
                     PlannedTab(
                         context = tab.context,
-                        namespace = tab.namespace.ifBlank { SavedClusterTab.ALL_NAMESPACES },
+                        namespaceScope = NamespaceScopeCodec.decode(tab.namespace, tab.namespaces),
                         screen = ScreenCodec.decode(tab.screen),
                         paneWidthDp = tab.paneWidthDp?.coerceIn(MIN_PANE_DP, MAX_PANE_DP),
                     )

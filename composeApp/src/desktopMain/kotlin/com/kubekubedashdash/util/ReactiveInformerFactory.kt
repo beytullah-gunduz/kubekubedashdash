@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.ResourceState
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -10,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
@@ -39,7 +41,7 @@ import org.slf4j.LoggerFactory
 internal class ReactiveInformerFactory(
     private val scope: CoroutineScope,
     private val connectionManager: KubeConnectionManager,
-    private val selectedNamespace: StateFlow<String?>,
+    private val namespaceScope: StateFlow<NamespaceScope>,
 ) {
     private val log = LoggerFactory.getLogger(ReactiveInformerFactory::class.java)
     private val k8s: KubernetesClient get() = connectionManager.client
@@ -194,10 +196,13 @@ internal class ReactiveInformerFactory(
         inform: (KubernetesClient, String?, ResourceEventHandler<R>) -> SharedIndexInformer<R>,
         mapper: (R) -> T?,
     ): StateFlow<ResourceState<List<T>>> {
-        // Same restart tick as the cluster-scoped builder; the selected
-        // namespace is carried through unchanged.
+        // Same restart tick as the cluster-scoped builder. Only the server-side
+        // namespace restarts the informer: two or more selected namespaces watch
+        // every namespace and namespacedList filters the store, so ticking one
+        // more namespace re-filters in place instead of re-listing the cluster.
         val restarts = MutableStateFlow(0L)
-        val trigger = combine(selectedNamespace, connectedTrigger, restarts) { ns, _, _ -> ns }
+        val serverNamespace = namespaceScope.map { it.serverNamespace }.distinctUntilChanged()
+        val trigger = combine(serverNamespace, connectedTrigger, restarts) { ns, _, _ -> ns }
         return RestartableStateFlow(namespacedList(trigger, inform, mapper)) { restarts.update { it + 1 } }
     }
 
@@ -232,6 +237,15 @@ internal class ReactiveInformerFactory(
                             }
                         },
                     )
+
+                    // Filters by the scope current at each emission: an informer
+                    // watching one namespace passes everything, one watching every
+                    // namespace keeps the selected ones.
+                    fun snapshot(): List<T> {
+                        val current = namespaceScope.value
+                        return informer.store.list().filter { current.contains(it.metadata?.namespace) }.mapNotNull(mapper)
+                    }
+                    var relay: Job? = null
                     // Same contract as the cluster-scoped builder: every exit
                     // after the lambda returned, the start included, closes the
                     // informer.
@@ -242,10 +256,15 @@ internal class ReactiveInformerFactory(
                                 .debounce(100)
                                 .collect {
                                     if (!informer.hasSynced()) return@collect
+                                    // A selection that moved the server-side namespace
+                                    // is restarting this informer; its store was listed
+                                    // for another scope, so filtering it would emit a
+                                    // remnant (often empty) ahead of the restart's Loading.
+                                    if (namespaceScope.value.serverNamespace != ns) return@collect
                                     try {
-                                        val items = informer.store.list()
+                                        val items = snapshot()
                                         log.trace("Namespaced informer emitting {} items for namespace={}", items.size, nsLabel)
-                                        send(ResourceState.Success(items.mapNotNull(mapper)))
+                                        send(ResourceState.Success(items))
                                         reportSuccess()
                                     } catch (e: CancellationException) {
                                         throw e
@@ -255,13 +274,27 @@ internal class ReactiveInformerFactory(
                                     }
                                 }
                         }
+                        // A selection change that keeps the server-side namespace
+                        // restarts nothing (see namespacedInformer): re-filter the
+                        // store through the debounced path. No drop(1): the replayed
+                        // current value costs one duplicate emission, which
+                        // distinctUntilChanged drops, and closes the gap between the
+                        // post-sync snapshot below and this collector's subscription.
+                        relay = launch { namespaceScope.collect { emitSignal.trySend(Unit) } }
                         awaitInformerSync(informer, "Namespaced informer for namespace=$nsLabel")
-                        val items = informer.store.list()
+                        // Unlike the debounced path, no server-namespace guard here: a
+                        // selection that moves away and back unseen restarts nothing,
+                        // and skipping this first send would leave the list on Loading.
+                        val items = snapshot()
                         log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
-                        send(ResourceState.Success(items.mapNotNull(mapper)))
+                        send(ResourceState.Success(items))
                         reportSuccess()
                         awaitCancellation()
                     } finally {
+                        // A list parked on Error keeps its children alive (channelFlow
+                        // waits for them); a later selection change must not re-read the
+                        // closed informer's store.
+                        relay?.cancel()
                         log.debug("Closing namespaced informer for namespace={}", nsLabel)
                         // Same guard as the cluster-scoped builder: never let a
                         // close() failure replace the propagating exception.
@@ -283,9 +316,9 @@ internal class ReactiveInformerFactory(
 
     fun <T> namespacedPolling(
         intervalMs: Long = 5_000,
-        fetch: (namespace: String?) -> T,
-    ): StateFlow<ResourceState<T>> = combine(selectedNamespace, connectedTrigger) { ns, _ -> ns }
-        .flatMapLatest { ns ->
+        fetch: (scope: NamespaceScope) -> T,
+    ): StateFlow<ResourceState<T>> = combine(namespaceScope, connectedTrigger) { s, _ -> s }
+        .flatMapLatest { s ->
             flow {
                 parkUnlessConnected()
                 emit(ResourceState.Loading)
@@ -296,15 +329,15 @@ internal class ReactiveInformerFactory(
                         // suspension point, so flatMapLatest cancellation (namespace /
                         // connection change) can't preempt it otherwise — it would pin
                         // an IO thread until fabric8's own retry budget exhausts.
-                        val data = runInterruptible(Dispatchers.IO) { fetch(ns) }
+                        val data = runInterruptible(Dispatchers.IO) { fetch(s) }
                         reportSuccess()
                         emit(ResourceState.Success(data))
                         loaded = true
-                        log.trace("Polling fetch succeeded for namespace={}", ns ?: "<all>")
+                        log.trace("Polling fetch succeeded for scope={}", s)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        log.warn("Polling fetch failed for namespace={}: {}", ns ?: "<all>", e.message)
+                        log.warn("Polling fetch failed for scope={}: {}", s, e.message)
                         reportError(e.message ?: "Unknown error")
                         if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
                     }

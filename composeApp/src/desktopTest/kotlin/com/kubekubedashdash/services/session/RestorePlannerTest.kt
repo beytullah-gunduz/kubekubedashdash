@@ -2,6 +2,7 @@ package com.kubekubedashdash.services.session
 
 import com.kubekubedashdash.model.ScreenBounds
 import com.kubekubedashdash.model.WindowGeometry
+import com.kubekubedashdash.models.NamespaceScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -93,8 +94,31 @@ class RestorePlannerTest {
 
         val tabs = plan[0].tabs
         assertEquals(1200f, tabs[0].paneWidthDp)
-        assertEquals("All Namespaces", tabs[0].namespace)
+        assertEquals(NamespaceScope.All, tabs[0].namespaceScope)
         assertEquals(400f, tabs[1].paneWidthDp)
+        assertEquals(NamespaceScope.single("kube-system"), tabs[1].namespaceScope)
+    }
+
+    @Test
+    fun `a saved namespace list decodes back to a multi-selection`() {
+        val snapshot = SessionSnapshot(
+            workspaces = listOf(
+                SavedWorkspace(
+                    tabs = listOf(
+                        SavedClusterTab(
+                            context = "example-context",
+                            namespace = "All Namespaces",
+                            namespaces = listOf("ns-a", "ns-b"),
+                        ),
+                    ),
+                    activeTab = 0,
+                ),
+            ),
+        )
+
+        val plan = RestorePlanner.plan(snapshot, availableContexts = listOf("example-context"), screens = emptyList())
+
+        assertEquals(NamespaceScope.of(listOf("ns-a", "ns-b")), plan[0].tabs[0].namespaceScope)
     }
 
     @Test

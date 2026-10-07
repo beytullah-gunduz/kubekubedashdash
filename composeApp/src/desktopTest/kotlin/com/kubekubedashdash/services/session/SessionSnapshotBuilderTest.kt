@@ -1,13 +1,15 @@
 package com.kubekubedashdash.services.session
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.models.NamespaceScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SessionSnapshotBuilderTest {
 
-    private fun tab(context: String, namespace: String = "default", screen: Screen = Screen.Main.ClusterOverview, paneWidthDp: Float = 800f) = TabView(context = context, namespace = namespace, screen = screen, paneWidthDp = paneWidthDp)
+    private fun tab(context: String, namespaceScope: NamespaceScope = NamespaceScope.single("default"), screen: Screen = Screen.Main.ClusterOverview, paneWidthDp: Float = 800f) = TabView(context = context, namespaceScope = namespaceScope, screen = screen, paneWidthDp = paneWidthDp)
 
     @Test
     fun `a blank-context tab is dropped and a window with only blank tabs is dropped`() {
@@ -59,7 +61,7 @@ class SessionSnapshotBuilderTest {
             tabs = listOf(
                 tab(
                     context = "example-context",
-                    namespace = "kube-system",
+                    namespaceScope = NamespaceScope.single("kube-system"),
                     screen = Screen.Main.Pods(selectPodUid = "u"),
                     paneWidthDp = 650f,
                 ),
@@ -75,5 +77,20 @@ class SessionSnapshotBuilderTest {
         assertTrue(savedTab.screen.crd == null)
         assertEquals(650f, savedTab.paneWidthDp)
         assertEquals("kube-system", savedTab.namespace)
+        assertNull(savedTab.namespaces)
+    }
+
+    @Test
+    fun `a two-namespace tab saves All Namespaces plus the sorted list`() {
+        val ws = WorkspaceView(
+            tabs = listOf(tab("example-context", namespaceScope = NamespaceScope.of(listOf("ns-b", "ns-a")))),
+            activeTabIndex = 0,
+            geometry = null,
+        )
+
+        val savedTab = SessionSnapshotBuilder.build(listOf(ws)).workspaces[0].tabs[0]
+
+        assertEquals("All Namespaces", savedTab.namespace)
+        assertEquals(listOf("ns-a", "ns-b"), savedTab.namespaces)
     }
 }
