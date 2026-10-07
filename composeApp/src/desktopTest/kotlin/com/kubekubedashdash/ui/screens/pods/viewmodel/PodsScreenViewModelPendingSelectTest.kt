@@ -1,7 +1,9 @@
 package com.kubekubedashdash.ui.screens.pods.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.shutdownCleanly
@@ -137,6 +139,22 @@ class PodsScreenViewModelPendingSelectTest {
 
         // Now the namespace switch completes and the pod appears.
         client.setSelectedNamespace("ns-b")
+
+        val selected = withTimeout(5_000) { vm.selectedPod.first { it != null } }
+        assertNotNull(selected)
+        assertEquals("target", selected.name)
+    }
+
+    @Test
+    fun `pending uid resolves when the jump comes from a session scoped to another namespace`() = runBlocking {
+        // The node-detail jump: the session is scoped to ns-a and the node's
+        // cluster-wide pod list offers the target in ns-b.
+        val session = SessionViewModel(client, scope)
+        session.setSelectedNamespace("ns-a")
+        awaitSnapshot { pods -> pods.isEmpty() }
+
+        session.navigate(Screen.Main.Pods(selectPodUid = targetUid))
+        vm.setParams(targetUid)
 
         val selected = withTimeout(5_000) { vm.selectedPod.first { it != null } }
         assertNotNull(selected)
