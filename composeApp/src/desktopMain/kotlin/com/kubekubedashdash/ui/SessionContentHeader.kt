@@ -28,15 +28,19 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,12 +48,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +78,7 @@ import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.arrow_back_filled
@@ -110,9 +121,9 @@ internal fun SessionContentHeader(
     canGoForward: Boolean,
     onBack: () -> Unit,
     onForward: () -> Unit,
-    selectedNamespace: String,
+    namespaceScope: NamespaceScope,
     namespaces: List<String>,
-    onNamespaceChange: (String) -> Unit,
+    onNamespaceScopeChange: (NamespaceScope) -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     searchFocusRequests: Int,
@@ -152,7 +163,7 @@ internal fun SessionContentHeader(
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
-                CompactNamespaceSelector(selectedNamespace, namespaces, onNamespaceChange)
+                CompactNamespaceSelector(namespaceScope, namespaces, onNamespaceScopeChange)
             }
 
             // The search slot is always reserved (Overview/Topology leave it
@@ -339,20 +350,41 @@ private fun CompactSearchField(
     )
 }
 
+/** The selector button's text: the one namespace, how many, or All Namespaces. */
+internal fun namespaceSelectorLabel(scope: NamespaceScope): String = when (scope) {
+    NamespaceScope.All -> "All Namespaces"
+    is NamespaceScope.Only -> scope.sortedNames.singleOrNull() ?: "${scope.namespaces.size} namespaces"
+}
+
+/** Test tags for the namespace selector. */
+internal object NamespaceSelectorTags {
+    const val BUTTON = "namespace-selector"
+    const val ALL = "namespace-selector-all"
+
+    fun row(namespace: String) = "namespace-selector-row-$namespace"
+
+    fun check(namespace: String) = "namespace-selector-check-$namespace"
+}
+
 @Composable
-private fun CompactNamespaceSelector(
-    selectedNamespace: String,
+internal fun CompactNamespaceSelector(
+    scope: NamespaceScope,
     namespaces: List<String>,
-    onNamespaceChange: (String) -> Unit,
+    onScopeChange: (NamespaceScope) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val buttonHeight = 28.dp
+    // A selected namespace the list lacks (not loaded yet, or deleted since)
+    // still gets a row, so it can be unticked.
+    val rows = remember(namespaces, scope) {
+        (namespaces + (scope as? NamespaceScope.Only)?.namespaces.orEmpty()).distinct().sorted()
+    }
 
     Box {
         OutlinedButton(
             onClick = { expanded = !expanded },
-            modifier = Modifier.height(buttonHeight).width(NamespaceSelectorWidth),
+            modifier = Modifier.height(buttonHeight).width(NamespaceSelectorWidth).testTag(NamespaceSelectorTags.BUTTON),
             shape = 4.dp.kdCorner,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
             border = ButtonDefaults.outlinedButtonBorder(true).copy(
@@ -364,7 +396,7 @@ private fun CompactNamespaceSelector(
             Spacer(Modifier.width(4.dp))
             // Names run to 63 chars; the menu shows them in full.
             Text(
-                selectedNamespace,
+                namespaceSelectorLabel(scope),
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -380,7 +412,7 @@ private fun CompactNamespaceSelector(
             // would otherwise resolve to an infinite constraint and crash).
             // +1 row for the "All Namespaces" entry; +13 for divider + padding.
             val rowHeight = 38.dp
-            val menuHeight = (rowHeight * (namespaces.size + 1) + 13.dp)
+            val menuHeight = (rowHeight * (rows.size + 1) + 13.dp)
                 .coerceAtMost(320.dp)
             Popup(
                 alignment = Alignment.TopStart,
@@ -404,20 +436,26 @@ private fun CompactNamespaceSelector(
                     ) {
                         NamespaceMenuRow(
                             label = "All Namespaces (${namespaces.size})",
-                            selected = selectedNamespace == "All Namespaces",
+                            selected = scope == NamespaceScope.All,
                             onClick = {
-                                onNamespaceChange("All Namespaces")
+                                onScopeChange(NamespaceScope.All)
                                 expanded = false
                             },
+                            modifier = Modifier.testTag(NamespaceSelectorTags.ALL),
                         )
                         HorizontalDivider(color = KdBorder)
-                        namespaces.forEach { ns ->
-                            NamespaceMenuRow(
-                                label = ns,
-                                selected = ns == selectedNamespace,
-                                onClick = {
-                                    onNamespaceChange(ns)
-                                    expanded = false
+                        rows.forEach { ns ->
+                            NamespaceCheckRow(
+                                namespace = ns,
+                                checked = scope is NamespaceScope.Only && ns in scope.namespaces,
+                                onToggle = { onScopeChange(scope.toggled(ns)) },
+                                onName = { toggle ->
+                                    if (toggle) {
+                                        onScopeChange(scope.toggled(ns))
+                                    } else {
+                                        onScopeChange(NamespaceScope.single(ns))
+                                        expanded = false
+                                    }
                                 },
                             )
                         }
@@ -437,9 +475,10 @@ private fun NamespaceMenuRow(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -460,6 +499,55 @@ private fun NamespaceMenuRow(
             label,
             style = MaterialTheme.typography.bodyMedium,
             color = if (selected) KdPrimary else KdTextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * A namespace in the selector. The box adds or removes it and keeps the menu
+ * open; the name selects only it and closes the menu (Cmd/Ctrl-click on the
+ * name toggles instead, as on a table row).
+ */
+@Composable
+private fun NamespaceCheckRow(
+    namespace: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    onName: (toggle: Boolean) -> Unit,
+) {
+    // Read inside the popup: the modifier state belongs to whichever layer
+    // owns the click (as ResourceTable's row click reads it).
+    val windowInfo = LocalWindowInfo.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(NamespaceSelectorTags.row(namespace))
+            .clickable {
+                val mods = windowInfo.keyboardModifiers
+                onName(mods.isMetaPressed || mods.isCtrlPressed)
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+            // Dp.Unspecified drops the 48 dp touch-target minimum, which would
+            // set the row height; scaled like ResourceTable's selection column.
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { onToggle() },
+                    colors = CheckboxDefaults.colors(checkedColor = KdPrimary),
+                    modifier = Modifier.scale(0.75f).testTag(NamespaceSelectorTags.check(namespace)),
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            namespace,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (checked) KdPrimary else KdTextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

@@ -151,7 +151,7 @@ class PodsScreenViewModelPendingSelectTest {
         // The node-detail jump: the session is scoped to ns-a and the node's
         // cluster-wide pod list offers the target in ns-b.
         val session = SessionViewModel(client, scope)
-        session.setSelectedNamespace("ns-a")
+        session.setNamespaceScope(NamespaceScope.single("ns-a"))
         awaitSnapshot { pods -> pods.isEmpty() }
 
         session.navigate(Screen.Main.Pods(selectPodUid = targetUid))

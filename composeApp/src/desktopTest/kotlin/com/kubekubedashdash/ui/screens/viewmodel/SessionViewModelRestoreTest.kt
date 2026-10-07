@@ -49,24 +49,24 @@ class SessionViewModelRestoreTest {
 
     @Test
     fun `a prepared restore lands on its namespace, screen and pane width`() = runBlocking<Unit> {
-        viewModel.prepareRestore(SessionViewModel.RestoreTarget("production", Screen.Main.Pods(), 600f))
+        viewModel.prepareRestore(SessionViewModel.RestoreTarget(NamespaceScope.single("production"), Screen.Main.Pods(), 600f))
         viewModel.connectToCluster(DemoContext.MOCK_CONTEXT_NAME)
         // Capture at the instant the screen flips: the connect path must have
         // applied namespace and width BEFORE emitting the success event.
-        var namespaceAtFlip: String? = null
+        var namespaceAtFlip: NamespaceScope? = null
         var widthAtFlip: Float? = null
         withTimeout(30_000) {
             viewModel.currentScreen.first { screen ->
                 val flipped = screen == Screen.Main.Pods()
                 if (flipped) {
-                    namespaceAtFlip = viewModel.selectedNamespace.value
+                    namespaceAtFlip = viewModel.namespaceScope.value
                     widthAtFlip = viewModel.extraPaneWidth.value
                 }
                 flipped
             }
         }
 
-        assertEquals("production", namespaceAtFlip)
+        assertEquals(NamespaceScope.single("production"), namespaceAtFlip)
         assertEquals(600f, widthAtFlip)
         assertEquals(NamespaceScope.single("production"), reactiveClient.namespaceScope.value)
         assertNull(viewModel.persistedRestoreView)
@@ -74,7 +74,7 @@ class SessionViewModelRestoreTest {
 
     @Test
     fun `the restore target is consumed once — a later connect uses the defaults`() = runBlocking<Unit> {
-        viewModel.prepareRestore(SessionViewModel.RestoreTarget("production", Screen.Main.Pods(), 600f))
+        viewModel.prepareRestore(SessionViewModel.RestoreTarget(NamespaceScope.single("production"), Screen.Main.Pods(), 600f))
         viewModel.connectToCluster(DemoContext.MOCK_CONTEXT_NAME)
         withTimeout(30_000) { viewModel.currentScreen.first { it == Screen.Main.Pods() } }
 
@@ -82,13 +82,13 @@ class SessionViewModelRestoreTest {
         viewModel.connectToCluster(viewModel.selectedContext.value)
         withTimeout(30_000) { viewModel.currentScreen.first { it == Screen.Main.ClusterOverview } }
 
-        assertEquals("All Namespaces", viewModel.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value)
         assertEquals(NamespaceScope.All, reactiveClient.namespaceScope.value)
     }
 
     @Test
     fun `the pane width is clamped like a drag`() = runBlocking<Unit> {
-        viewModel.prepareRestore(SessionViewModel.RestoreTarget("All Namespaces", Screen.Main.Nodes(), 5_000f))
+        viewModel.prepareRestore(SessionViewModel.RestoreTarget(NamespaceScope.All, Screen.Main.Nodes(), 5_000f))
         viewModel.connectToCluster(DemoContext.MOCK_CONTEXT_NAME)
         withTimeout(30_000) { viewModel.currentScreen.first { it == Screen.Main.Nodes() } }
 

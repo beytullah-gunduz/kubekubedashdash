@@ -135,7 +135,7 @@ object SessionPersistence {
                 val pending = vm.persistedRestoreView
                 TabView(
                     context = vm.selectedContext.value,
-                    namespace = pending?.namespace ?: vm.selectedNamespace.value,
+                    namespaceScope = pending?.namespaceScope ?: vm.namespaceScope.value,
                     screen = pending?.screen ?: vm.currentScreen.value,
                     paneWidthDp = pending?.paneWidthDp ?: vm.extraPaneWidth.value,
                 )

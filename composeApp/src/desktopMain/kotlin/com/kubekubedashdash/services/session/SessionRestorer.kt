@@ -40,7 +40,7 @@ object SessionRestorer {
                     workspace,
                     tab.context,
                     target,
-                    restore = SessionViewModel.RestoreTarget(tab.namespace, tab.screen, tab.paneWidthDp),
+                    restore = SessionViewModel.RestoreTarget(tab.namespaceScope, tab.screen, tab.paneWidthDp),
                 )
                 opened++
             }

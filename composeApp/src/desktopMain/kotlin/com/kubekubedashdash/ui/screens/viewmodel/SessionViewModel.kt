@@ -141,10 +141,10 @@ class SessionViewModel(
      * attempt is superseded — would lose the restored place on the retry of
      * a flaky restore connect, which is the common case. The rare cost is a
      * user who picks a DIFFERENT cluster into a still-connecting restored
-     * tab: that cluster then lands on the restored namespace/screen/pane
-     * width instead of the defaults.
+     * tab: that cluster then lands on the restored namespace
+     * selection/screen/pane width instead of the defaults.
      */
-    data class RestoreTarget(val namespace: String, val screen: Screen.Main, val paneWidthDp: Float?)
+    data class RestoreTarget(val namespaceScope: NamespaceScope, val screen: Screen.Main, val paneWidthDp: Float?)
 
     @Volatile
     private var pendingRestore: RestoreTarget? = null
@@ -165,8 +165,11 @@ class SessionViewModel(
         restoredView = target
     }
 
-    private val _selectedNamespace = MutableStateFlow("All Namespaces")
-    val selectedNamespace: StateFlow<String> = _selectedNamespace.asStateFlow()
+    /**
+     * The namespaces this tab follows. The client owns it, so the header, the
+     * lists and persistence read one flow and can never disagree.
+     */
+    val namespaceScope: StateFlow<NamespaceScope> = reactiveClient.namespaceScope
 
     private val _selectedContext = MutableStateFlow("")
     val selectedContext: StateFlow<String> = _selectedContext.asStateFlow()
@@ -475,11 +478,10 @@ class SessionViewModel(
     }
 
     fun navigate(screen: Screen) {
-        // A jump to a pod may land outside the selected namespace (a node's pod
-        // list is cluster-wide), so widen to All Namespaces — through the setter,
-        // so the informers widen with the header and the pod can appear.
+        // A jump to a pod may land outside the selection (a node's pod list is
+        // cluster-wide), so widen to All Namespaces.
         if (screen is Screen.Main.Pods && screen.selectPodUid != null) {
-            setSelectedNamespace("All Namespaces")
+            setNamespaceScope(NamespaceScope.All)
         }
         // A Detail opens as a pane next to the current main screen; anything
         // else replaces the main screen and closes the pane.
@@ -645,15 +647,15 @@ class SessionViewModel(
                             // and by tests — while still holding its default. Emitting last
                             // makes the screen change the final step, so awaiting it proves
                             // the rest already landed. A reconnect skips all of it: its
-                            // namespace and pane stay as they are, and its restore target
+                            // namespace selection and pane stay as they are, and its restore target
                             // (if any) was consumed by the first connect.
                             val restore = pendingRestore
-                            val namespace = initialNamespace(
-                                restore?.namespace,
-                                PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
+                            reactiveClient.setNamespaceScope(
+                                initialNamespaceScope(
+                                    restore?.namespaceScope,
+                                    PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
+                                ),
                             )
-                            _selectedNamespace.value = namespace
-                            reactiveClient.setNamespaceScope(if (namespace == "All Namespaces") NamespaceScope.All else NamespaceScope.single(namespace))
                             restore?.paneWidthDp?.let { setExtraPaneWidth(it) }
                         }
                         emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
@@ -676,10 +678,7 @@ class SessionViewModel(
         }
     }
 
-    fun setSelectedNamespace(namespace: String) {
-        _selectedNamespace.value = namespace
-        reactiveClient.setNamespaceScope(if (namespace == "All Namespaces") NamespaceScope.All else NamespaceScope.single(namespace))
-    }
+    fun setNamespaceScope(selection: NamespaceScope) = reactiveClient.setNamespaceScope(selection)
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query

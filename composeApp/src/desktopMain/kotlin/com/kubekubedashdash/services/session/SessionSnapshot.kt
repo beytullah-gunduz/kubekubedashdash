@@ -26,10 +26,18 @@ data class SavedWorkspace(
 @Serializable
 data class SavedClusterTab(
     val context: String,
+    /** The one selected namespace, or [ALL_NAMESPACES] for all of them and for a multi-selection (see [namespaces]). */
     val namespace: String = ALL_NAMESPACES,
     val screen: SavedScreen = SavedScreen(),
     /** Last dragged detail width, or null when the user never dragged (the host then uses its default). */
     val paneWidthDp: Float? = null,
+    /**
+     * The selected namespaces when there are two or more, else null. Added
+     * within schema version 1: a build without this field ignores it and
+     * restores [namespace] (all namespaces), a superset of the selection
+     * rather than a guess at one of its members.
+     */
+    val namespaces: List<String>? = null,
 ) {
     companion object {
         const val ALL_NAMESPACES = "All Namespaces"

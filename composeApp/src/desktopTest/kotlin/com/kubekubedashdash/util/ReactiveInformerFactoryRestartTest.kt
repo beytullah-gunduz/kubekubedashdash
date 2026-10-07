@@ -96,7 +96,7 @@ class ReactiveInformerFactoryRestartTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var manager: KubeConnectionManager
-    private lateinit var selectedNamespace: MutableStateFlow<NamespaceScope>
+    private lateinit var namespaceScope: MutableStateFlow<NamespaceScope>
     private lateinit var factory: ReactiveInformerFactory
     private val informers = CopyOnWriteArrayList<FakeInformer>()
 
@@ -109,8 +109,8 @@ class ReactiveInformerFactoryRestartTest {
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         manager = KubeConnectionManager()
         manager.connectWithClient(unusedClient(), "cluster-a").getOrThrow()
-        selectedNamespace = MutableStateFlow(NamespaceScope.single("ns-a"))
-        factory = ReactiveInformerFactory(scope, manager, selectedNamespace)
+        namespaceScope = MutableStateFlow(NamespaceScope.single("ns-a"))
+        factory = ReactiveInformerFactory(scope, manager, namespaceScope)
     }
 
     @AfterTest

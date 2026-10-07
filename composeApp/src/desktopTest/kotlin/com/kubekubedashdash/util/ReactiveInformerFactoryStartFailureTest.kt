@@ -103,7 +103,7 @@ class ReactiveInformerFactoryStartFailureTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var manager: KubeConnectionManager
-    private lateinit var selectedNamespace: MutableStateFlow<NamespaceScope>
+    private lateinit var namespaceScope: MutableStateFlow<NamespaceScope>
     private lateinit var factory: ReactiveInformerFactory
     private val informers = CopyOnWriteArrayList<FakeInformer>()
 
@@ -117,8 +117,8 @@ class ReactiveInformerFactoryStartFailureTest {
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         manager = KubeConnectionManager()
         manager.connectWithClient(unusedClient(), "cluster-a").getOrThrow()
-        selectedNamespace = MutableStateFlow<NamespaceScope>(NamespaceScope.All)
-        factory = ReactiveInformerFactory(scope, manager, selectedNamespace)
+        namespaceScope = MutableStateFlow<NamespaceScope>(NamespaceScope.All)
+        factory = ReactiveInformerFactory(scope, manager, namespaceScope)
     }
 
     @AfterTest

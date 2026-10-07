@@ -90,12 +90,12 @@ class SessionViewModelReconnectTest {
     fun `connection loss preserves screen and namespace and raises the overlay flag`() = runBlocking<Unit> {
         connectAndAwait()
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.setSelectedNamespace("production")
+        viewModel.setNamespaceScope(NamespaceScope.single("production"))
 
         forceConnectionLoss()
 
         assertIs<Screen.Main.Pods>(viewModel.currentScreen.value, "loss must not swap the screen")
-        assertEquals("production", viewModel.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("production"), viewModel.namespaceScope.value)
         assertEquals(NamespaceScope.single("production"), reactiveClient.namespaceScope.value)
         assertFalse(viewModel.isConnected.value)
         assertTrue(viewModel.reconnecting.value)
@@ -107,7 +107,7 @@ class SessionViewModelReconnectTest {
     fun `retryNow reconnects without resetting screen or namespace`() = runBlocking<Unit> {
         connectAndAwait()
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.setSelectedNamespace("production")
+        viewModel.setNamespaceScope(NamespaceScope.single("production"))
         forceConnectionLoss()
 
         viewModel.retryNow()
@@ -115,7 +115,7 @@ class SessionViewModelReconnectTest {
         withTimeout(10_000) { viewModel.reconnecting.first { !it } }
 
         assertIs<Screen.Main.Pods>(viewModel.currentScreen.value, "reconnect must not navigate")
-        assertEquals("production", viewModel.selectedNamespace.value)
+        assertEquals(NamespaceScope.single("production"), viewModel.namespaceScope.value)
         assertEquals(NamespaceScope.single("production"), reactiveClient.namespaceScope.value)
         assertNull(viewModel.reconnectError.value)
         assertEquals(0, viewModel.retryCountdown.value)
@@ -140,7 +140,7 @@ class SessionViewModelReconnectTest {
     fun `user-initiated connect still resets namespace and lands on the cluster overview`() = runBlocking<Unit> {
         connectAndAwait()
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.setSelectedNamespace("production")
+        viewModel.setNamespaceScope(NamespaceScope.single("production"))
         // An open, expanded pane from the old cluster must not outlive the switch.
         viewModel.navigate(Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "production"))
         viewModel.setExtraPaneExpanded(true)
@@ -155,7 +155,7 @@ class SessionViewModelReconnectTest {
         // happens-before proxy for the namespace writes.
         withTimeout(10_000) { reactiveClient.namespaceScope.first { it == NamespaceScope.All } }
 
-        assertEquals("All Namespaces", viewModel.selectedNamespace.value)
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value)
         assertEquals(NamespaceScope.All, reactiveClient.namespaceScope.value)
         assertFalse(viewModel.reconnecting.value)
         assertNull(viewModel.extraPaneScreen.value)

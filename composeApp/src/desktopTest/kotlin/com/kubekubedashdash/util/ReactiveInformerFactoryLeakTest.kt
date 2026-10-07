@@ -105,7 +105,7 @@ class ReactiveInformerFactoryLeakTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var manager: KubeConnectionManager
-    private lateinit var selectedNamespace: MutableStateFlow<NamespaceScope>
+    private lateinit var namespaceScope: MutableStateFlow<NamespaceScope>
     private lateinit var factory: ReactiveInformerFactory
     private val informers = CopyOnWriteArrayList<FakeInformer>()
 
@@ -119,8 +119,8 @@ class ReactiveInformerFactoryLeakTest {
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         manager = KubeConnectionManager()
         manager.connectWithClient(unusedClient(), "cluster-a").getOrThrow()
-        selectedNamespace = MutableStateFlow<NamespaceScope>(NamespaceScope.All)
-        factory = ReactiveInformerFactory(scope, manager, selectedNamespace)
+        namespaceScope = MutableStateFlow<NamespaceScope>(NamespaceScope.All)
+        factory = ReactiveInformerFactory(scope, manager, namespaceScope)
     }
 
     @AfterTest
@@ -180,7 +180,7 @@ class ReactiveInformerFactoryLeakTest {
 
         // A namespace switch restarts the inner flow while the first LIST is
         // still running; the first informer comes back into a cancelled flow.
-        selectedNamespace.value = NamespaceScope.single("ns-b")
+        namespaceScope.value = NamespaceScope.single("ns-b")
         listReleased.countDown()
 
         // Both attempts (the cancelled one and the restarted one) return an informer.
