@@ -101,7 +101,7 @@ Type `>` for actions: pick a verb, then its target. The verbs are **Cordon / Unc
 ### Deployment details
 
 - Resource graph tab that visualizes the ownership chain (Deployment → ReplicaSet → Pods) along with related Services, Ingresses, ConfigMaps, Secrets, and HPAs
-- **Scale** and **Rollout Restart** actions
+- **Scale** and **Rollout restart** actions
 
 ### Pod details
 
@@ -123,8 +123,8 @@ Beyond browsing, KubeKubeDashDash can perform a focused set of write operations:
 | Services | Port forward |
 | Nodes | Cordon, Uncordon, Drain |
 | Deployments, StatefulSets, ReplicaSets | Scale |
-| Deployments, StatefulSets, DaemonSets | Rollout Restart |
-| CronJobs | Trigger Now, Suspend, Resume |
+| Deployments, StatefulSets, DaemonSets | Rollout restart |
+| CronJobs | Trigger now, Suspend, Resume |
 | CertificateSigningRequests | Approve, Deny |
 | Most other kinds + custom resources | Delete |
 
@@ -141,7 +141,7 @@ Select several rows and a bar above the table offers actions for all of them: ti
 | Pods | Tail logs, Evict, Delete |
 | Deployments | Restart, Delete |
 | Nodes | Cordon, Uncordon, Drain |
-| Other kinds except Namespaces, custom resources included | Delete |
+| Other kinds except Namespaces, Services and Events, custom resources included | Delete |
 
 Every bulk action except Tail logs asks for confirmation, can be stopped while it runs, lists what failed, and keeps the failed rows selected so you can retry. **Tail logs** streams the selected pods into one merged, colour-coded tab (up to 10 namespaces and 40 container streams at once); a single pod opens its own log tab.
 
@@ -167,7 +167,7 @@ Pod and application logs share a resizable **bottom drawer**, toggled with <kbd>
 - Per-tab **filter** with the matches highlighted: plain text or a regular expression (`.*`), case-sensitive on request (`Aa`)
 - In a pod tab, **Follow** keeps the newest line in view, **Wrap** wraps long lines, **Timestamps** prefixes each line with its Kubernetes timestamp, **Prev** shows the previous (crashed) container's log, **Since** limits the history (5m to 24h), and a container picker switches between a pod's containers
 - Selectable, copyable text (drag to select, ⌘/Ctrl+C), plus buttons to copy the visible lines or save them to a file
-- A tab keeps the newest 5,000 lines and says how many older lines it dropped
+- A pod tab keeps the newest 5,000 lines (a namespace or multi-pod tail 20,000) and says how many older lines it dropped
 - Logs for terminated pods (Succeeded/Failed) are read once as history instead of opening a live stream
 - Hide the drawer (**Hide log drawer**) and its tabs stay open (a title-bar chip counts them; click it or press <kbd>⌘J</kbd> to bring them back). **Close all (N)** closes every tab — except Port forwards while a forward runs — and offers **Undo** for 10 seconds (it asks first while a log capture is still running)
 
@@ -314,7 +314,7 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 ./gradlew :composeApp:run
 ```
 
-The application opens a 1440×960 window on first launch (later launches restore the last window size and position), runs a prerequisites check, and presents the cluster selector.
+The application opens a 1440×960 window on first launch (later launches restore the last window size and position while **Restore last session** is on), runs a prerequisites check, and presents the cluster selector.
 
 ## Building distributable packages
 
