@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -33,8 +32,8 @@ import com.kubekubedashdash.KdTerminalBg
 import com.kubekubedashdash.KdTerminalFg
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.model.TerminalSession
+import com.kubekubedashdash.ui.components.BusyIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -151,11 +150,10 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        CircularProgressIndicator(
+                        BusyIndicator(
                             modifier = Modifier.size(32.dp),
                             color = KdPrimary,
                             strokeWidth = 3.dp,
-                            strokeCap = kdStrokeCap,
                         )
                         Text(
                             text = "Connecting to ${session.displayLabel}…",

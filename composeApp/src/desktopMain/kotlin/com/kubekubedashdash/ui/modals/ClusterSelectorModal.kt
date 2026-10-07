@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -66,7 +65,6 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
@@ -76,6 +74,7 @@ import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ContextBinding
@@ -275,11 +274,10 @@ fun ClusterSelectorModal(
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(
+                            BusyIndicator(
                                 modifier = Modifier.size(28.dp),
                                 color = KdPrimary,
                                 strokeWidth = 3.dp,
-                                strokeCap = kdStrokeCap,
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(

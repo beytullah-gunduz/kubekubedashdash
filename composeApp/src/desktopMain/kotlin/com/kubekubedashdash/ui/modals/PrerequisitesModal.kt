@@ -29,7 +29,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -67,7 +66,6 @@ import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.logging.AppLogStore
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_filled
@@ -75,6 +73,7 @@ import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.rocket_filled
 import com.kubekubedashdash.resources.warning_filled
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.CheckStatus
@@ -398,11 +397,10 @@ private fun CheckRow(check: PrerequisiteCheck) {
             contentAlignment = Alignment.Center,
         ) {
             when (check.status) {
-                CheckStatus.CHECKING -> CircularProgressIndicator(
+                CheckStatus.CHECKING -> BusyIndicator(
                     modifier = Modifier.size(16.dp),
                     color = KdPrimary,
                     strokeWidth = 2.dp,
-                    strokeCap = kdStrokeCap,
                 )
 
                 CheckStatus.PASSED -> Box(

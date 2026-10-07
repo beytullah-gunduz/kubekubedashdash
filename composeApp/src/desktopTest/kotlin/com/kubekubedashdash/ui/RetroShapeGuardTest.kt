@@ -21,6 +21,14 @@ import kotlin.test.fail
  * `baseShape =`, a `PrimaryTabRow`/`PrimaryScrollableTabRow` without `indicator =`, and a
  * `TabRowDefaults.PrimaryIndicator` without `shape =`.
  *
+ * Spinners: a raw `CircularProgressIndicator`, `LoadingIndicator` or `ContainedLoadingIndicator`
+ * call is a violation whatever its arguments; use `BusyIndicator`, which is square and stepped in
+ * Retro. Its own Default delegate is the one exempted call. Importing any Material 3 progress or
+ * loading indicator under an alias is a violation too, since the call would then be invisible.
+ * `LinearProgressIndicator` must pass `strokeCap =`. The Expressive `CircularWavyProgressIndicator`
+ * and `LinearWavyProgressIndicator` draw round caps by default and are not used here, so any call
+ * to them is a violation.
+ *
  * Deliberately NOT guarded:
  *  - `Switch`, `Checkbox`, `RadioButton` and `RangeSlider` stay round by user decision (2026-10-06,
  *    D4): their round internals are not routed through the Retro tokens.
@@ -30,9 +38,10 @@ import kotlin.test.fail
  * recognised as shaped, so it must be exempted with the marker (none exist today).
  *
  * The scan is a masking text scanner ([RetroShapeScanner]), not a parser: strings, char literals
- * and comments are blanked out first so a mention in a comment or an import never fires. The
- * canary tests pin the scanner's behaviour on synthetic sources, so a broken scanner cannot make
- * the repo scan pass vacuously. Read-only: it never writes anything.
+ * and comments are blanked out first so a mention in a comment never fires, and import lines are
+ * skipped, except that an aliased progress-indicator import is itself a violation. The canary
+ * tests pin the scanner's behaviour on synthetic sources, so a broken scanner cannot make the repo
+ * scan pass vacuously. Read-only: it never writes anything.
  */
 class RetroShapeGuardTest {
 
@@ -182,26 +191,42 @@ class RetroShapeGuardTest {
     }
 
     @Test
-    fun `progress indicators need a strokeCap at the top level of the call`() {
-        assertEquals(
-            listOf(1 to "progress-cap"),
-            hits(src("CircularProgressIndicator(", "  modifier = Modifier.size(4.dp),", ")")),
-        )
+    fun `circular spinners and M3 loading indicators must go through BusyIndicator`() {
+        assertEquals(listOf(1 to "raw-spinner"), hits("CircularProgressIndicator(modifier = Modifier.size(4.dp), strokeCap = kdStrokeCap)"))
+        assertEquals(listOf(1 to "raw-spinner"), hits("androidx.compose.material3.CircularProgressIndicator()"))
+        assertEquals(listOf(1 to "raw-spinner"), hits("LoadingIndicator()"))
+        assertEquals(listOf(1 to "raw-spinner"), hits("ContainedLoadingIndicator(modifier = Modifier)"))
         assertEquals(
             emptyList(),
-            hits(
-                src(
-                    "CircularProgressIndicator(",
-                    "  modifier = Modifier.size(4.dp),",
-                    "  strokeCap = kdStrokeCap,",
-                    ")",
-                ),
-            ),
+            hits("CircularProgressIndicator(modifier, color, strokeWidth, strokeCap = kdStrokeCap) // kd-shape-exempt: Default delegate"),
         )
+        assertEquals(emptyList(), hits("ResourceLoadingIndicator()"))
+        assertEquals(emptyList(), hits("BusyIndicator(modifier = Modifier.size(14.dp), color = KdPrimary)"))
+        assertEquals(emptyList(), hits("// CircularProgressIndicator( in a comment"))
+        assertEquals(listOf(1 to "wavy-indicator"), hits("CircularWavyProgressIndicator()"))
+        assertEquals(listOf(1 to "wavy-indicator"), hits("LinearWavyProgressIndicator(progress = { 0.5f })"))
+    }
+
+    @Test
+    fun `a progress indicator imported under another name is flagged`() {
+        assertEquals(listOf(1 to "aliased-spinner"), hits("import androidx.compose.material3.CircularProgressIndicator as Spinner"))
+        assertEquals(listOf(1 to "aliased-spinner"), hits("import androidx.compose.material3.LinearProgressIndicator as Bar"))
+        assertEquals(listOf(1 to "aliased-spinner"), hits("import androidx.compose.material3.CircularWavyProgressIndicator as Wave"))
+        assertEquals(emptyList(), hits("import androidx.compose.material3.CircularProgressIndicator"))
         assertEquals(
-            listOf(1 to "progress-cap"),
-            hits("LinearProgressIndicator(modifier = Modifier.foo(strokeCap = x))"),
+            emptyList(),
+            hits("import androidx.compose.material3.CircularProgressIndicator as Spinner // kd-shape-exempt: canary"),
         )
+    }
+
+    @Test
+    fun `linear progress indicators still need a strokeCap at the top level of the call`() {
+        assertEquals(listOf(1 to "progress-cap"), hits(src("LinearProgressIndicator(", "  progress = { 0.5f },", ")")))
+        assertEquals(
+            emptyList(),
+            hits(src("LinearProgressIndicator(", "  progress = { 0.5f },", "  strokeCap = kdStrokeCap,", ")")),
+        )
+        assertEquals(listOf(1 to "progress-cap"), hits("LinearProgressIndicator(modifier = Modifier.foo(strokeCap = x))"))
     }
 
     @Test
@@ -394,6 +419,16 @@ internal object RetroShapeScanner {
         TokenRule("corner-radius", Regex("""\bCornerRadius\s*\("""), "use kdCornerRadius(radius)"),
         TokenRule("draw-circle", Regex("""\bdrawCircle\s*\("""), "use drawKdDot(color, radius, center)"),
         TokenRule(
+            "raw-spinner",
+            Regex("""(?<!\w)(CircularProgressIndicator|LoadingIndicator|ContainedLoadingIndicator)\s*\("""),
+            "use BusyIndicator (ui/components/BusyIndicator.kt): square and stepped in Retro",
+        ),
+        TokenRule(
+            "wavy-indicator",
+            Regex("""(?<!\w)(CircularWavyProgressIndicator|LinearWavyProgressIndicator)\s*\("""),
+            "M3's wavy indicators draw round caps: use BusyIndicator, or LinearProgressIndicator with strokeCap = kdStrokeCap",
+        ),
+        TokenRule(
             "m3-default-shape",
             Regex("""\b(ButtonDefaults|IconButtonDefaults)\.\w*[sS]hapes?\b"""),
             "M3's default button shapes are CornerFull (round in Retro): use kdRoundShape",
@@ -403,7 +438,7 @@ internal object RetroShapeScanner {
     private val callRules = listOf(
         CallRule(
             "progress-cap",
-            Regex("""(?<!\w)(CircularProgressIndicator|LinearProgressIndicator)\s*\("""),
+            Regex("""(?<!\w)LinearProgressIndicator\s*\("""),
             "strokeCap",
             "pass strokeCap = kdStrokeCap",
         ),
@@ -438,6 +473,8 @@ internal object RetroShapeScanner {
     )
 
     private val exemptMarker = Regex("""//\s*kd-shape-exempt:\s*\S""")
+    private val spinnerAliasImport =
+        Regex("""^\s*import\s+androidx\.compose\.material3\.(CircularProgressIndicator|LinearProgressIndicator|LoadingIndicator|ContainedLoadingIndicator|CircularWavyProgressIndicator|LinearWavyProgressIndicator)\s+as\b""")
     private val funBefore = Regex("""\bfun\s+$""")
 
     private enum class State { CODE, STRING, RAW, CHAR, LINE_COMMENT, BLOCK_COMMENT }
@@ -463,6 +500,11 @@ internal object RetroShapeScanner {
             for (match in rule.regex.findAll(masked)) {
                 val line = lineOf(match.range.first)
                 if (reportable(line)) violations += Violation(file, line, rule.rule, rule.hint)
+            }
+        }
+        for ((index, text) in maskedLines.withIndex()) {
+            if (!exempt[index] && spinnerAliasImport.containsMatchIn(text)) {
+                violations += Violation(file, index + 1, "aliased-spinner", "import progress indicators under their own name so this guard sees their calls")
             }
         }
         for (rule in callRules) {

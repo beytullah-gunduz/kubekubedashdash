@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -54,7 +53,6 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.model.Workspace
@@ -74,6 +72,7 @@ import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.services.logtail.TailTarget
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.terminal.JediTermPane
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
@@ -1011,11 +1010,10 @@ private fun BootstrapSplash() {
                 tint = KdPrimary,
             )
             Spacer(Modifier.height(20.dp))
-            CircularProgressIndicator(
+            BusyIndicator(
                 modifier = Modifier.size(28.dp),
                 color = KdPrimary,
                 strokeWidth = 2.5.dp,
-                strokeCap = kdStrokeCap,
             )
         }
     }

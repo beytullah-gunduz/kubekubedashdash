@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,7 +38,6 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
@@ -51,6 +49,7 @@ import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.UsageBar
@@ -157,7 +156,7 @@ private fun resourceQuotaUsageTab(
     when {
         rows == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -219,7 +218,7 @@ private fun policyRulesTab(
     when {
         rules == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -276,7 +275,7 @@ private fun roleBindingTab(
     when {
         !loaded -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -405,7 +404,7 @@ private fun endpointSliceTab(
     when {
         !loaded -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp), strokeCap = kdStrokeCap)
+                BusyIndicator(modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -599,7 +598,7 @@ private fun podsOverviewSection(
         when {
             snapshot == null -> {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary, strokeCap = kdStrokeCap)
+                    BusyIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = KdPrimary)
                 }
             }
 
