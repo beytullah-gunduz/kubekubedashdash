@@ -753,8 +753,10 @@ private fun SidebarItemTooltip(text: String) {
 // retroChrome strips the bold and tracking): space above it but not below,
 // so it binds to its own rows; title text in the rows' icon column (18 dp),
 // left of their labels; a hairline after the title; the chevron at the
-// trailing edge, where it no longer sits in the icon column. Retro also gives
-// the title the heading accent, like TitleBar and SessionContentHeader do.
+// trailing edge, where it no longer sits in the icon column. The title is the
+// brightest text in the rail: the heading accent in Retro, like TitleBar and
+// SessionContentHeader; textPrimary elsewhere, where the accent is the
+// selection blue and would read as selected or as a link.
 // [separated] is false only for a section that opens the rail (Favourites):
 // space or a stub above it would separate it from nothing. Collapsed, the
 // header gives way to the activity-bar stub SidebarTierDivider uses.
@@ -794,13 +796,9 @@ fun SidebarSection(
                     style = MaterialTheme.typography.labelSmall
                         .copy(fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                         .retroChrome(8.sp),
-                    // Hovered, textPrimary: G1 holds it on KdHover in every palette,
-                    // where accent drops below 4.5:1 in several (PaletteGateTest G6).
-                    color = when {
-                        hovered -> KdTextPrimary
-                        ThemeManager.isRetro -> KdAccent
-                        else -> KdTextSecondary
-                    },
+                    // Hovered, textPrimary in Retro too: G1 holds it on KdHover in every
+                    // palette, where accent drops below 4.5:1 in several (PaletteGateTest G6).
+                    color = if (ThemeManager.isRetro && !hovered) KdAccent else KdTextPrimary,
                 )
                 Spacer(Modifier.width(8.dp))
                 HorizontalDivider(modifier = Modifier.weight(1f), color = KdBorder, thickness = 1.dp)

@@ -21,6 +21,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdAccent
+import com.kubekubedashdash.KdPrimary
+import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
@@ -167,12 +169,16 @@ class SidebarSectionTest {
     }
 
     @Test
-    fun `Default titles keep the secondary text colour`() = runComposeUiTest {
+    fun `Default titles take the primary text colour, not the selection blue`() = runComposeUiTest {
         ThemeManager.syncStyleFromPreferences(ThemeStyle.DEFAULT)
         setContent { Rail() }
         waitForIdle()
 
-        assertEquals(KdTextSecondary, onNodeWithText(shownTitle, useUnmergedTree = true).laidOutStyle().color)
+        val title = onNodeWithText(shownTitle, useUnmergedTree = true).laidOutStyle().color
+        assertEquals(KdTextPrimary, title)
+        assertNotEquals(KdPrimary, title)
+        // An unselected row label stays secondary, so the title stands out from it.
+        assertEquals(KdTextSecondary, onNodeWithText("Pods", useUnmergedTree = true).laidOutStyle().color)
     }
 
     @Test
