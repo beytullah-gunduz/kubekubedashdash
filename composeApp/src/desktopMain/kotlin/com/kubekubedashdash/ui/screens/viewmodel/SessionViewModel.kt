@@ -474,8 +474,11 @@ class SessionViewModel(
     }
 
     fun navigate(screen: Screen) {
+        // A jump to a pod may land outside the selected namespace (a node's pod
+        // list is cluster-wide), so widen to All Namespaces — through the setter,
+        // so the informers widen with the header and the pod can appear.
         if (screen is Screen.Main.Pods && screen.selectPodUid != null) {
-            _selectedNamespace.value = "All Namespaces"
+            setSelectedNamespace("All Namespaces")
         }
         // A Detail opens as a pane next to the current main screen; anything
         // else replaces the main screen and closes the pane.
