@@ -5,24 +5,30 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
@@ -49,6 +55,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -57,14 +67,23 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
@@ -85,6 +104,7 @@ import com.kubekubedashdash.data.repository.NavPreferenceRepository
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdCorners
+import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.orCompact
@@ -92,6 +112,7 @@ import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.extension_filled
+import com.kubekubedashdash.resources.more_horiz_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.SeverityDot
@@ -270,13 +291,14 @@ fun Sidebar(
                 }
 
                 SidebarSection("More", collapsed, defaultExpanded = false) {
-                    NavSections.filter { it.tier == NavTier.MORE }.forEach { section ->
-                        // Text only: the 56 dp rail would cram it into icons.
-                        if (!collapsed) {
+                    if (collapsed) {
+                        MoreFlyoutItem(currentScreen, onNavigate)
+                    } else {
+                        NavSections.filter { it.tier == NavTier.MORE }.forEach { section ->
                             SidebarSubLabel(section.title)
-                        }
-                        section.kinds.forEach { kind ->
-                            NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, favouriteKeySet, onToggleKindFavourite, onNavigate)
+                            section.kinds.forEach { kind ->
+                                NavKindItem(kind, currentScreen, collapsed, clusterHealth, counts, favouriteKeySet, onToggleKindFavourite, onNavigate)
+                            }
                         }
                     }
                 }
@@ -569,6 +591,8 @@ fun SidebarItem(
                 .clip(6.dp.kdCorner)
                 .background(bg)
                 .clickable(onClick = onClick)
+                // The current page, for screen readers as well as the bar below.
+                .semantics { this.selected = selected }
                 .onPointerEvent(PointerEventType.Enter) { hovered = true }
                 .onPointerEvent(PointerEventType.Exit) { hovered = false }
                 .onPointerEvent(PointerEventType.Press) { event ->
@@ -759,7 +783,10 @@ private fun SidebarItemTooltip(text: String) {
 // selection blue and would read as selected or as a link.
 // [separated] is false only for a section that opens the rail (Favourites):
 // space or a stub above it would separate it from nothing. Collapsed, the
-// header gives way to the activity-bar stub SidebarTierDivider uses.
+// header gives way to the activity-bar stub SidebarTierDivider uses, and the
+// content always shows, since the rail has no header to open it by: a section
+// whose rows would flood the rail (More, Custom Resources) renders a
+// SidebarFlyoutItem there instead of its rows.
 // The expanded state is stored under [title] — renaming a title resets it.
 @Composable
 fun SidebarSection(
@@ -831,15 +858,16 @@ private val SidebarLabelInset = 44.dp
 // and secondary, and has less space above it than a header (8 dp, not 14).
 // [chrome] is app wording: uppercased, pixel voice in Retro. Pass false for
 // cluster data such as a CRD API group, which keeps its own spelling and the
-// reading font — retroChrome's contract excludes data.
+// reading font — retroChrome's contract excludes data. [inset] moves it to a
+// flyout menu's icon column, where it heads the entries below it.
 @Composable
-internal fun SidebarSubLabel(text: String, chrome: Boolean = true) {
+internal fun SidebarSubLabel(text: String, chrome: Boolean = true, inset: Dp = SidebarLabelInset) {
     Text(
         if (chrome) text.uppercase() else text,
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = SidebarLabelInset,
+                start = inset,
                 end = 18.dp,
                 top = 8.dp.orCompact(4.dp),
                 bottom = 4.dp.orCompact(2.dp),
@@ -853,6 +881,129 @@ internal fun SidebarSubLabel(text: String, chrome: Boolean = true) {
         },
         color = KdTextSecondary,
     )
+}
+
+// The collapsed rail's stand-in for a section whose rows would flood the
+// 56 dp rail — More's tier-2 kinds, or every CRD under one shared icon: one
+// icon that opens those rows in a menu beside the rail. It shows as selected
+// while the current screen is one of them, so the rail still says where you
+// are. [content] gets a dismiss callback to close the menu on navigation.
+// A Popup rather than a DropdownMenu, which can only drop below its anchor or
+// flip above it: near the bottom of the rail that left the menu floating away
+// from the icon. The namespace picker's popup has the same chrome.
+@Composable
+internal fun SidebarFlyoutItem(
+    icon: DrawableResource,
+    label: String,
+    selected: Boolean,
+    content: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        SidebarItem(icon = icon, label = label, selected = selected, collapsed = true, onClick = { open = true })
+        if (open) {
+            Popup(
+                popupPositionProvider = BesideAnchor,
+                onDismissRequest = { open = false },
+                properties = PopupProperties(focusable = true),
+                // Escape closes it here, as the app's modals do, rather than
+                // only through the window's Escape-as-back mapping.
+                onKeyEvent = { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                        open = false
+                        true
+                    } else {
+                        false
+                    }
+                },
+            ) {
+                val scrollState = rememberScrollState()
+                // The window caps the popup's height; a CRD list longer than
+                // that scrolls, with a scrollbar sized to the menu, not the window.
+                Box(
+                    modifier = Modifier
+                        .background(KdSurface, 6.dp.kdCorner)
+                        .border(kdOutlineWidth, KdBorder, 6.dp.kdCorner),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(min = 180.dp, max = 320.dp)
+                            .width(IntrinsicSize.Max)
+                            .verticalScroll(scrollState)
+                            .padding(vertical = 4.dp),
+                    ) {
+                        content { open = false }
+                    }
+                    Box(Modifier.matchParentSize()) {
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(scrollState),
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Places a flyout to the right of its anchor (left, right to left), its top
+// level with the anchor's and slid up only as far as the window needs.
+private object BesideAnchor : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val x = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.right else anchorBounds.left - popupContentSize.width
+        val y = anchorBounds.top.coerceAtMost(windowSize.height - popupContentSize.height).coerceAtLeast(0)
+        return IntOffset(x, y)
+    }
+}
+
+// One row of a SidebarFlyoutItem's menu. Rail-row height rather than the M3
+// menu item's 48 dp: the CRD menu can list dozens. The current screen gets the
+// rail's selected background and primary icon tint.
+@Composable
+internal fun SidebarFlyoutEntry(icon: DrawableResource, label: String, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, style = MaterialTheme.typography.bodySmall, color = KdTextPrimary) },
+        leadingIcon = {
+            Icon(
+                painterResource(icon),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (selected) KdPrimary else KdTextSecondary,
+            )
+        },
+        onClick = onClick,
+        modifier = Modifier
+            .height(32.dp.orCompact(26.dp))
+            .background(if (selected) KdSelected else Color.Transparent)
+            .semantics { this.selected = selected },
+    )
+}
+
+// More in the collapsed rail: its three source groups, each under its label,
+// in one menu instead of seven icons below the catalogue.
+@Composable
+internal fun MoreFlyoutItem(currentScreen: Screen, onNavigate: (Screen) -> Unit) {
+    val sections = NavSections.filter { it.tier == NavTier.MORE }
+    SidebarFlyoutItem(
+        icon = Res.drawable.more_horiz_filled,
+        label = "More",
+        selected = sections.any { section -> section.kinds.any { it.isSelected(currentScreen) } },
+    ) { dismiss ->
+        sections.forEach { section ->
+            SidebarSubLabel(section.title, inset = 12.dp)
+            section.kinds.forEach { kind ->
+                SidebarFlyoutEntry(kind.icon, kind.label, kind.isSelected(currentScreen)) {
+                    dismiss()
+                    onNavigate(kind.screen())
+                }
+            }
+        }
+    }
 }
 
 // Maps a cluster health snapshot to the dot color on the Cluster nav item.

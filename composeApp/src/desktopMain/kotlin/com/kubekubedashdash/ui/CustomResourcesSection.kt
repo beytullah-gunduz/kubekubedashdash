@@ -4,6 +4,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.CrdInfo
 import com.kubekubedashdash.resources.Res
@@ -22,6 +23,9 @@ import com.kubekubedashdash.resources.extension_filled
  * 2. Per-API-group expand/collapse. Each `spec.group` becomes its own mini
  *    section. Hidden CRDs are excluded from these groups; they remain
  *    reachable through the command palette (Cmd-K).
+ *
+ * In the collapsed icon rail the whole section is one icon whose menu lists
+ * the same two layers (see SidebarFlyoutItem).
  *
  * [searchQuery] is the rail-wide search box's text, owned and rendered by
  * `Sidebar`. When non-blank (and the rail is expanded), this composable
@@ -56,6 +60,13 @@ fun CustomResourcesSection(
         visible.filter { it.key in pinned }.sortedBy { it.kind.lowercase() }
     }
     val unpinned = remember(visible, pinned) { visible.filter { it.key !in pinned } }
+    // One block per API group, groups and kinds alphabetical — the expanded
+    // rail's rows and the collapsed rail's menu share this order.
+    val grouped = remember(unpinned) {
+        unpinned.groupBy { it.group.ifBlank { "(core)" } } // unreachable since F13: mapCrd refuses a group-less CRD
+            .toSortedMap()
+            .mapValues { (_, items) -> items.sortedBy { it.kind.lowercase() } }
+    }
 
     if (searchQuery.isNotBlank() && !collapsed) {
         // Rail-wide search: matches render flat and OUTSIDE the section
@@ -67,32 +78,43 @@ fun CustomResourcesSection(
         visible.filter { matchesCrdSearch(it, searchQuery) }
             .sortedBy { it.kind.lowercase() }
             .forEach { crd ->
-                CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
+                CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite)
             }
         return
     }
 
     SidebarSection(title = "Custom Resources", collapsed = collapsed, defaultExpanded = false) {
         if (collapsed) {
-            // Icon-only mode: skip search/groups, render every visible CRD flat.
-            // Pinned first, then alphabetical by kind.
-            val flatList = pinnedCrds + unpinned.sortedBy { it.kind.lowercase() }
-            flatList.forEach { crd ->
-                CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = true)
+            // One icon, not one per CRD: they all share the extension icon, so
+            // a column of them could not be told apart and grew with the
+            // cluster. The menu keeps the expanded rail's order and labels.
+            if (visible.isNotEmpty()) {
+                SidebarFlyoutItem(
+                    icon = Res.drawable.extension_filled,
+                    label = "Custom Resources",
+                    selected = visible.any { it.isCurrent(currentScreen) },
+                ) { dismiss ->
+                    if (pinnedCrds.isNotEmpty()) {
+                        SidebarSubLabel("Pinned", inset = 12.dp)
+                        pinnedCrds.forEach { crd -> CrdFlyoutEntry(crd, currentScreen, onNavigate, dismiss) }
+                    }
+                    grouped.forEach { (group, items) ->
+                        SidebarSubLabel(group, chrome = false, inset = 12.dp)
+                        items.forEach { crd -> CrdFlyoutEntry(crd, currentScreen, onNavigate, dismiss) }
+                    }
+                }
             }
         } else {
             if (pinnedCrds.isNotEmpty()) {
                 SidebarSubLabel("Pinned")
                 pinnedCrds.forEach { crd ->
-                    CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
+                    CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite)
                 }
             }
-            val grouped = unpinned.groupBy { it.group.ifBlank { "(core)" } } // unreachable since F13: mapCrd refuses a group-less CRD
-                .toSortedMap()
             grouped.forEach { (group, items) ->
                 GroupBlock(
                     groupName = group,
-                    items = items.sortedBy { it.kind.lowercase() },
+                    items = items,
                     currentScreen = currentScreen,
                     pinned = pinned,
                     favourites = favourites,
@@ -122,7 +144,28 @@ private fun GroupBlock(
     // between groups is the label's own space above it.
     SidebarSubLabel(groupName, chrome = false)
     items.forEach { crd ->
-        CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, collapsed = false)
+        CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite)
+    }
+}
+
+// Whether [currentScreen] is this CRD's resource list.
+private fun CrdInfo.isCurrent(currentScreen: Screen): Boolean = currentScreen is Screen.Main.CustomResource && currentScreen.group == group && currentScreen.kind == kind
+
+private fun CrdInfo.screen(): Screen.Main.CustomResource = Screen.Main.CustomResource(
+    group = group,
+    version = version,
+    kind = kind,
+    plural = plural,
+    namespaced = namespaced,
+)
+
+// One CRD in the collapsed rail's menu. No pin/hide/favourite menu here: those
+// stay on the expanded rail's rows.
+@Composable
+private fun CrdFlyoutEntry(crd: CrdInfo, currentScreen: Screen, onNavigate: (Screen) -> Unit, dismiss: () -> Unit) {
+    SidebarFlyoutEntry(Res.drawable.extension_filled, crd.kind, crd.isCurrent(currentScreen)) {
+        dismiss()
+        onNavigate(crd.screen())
     }
 }
 
@@ -136,26 +179,12 @@ private fun CrdRow(
     onTogglePin: (CrdInfo) -> Unit,
     onToggleHide: (CrdInfo) -> Unit,
     onToggleFavourite: (CrdInfo) -> Unit,
-    collapsed: Boolean,
 ) {
-    val isSelected = currentScreen is Screen.Main.CustomResource &&
-        currentScreen.group == crd.group && currentScreen.kind == crd.kind
     SidebarItem(
         icon = Res.drawable.extension_filled,
         label = crd.kind,
-        selected = isSelected,
-        collapsed = collapsed,
-        onClick = {
-            onNavigate(
-                Screen.Main.CustomResource(
-                    group = crd.group,
-                    version = crd.version,
-                    kind = crd.kind,
-                    plural = crd.plural,
-                    namespaced = crd.namespaced,
-                ),
-            )
-        },
+        selected = crd.isCurrent(currentScreen),
+        onClick = { onNavigate(crd.screen()) },
         contextMenu = { dismiss ->
             DropdownMenuItem(
                 text = { Text(if (crd.key in favourites) "Remove from favourites" else "Add to favourites") },
