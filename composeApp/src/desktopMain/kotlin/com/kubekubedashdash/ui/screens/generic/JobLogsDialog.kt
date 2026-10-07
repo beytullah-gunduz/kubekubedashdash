@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.ui.components.statusColor
@@ -188,7 +190,7 @@ private fun JobLogsAlertDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = kdRoundShape) {
                 Text(dismissLabel)
             }
         },
@@ -199,7 +201,7 @@ private fun JobLogsAlertDialog(
 private fun LoadingDialog(job: GenericResourceInfo, onDismiss: () -> Unit) {
     JobLogsAlertDialog(job = job, onDismiss = onDismiss, dismissLabel = "Cancel") {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeCap = kdStrokeCap)
             Spacer(Modifier.width(12.dp))
             Text(
                 "Looking up pods…",
@@ -245,14 +247,14 @@ private fun PickPodDialog(
         ) {
             pods.forEach { pod ->
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = 6.dp.kdCorner,
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     OutlinedButton(
                         onClick = { onPick(pod) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = 6.dp.kdCorner,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -291,14 +293,14 @@ private fun PickContainerDialog(
         ) {
             pod.containers.forEach { container ->
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = 6.dp.kdCorner,
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     OutlinedButton(
                         onClick = { onPick(container.name) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = 6.dp.kdCorner,
                     ) {
                         Text(
                             container.name,

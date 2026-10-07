@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdStrokeCap
 
 @Composable
 fun ConnectingScreen() {
@@ -27,6 +28,7 @@ fun ConnectingScreen() {
                 modifier = Modifier.size(48.dp),
                 color = KdPrimary,
                 strokeWidth = 4.dp,
+                strokeCap = kdStrokeCap,
             )
             Spacer(Modifier.height(16.dp))
             Text(

@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -111,6 +110,7 @@ import com.kubekubedashdash.data.repository.TopologyRefreshOptionsSec
 import com.kubekubedashdash.data.repository.formatTopologyRefresh
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.model.CloseTabFocus
 import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.orCompact
@@ -166,7 +166,7 @@ private fun SettingsNavRail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 1.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(6.dp.kdCorner)
                     .background(if (isActive) KdSelected else Color.Transparent)
                     .clickable { onSelect(title) }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -260,12 +260,12 @@ private fun SettingsRowTitle(title: String) {
     val highlighted = LocalHighlightedSettingsRow.current == title
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(4.dp.kdCorner)
             .background(if (highlighted) KdSelected else Color.Transparent)
             .border(
                 width = kdOutlineWidth,
                 color = if (highlighted) KdPrimary else Color.Transparent,
-                shape = RoundedCornerShape(4.dp),
+                shape = 4.dp.kdCorner,
             )
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
@@ -367,14 +367,14 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { showStopAllDialog = true },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) {
                 Text("Reset to baseline", color = MaterialTheme.colorScheme.error)
             }
             OutlinedButton(
                 onClick = { showKillServerDialog = true },
-                shape = RoundedCornerShape(8.dp),
+                shape = 8.dp.kdCorner,
                 border = BorderStroke(kdOutlineWidth, KdBorder),
             ) {
                 Text("Kill mock server", color = MaterialTheme.colorScheme.error)
@@ -399,12 +399,13 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
                             viewModel.stopAllMockResources()
                             showStopAllDialog = false
                         },
+                        shape = kdRoundShape,
                     ) {
                         Text("Reset", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showStopAllDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showStopAllDialog = false }, shape = kdRoundShape) { Text("Cancel") }
                 },
             )
         }
@@ -423,12 +424,13 @@ private fun DemoClusterSimulatorSection(viewModel: SettingsScreenViewModel, mock
                             viewModel.killMockServer()
                             showKillServerDialog = false
                         },
+                        shape = kdRoundShape,
                     ) {
                         Text("Kill server", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showKillServerDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showKillServerDialog = false }, shape = kdRoundShape) { Text("Cancel") }
                 },
             )
         }
@@ -632,7 +634,7 @@ fun SettingsScreen(
 
                     Spacer(Modifier.width(12.dp))
 
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = onClose, shape = kdRoundShape) {
                         Icon(
                             painterResource(Res.drawable.close),
                             contentDescription = "Close settings",
@@ -831,6 +833,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = UiScaleSteps.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text("$step%", maxLines = 1, softWrap = false)
@@ -857,6 +860,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = LayoutDensity.entries.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(
@@ -953,6 +957,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = tabFocusOptions.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(label, maxLines = 1, softWrap = false)
@@ -986,6 +991,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = tabStripOptions.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(label, maxLines = 1, softWrap = false)
@@ -1045,6 +1051,7 @@ fun SettingsScreen(
                                             shape = SegmentedButtonDefaults.itemShape(
                                                 index = index,
                                                 count = TopologyRefreshOptionsSec.size,
+                                                baseShape = kdRoundShape,
                                             ),
                                         ) {
                                             Text(formatTopologyRefresh(sec), maxLines = 1, softWrap = false)
@@ -1208,7 +1215,7 @@ fun SettingsScreen(
                                 if (!mcpLocalhostOnly && !mcpRequireAuth) {
                                     Spacer(Modifier.height(8.dp))
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = 8.dp.kdCorner,
                                         color = MaterialTheme.colorScheme.errorContainer,
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
@@ -1242,6 +1249,7 @@ fun SettingsScreen(
                                         )
                                         IconButton(
                                             onClick = { copyToClipboard(mcpBearerToken.orEmpty(), "Copied token") },
+                                            shape = kdRoundShape,
                                         ) {
                                             Icon(
                                                 painterResource(Res.drawable.content_copy_filled),
@@ -1272,7 +1280,7 @@ fun SettingsScreen(
                                     OutlinedButton(
                                         onClick = onDiscoverEks,
                                         enabled = awsCliAvailable,
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = 8.dp.kdCorner,
                                         border = BorderStroke(kdOutlineWidth, KdBorder),
                                     ) {
                                         Icon(
@@ -1308,7 +1316,7 @@ fun SettingsScreen(
                                     OutlinedButton(
                                         onClick = onDiscoverGke,
                                         enabled = gcloudCliAvailable,
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = 8.dp.kdCorner,
                                         border = BorderStroke(kdOutlineWidth, KdBorder),
                                     ) {
                                         Icon(
@@ -1355,7 +1363,7 @@ fun SettingsScreen(
                                 Spacer(Modifier.height(12.dp))
                                 OutlinedButton(
                                     onClick = onShowAppLogs,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = 8.dp.kdCorner,
                                     border = BorderStroke(kdOutlineWidth, KdBorder),
                                 ) {
                                     Icon(
@@ -1391,7 +1399,7 @@ fun SettingsScreen(
                                     Box(
                                         modifier = Modifier
                                             .size(36.dp)
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(8.dp.kdCorner)
                                             .background(KdPrimary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center,
                                     ) {
@@ -1480,7 +1488,7 @@ private fun ClusterColorsSection(
             Box(
                 modifier = Modifier
                     .size(28.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clip(kdRoundShape)
                     .background(effectiveColor.composeColor),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1506,11 +1514,11 @@ private fun ClusterColorsSection(
                     modifier = Modifier
                         .padding(2.dp)
                         .size(if (selected) 20.dp else 16.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .clip(kdRoundShape)
                         .background(ClusterColor.parseHex(hex) ?: KdTextSecondary)
                         .then(
                             if (selected) {
-                                Modifier.border(2.dp, KdTextPrimary, androidx.compose.foundation.shape.CircleShape)
+                                Modifier.border(2.dp, KdTextPrimary, kdRoundShape)
                             } else {
                                 Modifier
                             },
@@ -1665,7 +1673,7 @@ private fun SettingsTextField(
                         isError = false,
                         interactionSource = interactionSource,
                         colors = colors,
-                        shape = RoundedCornerShape(6.dp),
+                        shape = 6.dp.kdCorner,
                     )
                 },
             )

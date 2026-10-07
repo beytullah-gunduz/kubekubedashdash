@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 
 @Composable
 internal fun StatusLegend(label: String, count: Int, color: Color, modifier: Modifier = Modifier) {
@@ -23,7 +23,7 @@ internal fun StatusLegend(label: String, count: Int, color: Color, modifier: Mod
         Box(
             modifier = Modifier
                 .size(10.dp)
-                .background(color, RoundedCornerShape(2.dp)),
+                .background(color, 2.dp.kdCorner),
         )
         Spacer(Modifier.width(6.dp))
         Text(

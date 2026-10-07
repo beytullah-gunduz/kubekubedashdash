@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.save_filled
@@ -204,6 +205,7 @@ fun DrawerLogPane(stream: ActiveLogStream, viewState: LogPaneViewState, modifier
                     },
                     modifier = Modifier.size(28.dp),
                     enabled = visibleLines.isNotEmpty(),
+                    shape = kdRoundShape,
                 ) {
                     Icon(
                         painterResource(Res.drawable.save_filled),
@@ -217,6 +219,7 @@ fun DrawerLogPane(stream: ActiveLogStream, viewState: LogPaneViewState, modifier
                     onClick = { copyToClipboard(visibleLines.joinToString("\n")) },
                     modifier = Modifier.size(28.dp),
                     enabled = visibleLines.isNotEmpty(),
+                    shape = kdRoundShape,
                 ) {
                     Icon(
                         painterResource(Res.drawable.content_copy_filled),

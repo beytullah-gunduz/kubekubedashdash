@@ -9,7 +9,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import kotlinx.coroutines.delay
 
@@ -91,9 +91,9 @@ fun CopyFeedbackHost(content: @Composable () -> Unit) {
 private fun CopiedPill(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(14.dp.kdCorner)
             .background(KdSurface)
-            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(14.dp))
+            .border(kdOutlineWidth, KdBorder, 14.dp.kdCorner)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, color = KdTextPrimary)

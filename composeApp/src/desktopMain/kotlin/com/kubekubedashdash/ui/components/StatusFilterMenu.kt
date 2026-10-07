@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
@@ -37,6 +36,7 @@ import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
@@ -100,11 +100,11 @@ fun StatusFilterMenu(
     Box {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
+                .clip(6.dp.kdCorner)
                 .border(
                     width = kdOutlineWidth,
                     color = borderColor,
-                    shape = RoundedCornerShape(6.dp),
+                    shape = 6.dp.kdCorner,
                 )
                 .background(bgColor)
                 .clickable { expanded = !expanded }

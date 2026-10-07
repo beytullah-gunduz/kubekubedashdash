@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextBright
+import com.kubekubedashdash.kdRoundShape
+import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.logcapture.CapturePhase
 import com.kubekubedashdash.services.logcapture.ContainerOutcome
@@ -116,12 +118,14 @@ fun DrawerCapturePane(tab: ActiveCaptureTask, modifier: Modifier = Modifier) {
             if (phase is CapturePhase.Running) {
                 OutlinedButton(
                     onClick = { tab.task.cancel() },
+                    shape = kdRoundShape,
                 ) {
                     Text("Cancel")
                 }
             } else if (phase is CapturePhase.Completed || phase is CapturePhase.Cancelled || phase is CapturePhase.Failed) {
                 OutlinedButton(
                     onClick = { revealCaptureFolder(state.outputDir) },
+                    shape = kdRoundShape,
                 ) {
                     Text(revealButtonLabel())
                 }
@@ -134,6 +138,7 @@ fun DrawerCapturePane(tab: ActiveCaptureTask, modifier: Modifier = Modifier) {
                     if (state.totalPods > 0) state.completedPods.toFloat() / state.totalPods else 0f
                 },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                strokeCap = kdStrokeCap,
             )
         }
 

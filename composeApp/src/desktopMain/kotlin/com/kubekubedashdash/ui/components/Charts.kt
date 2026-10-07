@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -41,7 +40,9 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.drawKdDot
 import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdCornerRadius
 import com.kubekubedashdash.kdStrokeCap
 
 @Composable
@@ -103,8 +104,8 @@ fun CircularUsageIndicator(
         targetValue = clamped,
         animationSpec = tween(durationMillis = 800),
     )
-    val tier = usageTier(clamped)
-    val gaugeColor = tier.color()
+    val level = usageLevel(clamped)
+    val gaugeColor = level.color()
 
     Column(
         modifier = modifier,
@@ -158,7 +159,7 @@ fun CircularUsageIndicator(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            UsageTierGlyph(tier)
+            UsageLevelGlyph(level)
             Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
         }
         Text(
@@ -182,8 +183,8 @@ fun HalfCircularUsageIndicator(
         targetValue = clamped,
         animationSpec = tween(durationMillis = 800),
     )
-    val tier = usageTier(clamped)
-    val gaugeColor = tier.color()
+    val level = usageLevel(clamped)
+    val gaugeColor = level.color()
 
     Column(
         modifier = modifier,
@@ -238,7 +239,7 @@ fun HalfCircularUsageIndicator(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            UsageTierGlyph(tier)
+            UsageLevelGlyph(level)
             Text(label, style = MaterialTheme.typography.labelLarge, color = KdTextPrimary)
         }
         Text(
@@ -280,13 +281,13 @@ fun UsageHistoryBar(
                 val y = size.height - barHeight
 
                 val fade = 0.4f + 0.6f * (index.toFloat() / (barCount - 1).coerceAtLeast(1))
-                val barColor = usageTier(clamped).color()
+                val barColor = usageLevel(clamped).color()
 
                 drawRoundRect(
                     color = barColor.copy(alpha = fade),
                     topLeft = Offset(x, y),
                     size = Size(barWidth, barHeight),
-                    cornerRadius = CornerRadius(1.dp.toPx()),
+                    cornerRadius = kdCornerRadius(1.dp),
                 )
             }
         }
@@ -383,8 +384,8 @@ fun MetricsLineChart(
                     val lastX = (n - 1) * stepX
                     val lastFrac = values.last().toFloat() / yMax
                     val lastY = size.height * (1f - lastFrac)
-                    drawCircle(lineColor, 3.dp.toPx(), Offset(lastX, lastY))
-                    drawCircle(KdSurfaceVariant, 1.5.dp.toPx(), Offset(lastX, lastY))
+                    drawKdDot(lineColor, 3.dp.toPx(), Offset(lastX, lastY))
+                    drawKdDot(KdSurfaceVariant, 1.5.dp.toPx(), Offset(lastX, lastY))
                 }
 
                 Spacer(Modifier.height(4.dp))

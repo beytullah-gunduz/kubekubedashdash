@@ -82,8 +82,8 @@ import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdDotShape
 import com.kubekubedashdash.kdMonoFamily
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
@@ -355,7 +355,7 @@ fun DetailFieldsCard(fields: List<DetailField>, modifier: Modifier = Modifier) {
                     Text(f.label, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                     if (f.valueColor != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(6.dp).clip(kdDotShape).background(f.valueColor))
+                            Box(Modifier.size(6.dp).clip(kdRoundShape).background(f.valueColor))
                             Spacer(Modifier.width(5.dp))
                             Text(f.value, style = MaterialTheme.typography.bodySmall, color = f.valueColor, fontWeight = FontWeight.Medium)
                         }
@@ -532,7 +532,7 @@ internal fun GenericYamlTab(
                     color = KdTextSecondary,
                 )
             }
-            IconButton(onClick = goPrev, modifier = Modifier.size(24.dp), enabled = matches.isNotEmpty()) {
+            IconButton(onClick = goPrev, modifier = Modifier.size(24.dp), enabled = matches.isNotEmpty(), shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.keyboard_arrow_up_filled),
                     "Previous match",
@@ -540,7 +540,7 @@ internal fun GenericYamlTab(
                     tint = KdTextSecondary.copy(alpha = if (matches.isEmpty()) 0.3f else 1f),
                 )
             }
-            IconButton(onClick = goNext, modifier = Modifier.size(24.dp), enabled = matches.isNotEmpty()) {
+            IconButton(onClick = goNext, modifier = Modifier.size(24.dp), enabled = matches.isNotEmpty(), shape = kdRoundShape) {
                 Icon(
                     painterResource(Res.drawable.keyboard_arrow_down_filled),
                     "Next match",
@@ -560,6 +560,7 @@ internal fun GenericYamlTab(
                     onClick = { showDecoded = !showDecoded },
                     colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = kdRoundShape,
                 ) {
                     Icon(painterResource(buttonIcon), null, Modifier.size(13.dp))
                     Spacer(Modifier.width(4.dp))
@@ -570,6 +571,7 @@ internal fun GenericYamlTab(
                 onClick = { yaml?.let { text -> copyToClipboard(text) } },
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                shape = kdRoundShape,
             ) {
                 Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))

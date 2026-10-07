@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +29,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.open_in_new_filled
@@ -71,6 +71,7 @@ fun DrawerPortForwardsPane(clusterBadges: Map<String, LogTabBadge>, modifier: Mo
             TextButton(
                 onClick = { entries.filter { it.isRunning }.forEach { PortForwardRegistry.stop(it.id) } },
                 enabled = running > 0,
+                shape = kdRoundShape,
             ) {
                 Text("Stop all")
             }
@@ -97,7 +98,7 @@ private fun PortForwardRow(e: PortForwardEntry, clusterBadges: Map<String, LogTa
             is PortForwardStatus.Stopped -> KdTextSecondary
         }
         Box(
-            modifier = Modifier.size(8.dp).clip(CircleShape).background(dotColor),
+            modifier = Modifier.size(8.dp).clip(kdRoundShape).background(dotColor),
         )
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -147,11 +148,11 @@ private fun PortForwardRow(e: PortForwardEntry, clusterBadges: Map<String, LogTa
                 tint = KdTextSecondary,
                 onClick = { copyToClipboard(e.localAddress, "Copied address") },
             )
-            TextButton(onClick = { PortForwardRegistry.stop(e.id) }) {
+            TextButton(onClick = { PortForwardRegistry.stop(e.id) }, shape = kdRoundShape) {
                 Text("Stop")
             }
         } else {
-            TextButton(onClick = { PortForwardRegistry.remove(e.id) }) {
+            TextButton(onClick = { PortForwardRegistry.remove(e.id) }, shape = kdRoundShape) {
                 Text("Remove")
             }
         }

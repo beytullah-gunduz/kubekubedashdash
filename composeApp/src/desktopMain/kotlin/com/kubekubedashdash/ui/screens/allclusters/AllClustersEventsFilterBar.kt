@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,8 +48,9 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPlaceholder
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.kdDotShape
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.list_filled
@@ -324,11 +324,11 @@ private fun FilterChip(
                 .border(
                     width = kdOutlineWidth,
                     color = if (active) KdPrimary else KdBorder,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = 4.dp.kdCorner,
                 )
                 .background(
                     if (active) KdPrimary.copy(alpha = 0.08f) else Color.Transparent,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = 4.dp.kdCorner,
                 )
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -368,7 +368,7 @@ private fun TimeWindowSelector(
 ) {
     Row(
         modifier = Modifier
-            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp)),
+            .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TimeWindow.entries.forEachIndexed { i, tw ->
@@ -407,7 +407,7 @@ private fun ViewModeToggle(
 ) {
     Row(
         modifier = Modifier
-            .border(kdOutlineWidth, KdBorder, RoundedCornerShape(4.dp))
+            .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner)
             .clickable(onClick = onToggle)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -443,11 +443,11 @@ private fun HeatmapToggle(
                 .border(
                     width = kdOutlineWidth,
                     color = if (active) KdPrimary else KdBorder,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = 4.dp.kdCorner,
                 )
                 .background(
                     color = if (active) KdPrimary.copy(alpha = 0.08f) else Color.Transparent,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = 4.dp.kdCorner,
                 )
                 .clickable(enabled = enabled, onClick = onToggle)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -469,7 +469,7 @@ private fun HeatmapToggle(
                 Box(
                     Modifier
                         .size(6.dp)
-                        .clip(kdDotShape)
+                        .clip(kdRoundShape)
                         .background(KdPrimary)
                         .semantics { contentDescription = "Warnings across several clusters" },
                 )
@@ -498,7 +498,7 @@ private fun HeatmapToggle(
 @Composable
 private fun HeatmapDisabledTooltip() {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurface,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp,

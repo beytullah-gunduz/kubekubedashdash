@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -30,6 +29,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.description_filled
@@ -196,7 +196,7 @@ private fun FilterPill(
     TooltipArea(
         tooltip = {
             Surface(
-                shape = RoundedCornerShape(6.dp),
+                shape = 6.dp.kdCorner,
                 color = KdSurface,
                 shadowElevation = 4.dp,
                 tonalElevation = 2.dp,
@@ -211,7 +211,7 @@ private fun FilterPill(
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         Surface(
-            shape = RoundedCornerShape(4.dp),
+            shape = 4.dp.kdCorner,
             color = KdPrimary.copy(alpha = 0.18f),
             modifier = Modifier
                 .clickable(onClick = onRemove)

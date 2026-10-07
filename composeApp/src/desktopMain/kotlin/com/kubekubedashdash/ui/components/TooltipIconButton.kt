@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -52,7 +53,7 @@ fun TooltipIconButton(
         tooltip = { ActionTooltip(label, description) },
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.size(28.dp), enabled = enabled) {
+        IconButton(onClick = onClick, modifier = Modifier.size(28.dp), enabled = enabled, shape = kdRoundShape) {
             Icon(painterResource(icon), label, Modifier.size(16.dp), tint = tint)
         }
     }
@@ -61,7 +62,7 @@ fun TooltipIconButton(
 @Composable
 internal fun ActionTooltip(label: String, description: String?) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurface,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp,

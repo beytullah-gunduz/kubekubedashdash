@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,6 +26,8 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdCorner
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.models.EventInfo
 
 @Composable
@@ -39,9 +39,9 @@ internal fun EventListItem(event: EventInfo, onClick: (() -> Unit)? = null) {
     }
 
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = 6.dp.kdCorner,
         color = KdSurfaceVariant,
-        modifier = if (onClick != null) Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick) else Modifier,
+        modifier = if (onClick != null) Modifier.clip(6.dp.kdCorner).clickable(onClick = onClick) else Modifier,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),
@@ -51,7 +51,7 @@ internal fun EventListItem(event: EventInfo, onClick: (() -> Unit)? = null) {
                 Modifier
                     .padding(top = 4.dp)
                     .size(8.dp)
-                    .clip(CircleShape)
+                    .clip(kdRoundShape)
                     .background(typeColor),
             )
             Spacer(Modifier.width(10.dp))

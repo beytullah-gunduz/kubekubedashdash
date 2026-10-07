@@ -55,6 +55,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
@@ -412,7 +413,7 @@ private fun EmptyFilterState(onClearFilters: (() -> Unit)?) {
                 color = KdTextSecondary,
             )
             if (onClearFilters != null) {
-                Button(onClick = onClearFilters) {
+                Button(onClick = onClearFilters, shape = kdRoundShape) {
                     Text("Clear filters")
                 }
             }

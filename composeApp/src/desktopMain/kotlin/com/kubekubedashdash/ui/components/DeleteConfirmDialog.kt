@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.ui.crt.crtCardReveal
 
 /**
@@ -89,7 +90,7 @@ fun DeleteConfirmDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm, enabled = canConfirm) {
+            TextButton(onClick = onConfirm, enabled = canConfirm, shape = kdRoundShape) {
                 Text(
                     if (inFlight) "Deleting…" else "Delete",
                     color = if (canConfirm) {
@@ -101,7 +102,7 @@ fun DeleteConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !inFlight) {
+            TextButton(onClick = onDismiss, enabled = !inFlight, shape = kdRoundShape) {
                 Text("Cancel")
             }
         },

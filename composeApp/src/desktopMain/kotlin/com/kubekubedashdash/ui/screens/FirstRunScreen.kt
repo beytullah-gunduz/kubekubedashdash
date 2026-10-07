@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.dashboard_filled
 import org.jetbrains.compose.resources.painterResource
@@ -70,29 +71,29 @@ fun FirstRunScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Button(onClick = onTryDemo) {
+            Button(onClick = onTryDemo, shape = kdRoundShape) {
                 Text("Try demo cluster")
             }
             onDiscoverEks?.let { handler ->
-                OutlinedButton(onClick = handler) {
+                OutlinedButton(onClick = handler, shape = kdRoundShape) {
                     Text("Discover EKS clusters")
                 }
             }
             onDiscoverGke?.let { handler ->
-                OutlinedButton(onClick = handler) {
+                OutlinedButton(onClick = handler, shape = kdRoundShape) {
                     Text("Discover GKE clusters")
                 }
             }
-            OutlinedButton(onClick = onOpenDocs) {
+            OutlinedButton(onClick = onOpenDocs, shape = kdRoundShape) {
                 Text("Open kubeconfig docs")
             }
-            OutlinedButton(onClick = onRescan) {
+            OutlinedButton(onClick = onRescan, shape = kdRoundShape) {
                 Text("Re-scan")
             }
         }
         onShowDiagnostics?.let { handler ->
             Spacer(Modifier.height(12.dp))
-            TextButton(onClick = handler) {
+            TextButton(onClick = handler, shape = kdRoundShape) {
                 Text(
                     "View diagnostics",
                     style = MaterialTheme.typography.labelMedium,
