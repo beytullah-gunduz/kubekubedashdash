@@ -24,6 +24,7 @@ import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.screenshots.ScreenshotHooks
@@ -208,9 +209,10 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         sessionVm.navigate(Screen.Main.ClusterOverview)
 
         // 3. Warm-up for the hero: the CPU/Memory sparklines poll every 10 s and keep 20 samples
-        // (ClusterOverviewViewModel, ReactiveKubeClient), so they only fill after ~200 s.
-        log.info("Warming up the hero (sparklines fill in ~200 s)")
-        delay(200_000)
+        // (ClusterOverviewViewModel, ReactiveKubeClient), so they fill after ~200 s. The first samples
+        // catch the demo's startup burst (a full-height red bar); 240 s pushes them out of the window.
+        log.info("Warming up the hero (sparklines fill in ~240 s)")
+        delay(240_000)
 
         // 4. Hero variants: the Cluster Overview in every look the landing page's switcher offers.
         log.info("Capturing hero variants")
@@ -377,12 +379,20 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         LogStreamRegistry.clearAll() // close the tail tab too, or later shots' title bars show the hidden-tabs chip
         delay(800)
 
-        // 13. topology
+        // 13. topology: one namespace trims the graph, two expanded pod groups give it its pod column,
+        // and the selected service lights up its whole pipe (Service → Deployment → Pods).
         log.info("Capturing topology")
+        sessionVm.setNamespaceScope(NamespaceScope.single("default"))
+        ScreenshotHooks.topologyExpand.value = setOf("Deployment/frontend", "Deployment/backend-api")
+        ScreenshotHooks.topologySelect.value = "Service/frontend-svc"
         sessionVm.navigate(Screen.Main.ClusterTopology)
         delay(8_000)
         captureWindow(initialWorkspace.id, outDir.resolve("topology.png"))
         log.info("captured topology")
+        ScreenshotHooks.topologyExpand.value = emptySet()
+        ScreenshotHooks.topologySelect.value = ""
+        sessionVm.setNamespaceScope(NamespaceScope.All)
+        delay(1_000)
 
         // 14. fleet: two more demo tabs (they mint the next screenshot labels), then the
         // All Clusters tab. openCluster inserts that tab ~50 ms after the second cluster opens,
@@ -436,6 +446,8 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         ScreenshotHooks.crtTimeScale.value = 1
         ScreenshotHooks.paletteQuery.value = ""
         ScreenshotHooks.autoSelectPodCount.value = 0
+        ScreenshotHooks.topologyExpand.value = emptySet()
+        ScreenshotHooks.topologySelect.value = ""
         // Restore the prior theme. setMode/setStyle persist, but the task runs with
         // its own data directory (build.gradle.kts), so nothing reaches the
         // developer's store.
