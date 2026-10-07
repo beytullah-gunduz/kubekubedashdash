@@ -40,6 +40,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Appearance", "Palette", listOf("palette", "colours", "colors", "high contrast", "contrast", "accessibility", "a11y", "monochrome", "grey", "gray", "solarized", "gruvbox", "catppuccin", "latte", "mocha", "nord", "dracula", "alucard", "editor")),
     SettingsEntry("Appearance", "Colour-blind-safe status colours", listOf("colour blind", "color blind", "colorblind", "cvd", "deuteranopia", "protanopia", "tritanopia", "accessibility", "a11y", "status colours", "status colors")),
     SettingsEntry("Appearance", "CRT scanlines", listOf("scanlines", "crt", "vignette", "retro")),
+    SettingsEntry("Appearance", "CRT refresh bar", listOf("refresh bar", "rolling", "sweep", "crt", "retro", "animation", "motion", "background")),
     SettingsEntry("Appearance", "UI zoom", listOf("font", "size", "scale", "bigger")),
     SettingsEntry("Appearance", "Density", listOf("density", "compact", "comfortable", "dense", "spacing", "rows", "table")),
     SettingsEntry("Appearance", "Log panel beside sidebar", listOf("widescreen", "logs", "drawer", "bottom panel", "sidebar", "layout")),

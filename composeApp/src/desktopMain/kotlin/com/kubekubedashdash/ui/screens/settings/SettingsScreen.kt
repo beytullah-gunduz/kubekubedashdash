@@ -130,6 +130,8 @@ import com.kubekubedashdash.ui.components.ShortcutGroups
 import com.kubekubedashdash.ui.components.UiScaleSteps
 import com.kubekubedashdash.ui.components.appShortcuts
 import com.kubekubedashdash.ui.components.rememberCopyToClipboard
+import com.kubekubedashdash.ui.crt.CrtRefreshBarMode
+import com.kubekubedashdash.ui.crt.CrtRefreshBarReplay
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
@@ -809,6 +811,65 @@ fun SettingsScreen(
                                         if (crtScanlines) "Scanlines on" else "Scanlines off",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (crtScanlines && ThemeManager.isRetro) MaterialTheme.colorScheme.primary else KdTextSecondary,
+                                    )
+                                }
+
+                                Spacer(Modifier.height(20.dp.orCompact(14.dp)))
+
+                                val crtRefreshBar by PreferenceRepository.crtRefreshBar.collectAsState()
+                                SettingsRowTitle("CRT refresh bar")
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "A bright line sweeps down the screen. Once: a single pass after the CRT power-on; Replay shows it again. Rolling: a pass every 8 s, paused while the window is in the background unless you keep it rolling. Needs scanlines on.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextSecondary,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                val refreshBarEnabled = ThemeManager.isRetro && crtScanlines
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    FullWidthSingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                                        CrtRefreshBarMode.entries.forEachIndexed { index, option ->
+                                            SegmentedButton(
+                                                selected = crtRefreshBar == option,
+                                                onClick = { PreferenceRepository.setCrtRefreshBar(option) },
+                                                enabled = refreshBarEnabled,
+                                                shape = SegmentedButtonDefaults.itemShape(
+                                                    index = index,
+                                                    count = CrtRefreshBarMode.entries.size,
+                                                    baseShape = kdRoundShape,
+                                                ),
+                                            ) {
+                                                Text(option.label, maxLines = 1, softWrap = false)
+                                            }
+                                        }
+                                    }
+                                    TextButton(
+                                        onClick = { CrtRefreshBarReplay.request() },
+                                        enabled = refreshBarEnabled && crtRefreshBar == CrtRefreshBarMode.ONCE,
+                                        shape = kdRoundShape,
+                                    ) {
+                                        Text("Replay")
+                                    }
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                val crtRefreshBarBackground by PreferenceRepository.crtRefreshBarBackground.collectAsState()
+                                val rollInBackgroundEnabled = refreshBarEnabled && crtRefreshBar == CrtRefreshBarMode.ROLLING
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Switch(
+                                        checked = crtRefreshBarBackground,
+                                        onCheckedChange = { PreferenceRepository.setCrtRefreshBarBackground(it) },
+                                        enabled = rollInBackgroundEnabled,
+                                    )
+                                    Text(
+                                        "Keep rolling in the background",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (crtRefreshBarBackground && rollInBackgroundEnabled) MaterialTheme.colorScheme.primary else KdTextSecondary,
                                     )
                                 }
 
