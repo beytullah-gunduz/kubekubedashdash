@@ -1111,6 +1111,9 @@ internal fun seedResources(client: KubernetesClient) {
         cjDefs.size,
         epDefs.size,
     )
+
+    // ── Helm releases (read by the Helm Releases view) ──────────────────────
+    seedHelmReleases(client)
 }
 
 /**

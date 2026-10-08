@@ -32,10 +32,10 @@ class NavCatalogueTest {
     // ── catalogue shape ──────────────────────────────────────────────────
 
     @Test
-    fun `every key is unique, and there are 37 — a tripwire, not a spec`() {
+    fun `every key is unique, and there are 38 — a tripwire, not a spec`() {
         val keys = NavKinds.map { it.key }
         assertEquals(keys.size, keys.toSet().size, "duplicate keys found: $keys")
-        assertEquals(37, NavKinds.size)
+        assertEquals(38, NavKinds.size)
     }
 
     @Test

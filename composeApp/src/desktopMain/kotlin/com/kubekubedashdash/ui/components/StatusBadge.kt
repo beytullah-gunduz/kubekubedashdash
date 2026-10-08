@@ -53,13 +53,15 @@ import org.jetbrains.compose.resources.painterResource
 data class StatusVisual(val icon: DrawableResource, val color: Color)
 
 fun statusVisual(status: String): StatusVisual = when (status.lowercase()) {
-    "running", "active", "ready", "bound", "available", "true" ->
+    "running", "active", "ready", "bound", "available", "true", "deployed" ->
         StatusVisual(Res.drawable.check_circle_filled, KdSuccess)
 
     "succeeded", "completed", "complete" ->
         StatusVisual(Res.drawable.check_filled, KdInfo)
 
-    "pending", "waiting", "containercreating", "terminating" ->
+    "pending", "waiting", "containercreating", "terminating",
+    "pending-install", "pending-upgrade", "pending-rollback", "uninstalling",
+    ->
         StatusVisual(Res.drawable.schedule_filled, KdWarning)
 
     "warning" ->

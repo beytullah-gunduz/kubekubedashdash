@@ -267,6 +267,40 @@ class SecretYamlMaskingTest {
     }
 
     @Test
+    fun `mask - double-quoted data key opens a masked block`() {
+        val yaml = "kind: Secret\n\"data\":\n  password: cGFzc3dvcmQxMjM=\ntype: Opaque"
+        val masked = SecretYamlMasking.maskSecretYaml(yaml)
+        assertFalse(masked.contains("cGFzc3dvcmQxMjM="))
+        assertEquals(
+            "kind: Secret\n\"data\":\n  password: ${SecretYamlMasking.PLACEHOLDER}\ntype: Opaque",
+            masked,
+        )
+    }
+
+    @Test
+    fun `mask - single-quoted stringData key opens a masked block`() {
+        val yaml = "kind: Secret\n'stringData':\n  token: my-plain-token\ntype: Opaque"
+        val masked = SecretYamlMasking.maskSecretYaml(yaml)
+        assertFalse(masked.contains("my-plain-token"))
+        assertEquals(
+            "kind: Secret\n'stringData':\n  token: ${SecretYamlMasking.PLACEHOLDER}\ntype: Opaque",
+            masked,
+        )
+    }
+
+    @Test
+    fun `mask - block scalar after an inline data key is masked and a top-level key after it is kept`() {
+        val yaml = "kind: Secret\ndata: |\n  c2VjcmV0LXZhbHVl\n  c2Vjb25kLWxpbmU=\ntype: Opaque"
+        val masked = SecretYamlMasking.maskSecretYaml(yaml)
+        assertFalse(masked.contains("c2VjcmV0LXZhbHVl"))
+        assertFalse(masked.contains("c2Vjb25kLWxpbmU="))
+        assertEquals(
+            "kind: Secret\ndata: ${SecretYamlMasking.PLACEHOLDER}\n  ${SecretYamlMasking.PLACEHOLDER}\n  ${SecretYamlMasking.PLACEHOLDER}\ntype: Opaque",
+            masked,
+        )
+    }
+
+    @Test
     fun `mask - indentation preserved on masked line`() {
         val yaml = "data:\n  password: dmFsdWU="
         val masked = SecretYamlMasking.maskSecretYaml(yaml)
