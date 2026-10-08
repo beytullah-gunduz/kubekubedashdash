@@ -123,6 +123,7 @@ internal fun SessionPaneContent(
     CompositionLocalProvider(
         LocalViewModelStoreOwner provides session,
         LocalReactiveKubeClient provides session.reactiveClient,
+        LocalClusterSession provides session,
         LocalIsConnected provides sessionIsConnected,
         LocalConnectionError provides sessionConnectionError,
         LocalPortForwardLauncher provides portForwardLauncher,

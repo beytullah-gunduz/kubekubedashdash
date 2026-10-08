@@ -6,6 +6,7 @@ import com.kubekubedashdash.logging.AppLogEntry;
 import com.kubekubedashdash.logging.AppLogStore;
 import com.kubekubedashdash.logging.InMemoryAppender;
 import com.kubekubedashdash.mcp.McpServerManager;
+import com.kubekubedashdash.ui.yamledit.KkddYamlTokenMaker;
 import com.kubekubedashdash.util.CrdJsonPath;
 import com.kubekubedashdash.util.MockClusterHandle;
 import com.kubekubedashdash.util.MockClusterProvider;
@@ -36,6 +37,9 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import javax.swing.text.Segment;
+import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -44,7 +48,7 @@ import org.slf4j.LoggerFactory;
  * jars FIRST on the classpath. Each check drives a code path that a shrinker can break
  * while every unit test (which runs unshrunk) stays green: logging configuration loaded
  * by class name, reflective JSONPath and enum lookups, the YAML editor's dump/parse
- * engine, the demo cluster's mock server
+ * engine and its RSyntaxTextArea highlighter, the demo cluster's mock server
  * (signed BouncyCastle jars), and the MCP server's Ktor/SSE stack (where a dropped
  * direct interface made the first coroutine Job fail verification).
  *
@@ -163,6 +167,25 @@ public final class ReleaseCanary {
             // Initialised, not just loaded: TextStyle.<clinit> reads TextStyle$Option's enum
             // constants reflectively, which fails if the shrinker strips values()/$VALUES.
             Class.forName("com.jediterm.terminal.TextStyle", true, loader);
+        });
+
+        check("rsyntaxtextarea", () -> {
+            ClassLoader loader = ReleaseCanary.class.getClassLoader();
+            for (String name : new String[] {
+                "org.fife.ui.rsyntaxtextarea.RSyntaxTextArea", "org.fife.ui.rtextarea.RTextScrollPane",
+                "org.fife.ui.rsyntaxtextarea.RSyntaxDocument", "com.kubekubedashdash.ui.yamledit.KkddYamlTokenMaker",
+            }) {
+                // Linked, not initialised: reflection runs the verifier, and no component can be built headless.
+                Class.forName(name, false, loader).getDeclaredMethods();
+            }
+            // The library's message bundle is a resource read by name when the first editor is built.
+            require(loader.getResource("org/fife/ui/rsyntaxtextarea/RSyntaxTextArea.properties") != null,
+                "the shrunk jars lack RSyntaxTextArea's message bundle");
+            // The highlighter itself, with no component: `key` is a key, so the first token is a RESERVED_WORD.
+            char[] line = "key: \"v\"".toCharArray();
+            Token first = new KkddYamlTokenMaker().getTokenList(new Segment(line, 0, line.length), TokenTypes.NULL, 0);
+            require(first != null && first.getType() == TokenTypes.RESERVED_WORD,
+                "the first token of a key line has type " + (first == null ? "null" : first.getType()));
         });
 
         check("demo-cluster", () -> {

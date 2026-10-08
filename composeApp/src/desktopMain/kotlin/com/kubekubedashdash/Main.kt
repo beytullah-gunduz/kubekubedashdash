@@ -22,6 +22,7 @@ import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.ui.App
+import com.kubekubedashdash.ui.yamledit.YamlEditorWindows
 import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
@@ -126,5 +127,9 @@ fun main() {
                 }
             }
         }
+
+        // The YAML editor windows (one per object being edited) live beside the workspace windows,
+        // not inside one: they belong to the process-wide registry, not to a workspace.
+        YamlEditorWindows(icon = appIcon)
     }
 }

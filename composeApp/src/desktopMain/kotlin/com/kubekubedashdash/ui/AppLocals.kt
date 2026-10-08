@@ -16,6 +16,7 @@ internal fun MaybeProvideSessionLocals(session: ClusterSession?, content: @Compo
         CompositionLocalProvider(
             LocalViewModelStoreOwner provides session,
             LocalReactiveKubeClient provides session.reactiveClient,
+            LocalClusterSession provides session,
             LocalIsConnected provides isConnected,
             LocalConnectionError provides connectionError,
         ) { content() }

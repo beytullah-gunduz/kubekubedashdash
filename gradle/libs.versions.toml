@@ -21,6 +21,7 @@ ktor = "3.6.0"
 jna = "5.19.1"
 jsonpath = "3.0.0"
 jediterm = "3.76"
+rsyntaxtextarea = "4.0.1"
 # Build-time only: the release-jar bytecode scan (composeApp verifyReleaseBuild).
 # Must parse every class-file version on the runtime classpath.
 asm = "9.10.1"
@@ -58,6 +59,7 @@ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotl
 lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 mcp-kotlin-sdk = { module = "io.modelcontextprotocol:kotlin-sdk", version.ref = "mcp" }
+rsyntaxtextarea = { module = "com.fifesoft:rsyntaxtextarea", version.ref = "rsyntaxtextarea" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

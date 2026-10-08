@@ -239,6 +239,19 @@ internal fun seedResources(client: KubernetesClient) {
             .build(),
     ).create()
 
+    // A ~900 KB ConfigMap (just under the API's 1 MiB cap): the YAML editor's large-object demo.
+    client.configMaps().inNamespace("monitoring").resource(
+        ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("grafana-dashboards")
+            .withNamespace("monitoring")
+            .withCreationTimestamp(MockClusterProvider.minutesAgo(2880))
+            .addToLabels("grafana_dashboard", "1")
+            .endMetadata()
+            .addToData("dashboards.json", grafanaDashboardsJson())
+            .build(),
+    ).create()
+
     // ── Secret ──────────────────────────────────────────────────────────────
     client.secrets().inNamespace("default").resource(
         SecretBuilder()
@@ -1342,4 +1355,114 @@ internal fun workflowInstance(
     r.additionalProperties["spec"] = mapOf("entrypoint" to "main")
     r.additionalProperties["status"] = mapOf("phase" to phase)
     return r to ns
+}
+
+/** The size [grafanaDashboardsJson] aims for, in characters: a ConfigMap holds at most 1 MiB, so this leaves headroom. */
+private const val GRAFANA_DASHBOARD_TARGET_CHARS = 900_000
+
+private val GRAFANA_PANEL_TYPES = listOf("timeseries", "stat", "gauge", "table")
+
+/**
+ * A made-up Grafana dashboard as pretty-printed JSON of about 900 000 characters (ASCII, tens of
+ * thousands of lines): the demo's `grafana-dashboards` ConfigMap, big enough to show what the YAML
+ * editor does with an object near the 1 MiB limit. Pure and deterministic: panels "Panel 1", "Panel 2",
+ * ... are appended until the target size is reached.
+ */
+internal fun grafanaDashboardsJson(): String {
+    val out = StringBuilder(GRAFANA_DASHBOARD_TARGET_CHARS + 4_096)
+    out.append(
+        """
+        |{
+        |  "uid": "demo-http-overview",
+        |  "title": "Demo HTTP overview",
+        |  "schemaVersion": 39,
+        |  "version": 1,
+        |  "refresh": "30s",
+        |  "tags": [
+        |    "demo",
+        |    "generated"
+        |  ],
+        |  "time": {
+        |    "from": "now-6h",
+        |    "to": "now"
+        |  },
+        |  "panels": [
+        |
+        """.trimMargin(),
+    )
+    var panel = 1
+    while (out.length < GRAFANA_DASHBOARD_TARGET_CHARS) {
+        if (panel > 1) out.append(",\n")
+        appendGrafanaPanel(out, panel)
+        panel++
+    }
+    out.append("\n  ]\n}\n")
+    return out.toString()
+}
+
+private fun appendGrafanaPanel(out: StringBuilder, i: Int) {
+    val type = GRAFANA_PANEL_TYPES[i % GRAFANA_PANEL_TYPES.size]
+    out.append(
+        """
+        |    {
+        |      "id": $i,
+        |      "type": "$type",
+        |      "title": "Panel $i",
+        |      "description": "Request rate and tail latency of demo service $i, one series per instance.",
+        |      "datasource": {
+        |        "type": "prometheus",
+        |        "uid": "demo-prometheus"
+        |      },
+        |      "gridPos": {
+        |        "h": 8,
+        |        "w": 12,
+        |        "x": ${(i % 2) * 12},
+        |        "y": ${(i / 2) * 8}
+        |      },
+        |      "targets": [
+        |        {
+        |          "refId": "A",
+        |          "expr": "rate(http_requests_total{job=\"demo-$i\"}[5m])",
+        |          "legendFormat": "{{instance}}"
+        |        },
+        |        {
+        |          "refId": "B",
+        |          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"demo-$i\"}[5m])) by (le))",
+        |          "legendFormat": "p99"
+        |        }
+        |      ],
+        |      "fieldConfig": {
+        |        "defaults": {
+        |          "unit": "reqps",
+        |          "color": {
+        |            "mode": "palette-classic"
+        |          },
+        |          "thresholds": {
+        |            "mode": "absolute",
+        |            "steps": [
+        |              {
+        |                "color": "green",
+        |                "value": null
+        |              },
+        |              {
+        |                "color": "red",
+        |                "value": 80
+        |              }
+        |            ]
+        |          }
+        |        },
+        |        "overrides": []
+        |      },
+        |      "options": {
+        |        "legend": {
+        |          "displayMode": "list",
+        |          "placement": "bottom"
+        |        },
+        |        "tooltip": {
+        |          "mode": "multi"
+        |        }
+        |      }
+        |    }
+        """.trimMargin(),
+    )
 }

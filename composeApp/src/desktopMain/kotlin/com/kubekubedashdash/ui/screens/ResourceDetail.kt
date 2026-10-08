@@ -1,7 +1,6 @@
 package com.kubekubedashdash.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,34 +10,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.kubekubedashdash.KdBackground
 import com.kubekubedashdash.KdBorder
-import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdSyntaxBool
 import com.kubekubedashdash.KdSyntaxComment
 import com.kubekubedashdash.KdSyntaxKey
@@ -48,17 +34,10 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdMonoFamily
 import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.close_filled
-import com.kubekubedashdash.resources.content_copy_filled
-import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
-import com.kubekubedashdash.ui.components.rememberCopyToClipboard
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -70,19 +49,6 @@ fun ResourceDetailScreen(
     onOpenLogs: (String, String, String?) -> Unit = { _, _, _ -> },
     onClose: (() -> Unit)? = null,
 ) {
-    val reactiveClient = LocalReactiveKubeClient.current
-    var yaml by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    val copyToClipboard = rememberCopyToClipboard()
-
-    LaunchedEffect(kind, name, namespace) {
-        loading = true
-        yaml = withContext(Dispatchers.IO) {
-            reactiveClient.getResourceYaml(kind, name, namespace)
-        }
-        loading = false
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -131,19 +97,6 @@ fun ResourceDetailScreen(
                 Spacer(Modifier.width(8.dp))
             }
 
-            OutlinedButton(
-                onClick = { yaml?.let { copyToClipboard(it) } },
-                shape = 6.dp.kdCorner,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
-                border = ButtonDefaults.outlinedButtonBorder(true).copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
-                ),
-            ) {
-                Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Copy YAML", style = MaterialTheme.typography.labelMedium)
-            }
-
             if (onClose != null) {
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
@@ -154,66 +107,9 @@ fun ResourceDetailScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // YAML viewer
-        if (loading) {
-            ResourceLoadingIndicator()
-        } else {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                shape = 8.dp.kdCorner,
-                color = KdBackground,
-                border = ButtonDefaults.outlinedButtonBorder(true).copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(KdBorder),
-                ),
-            ) {
-                val scrollState = rememberScrollState()
-                Row(modifier = Modifier.fillMaxSize()) {
-                    val lines = (yaml ?: "").lines()
-
-                    // Line numbers
-                    Column(
-                        modifier = Modifier
-                            .verticalScroll(scrollState)
-                            .background(KdSurfaceVariant.copy(alpha = 0.5f))
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        horizontalAlignment = Alignment.End,
-                    ) {
-                        lines.forEachIndexed { index, _ ->
-                            Text(
-                                "${index + 1}",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = kdMonoFamily(),
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp,
-                                ),
-                                color = KdTextSecondary.copy(alpha = 0.5f),
-                            )
-                        }
-                    }
-
-                    // YAML content with syntax highlighting
-                    SelectionContainer {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .verticalScroll(scrollState)
-                                .horizontalScroll(rememberScrollState())
-                                .padding(12.dp),
-                        ) {
-                            lines.forEach { line ->
-                                Text(
-                                    text = highlightYamlLine(line),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = kdMonoFamily(),
-                                        fontSize = 12.sp,
-                                        lineHeight = 18.sp,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+        // The same YAML tab the detail panels use: masking, search, Copy and Edit.
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            GenericYamlTab(kind, name, namespace)
         }
     }
 }

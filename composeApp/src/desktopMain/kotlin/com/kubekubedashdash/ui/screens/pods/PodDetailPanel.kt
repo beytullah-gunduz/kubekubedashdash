@@ -112,6 +112,8 @@ import com.kubekubedashdash.ui.screens.events.eventsForObject
 import com.kubekubedashdash.ui.screens.events.warningEventCount
 import com.kubekubedashdash.ui.screens.relatedScreen
 import com.kubekubedashdash.ui.screens.rememberRelated
+import com.kubekubedashdash.ui.yamledit.rememberYamlEditEntry
+import com.kubekubedashdash.ui.yamledit.yamlEditDetailAction
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.RelatedResources
 import com.kubekubedashdash.util.formatAge
@@ -403,6 +405,7 @@ private fun PanelHeader(
     onOwnerClick: (RelatedRef) -> Unit,
 ) {
     val portForward = LocalPortForwardLauncher.current
+    val editEntry = rememberYamlEditEntry("Pod", pod.name, pod.namespace, null, null, null)
     val containers = pod.containers
     val terminalAction = DetailAction(
         icon = Res.drawable.terminal_filled,
@@ -460,11 +463,12 @@ private fun PanelHeader(
         name = pod.name,
         subtitle = pod.namespace,
         status = pod.status,
-        actions = listOfNotNull(terminalAction, logsAction, portForwardAction, evictAction, forceDeleteAction),
+        actions = listOfNotNull(terminalAction, logsAction, portForwardAction, editEntry?.let(::yamlEditDetailAction), evictAction, forceDeleteAction),
         onClose = onClose,
         ownerChain = ownerChain,
         onOwnerClick = onOwnerClick,
     )
+    editEntry?.Dialog()
 }
 
 // ── Tab Bar ─────────────────────────────────────────────────────────────────────

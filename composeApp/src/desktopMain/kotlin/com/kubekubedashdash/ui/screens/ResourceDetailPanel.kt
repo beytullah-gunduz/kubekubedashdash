@@ -85,6 +85,7 @@ import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.content_copy_filled
+import com.kubekubedashdash.resources.edit_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.keyboard_arrow_up_filled
@@ -105,6 +106,8 @@ import com.kubekubedashdash.ui.components.rememberCopyToClipboard
 import com.kubekubedashdash.ui.crt.crtTabCut
 import com.kubekubedashdash.ui.crt.goToTab
 import com.kubekubedashdash.ui.crt.rememberCrtTabCut
+import com.kubekubedashdash.ui.yamledit.rememberYamlEditEntry
+import com.kubekubedashdash.ui.yamledit.yamlEditDetailAction
 import com.kubekubedashdash.util.RelatedRef
 import com.kubekubedashdash.util.SecretYamlMasking
 import kotlinx.coroutines.Dispatchers
@@ -206,6 +209,8 @@ fun ResourceDetailPanel(
         if (showYamlTab) add(TabDef("YAML", Res.drawable.code_filled))
     }
     val yamlIndex = if (showYamlTab) tabs.lastIndex else -1
+    // The header's own edit entry (the YAML tab keeps another): each renders its own consent dialog.
+    val editEntry = if (showYamlTab) rememberYamlEditEntry(kind, name, namespace, apiGroup, apiVersion, plural) else null
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val tabCut = rememberCrtTabCut()
 
@@ -243,12 +248,17 @@ fun ResourceDetailPanel(
                     if (namespace != null) append(" · $namespace")
                 },
                 status = status,
-                actions = actions,
+                actions = if (editEntry == null) {
+                    actions
+                } else {
+                    actions.filterNot { it.destructive } + yamlEditDetailAction(editEntry) + actions.filter { it.destructive }
+                },
                 onDelete = onDelete,
                 onClose = onClose,
                 ownerChain = ownerChain,
                 onOwnerClick = onOwnerClick,
             )
+            editEntry?.Dialog()
 
             // Tabs
             SecondaryTabRow(
@@ -432,9 +442,13 @@ internal fun GenericYamlTab(
     plural: String? = null,
 ) {
     val kubeClient = LocalReactiveKubeClient.current
+    val editEntry = rememberYamlEditEntry(kind, name, namespace, apiGroup, apiVersion, plural)
     var yaml by remember(kind, name, namespace) { mutableStateOf<String?>(null) }
     var loading by remember(kind, name, namespace) { mutableStateOf(true) }
-    LaunchedEffect(kind, name, namespace, apiGroup, apiVersion) {
+    // The text is fetched once per object, so read it again when its editor window opens or closes:
+    // after an apply (or an edit discarded while the server moved on) the tab shows the live object.
+    val editing = editEntry?.editing == true
+    LaunchedEffect(kind, name, namespace, apiGroup, apiVersion, editing) {
         loading = true
         yaml = withContext(Dispatchers.IO) {
             kubeClient.getResourceYaml(kind, name, namespace, apiGroup, apiVersion, plural)
@@ -476,18 +490,23 @@ internal fun GenericYamlTab(
         displayText = displayText,
         copyText = yaml,
         loading = loading,
-        toggle = if (isSecret) YamlToolbarToggle(buttonLabel, buttonIcon) { showDecoded = !showDecoded } else null,
+        toggle = if (isSecret) YamlToolbarToggle(buttonLabel, buttonIcon, { showDecoded = !showDecoded }) else null,
+        edit = editEntry?.let { entry -> YamlToolbarToggle("Edit", Res.drawable.edit_filled, { entry.open() }, enabled = entry.enabled) },
+        editingNote = editEntry?.takeIf { it.editing }?.focusExisting,
     )
+    editEntry?.Dialog()
 }
 
-/** A toolbar button rendered before Copy: Reveal/Hide, Decode/Raw. */
-internal class YamlToolbarToggle(val label: String, val icon: DrawableResource, val onClick: () -> Unit)
+/** A toolbar button rendered before Copy: Reveal/Hide, Decode/Raw, Edit. A disabled one is shown but ignores clicks. */
+internal class YamlToolbarToggle(val label: String, val icon: DrawableResource, val onClick: () -> Unit, val enabled: Boolean = true)
 
 /**
  * The YAML viewer body: search field, match navigation, an optional toggle, Copy, then
  * the line-numbered, selectable, scrollable text. [identity] keys the search query and
  * both scroll positions: a new identity resets them, a new [displayText] alone does not.
  * Copy copies [copyText] (nothing while it is null), which need not be what is shown.
+ * [edit] is the Edit button, between [toggle] and Copy; [editingNote], when set, adds a strip above the
+ * text saying the object is being edited in its own window, whose button calls it.
  */
 @Composable
 internal fun YamlTextPane(
@@ -496,6 +515,8 @@ internal fun YamlTextPane(
     copyText: String?,
     loading: Boolean,
     toggle: YamlToolbarToggle? = null,
+    edit: YamlToolbarToggle? = null,
+    editingNote: (() -> Unit)? = null,
 ) {
     val copyToClipboard = rememberCopyToClipboard()
 
@@ -594,6 +615,19 @@ internal fun YamlTextPane(
                     Text(toggle.label, style = MaterialTheme.typography.labelSmall)
                 }
             }
+            if (edit != null) {
+                TextButton(
+                    onClick = edit.onClick,
+                    enabled = edit.enabled,
+                    colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = kdRoundShape,
+                ) {
+                    Icon(painterResource(edit.icon), null, Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(edit.label, style = MaterialTheme.typography.labelSmall)
+                }
+            }
             TextButton(
                 onClick = { copyText?.let { text -> copyToClipboard(text) } },
                 colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
@@ -603,6 +637,29 @@ internal fun YamlTextPane(
                 Icon(painterResource(Res.drawable.content_copy_filled), null, Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Copy", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+
+        if (editingNote != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(KdWarning.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Being edited in a separate window",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = KdTextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = editingNote,
+                    colors = ButtonDefaults.textButtonColors(contentColor = KdPrimary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = kdRoundShape,
+                ) {
+                    Text("Show editor", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
 
@@ -701,7 +758,7 @@ internal fun YamlTextPane(
 // the YAML pane doesn't take a dependency on the log viewer package.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun YamlSearchField(
+internal fun YamlSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,

@@ -298,6 +298,13 @@
 -dontwarn com.jediterm.**
 
 # ---------------------------------------------------------------------------
+# RSyntaxTextArea — the YAML editor window. Token makers, folding parsers and
+# themes are loaded by class name / resource path; keep the whole library.
+# ---------------------------------------------------------------------------
+-keep class org.fife.** { *; }
+-dontwarn org.fife.**
+
+# ---------------------------------------------------------------------------
 # App entry point — already kept by Compose's auto-generated config, but
 # being explicit doesn't hurt and survives any future plugin changes.
 # ---------------------------------------------------------------------------
