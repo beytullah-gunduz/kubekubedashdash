@@ -40,6 +40,7 @@ import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.drawKdDot
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdCornerRadius
@@ -91,6 +92,21 @@ fun PodStatusBar(running: Int, pending: Int, failed: Int, succeeded: Int) {
     }
 }
 
+/** Segments of the Retro half gauge: 10° each, so one segment is about 5.6 % of the value. */
+internal const val GAUGE_SEGMENTS = 18
+
+/** Degrees left dark between two Retro gauge segments. */
+internal const val GAUGE_GAP_DEGREES = 3f
+
+/** Lit segments of the Retro half gauge for [fraction] ([litCells] over [GAUGE_SEGMENTS]). */
+internal fun gaugeSegments(fraction: Float): Int = litCells(fraction, GAUGE_SEGMENTS)
+
+/**
+ * A half-ring usage gauge with the percentage, a level glyph, [label] and "used / total" under it.
+ * Default: a smooth arc that eases to [fraction] over 800 ms. Retro: [GAUGE_SEGMENTS] segments with
+ * [GAUGE_GAP_DEGREES] gaps, [gaugeSegments] of them lit in the level colour, the rest in the track
+ * colour, with no easing.
+ */
 @Composable
 fun HalfCircularUsageIndicator(
     fraction: Float,
@@ -106,6 +122,7 @@ fun HalfCircularUsageIndicator(
     )
     val level = usageLevel(clamped)
     val gaugeColor = level.color()
+    val retro = ThemeManager.isRetro
 
     Column(
         modifier = modifier,
@@ -122,25 +139,41 @@ fun HalfCircularUsageIndicator(
                 val arcSize = Size(arcDiameter, arcDiameter)
                 val topLeft = Offset(pad, pad)
 
-                drawArc(
-                    color = KdSurfaceVariant,
-                    startAngle = 180f,
-                    sweepAngle = 180f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = kdStrokeCap),
-                )
-                if (animatedFraction > 0f) {
+                if (retro) {
+                    val lit = gaugeSegments(clamped)
+                    val step = 180f / GAUGE_SEGMENTS
+                    for (index in 0 until GAUGE_SEGMENTS) {
+                        drawArc(
+                            color = if (index < lit) gaugeColor else KdSurfaceVariant,
+                            startAngle = 180f + index * step + GAUGE_GAP_DEGREES / 2,
+                            sweepAngle = step - GAUGE_GAP_DEGREES,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = kdStrokeCap),
+                        )
+                    }
+                } else {
                     drawArc(
-                        color = gaugeColor,
+                        color = KdSurfaceVariant,
                         startAngle = 180f,
-                        sweepAngle = (180f * animatedFraction).coerceAtLeast(4f),
+                        sweepAngle = 180f,
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
                         style = Stroke(width = strokeWidth, cap = kdStrokeCap),
                     )
+                    if (animatedFraction > 0f) {
+                        drawArc(
+                            color = gaugeColor,
+                            startAngle = 180f,
+                            sweepAngle = (180f * animatedFraction).coerceAtLeast(4f),
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = kdStrokeCap),
+                        )
+                    }
                 }
             }
             val percentText = when {
