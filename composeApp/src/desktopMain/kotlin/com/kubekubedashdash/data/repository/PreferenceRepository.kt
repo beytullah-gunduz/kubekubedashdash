@@ -12,7 +12,6 @@ import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
-import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.ui.components.clampUiScale
 import com.kubekubedashdash.ui.crt.CrtRefreshBarMode
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
@@ -67,7 +66,6 @@ object PreferenceRepository {
     private val GKE_DISCOVERY_MODE by lazy { stringPreferencesKey("gke_discovery_mode") }
     private val EKS_DISCOVERY_MODE by lazy { stringPreferencesKey("eks_discovery_mode") }
     private val CLOSE_TAB_FOCUS by lazy { stringPreferencesKey("close_tab_focus") }
-    private val TAB_STRIP_VISIBILITY by lazy { stringPreferencesKey("tab_strip_visibility") }
     private val SIDEBAR_COLLAPSED by lazy { booleanPreferencesKey("sidebar_collapsed") }
     private val HEATMAP_AUTO_OPEN_DISMISSED by lazy { booleanPreferencesKey("heatmap_auto_open_dismissed") }
     private val DEMO_NODES_MIN by lazy { intPreferencesKey("demo_nodes_min") }
@@ -154,9 +152,6 @@ object PreferenceRepository {
 
     private val _closeTabFocus = MutableStateFlow(CloseTabFocus.LEFT_NEIGHBOR)
     val closeTabFocus: StateFlow<CloseTabFocus> = _closeTabFocus.asStateFlow()
-
-    private val _tabStripVisibility = MutableStateFlow(TabStripVisibility.AUTO)
-    val tabStripVisibility: StateFlow<TabStripVisibility> = _tabStripVisibility.asStateFlow()
 
     private val _sidebarCollapsed = MutableStateFlow(false)
     val sidebarCollapsed: StateFlow<Boolean> = _sidebarCollapsed.asStateFlow()
@@ -318,7 +313,6 @@ object PreferenceRepository {
                     _gkeDiscoveryMode.value = p[GKE_DISCOVERY_MODE]
                     _eksDiscoveryMode.value = p[EKS_DISCOVERY_MODE]
                     _closeTabFocus.value = decodeCloseTabFocus(p[CLOSE_TAB_FOCUS])
-                    _tabStripVisibility.value = decodeTabStripVisibility(p[TAB_STRIP_VISIBILITY])
                     _sidebarCollapsed.value = p[SIDEBAR_COLLAPSED] ?: false
                     _heatmapAutoOpenDismissed.value = p[HEATMAP_AUTO_OPEN_DISMISSED] ?: false
                     _demoTargets.value = DemoClusterSimulator.Targets(
@@ -470,11 +464,6 @@ object PreferenceRepository {
     fun setCloseTabFocus(value: CloseTabFocus) {
         _closeTabFocus.value = value
         ioScope.launch { dataStore.edit { it[CLOSE_TAB_FOCUS] = value.name } }
-    }
-
-    fun setTabStripVisibility(value: TabStripVisibility) {
-        _tabStripVisibility.value = value
-        ioScope.launch { dataStore.edit { it[TAB_STRIP_VISIBILITY] = value.name } }
     }
 
     fun setSidebarCollapsed(value: Boolean) {
@@ -661,8 +650,6 @@ object PreferenceRepository {
     private fun decodePinnedResources(raw: String?): Set<String> = raw?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
 
     private fun decodeCloseTabFocus(raw: String?): CloseTabFocus = raw?.let { runCatching { CloseTabFocus.valueOf(it) }.getOrNull() } ?: CloseTabFocus.LEFT_NEIGHBOR
-
-    private fun decodeTabStripVisibility(raw: String?): TabStripVisibility = raw?.let { runCatching { TabStripVisibility.valueOf(it) }.getOrNull() } ?: TabStripVisibility.AUTO
 
     private fun decodePresets(raw: String?): List<EventTriagePreset> {
         if (raw.isNullOrBlank()) return emptyList()

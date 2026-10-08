@@ -31,25 +31,6 @@ enum class CloseTabFocus {
     PREVIOUS_ACTIVE,
 }
 
-/**
- * When the multi-tab strip is shown.
- *
- * Stored in [com.kubekubedashdash.data.repository.PreferenceRepository.tabStripVisibility]
- * as the enum's `name`. Default ([AUTO]) preserves the original compact behavior — most
- * users keep a single cluster open most of the time, so the inline title-bar chip + "+"
- * is enough on its own. Power users who want the strip always visible can flip to
- * [ALWAYS] in Settings.
- */
-enum class TabStripVisibility {
-    /** Show the strip when there are ≥2 tabs or any non-cluster tab; otherwise use
-     *  the inline title-bar cluster chip + "+" affordance. */
-    AUTO,
-
-    /** Show the strip even with a single cluster tab. The inline title-bar chip is
-     *  hidden in this mode to avoid two competing affordances. */
-    ALWAYS,
-}
-
 /** A request to open the logs drawer on a specific pod/container (screenshot driver). */
 data class LogRequest(
     val podName: String,
@@ -59,8 +40,8 @@ data class LogRequest(
 
 /**
  * One OS window's worth of tabs. A workspace holds an ordered list of
- * [WorkspaceTab]s (rendered as a strip when N≥2 or any non-cluster tab is open)
- * and tracks which one is currently active.
+ * [WorkspaceTab]s (rendered in the window's title bar) and tracks which one is
+ * currently active.
  *
  * Per-window concerns also live here: the cluster-picker visibility flag is
  * scoped per window (Decision 1 in `.docs/multi-cluster-plan.md`) so two open
@@ -153,9 +134,9 @@ class Workspace(
     val dismissPortForwardRequest: StateFlow<Boolean> = _dismissPortForwardRequest.asStateFlow()
 
     /**
-     * Screen-space rectangle of this window's chip-drop zone — the chip slot in
-     * the title bar at N=1 or the [com.kubekubedashdash.ui.WindowTabStrip] row
-     * at N≥2. Updated by the corresponding composable via `onGloballyPositioned`
+     * Screen-space rectangle of this window's chip-drop zone — the title bar,
+     * which holds the [com.kubekubedashdash.ui.WindowTabStrip]. Updated by the
+     * corresponding composable via `onGloballyPositioned`
      * (see [com.kubekubedashdash.ui.App]) and queried by
      * [com.kubekubedashdash.services.WorkspaceManager.handleChipRelease] to hit-
      * test the cursor at drag end and decide between chip-on-chip merge and

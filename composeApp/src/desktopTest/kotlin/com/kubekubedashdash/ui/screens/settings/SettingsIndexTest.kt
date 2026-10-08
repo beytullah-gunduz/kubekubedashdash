@@ -98,12 +98,12 @@ class SettingsIndexTest {
 
     @Test
     fun `title match outranks keyword match outranks section match`() {
-        // "tab" is a title substring of "Tab strip", a keyword of
-        // "Cluster colors", and a section substring (via "Tab behavior")
-        // that only "Restore last session" reaches, since the other two
-        // rows in that section already rank as title matches.
+        // "tab" is a title substring of "When closing the active tab, focus:",
+        // a keyword of "Cluster colors", and a section substring (via
+        // "Tab behavior") that only "Restore last session" reaches, since the
+        // other row in that section already ranks as a title match.
         val results = settingsSearchResults("tab")
-        val titleRank = results.indexOfFirst { it.title == "Tab strip" }
+        val titleRank = results.indexOfFirst { it.title == "When closing the active tab, focus:" }
         val keywordRank = results.indexOfFirst { it.title == "Cluster colors" }
         val sectionRank = results.indexOfFirst { it.title == "Restore last session" }
         assertTrue(titleRank >= 0 && keywordRank >= 0 && sectionRank >= 0)

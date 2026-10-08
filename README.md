@@ -21,7 +21,7 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 
 ### Multi-cluster workspaces
 
-- **Tab strip** — each tab shows a color-coded cluster chip with a live connection-status ring: a rotating arc while connecting, a pulsing red ring when disconnected, and a solid ring when healthy
+- **Tab strip** — tabs sit in the window's title bar; each shows a color-coded cluster chip with a live connection-status ring: a rotating arc while connecting, a pulsing red ring when disconnected, and a solid ring when healthy
 - **Multiple windows** — open additional OS windows, each running as an independent workspace with its own tab strip, navigation state, and selected namespace
 - Tabs and windows are fully isolated — scrolling, selection, and navigation do not bleed across
 - Per-cluster colors are assigned automatically and can be overridden in Settings
@@ -233,7 +233,7 @@ Settings are opened via the gear icon (⚙) in the title bar or <kbd>⌘,</kbd> 
 - **Log panel beside sidebar** — a widescreen layout: the sidebar keeps its full height and the log panel opens to its right (off by default)
 - **Cluster colors** — override the auto-assigned color for any cluster, from a preset palette or a custom color
 - **Default namespace** — the namespace a cluster opens in when it connects fresh
-- **Tab behavior** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; choose whether the tab strip shows always or only with multiple tabs; and **Restore last session** (on by default) reopens the windows, clusters, namespaces and screens you had when you last quit
+- **Tab behavior** — when closing the active tab, focus the left neighbor, the first tab, or the most-recently-visited tab; and **Restore last session** (on by default) reopens the windows, clusters, namespaces and screens you had when you last quit
 - **Live data → Topology auto-refresh** — how often the topology graph re-fetches (lists and detail panels update live)
 - **Keyboard shortcuts** — the shortcut sheet, also on <kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd>
 - **Privacy → Secret values** — mask Secret data in the YAML view (the default) or show it in clear
@@ -263,7 +263,7 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 - Status is never colour alone: glyphs, filled vs hollow dots, dashed rings and usage-tier icons
 - **Sidebar** — a search box filters it (aliases such as `pv`, `pvc` and `csr` work, and CRDs match on kind, plural, group or short name); right-click a row to add it to **Favourites**; less common kinds sit under **More**; badges count failing pods, NotReady nodes and recent warning events, and clicking one opens the pre-filtered list
 - Collapsible sidebar — toggle from the title bar; collapsed, it becomes an icon rail where More and Custom Resources open as menus; state is persisted across sessions
-- **Back / Forward** in each cluster tab's header (<kbd>⌘[</kbd> / <kbd>⌘]</kbd>, <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd>) step through the screens and detail panels you visited
+- **Back / Forward** in the title bar, next to the sidebar button (<kbd>⌘[</kbd> / <kbd>⌘]</kbd>, <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd>), step through the screens and detail panels you visited in the active cluster tab
 - **Session restore** (on by default) — the next launch reopens your windows with their size and position, cluster tabs, namespaces and screens
 - Toasts confirm actions, with **Undo** where it applies
 - **UI zoom** (80–150 %) and a keyboard shortcut sheet (<kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd>)
