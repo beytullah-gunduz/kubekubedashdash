@@ -128,9 +128,12 @@ internal fun frameStep(frameTimeMillis: Long, stepMillis: Long, steps: Int): Int
 
 /**
  * The current step of a stepped Retro animation, `frameStep(frame time, stepMillis, steps)` from
- * the frame clock's absolute time, so every instance agrees. Read it only in the draw phase, so a
- * step redraws without recomposing. Starts at 0. The loop runs through
- * withInfiniteAnimationFrameMillis, so UI tests with an auto-advancing clock keep it at 0.
+ * the frame clock's absolute time, so every instance agrees. Read it in the draw phase where a
+ * redraw is enough; a composition read recomposes once per step (equal writes are no-ops), never
+ * per frame, which the Retro skeleton rows, live-data dot and cluster ring accept. Starts at 0, so
+ * a newly composed instance shows step 0 for its first frame before it joins the shared phase. The
+ * loop runs through withInfiniteAnimationFrameMillis, so UI tests with an auto-advancing clock keep
+ * it at 0.
  */
 @Composable
 internal fun rememberFrameStep(stepMillis: Long, steps: Int): IntState {
@@ -162,3 +165,6 @@ internal fun trailAlpha(behind: Int, trailLength: Int, highContrast: Boolean): F
     behind == 2 && trailLength >= 2 -> if (highContrast) 0.5f else 0.3f
     else -> if (highContrast) 0f else 0.14f
 }
+
+/** A Retro square wave for [step] from [rememberFrameStep] with 2 steps: full opacity on even steps, [low] on odd ones. */
+internal fun retroPulseAlpha(step: Int, low: Float): Float = if (step.mod(2) == 0) 1f else low
