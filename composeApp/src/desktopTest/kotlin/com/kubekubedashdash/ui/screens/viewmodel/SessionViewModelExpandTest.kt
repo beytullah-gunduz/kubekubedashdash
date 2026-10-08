@@ -1,12 +1,10 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.util.KubeConnectionManager
-import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.model.Workspace
+import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -22,20 +20,29 @@ import kotlin.test.assertTrue
  */
 class SessionViewModelExpandTest {
 
-    private lateinit var scope: CoroutineScope
-    private lateinit var manager: KubeConnectionManager
+    private lateinit var session: ClusterSession
+    private lateinit var workspace: Workspace
     private lateinit var viewModel: SessionViewModel
 
     @BeforeTest
+    fun guardDataDirectory() {
+        assertTrue(
+            SystemDirectories.dataDirectory.contains("test-data"),
+            "refusing to run against a data directory that is not the Gradle test-data directory",
+        )
+    }
+
+    @BeforeTest
     fun setUp() {
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        manager = KubeConnectionManager()
-        viewModel = SessionViewModel(ReactiveKubeClient(scope, manager), scope)
+        session = ClusterSession()
+        workspace = Workspace()
+        workspace.addSession(session, makeActive = true)
+        viewModel = session.viewModel
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(scope, label = "SessionViewModelExpandTest", manager = manager)
+        shutdownCleanly(session.scope, label = "SessionViewModelExpandTest", manager = session.connectionManager)
     }
 
     private val detail = Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "ns-a")
@@ -75,11 +82,11 @@ class SessionViewModelExpandTest {
         viewModel.navigate(detail)
         viewModel.setExtraPaneExpanded(true)
 
-        viewModel.goBack()
+        workspace.goBack()
         assertNull(viewModel.extraPaneScreen.value)
         assertFalse(viewModel.extraPaneExpanded.value)
         // Forward reopens the pane, collapsed: expanding is a view choice, not history.
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(detail, viewModel.extraPaneScreen.value)
         assertFalse(viewModel.extraPaneExpanded.value)
     }

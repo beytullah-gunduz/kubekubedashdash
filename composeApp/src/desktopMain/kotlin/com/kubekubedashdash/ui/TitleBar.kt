@@ -182,8 +182,8 @@ fun WindowScope.TitleBar(
 
             SidebarToggleButton(sidebarCollapsed, onToggleSidebar)
             Spacer(Modifier.width(2.dp))
-            // Back / Forward step through the active tab's screen history; the
-            // caller greys them out on tabs without one (All Clusters, terminals).
+            // Back / Forward walk the window's history across its tabs; the caller
+            // greys them out when there is nowhere to go.
             HistoryButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack)
             HistoryButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
             Spacer(Modifier.width(8.dp))

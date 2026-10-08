@@ -1,16 +1,15 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
-import com.kubekubedashdash.util.KubeConnectionManager
-import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.model.Workspace
+import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The header filter is stored per session but means "filter THIS list":
@@ -19,20 +18,29 @@ import kotlin.test.assertEquals
  */
 class SessionViewModelSearchTest {
 
-    private lateinit var scope: CoroutineScope
-    private lateinit var manager: KubeConnectionManager
+    private lateinit var session: ClusterSession
+    private lateinit var workspace: Workspace
     private lateinit var viewModel: SessionViewModel
 
     @BeforeTest
+    fun guardDataDirectory() {
+        assertTrue(
+            SystemDirectories.dataDirectory.contains("test-data"),
+            "refusing to run against a data directory that is not the Gradle test-data directory",
+        )
+    }
+
+    @BeforeTest
     fun setUp() {
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        manager = KubeConnectionManager()
-        viewModel = SessionViewModel(ReactiveKubeClient(scope, manager), scope)
+        session = ClusterSession()
+        workspace = Workspace()
+        workspace.addSession(session, makeActive = true)
+        viewModel = session.viewModel
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(scope, label = "SessionViewModelSearchTest", manager = manager)
+        shutdownCleanly(session.scope, label = "SessionViewModelSearchTest", manager = session.connectionManager)
     }
 
     private val detail = Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "ns-a")
@@ -60,11 +68,11 @@ class SessionViewModelSearchTest {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods())
         viewModel.setSearchQuery("nginx")
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Nodes(), viewModel.currentScreen.value)
         assertEquals("", viewModel.searchQuery.value)
         viewModel.setSearchQuery("kube")
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertEquals("", viewModel.searchQuery.value)
     }
@@ -74,7 +82,7 @@ class SessionViewModelSearchTest {
         viewModel.navigate(Screen.Main.Pods())
         viewModel.navigate(detail)
         viewModel.setSearchQuery("nginx")
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertEquals(null, viewModel.extraPaneScreen.value)
         assertEquals("nginx", viewModel.searchQuery.value)
@@ -85,7 +93,7 @@ class SessionViewModelSearchTest {
         viewModel.navigate(Screen.Main.Pods(selectPodUid = "uid-1"))
         viewModel.navigate(detail)
         viewModel.setSearchQuery("nginx")
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(null, viewModel.extraPaneScreen.value)
         assertEquals("nginx", viewModel.searchQuery.value)
     }

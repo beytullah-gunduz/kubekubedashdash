@@ -200,16 +200,17 @@ fun App(
         // Stable empty-state flows so collected Compose states don't change type.
         val emptyString = remember { MutableStateFlow("") }
         val emptyBool = remember { MutableStateFlow(false) }
+        val alwaysTrue = remember { MutableStateFlow(true) }
 
         val selectedContext by (titleVm?.selectedContext ?: emptyString).collectAsState()
         val isConnected by (titleVm?.isConnected ?: emptyBool).collectAsState()
         val isReconnecting by (titleVm?.reconnecting ?: emptyBool).collectAsState()
-        // Back / Forward in the title bar act on the active tab only: an All
-        // Clusters or terminal tab has no screen history, so they grey out there
-        // instead of stepping through a tab the user is not looking at.
-        val historyVm = activeSession?.viewModel
-        val canGoBack by (historyVm?.canGoBack ?: emptyBool).collectAsState()
-        val canGoForward by (historyVm?.canGoForward ?: emptyBool).collectAsState()
+        // Back / Forward walk this window's one history across its tabs. They wait
+        // while the active tab is on a connection screen, as they always have.
+        val navHistory by workspace.navigationHistory.collectAsState()
+        val activeAllowsHistory by (activeSession?.viewModel?.historyNavAllowed ?: alwaysTrue).collectAsState()
+        val canGoBack = activeAllowsHistory && navHistory.canGoBack
+        val canGoForward = activeAllowsHistory && navHistory.canGoForward
         // A tab that lost its cluster keeps its screen under the reconnect
         // scrim; on a machine with no real context that must not fall back to
         // the first-run screen, which would hide the scrim (and its exits).
@@ -529,17 +530,25 @@ fun App(
                                 activeSession != null
                             }
 
-                            // Cmd+[ / Ctrl+[: back through the active tab's screen history
-                            // (none on an All Clusters or terminal tab, like the title-bar arrow).
+                            // Cmd+[ / Ctrl+[: back through the window's history, across tabs.
+                            // Not on a terminal tab: Ctrl+[ is Escape to the shell there.
                             event.key == Key.LeftBracket && metaOrCtrl -> {
-                                activeSession?.viewModel?.goBack()
-                                activeSession != null
+                                if (activeTab is WorkspaceTab.Terminal) {
+                                    false
+                                } else {
+                                    workspace.goBack()
+                                    true
+                                }
                             }
 
-                            // Cmd+] / Ctrl+]: forward.
+                            // Cmd+] / Ctrl+]: forward, with the same terminal exception.
                             event.key == Key.RightBracket && metaOrCtrl -> {
-                                activeSession?.viewModel?.goForward()
-                                activeSession != null
+                                if (activeTab is WorkspaceTab.Terminal) {
+                                    false
+                                } else {
+                                    workspace.goForward()
+                                    true
+                                }
                             }
 
                             // Cmd+= / Cmd++ / Cmd+NumPad+: zoom in.
@@ -689,8 +698,8 @@ fun App(
                                     onOpenSettings = { workspace.showSettings() },
                                     canGoBack = canGoBack,
                                     canGoForward = canGoForward,
-                                    onBack = { activeSession?.viewModel?.goBack() },
-                                    onForward = { activeSession?.viewModel?.goForward() },
+                                    onBack = { workspace.goBack() },
+                                    onForward = { workspace.goForward() },
                                     hiddenLogTabCount = if (drawerState == LogDrawerState.HIDDEN) visibleDrawerTabCount else 0,
                                     onShowLogDrawer = { drawerState = LogDrawerState.EXPANDED },
                                     chipSlot = if (showAppTitle) null else tabStripSlot,

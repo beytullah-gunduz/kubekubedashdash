@@ -263,7 +263,7 @@ KubeKubeDashDash embeds an opt-in [Model Context Protocol](https://modelcontextp
 - Status is never colour alone: glyphs, filled vs hollow dots, dashed rings and usage-tier icons
 - **Sidebar** — a search box filters it (aliases such as `pv`, `pvc` and `csr` work, and CRDs match on kind, plural, group or short name); right-click a row to add it to **Favourites**; less common kinds sit under **More**; badges count failing pods, NotReady nodes and recent warning events, and clicking one opens the pre-filtered list
 - Collapsible sidebar — toggle from the title bar; collapsed, it becomes an icon rail where More and Custom Resources open as menus; state is persisted across sessions
-- **Back / Forward** in the title bar, next to the sidebar button (<kbd>⌘[</kbd> / <kbd>⌘]</kbd>, <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd>), step through the screens and detail panels you visited in the active cluster tab
+- **Back / Forward** in the title bar, next to the sidebar button (<kbd>⌘[</kbd> / <kbd>⌘]</kbd>, <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd>), step through the screens, detail panels and tabs you visited in that window, in order — Back can take you to another tab
 - **Session restore** (on by default) — the next launch reopens your windows with their size and position, cluster tabs, namespaces and screens
 - Toasts confirm actions, with **Undo** where it applies
 - **UI zoom** (80–150 %) and a keyboard shortcut sheet (<kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd>)
