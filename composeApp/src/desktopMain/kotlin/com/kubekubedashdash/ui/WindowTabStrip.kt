@@ -66,7 +66,7 @@ private data class ClusterDisplay(
  * The strip eats presses so a click or drag on a chip never moves the window;
  * the title bar around it stays draggable. When [isDropTarget] is true
  * (another window's chip is being dragged over this window) its background
- * lightens to advertise the drop.
+ * lightens to advertise the drop; a lone cluster chip also draws its drop border.
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -209,6 +209,9 @@ fun WindowTabStrip(
                             isActive = tab.key == activeTabKey,
                             isConnected = display.connected,
                             isConnecting = display.connecting,
+                            // A lone chip also draws the chip-level drop cue — its 1.5 dp border
+                            // (its fill matches the strip's tint) — as it did alone in the title bar.
+                            isDropTarget = loneTab && isDropTarget,
                             showActiveIndicator = !loneTab,
                             onClick = { onSelectTab(tab.key) },
                             onClose = if (loneTab) {

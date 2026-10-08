@@ -62,7 +62,7 @@ object WorkspaceManager {
      * The workspace whose drop zone currently sits under the cursor mid-drag,
      * or null when no other window is being targeted (or no drag is in
      * progress). Each window's [com.kubekubedashdash.ui.App] subscribes to this
-     * to render the drag-over highlight on its own chip slot / tab strip.
+     * to render the drag-over highlight on its own title-bar tab strip.
      *
      * Updated by [notifyDragMove] as the source chip's screen position changes,
      * and cleared at drag end (either through [handleChipRelease] or

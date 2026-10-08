@@ -19,8 +19,8 @@ import kotlinx.coroutines.ensureActive
  * active tab.
  *
  * Slides to the new page, except right after a tab was inserted: then it snaps, because
- * animateScrollToPage composes every page it passes — when the 2nd cluster opens (tabs grow 1→2,
- * or 1→3 with the All Clusters tab) that would compose several full session panes at once.
+ * animateScrollToPage composes every page it passes — a new tab is appended, so opening one
+ * from an early tab (say the 4th cluster from the 1st) would compose several full session panes.
  *
  * "Already there" means on the page AND at a zero offset: a second tab click mid-slide cancels the
  * slide wherever it is, which can be part-way past the new target's page.

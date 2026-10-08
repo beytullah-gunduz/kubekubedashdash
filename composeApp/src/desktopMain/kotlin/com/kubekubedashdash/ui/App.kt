@@ -187,10 +187,12 @@ fun App(
         val awsCliAvailable = remember { ShellEnvironment.resolveCommand("aws") != null }
         val gcloudCliAvailable = remember { ShellEnvironment.resolveCommand("gcloud") != null }
 
-        // The title bar powers the cluster chip + connection state for the
-        // active cluster tab; fall back to the first cluster tab when a
-        // non-cluster tab (Logs / All Clusters) is active so the chip persists.
-        // Namespace + search now live in the per-tab content header.
+        // The session behind window-level state: the active cluster tab, else
+        // the first cluster tab while a non-cluster tab (All Clusters, a
+        // terminal) is active. It feeds the first-run check, the title bar's
+        // app-name fallback, the cluster picker, the command palette and the
+        // App-scope session locals; the tabs read their own sessions, and
+        // namespace + search live in the per-tab content header.
         val titleSession = activeSession
             ?: tabs.filterIsInstance<WorkspaceTab.Cluster>().firstOrNull()?.session
         val titleVm = titleSession?.viewModel
@@ -572,7 +574,7 @@ fun App(
                     // dismiss themselves — only an unconsumed Escape lands here.
                     // activeSession, NOT sessionForPalette/titleSession: those
                     // fall back to the first cluster tab, so Escape on a
-                    // Terminal / Logs / All Clusters tab would close an
+                    // Terminal / All Clusters tab would close an
                     // invisible pane in another tab.
                     .onKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown || event.key != Key.Escape) return@onKeyEvent false
@@ -806,7 +808,9 @@ fun App(
                         onDismiss = { workspace.dismissClusterSelector() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
                         onDiscoverGke = { workspace.showGkeDiscovery() },
-                        onOpenAllClusters = openAllClusters?.let { open ->
+                        // Not while the picker is locked open on a tab with no cluster yet
+                        // (dismissable false): the row would close it and leave that tab blank.
+                        onOpenAllClusters = openAllClusters?.takeIf { selectedContext.isNotBlank() }?.let { open ->
                             {
                                 workspace.dismissClusterSelector()
                                 open()
