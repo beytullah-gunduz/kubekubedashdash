@@ -849,11 +849,7 @@ fun ResourceLoadingIndicator() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        BusyIndicator(
-            modifier = Modifier.size(40.dp),
-            color = KdPrimary,
-            strokeWidth = 3.dp,
-        )
+        BusyScanner(ringSize = 40.dp, color = KdPrimary, strokeWidth = 3.dp)
     }
 }
 
