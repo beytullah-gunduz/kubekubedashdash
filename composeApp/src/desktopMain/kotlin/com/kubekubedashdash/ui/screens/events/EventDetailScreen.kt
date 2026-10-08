@@ -25,7 +25,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
@@ -43,7 +42,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,23 +65,20 @@ import com.kubekubedashdash.models.EventInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.expand_more_filled
-import com.kubekubedashdash.resources.fit_screen_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.BusyIndicator
-import com.kubekubedashdash.ui.components.LocalDetailHostControls
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.restartCountColor
-import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.crt.crtTabCut
 import com.kubekubedashdash.ui.crt.goToTab
 import com.kubekubedashdash.ui.crt.rememberCrtTabCut
 import com.kubekubedashdash.ui.screens.GenericYamlTab
+import com.kubekubedashdash.ui.screens.PanelChromeButtons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -182,47 +177,34 @@ fun EventDetailScreen(
     Surface(color = KdSurface, modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(KdSurfaceVariant)
                     .padding(horizontal = 14.dp, vertical = 10.dp.orCompact(6.dp)),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                // The reason, and the panel's own controls in the top-right corner.
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         event.reason,
                         style = MaterialTheme.typography.titleMedium,
                         color = KdTextPrimary,
                         fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        StatusBadge(event.type)
-                        Text(
-                            "Event · ${event.namespace}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = KdTextSecondary,
-                        )
-                    }
+                    PanelChromeButtons(onClose)
                 }
-                LocalDetailHostControls.current?.let { controls ->
-                    IconButton(onClick = controls.onToggleExpand, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
-                        Icon(
-                            painterResource(Res.drawable.fit_screen_filled),
-                            if (controls.expanded) "Restore panel" else "Expand",
-                            Modifier.size(16.dp),
-                            tint = KdTextSecondary,
-                        )
-                    }
-                }
-                if (onClose != null) {
-                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
-                        Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
-                    }
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    StatusBadge(event.type)
+                    Text(
+                        "Event · ${event.namespace}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KdTextSecondary,
+                    )
                 }
             }
 

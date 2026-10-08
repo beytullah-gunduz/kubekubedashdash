@@ -57,6 +57,42 @@ internal fun truncateStart(label: String, maxWidthPx: Int, widthOf: (String) -> 
 /** [truncateStart] at [style]'s rendered width. */
 internal fun truncateStart(label: String, measurer: TextMeasurer, style: TextStyle, maxWidthPx: Int): String = truncateStart(label, maxWidthPx) { measurer.oneLine(it, style).size.width }
 
+/**
+ * Width-measured middle truncation. If [label] is wider than [maxWidthPx] by [widthOf],
+ * keeps the most characters it can around a "…" — the head gets the odd one out — so
+ * both a name's prefix and its distinguishing suffix (a pod's `-exec-11`, a replica's
+ * hash) stay visible. "…" alone when nothing else fits. Never splits a surrogate pair.
+ */
+internal fun truncateMiddle(label: String, maxWidthPx: Int, widthOf: (String) -> Int): String {
+    if (label.isEmpty() || widthOf(label) <= maxWidthPx) return label
+    var lo = 0
+    var hi = label.length - 1
+    var best = ELLIPSIS
+    while (lo <= hi) {
+        val mid = (lo + hi) / 2
+        val candidate = middleCandidate(label, mid)
+        if (widthOf(candidate) <= maxWidthPx) {
+            best = candidate
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    return best
+}
+
+/** [keep] characters of [label] around a middle "…", trimmed so no surrogate pair is cut. */
+private fun middleCandidate(label: String, keep: Int): String {
+    var head = label.take(keep - keep / 2)
+    var tail = label.takeLast(keep / 2)
+    if (head.lastOrNull()?.isHighSurrogate() == true) head = head.dropLast(1)
+    if (tail.firstOrNull()?.isLowSurrogate() == true) tail = tail.drop(1)
+    return head + ELLIPSIS + tail
+}
+
+/** [truncateMiddle] at [style]'s rendered width. */
+internal fun truncateMiddle(label: String, measurer: TextMeasurer, style: TextStyle, maxWidthPx: Int): String = truncateMiddle(label, maxWidthPx) { measurer.oneLine(it, style).size.width }
+
 private fun TextMeasurer.oneLine(text: String, style: TextStyle): TextLayoutResult = measure(text, style, maxLines = 1, softWrap = false)
 
 /**
@@ -79,6 +115,33 @@ internal fun StartEllipsisText(
     modifier: Modifier = Modifier,
     fontWeight: FontWeight? = null,
 ) {
+    TruncatingText(text, style, color, modifier, fontWeight) { label, measurer, resolved, maxWidthPx -> truncateStart(label, measurer, resolved, maxWidthPx) }
+}
+
+/**
+ * One line of [text] that, when it does not fit, keeps its start and end around a middle "…"
+ * ([truncateMiddle]). Same measuring, intrinsics and semantics as [StartEllipsisText].
+ */
+@Composable
+internal fun MiddleEllipsisText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    fontWeight: FontWeight? = null,
+) {
+    TruncatingText(text, style, color, modifier, fontWeight) { label, measurer, resolved, maxWidthPx -> truncateMiddle(label, measurer, resolved, maxWidthPx) }
+}
+
+@Composable
+private fun TruncatingText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier,
+    fontWeight: FontWeight?,
+    truncate: (label: String, measurer: TextMeasurer, style: TextStyle, maxWidthPx: Int) -> String,
+) {
     val measurer = rememberTextMeasurer()
     val resolved = remember(style, color, fontWeight) { style.merge(TextStyle(color = color, fontWeight = fontWeight)) }
     // Written by the measure pass, read by the draw pass: drawing follows layout in each frame.
@@ -86,7 +149,7 @@ internal fun StartEllipsisText(
     val policy = remember(text, resolved, measurer) {
         object : MeasurePolicy {
             override fun MeasureScope.measure(measurables: List<Measurable>, constraints: Constraints): MeasureResult {
-                val line = if (constraints.hasBoundedWidth) truncateStart(text, measurer, resolved, constraints.maxWidth) else text
+                val line = if (constraints.hasBoundedWidth) truncate(text, measurer, resolved, constraints.maxWidth) else text
                 val result = measurer.oneLine(line, resolved)
                 shown = result
                 return layout(

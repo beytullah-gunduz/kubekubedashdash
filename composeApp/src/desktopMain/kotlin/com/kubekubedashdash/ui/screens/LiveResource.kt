@@ -2,8 +2,7 @@ package com.kubekubedashdash.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,7 +10,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,17 @@ import com.kubekubedashdash.models.ResourceState
 
 /** The freshest known copy of a resource a detail panel is showing, plus whether it has been deleted. */
 data class LiveResource<T>(val value: T, val removed: Boolean)
+
+/** The deleted resource a detail panel is showing; see [LocalRemovedResource]. */
+data class RemovedResource(val kind: String, val name: String)
+
+/**
+ * Set by [LiveDetailPane] while its resource is deleted from the cluster, null otherwise
+ * and outside a live pane. [DetailPanelHeader] reads it to disable its verbs and to show
+ * the "no longer exists" banner under itself. A plain (non-static) local: it changes only
+ * when the resource disappears or comes back.
+ */
+val LocalRemovedResource = compositionLocalOf<RemovedResource?> { null }
 
 /**
  * Decide whether a resource a detail panel is showing has been deleted from the
@@ -91,8 +103,10 @@ fun <T> rememberLiveResource(
 
 /**
  * Wraps a detail panel so it renders the live copy of its resource (resolved by
- * [uid] from [state]) and shows a banner when the resource has been deleted from
- * the cluster. See [rememberLiveResource] for the [inScope] contract.
+ * [uid] from [state]) and tells the panel's header (through
+ * [LocalRemovedResource]) when the resource has been deleted from the cluster, so the
+ * header can show the banner below itself and disable its verbs. See [rememberLiveResource]
+ * for the [inScope] contract.
  */
 @Composable
 fun <T> LiveDetailPane(
@@ -106,23 +120,22 @@ fun <T> LiveDetailPane(
     content: @Composable (T) -> Unit,
 ) {
     val live = rememberLiveResource(initial, state, uid, inScope, uidOf)
-    Column(Modifier.fillMaxSize()) {
-        if (live.removed) {
-            ResourceRemovedBanner(kind = kind, name = name)
-        }
-        Box(Modifier.fillMaxWidth().weight(1f)) {
+    val removed = remember(live.removed, kind, name) { if (live.removed) RemovedResource(kind, name) else null }
+    CompositionLocalProvider(LocalRemovedResource provides removed) {
+        Box(Modifier.fillMaxSize()) {
             content(live.value)
         }
     }
 }
 
 @Composable
-private fun ResourceRemovedBanner(kind: String, name: String) {
+internal fun ResourceRemovedBanner(kind: String, name: String) {
     Surface(color = KdError.copy(alpha = 0.14f), modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Text("This $kind no longer exists", style = MaterialTheme.typography.labelLarge, color = KdError, fontWeight = FontWeight.SemiBold)
             Text(

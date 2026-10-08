@@ -452,6 +452,7 @@ private fun PanelHeader(
         label = "Force delete",
         tint = KdError,
         destructive = true,
+        overflowOnly = true,
         description = "Immediately delete this pod (grace period 0) — only for a stuck/unresponsive pod; skips graceful shutdown and can orphan resources.",
         enabled = actionsEnabled,
         onClick = onForceDeleteClick,
