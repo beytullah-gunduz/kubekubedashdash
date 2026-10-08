@@ -58,6 +58,10 @@ private fun EditorWindow(model: EditorWindowModel, icon: Painter) {
         val focus by model.focusRequests.collectAsState()
         LaunchedEffect(focus) {
             if (focus > 0) {
+                // A minimized window ignores toFront: de-iconify it first, like WorkspaceManager.raiseWindow.
+                if ((window.extendedState and java.awt.Frame.ICONIFIED) != 0) {
+                    window.extendedState = window.extendedState and java.awt.Frame.ICONIFIED.inv()
+                }
                 window.toFront()
                 window.requestFocus()
             }

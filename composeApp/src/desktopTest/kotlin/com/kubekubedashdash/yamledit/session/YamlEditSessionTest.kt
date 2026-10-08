@@ -397,6 +397,55 @@ class YamlEditSessionTest {
         assertEquals(line, problem.line)
     }
 
+    @Test
+    fun `a recursive alias in the buffer is a parse problem and costs no request`() = runTest {
+        mock.seedConfigMap()
+        val o = open()
+        o.edit("app: demo", "app: &l {self: *l}")
+
+        val requests = mock.recorded { review(o) }
+
+        assertEquals(emptyList(), requests.map { it.toString() })
+        assertEquals(EditPhase.Editing, o.session.phase.value)
+        val problem = assertNotNull(o.session.parseProblem.value)
+        assertEquals("Recursive YAML aliases are not supported.", problem.message)
+        assertEquals(1, problem.line)
+        assertTrue(o.session.problems.value.isEmpty())
+    }
+
+    @Test
+    fun `an Error thrown inside the review is shown as a problem, not swallowed`() = runTest {
+        mock.seedConfigMap()
+        val inner = StringEditorBuffer()
+        val buffer = ErroringBuffer(inner)
+        val session = YamlEditSession(
+            id = 7,
+            clusterSessionId = SessionId("tab-1"),
+            context = context,
+            target = configMapTarget(),
+            writer = YamlWriter(mock.manager),
+            feedback = RecordingFeedback(),
+            masking = { false },
+            buffer = buffer,
+            scope = backgroundScope,
+            io = StandardTestDispatcher(testScheduler),
+            compute = StandardTestDispatcher(testScheduler),
+            pollIntervalMs = POLL,
+            onClosed = {},
+        )
+        session.start()
+        runCurrent()
+        assertEquals(EditPhase.Editing, session.phase.value)
+
+        buffer.failing = true
+        session.review()
+        runCurrent()
+        buffer.failing = false
+
+        assertEquals("Unexpected error: StackOverflowError", session.problems.value.single().message)
+        assertEquals(EditPhase.Editing, session.phase.value)
+    }
+
     // ── Review and dry run ─────────────────────────────────────────────────────
 
     @Test
@@ -678,6 +727,80 @@ class YamlEditSessionTest {
         gate.release()
         runCurrent()
         assertEquals(listOf(7L), o.closed, "the apply completes and closes the session itself")
+    }
+
+    @Test
+    fun `confirmApply refuses text that changed after the review and sends nothing`() = runTest {
+        mock.seedConfigMap()
+        expectDryRunPasses(cmPath)
+        val o = open()
+        o.edit("app: demo", "app: edited")
+        review(o)
+        o.session.requestApply()
+        assertEquals(ApplyState.Confirming, o.session.apply.value)
+        o.edit("a: '1'", "a: sneaked-in") // after the dry run, before the confirm
+
+        val requests = mock.recorded {
+            o.session.confirmApply()
+            runCurrent()
+        }
+
+        assertEquals(emptyList(), requests.map { it.toString() }, "what was dry-run is not what the buffer says")
+        assertEquals(EditPhase.Editing, o.session.phase.value)
+        assertEquals(ApplyState.Idle, o.session.apply.value)
+        assertEquals("The text changed while it was being checked; review again.", o.session.problems.value.single().message)
+        assertTrue(o.buffer.text().contains("sneaked-in"), "the buffer is untouched")
+        assertTrue(o.closed.isEmpty(), "the session stays open")
+        assertTrue(o.feedback.events.isEmpty())
+        assertEquals("demo", mock.seed.configMaps().inNamespace(TEST_NAMESPACE).withName("demo-cm").get().metadata.labels["app"], "nothing was written")
+    }
+
+    @Test
+    fun `closing under an apply in flight warns that the change may have landed`() = runTest {
+        mock.seedConfigMap()
+        expectDryRunPasses(cmPath)
+        val gate = GatedIo(testScheduler)
+        val o = open(io = gate)
+        o.edit("app: demo", "app: edited")
+        review(o)
+        o.session.requestApply()
+        gate.holdAfter()
+        o.session.confirmApply()
+        runCurrent()
+        assertEquals(ApplyState.InFlight, o.session.apply.value)
+        assertEquals(1, gate.pending, "the PUT is on its way")
+
+        o.session.close() // what a guard's Discard does: requestClose would have been ignored
+
+        val toast = o.feedback.events.single()
+        assertEquals("warning", toast.kind)
+        assertEquals("Closed while applying to ConfigMap \"$TEST_NAMESPACE/demo-cm\"", toast.title)
+        assertEquals("The change may or may not have been applied. Check the object before editing it again.", toast.detail)
+        assertEquals(listOf(7L), o.closed)
+        gate.release()
+        runCurrent()
+        o.session.close()
+        assertEquals(1, o.feedback.events.size, "the cancelled apply adds no toast and a second close none either")
+        assertEquals(listOf(7L), o.closed)
+    }
+
+    @Test
+    fun `closing with no apply in flight raises no toast`() = runTest {
+        mock.seedConfigMap()
+        expectDryRunPasses(cmPath)
+        val reviewed = open()
+        reviewed.edit("app: demo", "app: edited")
+        review(reviewed)
+        reviewed.session.requestApply()
+        assertEquals(ApplyState.Confirming, reviewed.session.apply.value)
+
+        reviewed.session.close()
+
+        assertEquals(listOf(7L), reviewed.closed)
+        assertTrue(reviewed.feedback.events.isEmpty(), "a confirmation that was never answered is not an apply")
+        val clean = open()
+        clean.session.close()
+        assertTrue(clean.feedback.events.isEmpty())
     }
 
     // ── Server changes while the window is open ───────────────────────────────
@@ -1006,6 +1129,36 @@ class YamlEditSessionTest {
         gate.release()
         runCurrent()
         assertIs<EditPhase.Reviewing>(o.session.phase.value)
+    }
+
+    @Test
+    fun `text typed while the review is reading the server is not reviewed`() = runTest {
+        mock.seedConfigMap()
+        expectDryRunPasses(cmPath)
+        val gate = GatedIo(testScheduler)
+        val o = open(io = gate)
+        o.edit("app: demo", "app: edited")
+        gate.holdAfter()
+        o.session.review()
+        runCurrent()
+        assertEquals(1, gate.pending, "the review's GET is on its way")
+        o.buffer.type("# typed while the server is being asked\n")
+
+        val requests = mock.recorded {
+            gate.release()
+            runCurrent()
+        }
+
+        assertEquals(EditPhase.Editing, o.session.phase.value, "a review of text that is gone is not shown")
+        assertEquals("The text changed while it was being checked; review again.", o.session.problems.value.single().message)
+        assertTrue(requests.writes.isEmpty(), "no dry run and no PUT: $requests")
+        assertEquals(ApplyState.Idle, o.session.apply.value)
+
+        // The review itself is not broken: the next one covers the text that is in the buffer now.
+        review(o)
+        assertTrue(o.session.problems.value.isEmpty())
+        assertEquals(DryRunState.Passed(simulatedLocally = false), o.reviewing.dryRun)
+        assertTrue("typed while the server" in o.reviewing.newText)
     }
 
     @Test

@@ -185,7 +185,8 @@ class ApplyYamlSession(
                 runReview()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Throwable, not Exception: an Error from a pathological document must not leave Review doing nothing.
                 documents = emptyMap()
                 setPhase(ApplyPhase.Editing)
                 _problems.value = listOf(EditProblem(unexpected(e)))
@@ -366,12 +367,23 @@ class ApplyYamlSession(
 
     override fun close() {
         if (closed) return
+        val applying = _phase.value is ApplyPhase.Applying
         closed = true
         _closePrompt.value = false
-        // The session's own job only: the injected scope belongs to the caller.
-        jobs.cancel()
-        log.info("Apply session {} closed", id)
-        onClosed(id)
+        try {
+            // A guard's Discard can close the window under an apply that is under way: the later documents are skipped silently otherwise.
+            if (applying) {
+                feedback.warning(
+                    "Closed while applying documents to $context",
+                    detail = "Documents sent before closing may have been applied; the rest were not. Nothing was rolled back.",
+                )
+            }
+        } finally {
+            // The session's own job only: the injected scope belongs to the caller.
+            jobs.cancel()
+            log.info("Apply session {} closed", id)
+            onClosed(id)
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -421,7 +433,7 @@ class ApplyYamlSession(
         const val CHANGED_WHILE_CHECKING = "The text changed while it was being checked; review again."
         const val NOT_ROLLED_BACK = "Nothing was rolled back: documents applied before the failure stay applied."
 
-        /** `v1` or `group/version`: the only shapes a request path is built from. */
-        val API_VERSION = Regex("""[A-Za-z0-9.\-]+(/[A-Za-z0-9.\-]+)?""")
+        /** `v1` or `group/version`: the only shapes a request path is built from. No segment can be `.` or `..`. */
+        val API_VERSION = Regex("""[A-Za-z0-9]([A-Za-z0-9.\-]*[A-Za-z0-9])?(/[A-Za-z0-9]+)?""")
     }
 }

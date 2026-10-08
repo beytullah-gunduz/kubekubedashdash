@@ -259,6 +259,41 @@ class ApplyDocumentsTest {
     }
 
     @Test
+    fun `a dot segment as name or namespace is an error, not a request path`() {
+        for (dots in listOf(".", "..")) {
+            val name = parsed("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: $dots\n  namespace: example-ns\n")
+            assertEquals("metadata.name contains characters that are not allowed.", name.errors.single().message, dots)
+            assertTrue(name.documents.isEmpty())
+
+            val namespace = parsed("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: demo-cm\n  namespace: $dots\n")
+            assertEquals("metadata.namespace contains characters that are not allowed.", namespace.errors.single().message, dots)
+            assertTrue(namespace.documents.isEmpty())
+
+            val cluster = parsed("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: $dots\n")
+            assertEquals("metadata.name contains characters that are not allowed.", cluster.errors.single().message, dots)
+        }
+    }
+
+    @Test
+    fun `a resolved kind whose group, version or plural is not a plain path segment is an unknown kind`() {
+        val hostile: (String, String) -> ResolvedKind? = { _, kind ->
+            when (kind) {
+                "Dotty" -> ResolvedKind("example.com", "..", "Dotty", "dotties", true)
+                "Grouped" -> ResolvedKind("..", "v1", "Grouped", "groupeds", true)
+                "Plural" -> ResolvedKind("example.com", "v1", "Plural", "../x", true)
+                else -> null
+            }
+        }
+        for (kind in listOf("Dotty", "Grouped", "Plural")) {
+            val result = ApplyDocuments.prepare("apiVersion: example.com/v1\nkind: $kind\nmetadata:\n  name: x\n  namespace: example-ns\n", "default", hostile)
+
+            val parsed = assertIs<PrepareResult.Parsed>(result)
+            assertEquals("Unknown kind example.com/v1 $kind on this cluster.", parsed.errors.single().message, kind)
+            assertTrue(parsed.documents.isEmpty())
+        }
+    }
+
+    @Test
     fun `a parse error is Failed with its position`() {
         val result = assertIs<PrepareResult.Failed>(prepare("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n  name: b\n"))
 

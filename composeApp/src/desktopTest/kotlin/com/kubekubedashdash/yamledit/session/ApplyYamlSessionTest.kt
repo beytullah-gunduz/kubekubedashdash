@@ -347,6 +347,48 @@ class ApplyYamlSessionTest {
     }
 
     @Test
+    fun `a recursive alias is a parse problem at its document's line and costs no request`() = runTest {
+        val o = open(docs(configMap("cm-a"), "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-b\n  labels: &l {app: demo, self: *l}\n"))
+
+        val requests = mock.recorded { review(o) }
+
+        assertEquals(emptyList(), requests.summary)
+        assertEquals(ApplyPhase.Editing, o.session.phase.value)
+        val problem = assertNotNull(o.session.parseProblem.value)
+        assertEquals("Recursive YAML aliases are not supported.", problem.message)
+        assertEquals(configMap("cm-a").lines().size + 1, problem.line, "the second document starts after the separator")
+        assertTrue(o.session.problems.value.isEmpty())
+    }
+
+    @Test
+    fun `an Error thrown inside the review is shown as a problem, not swallowed`() = runTest {
+        val buffer = ErroringBuffer(StringEditorBuffer(configMap("cm-a")))
+        val session = ApplyYamlSession(
+            id = 9,
+            clusterSessionId = SessionId("tab-1"),
+            context = context,
+            defaultNamespace = TEST_NAMESPACE,
+            writer = realWriter,
+            crds = { emptyList() },
+            feedback = RecordingFeedback(),
+            masking = { false },
+            buffer = buffer,
+            scope = backgroundScope,
+            io = StandardTestDispatcher(testScheduler),
+            compute = StandardTestDispatcher(testScheduler),
+            onClosed = {},
+        )
+
+        buffer.failing = true
+        session.review()
+        runCurrent()
+        buffer.failing = false
+
+        assertEquals("Unexpected error: StackOverflowError", session.problems.value.single().message)
+        assertEquals(ApplyPhase.Editing, session.phase.value)
+    }
+
+    @Test
     fun `an empty buffer has nothing to apply`() = runTest {
         val o = open("")
 
@@ -464,6 +506,18 @@ class ApplyYamlSessionTest {
 
         assertEquals(emptyList(), requests.summary)
         assertIs<DocStatus.Failed>(o.statuses.single())
+    }
+
+    @Test
+    fun `an apiVersion with a dot segment is an unknown kind and costs no request`() = runTest {
+        for (apiVersion in listOf("apps/..", "../v1", "..", "./v1", "apps/.")) {
+            val o = open("apiVersion: $apiVersion\nkind: Deployment\nmetadata:\n  name: web\n  namespace: $TEST_NAMESPACE\n")
+
+            val requests = mock.recorded { review(o) }
+
+            assertEquals(emptyList(), requests.summary, apiVersion)
+            assertEquals(DocStatus.Failed("Unknown kind $apiVersion Deployment on this cluster."), o.statuses.single(), apiVersion)
+        }
     }
 
     @Test
@@ -802,6 +856,57 @@ class ApplyYamlSessionTest {
         assertIs<ApplyPhase.Done>(o.session.phase.value)
         o.session.requestClose()
         assertEquals(listOf(9L), o.closed, "fully applied and unchanged: nothing is unsaved")
+    }
+
+    @Test
+    fun `closing while documents are being applied warns that some may have landed`() = runTest {
+        expectDryRunsPass("cm-a")
+        expectApplySucceeds("cm-a")
+        val gate = GatedIo(testScheduler)
+        val o = open(configMap("cm-a"), io = gate)
+        review(o)
+        gate.holdAfter(0)
+        o.session.confirmApply()
+        runCurrent()
+        assertIs<ApplyPhase.Applying>(o.session.phase.value)
+        assertEquals(1, gate.pending, "the apply is on its way")
+
+        o.session.close() // what a guard's Discard does: requestClose would have been ignored
+
+        val toast = o.feedback.events.single()
+        assertEquals("warning", toast.kind)
+        assertEquals("Closed while applying documents to $context", toast.title)
+        assertEquals("Documents sent before closing may have been applied; the rest were not. Nothing was rolled back.", toast.detail)
+        assertEquals(listOf(9L), o.closed)
+        gate.release()
+        runCurrent()
+        o.session.close()
+        assertEquals(1, o.feedback.events.size, "the cancelled apply adds no toast and a second close none either")
+        assertEquals(listOf(9L), o.closed)
+    }
+
+    @Test
+    fun `closing in any other phase raises no toast`() = runTest {
+        expectDryRunsPass("cm-a")
+        expectApplySucceeds("cm-a")
+        val editing = open(configMap("cm-a"))
+        editing.session.close()
+        assertTrue(editing.feedback.events.isEmpty())
+
+        val reviewed = open(configMap("cm-a"))
+        review(reviewed)
+        assertTrue(reviewed.session.canApply.value)
+        reviewed.session.close()
+        assertTrue(reviewed.feedback.events.isEmpty())
+
+        val done = open(configMap("cm-a"))
+        review(done)
+        confirm(done)
+        assertIs<ApplyPhase.Done>(done.session.phase.value)
+        val toasts = done.feedback.events.size
+        done.session.close()
+        assertEquals(toasts, done.feedback.events.size, "only the result toast, none for the close")
+        assertEquals(listOf(9L), done.closed)
     }
 
     @Test

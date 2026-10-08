@@ -142,8 +142,14 @@ object ApplyDocuments {
         val target = try {
             EditTarget(resolved.kind, resolved.group, resolved.version, resolved.plural, resolved.namespaced, name, effectiveNamespace)
         } catch (e: IllegalArgumentException) {
-            val field = if (e.message == "unsupported namespace") "metadata.namespace" else "metadata.name"
-            return reject(label, "$field contains characters that are not allowed.")
+            return when (e.message) {
+                "unsupported namespace" -> reject(label, "metadata.namespace contains characters that are not allowed.")
+
+                "unsupported name" -> reject(label, "metadata.name contains characters that are not allowed.")
+
+                // The resolved group, version or plural is not a plain API path segment: the cluster does not serve this kind.
+                else -> reject(label, "Unknown kind $apiVersion $kind on this cluster.")
+            }
         }
 
         @Suppress("UNCHECKED_CAST")

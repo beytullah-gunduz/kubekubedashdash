@@ -256,6 +256,57 @@ class EditorYamlTest {
         assertIs<YamlParseAll.Failed>(EditorYaml.parseAll(text))
     }
 
+    // ── recursive aliases ────────────────────────────────────────────────────
+
+    @Test
+    fun `a mapping that contains itself through an alias is refused at its document's start line`() {
+        val text = "a: 1\n---\nlabels: &l {app: demo, self: *l}\n"
+
+        val failed = assertIs<YamlParseAll.Failed>(EditorYaml.parseAll(text))
+
+        assertEquals(YamlProblem(line = 3, column = 1, message = "Recursive YAML aliases are not supported."), failed.problem)
+        assertEquals(YamlProblem(line = 1, column = 1, message = "Recursive YAML aliases are not supported."), failure("labels: &l {app: demo, self: *l}\n"))
+    }
+
+    @Test
+    fun `a list that contains itself and a cycle several levels down are refused too`() {
+        assertEquals("Recursive YAML aliases are not supported.", failure("items: &i [x, *i]\n").message)
+        assertEquals("Recursive YAML aliases are not supported.", failure("a:\n  b: &deep\n    c:\n      - d: *deep\n").message)
+    }
+
+    @Test
+    fun `an alias that reuses a sub-tree without a cycle still parses`() {
+        val ok = assertIs<YamlParse.Ok>(EditorYaml.parseSingle("a: &x {k: v}\nb: *x\nc: [*x, *x]\n"))
+
+        val expected = mapOf("k" to "v")
+        assertEquals(mapOf("a" to expected, "b" to expected, "c" to listOf(expected, expected)), ok.value)
+    }
+
+    @Test
+    fun `the cycle check is iterative and walks a shared sub-tree once`() {
+        assertFalse(EditorYaml.containsCycle(null))
+        assertFalse(EditorYaml.containsCycle("scalar"))
+        assertFalse(EditorYaml.containsCycle(emptyMap<String, Any?>()))
+
+        // 200 000 levels deep: a recursive walk overflows long before.
+        var deep: Any = emptyList<Any?>()
+        repeat(200_000) { deep = listOf(deep) }
+        assertFalse(EditorYaml.containsCycle(deep))
+
+        // 2^60 paths through 60 shared levels: only a walk that remembers finished sub-trees returns.
+        var shared: Any = mapOf("leaf" to 1)
+        repeat(60) { shared = listOf(shared, shared) }
+        assertFalse(EditorYaml.containsCycle(shared))
+
+        val self = ArrayList<Any?>()
+        self.add(self)
+        assertTrue(EditorYaml.containsCycle(self))
+        val inner = LinkedHashMap<String, Any?>()
+        val outer = mapOf("x" to listOf(mapOf("y" to inner)))
+        inner["back"] = outer
+        assertTrue(EditorYaml.containsCycle(outer))
+    }
+
     private companion object {
         /** A string no parser message can contain by accident. */
         const val SENTINEL = "zq7-sentinel-4417"

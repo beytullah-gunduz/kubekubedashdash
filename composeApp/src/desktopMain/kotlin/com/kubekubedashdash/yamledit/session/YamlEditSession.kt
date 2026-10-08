@@ -370,7 +370,8 @@ class YamlEditSession(
                 runReview()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Throwable, not Exception: an Error from a pathological document must not leave Review doing nothing.
                 _problems.value = listOf(EditProblem(unexpected(e)))
             }
         }
@@ -443,6 +444,11 @@ class YamlEditSession(
         val prepared = withContext(compute) { prepare(edited, base, text) }
         if (closed || _base.value !== base || _phase.value !is EditPhase.Editing) {
             _problems.value = listOf(EditProblem(CHANGED_WHILE_CHECKING))
+            return
+        }
+        // The editor stays editable while the server is asked: what was reviewed must be what is in the buffer.
+        if (buffer.text() != text) {
+            _problems.value = listOf(EditProblem(TEXT_CHANGED_WHILE_CHECKING))
             return
         }
         if (prepared.body == null) {
@@ -573,6 +579,15 @@ class YamlEditSession(
         val body = reviewing?.body
         if (reviewing == null || body == null || reviewing.dryRun !is DryRunState.Passed || _banner.value != null) {
             _apply.value = ApplyState.Idle
+            return
+        }
+        if (buffer.text() != reviewing.newText) {
+            // Changed since the review: what was dry-run is not what the buffer says.
+            dryRunJob?.cancel()
+            reviewParsed = null
+            _apply.value = ApplyState.Idle
+            _phase.value = EditPhase.Editing
+            _problems.value = listOf(EditProblem(TEXT_CHANGED_WHILE_CHECKING))
             return
         }
         _apply.value = ApplyState.InFlight
@@ -707,12 +722,23 @@ class YamlEditSession(
 
     override fun close() {
         if (closed) return
+        val applying = _apply.value == ApplyState.InFlight
         closed = true
         _closePrompt.value = false
-        // The session's own job only: the injected scope belongs to the caller.
-        jobs.cancel()
-        log.info("Edit session {} closed", id)
-        onClosed(id)
+        try {
+            // A guard's Discard can close the window under a PUT that is already on its way: say so.
+            if (applying) {
+                feedback.warning(
+                    "Closed while applying to ${target.kind} \"${target.ref}\"",
+                    detail = "The change may or may not have been applied. Check the object before editing it again.",
+                )
+            }
+        } finally {
+            // The session's own job only: the injected scope belongs to the caller.
+            jobs.cancel()
+            log.info("Edit session {} closed", id)
+            onClosed(id)
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -737,5 +763,6 @@ class YamlEditSession(
     private companion object {
         const val DEBOUNCE_MS = 300L
         const val CHANGED_WHILE_CHECKING = "The object changed while it was being checked; review again."
+        const val TEXT_CHANGED_WHILE_CHECKING = "The text changed while it was being checked; review again."
     }
 }

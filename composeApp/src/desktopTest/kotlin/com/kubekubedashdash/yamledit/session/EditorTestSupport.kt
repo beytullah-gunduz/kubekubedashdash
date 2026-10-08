@@ -65,6 +65,16 @@ internal class GatedIo(scheduler: TestCoroutineScheduler) : CoroutineDispatcher(
 }
 
 /**
+ * An [EditorBuffer] over [inner] whose [text] throws an Error while [failing]: the one way to make
+ * a review job die with something that is not an Exception, as a pathological document would.
+ */
+internal class ErroringBuffer(private val inner: StringEditorBuffer) : EditorBuffer by inner {
+    var failing = false
+
+    override fun text(): String = if (failing) throw StackOverflowError() else inner.text()
+}
+
+/**
  * A registry for a test: sessions run on the test's `backgroundScope`, which the registry must not
  * cancel, and its io and compute dispatchers are the test's own, so a blocking call runs on the
  * test thread.

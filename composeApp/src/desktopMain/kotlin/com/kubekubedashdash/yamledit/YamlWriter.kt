@@ -306,7 +306,7 @@ class YamlWriter(
         private const val HTTP_NOT_FOUND = 404
         private const val HTTP_FORBIDDEN = 403
 
-        /** `v1` or `group/version`: what discovery is asked for, kept a plain path. */
-        private val API_VERSION = Regex("""[A-Za-z0-9.\-]+(/[A-Za-z0-9.\-]+)?""")
+        /** `v1` or `group/version`: what discovery is asked for, kept a plain path. No segment can be `.` or `..`. */
+        private val API_VERSION = Regex("""[A-Za-z0-9]([A-Za-z0-9.\-]*[A-Za-z0-9])?(/[A-Za-z0-9]+)?""")
     }
 }

@@ -14,6 +14,8 @@ import org.snakeyaml.engine.v2.nodes.Node
 import org.snakeyaml.engine.v2.nodes.Tag
 import org.snakeyaml.engine.v2.representer.StandardRepresenter
 import org.snakeyaml.engine.v2.schema.CoreSchema
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.Optional
 
 /** A YAML error at a 1-based [line] and [column]; [message] is the parser's problem text, never the input. */
@@ -47,6 +49,7 @@ sealed interface YamlParseAll {
 object EditorYaml {
     private const val EMPTY_MESSAGE = "The editor is empty."
     private const val FALLBACK_MESSAGE = "Invalid YAML"
+    private const val RECURSIVE_MESSAGE = "Recursive YAML aliases are not supported."
 
     private val loadSettings: LoadSettings = LoadSettings.builder()
         .setAllowDuplicateKeys(false)
@@ -87,6 +90,8 @@ object EditorYaml {
             // composeAllFromString is lazy: the scanner and the parser throw while iterating.
             for (node in Compose(loadSettings).composeAllFromString(text)) {
                 val value = constructor.constructSingleDocument(Optional.of(node))
+                // Every walk of the tree (copy, strip, dump, compare) would recurse forever on a container that contains itself.
+                if (containsCycle(value)) return YamlParseAll.Failed(YamlProblem(startLine(node), 1, RECURSIVE_MESSAGE))
                 if (value != null) documents += ParsedDocument(startLine(node), value)
             }
         } catch (e: YamlEngineException) {
@@ -105,6 +110,43 @@ object EditorYaml {
     fun dump(value: Map<String, Any?>): String = Dump(dumpSettings, EditorRepresenter(dumpSettings)).dumpToString(value)
 
     private fun startLine(node: Node): Int = node.startMark.map { it.line + 1 }.orElse(1)
+
+    /**
+     * True when a map or list of [root] contains itself (`a: &x {self: *x}`). Containers are compared
+     * by identity, and only a container met again on the path from [root] is a cycle: an alias that
+     * reuses a sub-tree twice is fine, and a sub-tree already walked is not walked again. Iterative
+     * with an explicit stack, so a deep but acyclic document cannot overflow it.
+     */
+    internal fun containsCycle(root: Any?): Boolean {
+        if (root !is Map<*, *> && root !is List<*>) return false
+        val onPath = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
+        val finished = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
+        val stack = ArrayList<Pair<Any, Iterator<Any?>>>()
+        onPath += root
+        stack += root to childrenOf(root)
+        while (stack.isNotEmpty()) {
+            val (container, children) = stack.last()
+            if (!children.hasNext()) {
+                stack.removeAt(stack.lastIndex)
+                onPath -= container
+                finished += container
+                continue
+            }
+            val child = children.next()
+            if (child !is Map<*, *> && child !is List<*>) continue
+            if (child in onPath) return true
+            if (child in finished) continue
+            onPath += child
+            stack += child to childrenOf(child)
+        }
+        return false
+    }
+
+    /** The keys and values of a map, the items of a list. */
+    private fun childrenOf(container: Any): Iterator<Any?> = when (container) {
+        is Map<*, *> -> (container.keys.asSequence() + container.values.asSequence()).iterator()
+        else -> (container as List<*>).iterator()
+    }
 
     /** The position and problem text of [e], without the input snippet snakeyaml appends to its message. */
     private fun problemOf(e: YamlEngineException): YamlProblem {

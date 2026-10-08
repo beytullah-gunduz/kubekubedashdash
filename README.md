@@ -364,6 +364,7 @@ The application opens a 1440×960 window on first launch (later launches restore
 | Persistence | androidx.datastore-preferences 1.2.1 |
 | Kubernetes client | fabric8 kubernetes-client + kubernetes-server-mock 7.7.0 |
 | Terminal | JediTerm 3.76 (interactive pod exec) |
+| YAML editor | RSyntaxTextArea 4.0.1, BSD-3-Clause (the separate YAML editor window) |
 | Coroutines | kotlinx-coroutines 1.11.0 (core + swing) |
 | Serialization | kotlinx-serialization 1.11.0 |
 | JSONPath | json-path 3.0.0 (custom-resource column extraction) |
@@ -379,7 +380,7 @@ The application opens a 1440×960 window on first launch (later launches restore
 
 Every push and PR to `main` checks formatting, compiles, runs the desktop test suite and verifies the release build on Linux. Pushing a `v*` tag runs the same checks on macOS, Linux and Windows, builds the installers (DMG, DEB, MSI) and creates a GitHub Release with them. For a stable tag it then points the Homebrew cask at the new DMG (see [packaging/homebrew](packaging/homebrew/README.md)).
 
-The installers ship ProGuard-shrunk jars, which no unit test runs. `verifyReleaseBuild` checks them: a bytecode scan fails on any `invokespecial` of an interface method through an indirect superinterface (the JVM verifier rejects those at class load), and a headless canary boots the shrunk jars — logging, JSONPath, JediTerm, the demo cluster and a full MCP session — once on the full JDK and once limited to the packaged runtime's modules. It runs in a scratch sandbox and never reads your kubeconfig, preferences or logs:
+The installers ship ProGuard-shrunk jars, which no unit test runs. `verifyReleaseBuild` checks them: a bytecode scan fails on any `invokespecial` of an interface method through an indirect superinterface (the JVM verifier rejects those at class load), and a headless canary boots the shrunk jars — logging, JSONPath, JediTerm, the YAML editor engine and RSyntaxTextArea, the demo cluster and a full MCP session — once on the full JDK and once limited to the packaged runtime's modules. It runs in a scratch sandbox and never reads your kubeconfig, preferences or logs:
 
 ```bash
 ./gradlew :composeApp:verifyReleaseBuild

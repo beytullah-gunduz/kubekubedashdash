@@ -16,8 +16,11 @@ data class EditTarget(
 ) {
     init {
         require(namespaced == (namespace != null)) { "namespace must be set iff the kind is namespaced" }
-        require(SAFE_SEGMENT.matches(name)) { "unsupported name" }
-        namespace?.let { require(SAFE_SEGMENT.matches(it)) { "unsupported namespace" } }
+        require(isSafeSegment(name)) { "unsupported name" }
+        namespace?.let { require(isSafeSegment(it)) { "unsupported namespace" } }
+        require(group.isEmpty() || DNS_NAME.matches(group)) { "unsupported group" }
+        require(DNS_LABEL.matches(version)) { "unsupported version" }
+        require(DNS_NAME.matches(plural)) { "unsupported plural" }
     }
 
     val apiVersion: String get() = if (group.isEmpty()) version else "$group/$version"
@@ -41,6 +44,15 @@ data class EditTarget(
     companion object {
         /** Kubernetes names never contain these; refusing them keeps the path a plain path. */
         private val SAFE_SEGMENT = Regex("""[^/?#%\s]+""")
+
+        /** An API group or a plural: lowercase DNS name, so neither can be `.` or `..` (nor start or end with a dot). */
+        private val DNS_NAME = Regex("""[a-z0-9]([a-z0-9.\-]*[a-z0-9])?""")
+
+        /** An API version (`v1`, `v1beta1`): a lowercase DNS label. */
+        private val DNS_LABEL = Regex("""[a-z0-9]([a-z0-9\-]*[a-z0-9])?""")
+
+        /** A plain path segment that is not a dot segment: `.` and `..` would make the request path leave its collection. */
+        private fun isSafeSegment(segment: String): Boolean = SAFE_SEGMENT.matches(segment) && segment != "." && segment != ".."
     }
 }
 

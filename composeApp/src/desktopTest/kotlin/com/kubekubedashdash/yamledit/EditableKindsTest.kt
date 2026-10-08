@@ -99,6 +99,44 @@ class EditableKindsTest {
     }
 
     @Test
+    fun `a dot segment as name or namespace is refused`() {
+        for (dots in listOf(".", "..")) {
+            assertNull(target("ConfigMap", dots, "example-ns"), "name $dots")
+            assertNull(target("ConfigMap", "demo-cm", dots), "namespace $dots")
+            assertNull(target("Node", dots, null), "cluster-scoped name $dots")
+            assertNull(target("Widget", dots, null, group = "example.com", version = "v1"), "custom resource name $dots")
+            assertNull(target("Widget", "w1", dots, group = "example.com", version = "v1"), "custom resource namespace $dots")
+        }
+        assertEquals("unsupported name", assertFailsWith<IllegalArgumentException> { EditTarget("ConfigMap", "", "v1", "configmaps", true, "..", "example-ns") }.message)
+        assertEquals("unsupported namespace", assertFailsWith<IllegalArgumentException> { EditTarget("ConfigMap", "", "v1", "configmaps", true, "demo-cm", ".") }.message)
+        assertNotNull(target("ConfigMap", "a.b", "example-ns"), "a dot inside a name is a name")
+        assertNotNull(target("ConfigMap", "...", "example-ns"), "only '.' and '..' are dot segments")
+    }
+
+    @Test
+    fun `a group, version or plural that is not a plain API path segment is refused`() {
+        assertNull(target("Widget", "w1", "example-ns", group = "..", version = "v1"))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com/..", version = "v1"))
+        assertNull(target("Widget", "w1", "example-ns", group = "Example.com", version = "v1"))
+        assertNull(target("Widget", "w1", "example-ns", group = ".example.com", version = "v1"))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com", version = ".."))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com", version = "v1/x"))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com", version = "V1"))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com", version = "v1", plural = ".."))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com", version = "v1", plural = "wid/gets"))
+        assertNull(target("Widget", "w1", "example-ns", group = "example.com", version = "v1", plural = "Widgets"))
+        assertEquals("unsupported group", assertFailsWith<IllegalArgumentException> { EditTarget("Widget", "..", "v1", "widgets", true, "w1", "example-ns") }.message)
+        assertEquals("unsupported version", assertFailsWith<IllegalArgumentException> { EditTarget("Widget", "example.com", "..", "widgets", true, "w1", "example-ns") }.message)
+        assertEquals("unsupported version", assertFailsWith<IllegalArgumentException> { EditTarget("ConfigMap", "", "", "configmaps", true, "demo-cm", "example-ns") }.message)
+        assertEquals("unsupported plural", assertFailsWith<IllegalArgumentException> { EditTarget("Widget", "example.com", "v1", "..", true, "w1", "example-ns") }.message)
+
+        // What real clusters serve still passes.
+        assertNotNull(target("Widget", "w1", "example-ns", group = "example.com", version = "v1beta1", plural = "widgets"))
+        assertNotNull(target("Widget", "w1", "example-ns", group = "sub.example.com", version = "v2alpha1", plural = "my-widgets"))
+        assertNotNull(target("Widget", "w1", "example-ns", group = "example.com", version = "v1"))
+    }
+
+    @Test
     fun `EditTarget refuses a scope that disagrees with its namespace`() {
         assertFailsWith<IllegalArgumentException> { EditTarget("ConfigMap", "", "v1", "configmaps", true, "demo-cm", null) }
         assertFailsWith<IllegalArgumentException> { EditTarget("Node", "", "v1", "nodes", false, "node-1", "example-ns") }

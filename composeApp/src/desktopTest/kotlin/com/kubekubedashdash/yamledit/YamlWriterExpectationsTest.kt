@@ -293,6 +293,17 @@ class YamlWriterExpectationsTest {
     }
 
     @Test
+    fun `discover never asks for an apiVersion with a dot segment`() {
+        val requests = mock.recorded {
+            for (apiVersion in listOf("apps/..", "../v1", "..", "./v1", "apps/.", "apps/v1/..")) {
+                assertNull(writer.discover(apiVersion, "Deployment", context), apiVersion)
+            }
+        }
+
+        assertTrue(requests.isEmpty(), "a dot segment would leave the discovery path: ${requests.map { it.path }}")
+    }
+
+    @Test
     fun `a server error during discovery is a YamlWriteException, not null`() {
         mock.server.expect().get().withPath("/apis/broken.example.com/v1").andReturn(405, failure(405, "MethodNotAllowed", "no discovery here")).once()
 
