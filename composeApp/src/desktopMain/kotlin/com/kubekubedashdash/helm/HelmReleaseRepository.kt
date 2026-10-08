@@ -1,5 +1,6 @@
 package com.kubekubedashdash.helm
 
+import com.kubekubedashdash.util.isForbidden
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -131,7 +132,7 @@ class HelmReleaseRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            val message = if (isHelmForbidden(e.message)) "Reading this release was refused (HTTP 403)." else COULDNT_READ
+            val message = if (isForbidden(e)) "Reading this release was refused (HTTP 403)." else COULDNT_READ
             return HelmDecoded.Failed(message, transient = true)
         }
         return try {

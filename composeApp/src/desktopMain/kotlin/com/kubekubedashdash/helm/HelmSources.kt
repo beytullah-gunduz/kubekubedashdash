@@ -1,6 +1,7 @@
 package com.kubekubedashdash.helm
 
 import com.kubekubedashdash.models.ResourceState
+import com.kubekubedashdash.util.isForbidden
 
 /** The Secret-driver and ConfigMap-driver revision lists, reduced to one outcome for the screen. */
 sealed interface HelmSourceState {
@@ -32,12 +33,12 @@ fun combineHelmSources(
 
         is ResourceState.Error -> HelmSourceState.Ready(
             secrets.data,
-            if (isHelmForbidden(configMaps.message)) HELM_CONFIGMAP_FORBIDDEN_WARNING else CONFIGMAP_LIST_FAILED,
+            if (isForbidden(configMaps.message)) HELM_CONFIGMAP_FORBIDDEN_WARNING else CONFIGMAP_LIST_FAILED,
         )
     }
 
     is ResourceState.Error -> {
-        val forbidden = isHelmForbidden(secrets.message)
+        val forbidden = isForbidden(secrets.message)
         if (configMaps is ResourceState.Success && configMaps.data.isNotEmpty()) {
             HelmSourceState.Ready(configMaps.data, if (forbidden) HELM_FORBIDDEN_MESSAGE else SECRET_LIST_FAILED)
         } else {
