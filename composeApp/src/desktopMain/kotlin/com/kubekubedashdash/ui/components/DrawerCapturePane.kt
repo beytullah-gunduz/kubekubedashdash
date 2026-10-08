@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -28,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextBright
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.services.ActiveCaptureTask
 import com.kubekubedashdash.services.logcapture.CapturePhase
 import com.kubekubedashdash.services.logcapture.ContainerOutcome
@@ -133,12 +131,10 @@ fun DrawerCapturePane(tab: ActiveCaptureTask, modifier: Modifier = Modifier) {
         }
 
         if (phase is CapturePhase.Running) {
-            LinearProgressIndicator(
-                progress = {
-                    if (state.totalPods > 0) state.completedPods.toFloat() / state.totalPods else 0f
-                },
+            ItemProgressBar(
+                done = state.completedPods,
+                total = state.totalPods,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                strokeCap = kdStrokeCap,
             )
         }
 

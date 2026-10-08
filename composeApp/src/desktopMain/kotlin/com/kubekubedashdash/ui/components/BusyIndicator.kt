@@ -7,6 +7,7 @@ import androidx.compose.foundation.progressSemantics
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.IntState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -71,12 +72,7 @@ fun BusyIndicator(
 
 @Composable
 private fun RetroBusyRing(modifier: Modifier, color: Color, highContrast: Boolean) {
-    val step = remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            withInfiniteAnimationFrameMillis { frameTimeMillis -> step.intValue = busyStep(frameTimeMillis) }
-        }
-    }
+    val step = rememberFrameStep(BUSY_STEP_MILLIS, BUSY_RING_STEPS)
     Spacer(
         modifier
             .progressSemantics()
@@ -125,7 +121,30 @@ internal fun busyRingCells(width: Float, height: Float, smallRingMaxSidePx: Floa
 }
 
 /** The ring step for a frame time: advances every [BUSY_STEP_MILLIS] and wraps at [BUSY_RING_STEPS]. */
-internal fun busyStep(frameTimeMillis: Long): Int = (frameTimeMillis / BUSY_STEP_MILLIS).mod(BUSY_RING_STEPS.toLong()).toInt()
+internal fun busyStep(frameTimeMillis: Long): Int = frameStep(frameTimeMillis, BUSY_STEP_MILLIS, BUSY_RING_STEPS)
+
+/** Step [frameTimeMillis] falls in when a cycle of [steps] steps advances every [stepMillis]. Same time, same step, everywhere. */
+internal fun frameStep(frameTimeMillis: Long, stepMillis: Long, steps: Int): Int = (frameTimeMillis / stepMillis).mod(steps.toLong()).toInt()
+
+/**
+ * The current step of a stepped Retro animation, `frameStep(frame time, stepMillis, steps)` from
+ * the frame clock's absolute time, so every instance agrees. Read it in the draw phase where a
+ * redraw is enough; a composition read recomposes once per step (equal writes are no-ops), never
+ * per frame, which the Retro skeleton rows, live-data dot and cluster ring accept. Starts at 0, so
+ * a newly composed instance shows step 0 for its first frame before it joins the shared phase. The
+ * loop runs through withInfiniteAnimationFrameMillis, so UI tests with an auto-advancing clock keep
+ * it at 0.
+ */
+@Composable
+internal fun rememberFrameStep(stepMillis: Long, steps: Int): IntState {
+    val step = remember { mutableIntStateOf(0) }
+    LaunchedEffect(stepMillis, steps) {
+        while (true) {
+            withInfiniteAnimationFrameMillis { frameTimeMillis -> step.intValue = frameStep(frameTimeMillis, stepMillis, steps) }
+        }
+    }
+    return step
+}
 
 /**
  * Opacity of ring cell [index] while cell [head] is lit, on a ring of [cellCount] cells. The head is
@@ -133,12 +152,19 @@ internal fun busyStep(frameTimeMillis: Long): Int = (frameTimeMillis / BUSY_STEP
  * 4-cell ring; every other cell rests faintly. High Contrast keeps a brighter trail and drops the
  * resting cells.
  */
-internal fun busyCellAlpha(head: Int, index: Int, cellCount: Int, highContrast: Boolean): Float {
-    val behind = (head - index).mod(cellCount)
-    return when {
-        behind == 0 -> 1f
-        behind == 1 -> if (highContrast) 0.75f else 0.55f
-        behind == 2 && cellCount > 4 -> if (highContrast) 0.5f else 0.3f
-        else -> if (highContrast) 0f else 0.14f
-    }
+internal fun busyCellAlpha(head: Int, index: Int, cellCount: Int, highContrast: Boolean): Float = trailAlpha((head - index).mod(cellCount), trailLength = if (cellCount > 4) 2 else 1, highContrast)
+
+/**
+ * Opacity of a cell [behind] steps behind a moving head (0 = the head), with a trail of
+ * [trailLength] cells: 1, then 0.55 and 0.30; every other cell rests at 0.14. High Contrast keeps a
+ * brighter trail (0.75, 0.50) and drops the resting cells (0).
+ */
+internal fun trailAlpha(behind: Int, trailLength: Int, highContrast: Boolean): Float = when {
+    behind == 0 -> 1f
+    behind == 1 && trailLength >= 1 -> if (highContrast) 0.75f else 0.55f
+    behind == 2 && trailLength >= 2 -> if (highContrast) 0.5f else 0.3f
+    else -> if (highContrast) 0f else 0.14f
 }
+
+/** A Retro square wave for [step] from [rememberFrameStep] with 2 steps: full opacity on even steps, [low] on odd ones. */
+internal fun retroPulseAlpha(step: Int, low: Float): Float = if (step.mod(2) == 0) 1f else low

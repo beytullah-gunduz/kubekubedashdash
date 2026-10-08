@@ -849,28 +849,46 @@ fun ResourceLoadingIndicator() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        BusyIndicator(
-            modifier = Modifier.size(40.dp),
-            color = KdPrimary,
-            strokeWidth = 3.dp,
+        BusyScanner(ringSize = 40.dp, color = KdPrimary, strokeWidth = 3.dp)
+    }
+}
+
+/** Milliseconds each Retro skeleton row stays bright before the next one lights. */
+private const val SKELETON_STEP_MILLIS = 180L
+
+/** Retro skeleton: the row the stepping scan is on is bright (0.8), the others dim (0.4). */
+internal fun skeletonRowAlpha(step: Int, row: Int, rowCount: Int): Float = if (rowCount > 0 && row == step.mod(rowCount)) 0.8f else 0.4f
+
+/**
+ * Placeholder rows while a list loads. Default: every row pulses between 0.4 and 0.8 alpha over
+ * 600 ms. Retro: one row at a time is bright, the bright row stepping down every
+ * [SKELETON_STEP_MILLIS] and wrapping, from the shared Retro clock.
+ */
+@Composable
+fun SkeletonRows(rowCount: Int = 6) {
+    if (ThemeManager.isRetro) {
+        val step = rememberFrameStep(SKELETON_STEP_MILLIS, rowCount.coerceAtLeast(1))
+        SkeletonRowsLayout(rowCount) { row -> skeletonRowAlpha(step.intValue, row, rowCount) }
+    } else {
+        val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
+        val alpha by infiniteTransition.animateFloat(
+            initialValue = 0.4f,
+            targetValue = 0.8f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "alpha",
         )
+        SkeletonRowsLayout(rowCount) { alpha }
     }
 }
 
 @Composable
-fun SkeletonRows(rowCount: Int = 6) {
-    val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "alpha",
-    )
+private fun SkeletonRowsLayout(rowCount: Int, rowAlpha: (Int) -> Float) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        repeat(rowCount) {
+        repeat(rowCount) { row ->
+            val alpha = rowAlpha(row)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

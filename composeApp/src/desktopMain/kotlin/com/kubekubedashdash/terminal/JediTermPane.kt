@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,7 +32,8 @@ import com.kubekubedashdash.KdTerminalFg
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.model.TerminalSession
-import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.BusyScanner
+import com.kubekubedashdash.ui.components.LoadingCaption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,14 +150,11 @@ fun JediTermPane(session: TerminalSession, modifier: Modifier = Modifier) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        BusyIndicator(
-                            modifier = Modifier.size(32.dp),
-                            color = KdPrimary,
-                            strokeWidth = 3.dp,
-                        )
-                        Text(
+                        BusyScanner(ringSize = 32.dp, color = KdPrimary, strokeWidth = 3.dp)
+                        LoadingCaption(
                             text = "Connecting to ${session.displayLabel}…",
                             color = KdTerminalFg.copy(alpha = 0.8f),
+                            caps = false,
                         )
                     }
                 }

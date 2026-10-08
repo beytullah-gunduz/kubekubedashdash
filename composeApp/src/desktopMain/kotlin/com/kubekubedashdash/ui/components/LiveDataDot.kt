@@ -25,6 +25,7 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
 
 private const val PULSE_HALF_CYCLE_MS = 800
@@ -36,17 +37,22 @@ fun LiveDataDot(isConnected: Boolean, errorMessage: String?, modifier: Modifier 
     val dotColor = if (healthy) KdSuccess else KdError
 
     val dotAlpha = if (healthy) {
-        val transition = rememberInfiniteTransition(label = "liveDataDot")
-        val a by transition.animateFloat(
-            initialValue = 1.0f,
-            targetValue = 0.4f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(PULSE_HALF_CYCLE_MS, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "liveDataDotAlpha",
-        )
-        a
+        if (ThemeManager.isRetro) {
+            // Retro: the same 800 ms rhythm and 1.0 / 0.4 depth, as a step instead of a fade.
+            retroPulseAlpha(rememberFrameStep(PULSE_HALF_CYCLE_MS.toLong(), 2).intValue, low = 0.4f)
+        } else {
+            val transition = rememberInfiniteTransition(label = "liveDataDot")
+            val a by transition.animateFloat(
+                initialValue = 1.0f,
+                targetValue = 0.4f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(PULSE_HALF_CYCLE_MS, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "liveDataDotAlpha",
+            )
+            a
+        }
     } else {
         1.0f
     }

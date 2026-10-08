@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -65,6 +66,7 @@ import com.kubekubedashdash.KdSuccess
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdWarning
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.kdStrokeCap
@@ -72,6 +74,8 @@ import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
 import com.kubekubedashdash.theme.kdInkOn
+import com.kubekubedashdash.ui.components.rememberFrameStep
+import com.kubekubedashdash.ui.components.retroPulseAlpha
 import com.kubekubedashdash.ui.components.truncateStart
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
@@ -105,12 +109,19 @@ private const val MIN_SPINNER_VISIBLE_MS: Long = 1100L
 // Sweep / color / track-alpha all crossfade over this same window when
 // flipping between the connecting and settled visuals, so the arc closes
 // into a ring (or unwraps back into a partial arc) rather than snapping.
+// Default only: Retro snaps (see ClusterAvatar).
 private const val ARC_TRANSITION_MS = 400
 
 // Slow breath applied to the disconnected steady-state ring so the red
 // state is unmistakable at a glance. One direction = DISCONNECTED_PULSE_MS;
 // full breath cycle = 2× that with RepeatMode.Reverse.
 private const val DISCONNECTED_PULSE_MS = 1400
+
+/** Steps per Retro lap of the connecting arc: it jumps 45° at a time. */
+private const val RETRO_ARC_STEPS = 8
+
+/** Milliseconds per Retro arc step: [ARC_ROTATION_MS] / [RETRO_ARC_STEPS], rounded down (137). */
+private const val RETRO_ARC_STEP_MILLIS: Long = (ARC_ROTATION_MS / RETRO_ARC_STEPS).toLong()
 
 private val LABEL_MAX_WIDTH = 180.dp
 
@@ -322,9 +333,13 @@ fun ClusterChip(
  * sweep (anything below ~100° reads as stationary), 1100 ms full
  * revolution with [LinearEasing], `MIN_SPINNER_VISIBLE_MS` matched to
  * one revolution.
+ *
+ * In Retro the arc steps 45° at a time, settle transitions snap, and the disconnected breath
+ * is a square wave. The stepped arc shows 0° for the first frame after the spinner starts, as the
+ * eased one does.
  */
 @Composable
-private fun ClusterAvatar(
+internal fun ClusterAvatar(
     color: Color,
     initial: String,
     isConnected: Boolean?,
@@ -345,6 +360,7 @@ private fun ClusterAvatar(
         }
     }
     val showSpinner = isConnecting || enteredConnectingAt != null
+    val retro = ThemeManager.isRetro
 
     // Freeze the last rotating-arc angle once the spinner stops, so the
     // arc keeps the same start angle while its sweep grows from 120° to
@@ -353,16 +369,21 @@ private fun ClusterAvatar(
     // before the sweep growth had time to hide the discontinuity.
     var lastRotation by remember { mutableStateOf(0f) }
     val arcRotation = if (showSpinner) {
-        val transition = rememberInfiniteTransition(label = "clusterArc")
-        val rotation by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = ARC_ROTATION_MS, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "clusterArcAngle",
-        )
+        val rotation = if (retro) {
+            rememberFrameStep(RETRO_ARC_STEP_MILLIS, RETRO_ARC_STEPS).intValue * (360f / RETRO_ARC_STEPS)
+        } else {
+            val transition = rememberInfiniteTransition(label = "clusterArc")
+            val smooth by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = ARC_ROTATION_MS, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "clusterArcAngle",
+            )
+            smooth
+        }
         SideEffect { lastRotation = rotation }
         rotation
     } else {
@@ -370,7 +391,7 @@ private fun ClusterAvatar(
     }
 
     // Animated targets so the connecting → settled (and reverse) transition
-    // feels like the arc closing into a ring, not a sudden swap.
+    // feels like the arc closing into a ring, not a sudden swap (Default; Retro snaps).
     val targetSweep = if (showSpinner) 120f else 360f
     val targetArcColor = when {
         showSpinner -> KdWarning
@@ -381,17 +402,17 @@ private fun ClusterAvatar(
     val targetTrackAlpha = if (showSpinner) 0.25f else 0f
     val animatedSweep by animateFloatAsState(
         targetValue = targetSweep,
-        animationSpec = tween(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
+        animationSpec = if (retro) snap<Float>() else tween<Float>(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
         label = "clusterArcSweep",
     )
     val animatedArcColor by animateColorAsState(
         targetValue = targetArcColor,
-        animationSpec = tween(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
+        animationSpec = if (retro) snap<Color>() else tween<Color>(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
         label = "clusterArcColor",
     )
     val animatedTrackAlpha by animateFloatAsState(
         targetValue = targetTrackAlpha,
-        animationSpec = tween(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
+        animationSpec = if (retro) snap<Float>() else tween<Float>(durationMillis = ARC_TRANSITION_MS, easing = FastOutSlowInEasing),
         label = "clusterArcTrackAlpha",
     )
 
@@ -399,17 +420,21 @@ private fun ClusterAvatar(
     // red — never overlaps showSpinner (the rotating arc owns its own
     // animation) and never runs during the anti-flash hold.
     val pulseAlpha = if (isConnected == false && !showSpinner) {
-        val pulseTransition = rememberInfiniteTransition(label = "clusterPulse")
-        val a by pulseTransition.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = DISCONNECTED_PULSE_MS, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "clusterPulseAlpha",
-        )
-        a
+        if (retro) {
+            retroPulseAlpha(rememberFrameStep(DISCONNECTED_PULSE_MS.toLong(), 2).intValue, low = 0.35f)
+        } else {
+            val pulseTransition = rememberInfiniteTransition(label = "clusterPulse")
+            val a by pulseTransition.animateFloat(
+                initialValue = 0.35f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = DISCONNECTED_PULSE_MS, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "clusterPulseAlpha",
+            )
+            a
+        }
     } else {
         1f
     }

@@ -63,6 +63,7 @@ import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
@@ -560,7 +561,7 @@ private fun NodeDetailsOnlyTab(
 private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (PodInfo) -> Unit) {
     if (podsLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            BusyIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+            BusyScanner(ringSize = 24.dp, strokeWidth = 2.dp, color = KdPrimary)
         }
     } else if (pods.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)), contentAlignment = Alignment.Center) {
@@ -588,7 +589,7 @@ private fun NodePodsTab(pods: List<PodInfo>, podsLoading: Boolean, onPodClick: (
 private fun NodeEventsTab(events: List<EventInfo>, eventsLoading: Boolean) {
     if (eventsLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            BusyIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+            BusyScanner(ringSize = 24.dp, strokeWidth = 2.dp, color = KdPrimary)
         }
     } else if (events.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)), contentAlignment = Alignment.Center) {

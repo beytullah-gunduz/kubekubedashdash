@@ -72,7 +72,7 @@ import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.services.logtail.TailTarget
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.terminal.JediTermPane
-import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.CaptureNamespaceLogsDialog
 import com.kubekubedashdash.ui.components.LogPaneStateStore
 import com.kubekubedashdash.ui.components.ShortcutSheet
@@ -991,11 +991,7 @@ private fun BootstrapSplash() {
                 tint = KdPrimary,
             )
             Spacer(Modifier.height(20.dp))
-            BusyIndicator(
-                modifier = Modifier.size(28.dp),
-                color = KdPrimary,
-                strokeWidth = 2.5.dp,
-            )
+            BusyScanner(ringSize = 28.dp, color = KdPrimary, strokeWidth = 2.5.dp)
         }
     }
 }

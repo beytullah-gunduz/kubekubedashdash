@@ -74,7 +74,8 @@ import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
-import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.BusyScanner
+import com.kubekubedashdash.ui.components.LoadingCaption
 import com.kubekubedashdash.ui.crt.CrtGhost
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.util.ContextBinding
@@ -274,13 +275,9 @@ fun ClusterSelectorModal(
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            BusyIndicator(
-                                modifier = Modifier.size(28.dp),
-                                color = KdPrimary,
-                                strokeWidth = 3.dp,
-                            )
+                            BusyScanner(ringSize = 28.dp, color = KdPrimary, strokeWidth = 3.dp)
                             Spacer(Modifier.height(12.dp))
-                            Text(
+                            LoadingCaption(
                                 "Loading clusters…",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = KdTextSecondary,
