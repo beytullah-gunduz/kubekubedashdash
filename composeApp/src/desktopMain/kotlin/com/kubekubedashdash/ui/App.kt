@@ -43,7 +43,6 @@ import androidx.compose.ui.window.WindowState
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.LocalSystemDensity
-import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
@@ -170,6 +169,20 @@ fun App(
 
         val activeTab = tabs.firstOrNull { it.key == activeTabKey }
         val activeSession = (activeTab as? WorkspaceTab.Cluster)?.session
+        // Cluster tabs open across every window: the All Clusters entry points
+        // (palette, cluster picker) only show from two up.
+        val allWorkspaces by WorkspaceManager.workspaces.collectAsState()
+        val openClusterTabs = allWorkspaces.sumOf { ws ->
+            key(ws.id) {
+                val wsTabs by ws.tabs.collectAsState()
+                wsTabs.count { it is WorkspaceTab.Cluster }
+            }
+        }
+        val openAllClusters: (() -> Unit)? = if (openClusterTabs >= 2) {
+            { WorkspaceManager.openAllClusters(workspace) }
+        } else {
+            null
+        }
         val hasRealContexts by appViewModel.hasRealContexts.collectAsState()
         val awsCliAvailable = remember { ShellEnvironment.resolveCommand("aws") != null }
         val gcloudCliAvailable = remember { ShellEnvironment.resolveCommand("gcloud") != null }
@@ -444,6 +457,7 @@ fun App(
             tabs = tabs,
             onNavigate = { target -> sessionForPalette?.viewModel?.navigate(target) },
             onActivateTab = { key -> workspace.setActive(key) },
+            onOpenAllClusters = openAllClusters,
             onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setNamespaceScope(NamespaceScope.single(ns)) },
             onCaptureLogs = onCaptureLogs,
             onTailLogs = onTailLogs,
@@ -792,6 +806,12 @@ fun App(
                         onDismiss = { workspace.dismissClusterSelector() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
                         onDiscoverGke = { workspace.showGkeDiscovery() },
+                        onOpenAllClusters = openAllClusters?.let { open ->
+                            {
+                                workspace.dismissClusterSelector()
+                                open()
+                            }
+                        },
                         dismissable = selectedContext.isNotBlank(),
                         crtGhost = selectorGhost,
                     )

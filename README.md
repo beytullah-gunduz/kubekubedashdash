@@ -28,7 +28,7 @@ It stays a browse-and-operate tool rather than an authoring tool: there is no bl
 
 ### All Clusters view
 
-A dedicated tab (alongside your per-cluster tabs) that aggregates everything you have open into one screen:
+A tab you open when two or more clusters are open — **All Clusters** in the ⌘K palette, or **All Clusters view** at the bottom of the cluster picker — that aggregates everything you have open into one screen:
 
 - **Fleet strip** — a Total panel and, when node usage is known, the top nodes by pressure, with one panel per open cluster (in tab order) between them once two or more clusters are open. Each panel shows CPU, memory and pod usage and a pod-phase bar (hover for exact figures); the Total panel adds a short usage history. When the panels don't fit, the cluster panels scroll between the pinned Total and Top nodes
 - **Warnings and navigation** — the warnings chip on the Total and cluster panels counts the Warning and Error events of the chosen time window and narrows the event table to them; click a cluster panel to open its tab (in this window or another), or a top node to open it in its cluster's tab

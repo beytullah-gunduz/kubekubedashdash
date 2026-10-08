@@ -52,8 +52,8 @@ private const val ALL_CLUSTERS_DRAG_THRESHOLD_PX = 30.0
  * same height, same active underline, same drag-to-new-window gesture — with a circular
  * avatar (static ring + hub icon) that visually echoes [ClusterChip].
  *
- * [onClose] is nullable: when null (≥2 cluster tabs in this window) the close × is hidden
- * and middle-click is a no-op, preventing accidental dismissal of the centralized view.
+ * [onClose] null hides the close × and makes middle-click a no-op; the tab strip always
+ * passes one, since the tab is opened on request and can always be closed.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

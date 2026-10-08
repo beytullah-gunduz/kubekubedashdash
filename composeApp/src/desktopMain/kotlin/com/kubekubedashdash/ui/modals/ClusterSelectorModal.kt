@@ -70,6 +70,7 @@ import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.dns_filled
+import com.kubekubedashdash.resources.hub
 import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
 import com.kubekubedashdash.resources.tab_filled
@@ -157,6 +158,7 @@ fun ClusterSelectorModal(
     onDismiss: () -> Unit,
     onDiscoverEks: () -> Unit = {},
     onDiscoverGke: () -> Unit = {},
+    onOpenAllClusters: (() -> Unit)? = null,
     dismissable: Boolean = true,
     canAddTab: Boolean = false,
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
@@ -407,6 +409,51 @@ fun ClusterSelectorModal(
                 HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
                 Column {
+                    if (onOpenAllClusters != null) {
+                        var fleetFooterHovered by remember { mutableStateOf(false) }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenAllClusters() }
+                                .onPointerEvent(PointerEventType.Enter) { fleetFooterHovered = true }
+                                .onPointerEvent(PointerEventType.Exit) { fleetFooterHovered = false }
+                                .background(if (fleetFooterHovered) KdHover else Color.Transparent)
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(6.dp.kdCorner)
+                                    .background(KdPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    painterResource(Res.drawable.hub),
+                                    contentDescription = null,
+                                    tint = KdPrimary,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "All Clusters view",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = KdTextPrimary,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    "Compare the clusters open in your windows on one page",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = KdTextSecondary,
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = KdBorder, thickness = 1.dp)
+                    }
+
                     var footerHovered by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier
