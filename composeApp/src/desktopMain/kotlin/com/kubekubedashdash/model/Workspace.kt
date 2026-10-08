@@ -228,6 +228,8 @@ class Workspace(
         val newActive = if (_activeTabKey.value == key) computeNewActiveKey(closedIndex, newList, behavior) else _activeTabKey.value
         if (newActive != _activeTabKey.value) _activeTabKey.value = newActive
         _tabs.value = newList
+        // Focus may have moved, and the prune may have left this very place on top.
+        navigation.focusMoved(locationOf(_activeTabKey.value))
         return tab
     }
 
@@ -318,6 +320,9 @@ class Workspace(
             pushHistory(_activeTabKey.value)
             _activeTabKey.value = entry.tabKey
         }
+        // The tab already shows this place (a jump screen strips to the same entry):
+        // leave it as it is, so its list is not rebuilt.
+        if (locationOf(entry.tabKey) == entry) return
         val screen = entry.screen ?: return
         val tab = _tabs.value.firstOrNull { it.key == entry.tabKey } as? WorkspaceTab.Cluster ?: return
         tab.session.viewModel.showHistoryEntry(screen, entry.extraPane)
@@ -356,6 +361,8 @@ class Workspace(
         if (_activeTabKey.value == key) {
             _activeTabKey.value = _tabs.value.firstOrNull()?.key
         }
+        // Focus may have moved, and the prune may have left this very place on top.
+        navigation.focusMoved(locationOf(_activeTabKey.value))
     }
 
     /**

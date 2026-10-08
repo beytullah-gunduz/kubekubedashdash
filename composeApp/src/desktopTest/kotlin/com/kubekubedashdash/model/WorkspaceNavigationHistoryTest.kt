@@ -154,4 +154,51 @@ class WorkspaceNavigationHistoryTest {
 
         assertFalse(w.navigationHistory.value.back.any { it.tabKey == keyA && it.screen != null })
     }
+
+    @Test
+    fun `the window's first tab does not swallow the next switch`() {
+        w.addSession(b, makeActive = true)
+
+        assertEquals(listOf(HistoryLocation(keyA, "", null, null)), w.navigationHistory.value.back)
+    }
+
+    @Test
+    fun `closing a just-opened tab leaves no dead Back`() {
+        a.viewModel.navigate(Screen.Main.Pods())
+        w.addSession(b, makeActive = true)
+        assertEquals(1, w.navigationHistory.value.back.size)
+
+        w.removeTab(keyB)
+
+        assertEquals(keyA, w.activeTabKey.value)
+        assertFalse(w.navigationHistory.value.canGoBack)
+    }
+
+    @Test
+    fun `Back onto a tab on a jump screen leaves that screen as it is`() {
+        a.viewModel.navigate(Screen.Main.Pods(selectPodUid = "u-1"))
+        w.addSession(b, makeActive = true)
+        b.viewModel.navigate(Screen.Main.Nodes())
+
+        w.goBack()
+
+        assertEquals(keyA, w.activeTabKey.value)
+        assertEquals(Screen.Main.Pods(selectPodUid = "u-1"), a.viewModel.currentScreen.value)
+    }
+
+    @Test
+    fun `a tab moved to another window records only there`() {
+        val w2 = Workspace()
+        w.addSession(b, makeActive = true)
+        b.viewModel.navigate(Screen.Main.Pods())
+        b.viewModel.navigate(Screen.Main.Nodes())
+
+        w.removeTab(keyB)
+        w2.addSession(b, makeActive = true)
+        b.viewModel.navigate(Screen.Main.Deployments())
+
+        val state = w.navigationHistory.value
+        assertTrue((state.back + state.forward).none { it.tabKey == keyB })
+        assertEquals(HistoryLocation(keyB, "", Screen.Main.Nodes(), null), w2.navigationHistory.value.back.last())
+    }
 }

@@ -64,14 +64,16 @@ internal class WindowHistory(private val capacity: Int = MAX_WINDOW_HISTORY) {
 
     /**
      * The active tab is about to change. [outgoing] is where the user is now
-     * (null when no tab is active). Only the first switch of a run records it.
+     * (null when no tab is active: then nothing is recorded and no run
+     * starts). Only the first switch of a run records it.
      */
     fun beforeTabSwitch(outgoing: HistoryLocation?) = synchronized(lock) {
         var back = _state.value.back
-        if (!inTabSwitchRun) {
+        // No active tab yet (a window's first tab): nothing to record, no run to start.
+        if (outgoing != null && !inTabSwitchRun) {
             inTabSwitchRun = true
             runStart = null
-            if (outgoing != null && back.lastOrNull() != outgoing) {
+            if (back.lastOrNull() != outgoing) {
                 back = push(back, outgoing)
                 runStart = outgoing
             }
@@ -87,6 +89,21 @@ internal class WindowHistory(private val capacity: Int = MAX_WINDOW_HISTORY) {
             _state.value = s.copy(back = s.back.dropLast(1))
             endRun()
         }
+    }
+
+    /**
+     * Focus moved without a user switch (a tab closed and another took over):
+     * any run is over, and newest entries equal to [current] go, so Back and
+     * Forward never offer a click that does nothing.
+     */
+    fun focusMoved(current: HistoryLocation?) = synchronized(lock) {
+        endRun()
+        if (current == null) return@synchronized
+        val s = _state.value
+        _state.value = NavigationHistoryState(
+            back = s.back.dropLastWhile { it == current },
+            forward = s.forward.dropLastWhile { it == current },
+        )
     }
 
     /**

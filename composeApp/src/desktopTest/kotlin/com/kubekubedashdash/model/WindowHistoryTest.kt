@@ -200,4 +200,42 @@ class WindowHistoryTest {
         h.afterTabSwitch(c1)
         assertEquals(listOf(b1), h.state.value.back)
     }
+
+    @Test
+    fun `a switch with no active tab starts no run`() {
+        val h = WindowHistory()
+        val a1 = at("a")
+        val b1 = at("b")
+        h.beforeTabSwitch(null)
+        h.afterTabSwitch(a1)
+        h.beforeTabSwitch(a1)
+        h.afterTabSwitch(b1)
+        assertEquals(listOf(a1), h.state.value.back)
+    }
+
+    @Test
+    fun `focusMoved ends the run and drops newest entries equal to where the user is`() {
+        val h = WindowHistory()
+        val a1 = at("a")
+        val b1 = at("b")
+        val c1 = at("c")
+        h.beforeTabSwitch(a1)
+        h.afterTabSwitch(b1)
+        assertEquals(listOf(a1), h.state.value.back)
+
+        h.focusMoved(a1)
+        assertTrue(h.state.value.back.isEmpty())
+
+        h.beforeTabSwitch(a1)
+        h.afterTabSwitch(c1)
+        assertEquals(listOf(a1), h.state.value.back)
+
+        val h2 = WindowHistory()
+        h2.recordNavigation(a1)
+        h2.back(at("a", Screen.Main.Nodes()), all)
+        assertEquals(listOf(at("a", Screen.Main.Nodes())), h2.state.value.forward)
+
+        h2.focusMoved(at("a", Screen.Main.Nodes()))
+        assertTrue(h2.state.value.forward.isEmpty())
+    }
 }
