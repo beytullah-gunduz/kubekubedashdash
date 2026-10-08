@@ -48,7 +48,6 @@ import androidx.compose.ui.window.WindowState
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KubeDashTheme
 import com.kubekubedashdash.LocalSystemDensity
-import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdRoundShape
@@ -101,6 +100,7 @@ import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.ui.yamledit.DiscardPromptDialog
+import com.kubekubedashdash.ui.yamledit.rememberApplyYamlOpener
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ShellEnvironment
 import kotlinx.coroutines.Dispatchers
@@ -445,6 +445,7 @@ fun App(
         }
 
         val sessionForPalette = activeSession ?: titleSession
+        val onApplyYaml = rememberApplyYamlOpener(sessionForPalette)
         val paletteEntries = rememberPaletteEntries(
             activeSession = sessionForPalette,
             tabs = tabs,
@@ -453,6 +454,7 @@ fun App(
             onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setNamespaceScope(NamespaceScope.single(ns)) },
             onCaptureLogs = onCaptureLogs,
             onTailLogs = onTailLogs,
+            onApplyYaml = onApplyYaml,
         )
 
         // Provide the title session's locals at App scope for modals and the

@@ -7,6 +7,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.edit_filled
 import com.kubekubedashdash.ui.LocalClusterSession
@@ -19,6 +21,7 @@ import com.kubekubedashdash.yamledit.EditableKinds
 import com.kubekubedashdash.yamledit.YamlWriter
 import com.kubekubedashdash.yamledit.session.YamlEditRegistry
 import com.kubekubedashdash.yamledit.session.YamlEditSession
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * What an Edit button needs for one object: whether it can be clicked ([enabled]: connected, inside
@@ -131,3 +134,44 @@ fun yamlEditDetailAction(entry: YamlEditEntry): DetailAction = DetailAction(
     enabled = entry.enabled,
     onClick = entry.open,
 )
+
+/** Stands for a missing session's connection flag: never connected. */
+private val NeverConnected = MutableStateFlow(false)
+
+/**
+ * What the "Apply YAML" button and palette entry run for [session], or null while there is no
+ * session or it is not connected (the control then is not offered). Running it opens the Apply YAML
+ * window of the session's tab and cluster, or brings the open one forward (one per tab and cluster).
+ *
+ * The window's default namespace, given to a document that names none, is the tab's one selected
+ * namespace (D12), else `default`; it is read when the window opens. Its CRD list is the tab's
+ * informer as it stands when a review starts. Both ask the session's reactive client, so the
+ * button works from any screen of the tab. The window's toasts go to the window this was composed in.
+ */
+@Composable
+fun rememberApplyYamlOpener(session: ClusterSession?, registry: YamlEditRegistry = YamlEditRegistry.Default): (() -> Unit)? {
+    val feedback = LocalActionFeedback.current
+    val connected by (session?.viewModel?.isConnected ?: NeverConnected).collectAsState()
+    return remember(session, feedback, registry, connected) {
+        if (session == null || !connected) {
+            null
+        } else {
+            val open: () -> Unit = {
+                // Lock-free, so safe on the EDT; null when the connection dropped since the button was drawn.
+                session.connectionManager.connectedContextOrNull()?.let { context ->
+                    registry.openApply(
+                        clusterSessionId = session.id,
+                        context = context,
+                        defaultNamespace = session.reactiveClient.namespaceScope.value.serverNamespace ?: "default",
+                        writer = YamlWriter(session.connectionManager),
+                        crds = { (session.reactiveClient.crds.value as? ResourceState.Success)?.data.orEmpty() },
+                        feedback = feedback,
+                        masking = { PreferenceRepository.maskSecretValues.value },
+                        bufferFactory = { RstaBuffer() },
+                    )
+                }
+            }
+            open
+        }
+    }
+}

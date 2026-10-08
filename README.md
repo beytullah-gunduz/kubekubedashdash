@@ -1,8 +1,8 @@
 # KubeKubeDashDash
 
-A desktop Kubernetes dashboard built with Compose Multiplatform. It connects to your clusters through your local kubeconfig and lets you browse resources — across several clusters at once — inspect YAML, stream logs, open an interactive shell into a pod, visualize cluster topology, and run common operational actions (scale, restart, cordon, drain, evict, trigger, approve…) without hand-writing kubectl commands.
+A desktop Kubernetes dashboard built with Compose Multiplatform. It connects to your clusters through your local kubeconfig and lets you browse resources — across several clusters at once — inspect YAML, edit a resource's YAML or apply manifests (with a diff and a server dry run first), stream logs, open an interactive shell into a pod, visualize cluster topology, and run common operational actions (scale, restart, cordon, drain, evict, trigger, approve…) without hand-writing kubectl commands.
 
-It stays a browse-and-operate tool rather than an authoring tool: there is no blanket resource creation or free-form YAML editing — writes are limited to the targeted actions listed below.
+It is mainly a browse-and-operate tool rather than an authoring tool. Edits to a resource's YAML go through a separate editor window with a line diff, a server-side dry run and a confirmation, and manifests are applied with server-side apply (see [Editing YAML and applying manifests](#editing-yaml-and-applying-manifests)); every other write is one of the targeted actions listed below.
 
 ![KubeKubeDashDash overview](docs/screenshots/overview.png)
 
@@ -86,14 +86,14 @@ With a Metrics Server installed, the Pods table shows each pod's CPU and memory 
 
 Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for a fuzzy finder (subsequence scoring) that jumps to any screen, switches between open clusters, or navigates to a namespace, a cached pod, a node, or a discovered CRD. A prefix narrows the search (`pod:`, `node:`, `ns:`, `dep:`, `crd:`, `go:`), and with an empty query a **Recent** group lists what you picked lately.
 
-Type `>` for actions: pick a verb, then its target. The verbs are **Cordon / Uncordon node**, **Drain node**, **Scale…**, **Rollout restart**, **Evict pod**, **Force delete pod**, **Trigger now**, **Suspend / Resume** (CronJobs) and **Delete…**, and each one asks for confirmation. Esc, or Backspace in an empty query, backs out of a verb. The palette can also start a namespace's log tail or log capture (`Tail logs: <namespace>`, `Capture logs: <namespace>`).
+Type `>` for actions: pick a verb, then its target. The verbs are **Cordon / Uncordon node**, **Drain node**, **Scale…**, **Rollout restart**, **Evict pod**, **Force delete pod**, **Trigger now**, **Suspend / Resume** (CronJobs) and **Delete…**, and each one asks for confirmation. Esc, or Backspace in an empty query, backs out of a verb. The palette can also start a namespace's log tail or log capture (`Tail logs: <namespace>`, `Capture logs: <namespace>`) and open the **Apply YAML…** window.
 
 ### Resource details
 
 - Side panel with **Overview** and **YAML** tabs for inspected resources; **Expand** widens it over the list, and Esc closes it
 - The header labels its actions (e.g. **Scale**, **Rollout restart**, **Trigger now**, **Delete**); those that don't fit move into an **Actions** menu
 - A **Related** section links pods, ReplicaSets, Deployments, StatefulSets, DaemonSets, Jobs and CronJobs to their owners and children (and a pod to its Services) — click one to open it — and a breadcrumb under the title shows the owner chain (e.g. `Deployment redis › ReplicaSet …`)
-- YAML view with syntax highlighting, line numbers, selectable text, search (Enter / Shift+Enter step through the matches) and copy-to-clipboard (read-only)
+- YAML view with syntax highlighting, line numbers, selectable text, search (Enter / Shift+Enter step through the matches), copy-to-clipboard and an **Edit** button that opens the object in the YAML editor window (Events can't be edited)
 - **Secret values are masked** in the YAML view by default (Settings → Privacy → Secret values): **Reveal** shows one Secret's decoded values, and with masking off **Decode** / **Raw** switch between decoded and base64 values. **Copy** always copies the raw YAML, base64 values included. The same setting hides Helm release values and NOTES until Reveal and masks Secrets in a release's manifest; there, Copy copies what is shown.
 - Labels and annotations shown as chips; click a chip to toggle it into the active label/annotation filter
 - Many kinds have resource-specific detail tabs — e.g. RBAC Roles show their resolved rules and bindings, ResourceQuotas show usage bars, EndpointSlices link through to their backing Service, and CertificateSigningRequests expose Approve/Deny
@@ -134,11 +134,26 @@ Beyond browsing, KubeKubeDashDash can perform a focused set of write operations:
 | Deployments, StatefulSets, DaemonSets | Rollout restart |
 | CronJobs | Trigger now, Suspend, Resume |
 | CertificateSigningRequests | Approve, Deny |
+| Every kind with a YAML tab except Events, and custom resources | Edit YAML |
+| Any resource, from a manifest | Apply YAML |
 | Most other kinds + custom resources | Delete |
 
-Delete is available both from a resource's detail-panel header and from a right-click context menu in the lists. Destructive actions go through a confirmation dialog. There is no generic create or YAML-edit capability.
+Delete is available both from a resource's detail-panel header and from a right-click context menu in the lists. Destructive actions go through a confirmation dialog. Editing a resource's YAML and applying manifests are described in [Editing YAML and applying manifests](#editing-yaml-and-applying-manifests).
 
 A toast in the bottom-right corner confirms each action. Cordon / Uncordon, Scale and CronJob Suspend / Resume offer **Undo** in that toast for 10 seconds.
+
+### Editing YAML and applying manifests
+
+**Edit** (in a YAML tab) and **Edit YAML** (in a detail panel's header) open the object in a separate editor window; clicking again brings that window forward instead of opening a second one. The editor is a syntax-highlighted text area with line numbers, search, and undo / redo of your own typing. It hides the server-managed `status` and `metadata.managedFields`, and refuses a changed `apiVersion`, `kind`, name or namespace. Events and Helm releases can't be edited.
+
+- **Review changes** (<kbd>⌘S</kbd> / <kbd>Ctrl+S</kbd>) shows a line diff of your edit and runs a server-side dry run of exactly what would be sent, so a rejection — a validation error, or a 403 for missing permission — shows up before anything is written. Only after a confirmation is the object replaced. The demo cluster has no dry run to ask, so there it is simulated locally and the review says so
+- The replace is pinned to the resourceVersion you started from. If the object changed on the server while you were editing, a **changed on the server** banner offers **Compare with latest** and **Discard my edits**; nothing is overwritten, and a conflict at apply time applies nothing. A change to `status` alone is picked up silently
+- **Secrets**: with masking on (Settings → Privacy → Secret values), editing a Secret first asks before showing its values, base64-encoded as in `kubectl edit`; the review's diff stays masked until **Reveal**, and a masked placeholder in the text is never sent to the cluster
+- There is no **Undo** for an applied edit — Kubernetes keeps none, and re-applying the old version could undo someone else's change — so the confirmation says so. To change it back, edit it again
+- **Unsaved edits are protected**: closing the editor window, closing its cluster tab or the main window, switching the tab to another cluster, and <kbd>⌘Q</kbd> on macOS each ask before discarding. Esc and moving around the main window leave an open editor alone, and editors are not part of a restored session
+- **Apply YAML** (the header button, or **Apply YAML…** in the palette) opens a window for pasting or opening (**Open file…**: `.yaml`, `.yml` or `.json`, up to 5 MB) one or more manifests — several documents separated by `---`, or a `kind: List`. **Review** dry-runs every document and lists what each would do (created, configured, unchanged, or an error such as an unknown kind); **Apply** is enabled once every document passed and at least one would change something. Documents are applied in order with server-side apply as field manager `kubekubedashdash`, never forced, so a field another manager owns is reported as an error on its row. A failure doesn't stop the rest and **nothing is rolled back**: documents applied before it stay applied. A namespaced document without a namespace gets the namespace selected in the tab (when exactly one is), else `default`; server-owned fields such as `status` and `resourceVersion` are dropped from each document. On the demo cluster the dry run and the apply are simulated locally
+
+The embedded MCP server is unchanged: it can only query, never write.
 
 ### Bulk actions
 
@@ -305,7 +320,7 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 | Shortcut | Action |
 |----------|--------|
 | <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> | Open the command palette |
-| <kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd> | Show the shortcut sheet (it also lists the shortcuts for tables, the palette, YAML search and dialogs) |
+| <kbd>⌘/</kbd> / <kbd>Ctrl+/</kbd> | Show the shortcut sheet (it also lists the shortcuts for tables, the palette, YAML search, the YAML editor window and dialogs) |
 | <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> | Open Settings |
 | <kbd>⌘J</kbd> / <kbd>Ctrl+J</kbd> | Toggle the logs drawer |
 | <kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd> | Focus the list filter |
@@ -315,6 +330,7 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 | <kbd>⌘0</kbd> / <kbd>Ctrl+0</kbd> | Reset zoom |
 | <kbd>Esc</kbd> | Close the detail panel |
 | <kbd>⌘A</kbd> / <kbd>Ctrl+A</kbd> | Select all rows in a table with bulk actions |
+| <kbd>⌘S</kbd> / <kbd>Ctrl+S</kbd> | Review changes (in a YAML editor window) |
 
 ## Running
 
@@ -376,9 +392,11 @@ When launched from a DMG-installed `.app` bundle, macOS GUI apps inherit a minim
 ## Limitations
 
 - Desktop only (no web or mobile targets)
-- Little RBAC-aware UI — apart from the Helm releases view, errors from insufficient permissions are shown as-is
+- Little RBAC-aware UI — apart from the Helm releases view, errors from insufficient permissions are shown as-is (the YAML editor shows the API's 403 at review time, before anything is written)
 - Helm support is read-only: no install, upgrade, rollback or uninstall, and hooks are not shown
-- No blanket resource creation or free-form YAML editing — YAML is read-only, and writes are limited to the targeted actions listed above
+- No Undo for an applied YAML edit or manifest, and Apply YAML never rolls back documents applied before a failure
+- The unsaved-edits prompt on quit (<kbd>⌘Q</kbd>) is macOS-only; on other platforms closing an editor, a tab or a window still asks
+- The demo cluster simulates dry runs and server-side apply locally, so it shows the flow but not what a real API server would answer
 - Metrics require a running Metrics Server in the cluster
 - Log streaming relies on fabric8's `watchLog` and may not handle all edge cases (e.g., very large log volumes)
 

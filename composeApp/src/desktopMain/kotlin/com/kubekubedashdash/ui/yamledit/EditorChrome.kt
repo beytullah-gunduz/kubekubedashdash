@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -69,19 +70,16 @@ internal fun CompactControls(content: @Composable () -> Unit) {
 }
 
 /**
- * The top row: what is being edited, and in the Editing phase (a non-null [search]) the search field
- * with its match count and arrows plus "Review changes". In the field, Enter and Shift+Enter step
- * through the matches and Escape clears a query.
+ * The frame both editor windows' top row shares: [title] over [subtitle] at the start, then [content]
+ * (the window's own controls). [titleMaxWidth] caps the title column; null lets it take the room
+ * [content] leaves.
  */
 @Composable
-internal fun EditToolbar(
-    kind: String,
+internal fun EditorToolbarFrame(
+    title: String,
     subtitle: String,
-    search: YamlSearchState?,
-    searchFocus: FocusRequester,
-    reviewEnabled: Boolean,
-    onReview: () -> Unit,
-    onClose: () -> Unit,
+    titleMaxWidth: Dp? = 320.dp,
+    content: @Composable RowScope.() -> Unit,
 ) {
     CompactControls {
         Row(
@@ -89,9 +87,9 @@ internal fun EditToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(modifier = Modifier.widthIn(max = 320.dp)) {
+            Column(modifier = if (titleMaxWidth != null) Modifier.widthIn(max = titleMaxWidth) else Modifier.weight(1f)) {
                 Text(
-                    "Edit $kind".retroCaps(),
+                    title.retroCaps(),
                     style = MaterialTheme.typography.labelLarge,
                     color = KdTextPrimary,
                     fontWeight = FontWeight.SemiBold,
@@ -106,33 +104,53 @@ internal fun EditToolbar(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (search != null) {
-                SearchControls(search, searchFocus, Modifier.weight(1f))
-                TextButton(
-                    onClick = onReview,
-                    enabled = reviewEnabled,
-                    colors = ButtonDefaults.textButtonColors(contentColor = KdPrimary),
-                    shape = kdRoundShape,
-                ) {
-                    Text("Review changes", style = MaterialTheme.typography.labelMedium)
-                }
-            } else {
-                Box(Modifier.weight(1f))
-            }
+            content()
+        }
+    }
+}
+
+/**
+ * The top row: what is being edited, and in the Editing phase (a non-null [search]) the search field
+ * with its match count and arrows plus "Review changes". In the field, Enter and Shift+Enter step
+ * through the matches and Escape clears a query.
+ */
+@Composable
+internal fun EditToolbar(
+    kind: String,
+    subtitle: String,
+    search: YamlSearchState?,
+    searchFocus: FocusRequester,
+    reviewEnabled: Boolean,
+    onReview: () -> Unit,
+    onClose: () -> Unit,
+) {
+    EditorToolbarFrame(title = "Edit $kind", subtitle = subtitle) {
+        if (search != null) {
+            SearchControls(search, searchFocus, Modifier.weight(1f))
             TextButton(
-                onClick = onClose,
-                colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
+                onClick = onReview,
+                enabled = reviewEnabled,
+                colors = ButtonDefaults.textButtonColors(contentColor = KdPrimary),
                 shape = kdRoundShape,
             ) {
-                Text("Close", style = MaterialTheme.typography.labelMedium)
+                Text("Review changes", style = MaterialTheme.typography.labelMedium)
             }
+        } else {
+            Box(Modifier.weight(1f))
+        }
+        TextButton(
+            onClick = onClose,
+            colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
+            shape = kdRoundShape,
+        ) {
+            Text("Close", style = MaterialTheme.typography.labelMedium)
         }
     }
 }
 
 /** The search field with its "n/m" count and the previous / next arrows, as the YAML tab has them. */
 @Composable
-private fun SearchControls(search: YamlSearchState, searchFocus: FocusRequester, modifier: Modifier) {
+internal fun SearchControls(search: YamlSearchState, searchFocus: FocusRequester, modifier: Modifier) {
     val matches = search.matches
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         YamlSearchField(
@@ -250,6 +268,7 @@ internal fun EditBannerStrip(
  * The strip under the editor. A parse error (clickable, jumps to it) wins over the checks' problems
  * (the first one, "and N more"), which win over the plain state: "Modified" or "No changes", the line
  * count ([lineCount], re-read by the caller) and, for a Secret with masking on, that its values show unmasked.
+ * [cleanLabel] stands in for "No changes" when the text is not modified (the Apply window says what to do instead).
  */
 @Composable
 internal fun EditStatusStrip(
@@ -258,6 +277,7 @@ internal fun EditStatusStrip(
     dirty: Boolean,
     lineCount: Int,
     secretUnmasked: Boolean,
+    cleanLabel: String = "No changes",
     onJump: (line: Int, column: Int) -> Unit,
 ) {
     Surface(color = KdSurfaceVariant, modifier = Modifier.fillMaxWidth()) {
@@ -286,7 +306,7 @@ internal fun EditStatusStrip(
 
                 else -> {
                     Text(
-                        if (dirty) "Modified" else "No changes",
+                        if (dirty) "Modified" else cleanLabel,
                         style = MaterialTheme.typography.labelMedium,
                         color = if (dirty) KdWarning else KdTextSecondary,
                     )

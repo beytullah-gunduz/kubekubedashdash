@@ -72,11 +72,12 @@ private fun EditorWindow(model: EditorWindowModel, icon: Painter) {
                             true
                         }
 
-                        Key.S -> if (model is YamlEditSession) {
-                            model.review()
+                        Key.S -> {
+                            when (model) {
+                                is YamlEditSession -> model.review()
+                                is ApplyYamlSession -> model.review()
+                            }
                             true
-                        } else {
-                            false
                         }
 
                         else -> false
@@ -90,8 +91,10 @@ private fun EditorWindow(model: EditorWindowModel, icon: Painter) {
                         if (buffer != null) EditWindowContent(model, buffer) else UnavailableNote("This editor has no text area.")
                     }
 
-                    // Slice B (WS5) replaces this with the Apply YAML window.
-                    is ApplyYamlSession -> UnavailableNote("Apply YAML is not available yet")
+                    is ApplyYamlSession -> {
+                        val buffer = model.buffer as? RstaBuffer
+                        if (buffer != null) ApplyWindowContent(model, buffer) else UnavailableNote("This editor has no text area.")
+                    }
                 }
             }
         }

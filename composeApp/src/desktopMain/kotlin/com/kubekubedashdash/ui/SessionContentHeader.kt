@@ -39,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +84,7 @@ import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.add_filled
 import com.kubekubedashdash.resources.arrow_back_filled
 import com.kubekubedashdash.resources.arrow_forward_filled
 import com.kubekubedashdash.resources.check_filled
@@ -115,6 +117,10 @@ private val NamespaceSelectorWidth = 150.dp
  * non-namespaced CRDs) it would be a no-op, so it is omitted entirely.
  * The whole header is suppressed on the connecting / error screens, where
  * neither control has anything to act on.
+ *
+ * [onApplyYaml] opens the Apply YAML window (create or update resources from a
+ * manifest); the button sits left of the selector, so it moves neither fixed
+ * control, and is left out while it is null (not connected).
  */
 @Composable
 internal fun SessionContentHeader(
@@ -124,6 +130,7 @@ internal fun SessionContentHeader(
     onBack: () -> Unit,
     onForward: () -> Unit,
     namespaceScope: NamespaceScope,
+    onApplyYaml: (() -> Unit)?,
     namespaces: List<String>,
     onNamespaceScopeChange: (NamespaceScope) -> Unit,
     searchQuery: String,
@@ -155,6 +162,8 @@ internal fun SessionContentHeader(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+
+            if (onApplyYaml != null) ApplyYamlButton(onApplyYaml)
 
             // Both controls fade, never slide or resize: their slots are
             // fixed, so only visibility changes. Default specs, as in the
@@ -267,6 +276,24 @@ internal fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     is Screen.Main.CustomResource -> namespaced
 
     else -> false
+}
+
+/** "Apply YAML": a quiet text button, 28 dp tall like the selector beside it. */
+@Composable
+private fun ApplyYamlButton(onClick: () -> Unit) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        TextButton(
+            onClick = onClick,
+            modifier = Modifier.height(28.dp),
+            shape = kdRoundShape,
+            colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
+            contentPadding = PaddingValues(horizontal = 8.dp),
+        ) {
+            Icon(painterResource(Res.drawable.add_filled), null, Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Apply YAML", style = MaterialTheme.typography.labelMedium)
+        }
+    }
 }
 
 @Composable

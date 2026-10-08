@@ -85,7 +85,8 @@ class ApplyYamlSession(
     override val id: Long,
     override val clusterSessionId: SessionId,
     override val context: String,
-    private val defaultNamespace: String,
+    /** The namespace a namespaced document without one is given; the window names it so the person knows. */
+    val defaultNamespace: String,
     private val writer: YamlWriter,
     private val crds: () -> List<CrdInfo>,
     private val feedback: ActionFeedback,

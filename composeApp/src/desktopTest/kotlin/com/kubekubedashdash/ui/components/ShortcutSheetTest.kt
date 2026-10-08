@@ -70,4 +70,21 @@ class ShortcutSheetTest {
         val globalOther = otherGroups.first { it.title == "Global" }
         assertTrue(globalOther.shortcuts.any { it.keys == "Ctrl+/" && it.action == "Show the shortcut sheet" })
     }
+
+    @Test
+    fun `the YAML editor window group follows YAML search and lists the six editor keys`() {
+        for ((groups, review, redo) in listOf(Triple(macGroups, "⌘S", "⇧⌘Z"), Triple(otherGroups, "Ctrl+S", "Ctrl+Y"))) {
+            val titles = groups.map { it.title }
+            assertEquals(titles.indexOf("YAML search") + 1, titles.indexOf("YAML editor window"))
+
+            val editor = groups.first { it.title == "YAML editor window" }
+            assertEquals(
+                listOf("Review changes", "Find", "Undo", "Redo", "Close the editor", "Insert two spaces"),
+                editor.shortcuts.map { it.action },
+            )
+            assertEquals(review, editor.shortcuts.first { it.action == "Review changes" }.keys)
+            assertEquals(redo, editor.shortcuts.first { it.action == "Redo" }.keys)
+            assertEquals("Tab", editor.shortcuts.first { it.action == "Insert two spaces" }.keys)
+        }
+    }
 }
