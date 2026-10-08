@@ -10,11 +10,16 @@ import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceId
 import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.model.dismissing
 import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.services.session.SessionPersistence
 import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
 import com.kubekubedashdash.util.toPosition
 import com.kubekubedashdash.util.toSize
+import com.kubekubedashdash.yamledit.session.DiscardPrompt
+import com.kubekubedashdash.yamledit.session.GuardVerb
+import com.kubekubedashdash.yamledit.session.UnsavedEditGuard
+import com.kubekubedashdash.yamledit.session.YamlEditRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +40,14 @@ import kotlinx.coroutines.launch
  * - [NEW_WINDOW]: spawn a new window/workspace pre-connected to this cluster.
  */
 enum class OpenTarget { CURRENT_VIEW, NEW_TAB, NEW_WINDOW }
+
+/**
+ * Whether a cluster pick would take over a live cluster tab: only a current-view pick of another
+ * context than [activeContext] (the active cluster tab's context; null or blank when the window
+ * has none yet) replaces the tab's cluster, and with it the YAML editors bound to it. A re-pick
+ * of the same context keeps them, a new tab or window never touches the current tab.
+ */
+internal fun replacesLiveCluster(activeContext: String?, ctx: String, target: OpenTarget): Boolean = target == OpenTarget.CURRENT_VIEW && !activeContext.isNullOrBlank() && activeContext != ctx
 
 /**
  * Process-wide coordinator for [Workspace]s (one per OS window) and the
@@ -74,6 +87,13 @@ object WorkspaceManager {
      * See `.docs/feature/second-cluster-pick-perf.md`.
      */
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /**
+     * Stands between every user-initiated close or switch and the YAML editors it would take
+     * down (D11): see [requestCloseTab], [requestCloseWorkspace], [requestOpenCluster] and, for
+     * the app-wide quit, [showQuitPrompt].
+     */
+    private val editGuard = UnsavedEditGuard(YamlEditRegistry.Default)
 
     init {
         // The bootstrap window must know its saved geometry before it
@@ -150,6 +170,20 @@ object WorkspaceManager {
     }
 
     /**
+     * [openCluster] for a user's pick. A current-view pick of another cluster closes the active
+     * tab's YAML editors (they are bound to the tab's cluster), so it asks first when one holds
+     * unsaved text; every other pick goes straight through. Runs on the EDT.
+     */
+    fun requestOpenCluster(workspace: Workspace, ctx: String, target: OpenTarget) {
+        val active = workspace.activeSession
+        if (active != null && replacesLiveCluster(active.viewModel.selectedContext.value, ctx, target)) {
+            guarded(workspace, listOf(active.id), GuardVerb.SwitchCluster) { openCluster(workspace, ctx, target) }
+        } else {
+            openCluster(workspace, ctx, target)
+        }
+    }
+
+    /**
      * Defer the AllClusters tab insertion off the click frame. When opening
      * the second cluster, totalClusters just hit 2 → reconcile would insert
      * AllClusters at index 0, which shifts existing pages' indices. That
@@ -172,6 +206,16 @@ object WorkspaceManager {
     }
 
     /**
+     * [closeTab] for a user's click on a tab's close button. A cluster tab's YAML editors close
+     * with it, so this asks first when one holds unsaved text. Runs on the EDT.
+     */
+    fun requestCloseTab(workspace: Workspace, tabKey: String) {
+        val tab = workspace.tabs.value.firstOrNull { it.key == tabKey }
+        val sessionIds = listOfNotNull((tab as? WorkspaceTab.Cluster)?.session?.id)
+        guarded(workspace, sessionIds, GuardVerb.CloseTab) { closeTab(workspace, tabKey) }
+    }
+
+    /**
      * Close a tab by its key. Cluster tabs dispose their session; the
      * AllClusters tab has no resources to free. Empty workspace cascades to
      * window close per Decision 2 of `.docs/multi-cluster-plan.md`.
@@ -180,6 +224,10 @@ object WorkspaceManager {
         val behavior = PreferenceRepository.closeTabFocus.value
         when (val removed = workspace.removeTab(tabKey, behavior)) {
             is WorkspaceTab.Cluster -> {
+                // The tab's YAML editors are bound to its cluster: close them with it. The
+                // callers that ask first (requestCloseTab) have already done so for unsaved
+                // text; this is the backstop for every other route here.
+                YamlEditRegistry.Default.closeAllFor(removed.session.id)
                 // Release the cluster's exec + log streams and tear down any
                 // terminal tabs that belonged to it — otherwise they linger in
                 // the strip pointing at a now-closed session (use-after-close
@@ -277,12 +325,26 @@ object WorkspaceManager {
     }
 
     /**
+     * [closeWorkspace] for the window's close button (or the OS closing it). Every cluster tab's
+     * YAML editors close with the window, so this asks first when one holds unsaved text.
+     * Runs on the EDT.
+     */
+    fun requestCloseWorkspace(workspaceId: WorkspaceId) {
+        val workspace = workspaceById(workspaceId) ?: return
+        val sessionIds = workspace.tabs.value.filterIsInstance<WorkspaceTab.Cluster>().map { it.session.id }
+        guarded(workspace, sessionIds, GuardVerb.CloseWindow) { closeWorkspace(workspaceId) }
+    }
+
+    /**
      * Close a workspace and dispose every cluster session it still holds. Intended
      * both as the cascade target for [closeTab] when the last tab leaves and as
      * the OS-window-close handler.
      */
     fun closeWorkspace(workspaceId: WorkspaceId) {
         val workspace = _workspaces.value.firstOrNull { it.id == workspaceId } ?: return
+        // A question this window is still asking (a pending quit prompt) goes away with it,
+        // answered "keep editing" so the quit it belongs to is cancelled, not left waiting.
+        workspace.cancelDiscardPrompt()
         // Closing the last window is the quit path: the list empties and the app
         // exits before the poll or the shutdown hook can see anything, so save
         // now, while every tab is still attached. This is a ~2 KB synchronous
@@ -295,6 +357,8 @@ object WorkspaceManager {
         workspace.tabs.value.forEach { tab ->
             when (tab) {
                 is WorkspaceTab.Cluster -> {
+                    // The tab's YAML editors are bound to its cluster (see closeTab).
+                    YamlEditRegistry.Default.closeAllFor(tab.session.id)
                     LogStreamRegistry.closeAllForSession(tab.session.id)
                     TerminalSessionRegistry.closeAllForSession(tab.session.id)
                     PortForwardRegistry.stopAllForSession(tab.session.id)
@@ -358,6 +422,12 @@ object WorkspaceManager {
         } ?: return false
         val tabKey = "cluster:${sessionId.value}"
         workspace.setActive(tabKey)
+        raiseWindow(workspace)
+        return true
+    }
+
+    /** Un-minimizes [workspace]'s window, if it is minimized, and brings it to the front. */
+    private fun raiseWindow(workspace: Workspace) {
         workspace.awtWindow?.let { win ->
             (win as? java.awt.Frame)?.let { frame ->
                 if ((frame.extendedState and java.awt.Frame.ICONIFIED) != 0) {
@@ -367,7 +437,43 @@ object WorkspaceManager {
             win.toFront()
             win.requestFocus()
         }
-        return true
+    }
+
+    /**
+     * Runs [action] through the editor guard for [sessionIds]'s editors and, when one of them
+     * holds unsaved text, asks in [workspace] instead: the action waits for the answer.
+     */
+    private fun guarded(workspace: Workspace, sessionIds: Collection<SessionId>, verb: GuardVerb, action: () -> Unit) {
+        editGuard.guard(sessionIds, verb, action)?.let { workspace.showDiscardPrompt(it.dismissing(workspace)) }
+    }
+
+    /**
+     * The window that should ask an app-wide question: the one holding the cluster tab of the
+     * first editor with unsaved text, else the first window. Null when no window is open.
+     */
+    fun workspaceForPrompt(): Workspace? {
+        val sessionId = YamlEditRegistry.Default.dirty().firstOrNull()?.clusterSessionId
+        val holder = sessionId?.let { id ->
+            _workspaces.value.firstOrNull { ws -> ws.tabs.value.any { it is WorkspaceTab.Cluster && it.session.id == id } }
+        }
+        return holder ?: _workspaces.value.firstOrNull()
+    }
+
+    /**
+     * Shows [prompt], the quit guard's question, in [workspaceForPrompt] and brings that window
+     * forward (Cmd+Q may come while an editor window is on top). The quit is answered only by the
+     * prompt's own callbacks, so with no window to ask in the prompt is answered "keep editing"
+     * here, which cancels the quit and clears the guard's pending flag.
+     */
+    fun showQuitPrompt(prompt: DiscardPrompt) = showQuitPromptIn(workspaceForPrompt(), prompt)
+
+    internal fun showQuitPromptIn(workspace: Workspace?, prompt: DiscardPrompt) {
+        if (workspace == null) {
+            prompt.onKeepEditing()
+            return
+        }
+        workspace.showDiscardPrompt(prompt.dismissing(workspace))
+        raiseWindow(workspace)
     }
 
     /**

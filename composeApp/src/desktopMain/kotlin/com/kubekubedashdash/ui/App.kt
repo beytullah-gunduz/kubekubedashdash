@@ -100,6 +100,7 @@ import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
+import com.kubekubedashdash.ui.yamledit.DiscardPromptDialog
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ShellEnvironment
 import kotlinx.coroutines.Dispatchers
@@ -217,6 +218,7 @@ fun App(
         FollowActiveTab(pagerState, activeIndex, tabs.size)
 
         val settingsOpen by workspace.showSettings.collectAsState()
+        val discardPrompt by workspace.discardPrompt.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
         var shortcutsOpen by remember { mutableStateOf(false) }
         var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
@@ -586,7 +588,7 @@ fun App(
                     FirstRunScreen(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                         onTryDemo = {
-                            WorkspaceManager.openCluster(
+                            WorkspaceManager.requestOpenCluster(
                                 workspace,
                                 DemoContext.MOCK_CONTEXT_NAME,
                                 OpenTarget.CURRENT_VIEW,
@@ -726,7 +728,7 @@ fun App(
                                             workspace.setActive(key)
                                         }
                                     },
-                                    onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
+                                    onCloseTab = { key -> WorkspaceManager.requestCloseTab(workspace, key) },
                                     onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
                                     onDragMoveSession = { id, x, y ->
                                         WorkspaceManager.notifyDragMove(id, x, y)
@@ -851,7 +853,7 @@ fun App(
                         defaultTarget = clusterSelectorDefault,
                         onOpenCluster = { ctx, target ->
                             workspace.dismissClusterSelector()
-                            WorkspaceManager.openCluster(workspace, ctx, target)
+                            WorkspaceManager.requestOpenCluster(workspace, ctx, target)
                         },
                         onDismiss = { workspace.dismissClusterSelector() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
@@ -963,6 +965,10 @@ fun App(
                         onDismiss = { pendingPortForward = null },
                     )
                 }
+
+                // Last, so it sits above every other surface: a quit prompt can arrive while
+                // Settings, the palette or any dialog is already up.
+                discardPrompt?.let { DiscardPromptDialog(it) }
             }
         }
     }

@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.window.WindowPosition
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.portforward.PortForwardRequest
+import com.kubekubedashdash.yamledit.session.DiscardPrompt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -125,6 +126,14 @@ class Workspace(
 
     private val _showSettings = MutableStateFlow(false)
     val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
+
+    /**
+     * The "discard unsaved YAML edits?" question this window is asking before it closes a tab or
+     * the window, switches a tab's cluster or quits the app, or null. Rendered by
+     * [com.kubekubedashdash.ui.App]; set through [showDiscardPrompt].
+     */
+    private val _discardPrompt = MutableStateFlow<DiscardPrompt?>(null)
+    val discardPrompt: StateFlow<DiscardPrompt?> = _discardPrompt.asStateFlow()
 
     // Command palette visibility — hoisted so the screenshot generator can open it
     // (App.kt owns the keyboard toggle; this lets an external driver request it too).
@@ -334,6 +343,28 @@ class Workspace(
         _showSettings.value = false
     }
 
+    /**
+     * Shows [prompt] (wrap it with [dismissing] first, so answering it clears it). A prompt
+     * already up is answered "keep editing" before it is replaced: a pending quit prompt must not
+     * be dropped unanswered, or macOS would wait for a reply that never comes.
+     */
+    fun showDiscardPrompt(prompt: DiscardPrompt) {
+        cancelDiscardPrompt()
+        _discardPrompt.value = prompt
+    }
+
+    /** Clears the prompt without answering it; the callbacks [dismissing] builds call this first. */
+    fun dismissDiscardPrompt() {
+        _discardPrompt.value = null
+    }
+
+    /** Answers a prompt still up "keep editing": the window is closing, or another prompt is taking its place. */
+    fun cancelDiscardPrompt() {
+        val shown = _discardPrompt.value ?: return
+        _discardPrompt.value = null
+        shown.onKeepEditing()
+    }
+
     fun showPalette() {
         _showPalette.value = true
     }
@@ -394,4 +425,30 @@ class Workspace(
     fun updateDropZoneScreenBounds(bounds: Rect?) {
         _dropZoneScreenBounds.value = bounds
     }
+}
+
+/**
+ * This prompt for display in [workspace]: each callback clears the prompt from [workspace] first
+ * and then runs the original, at most once (a double click must not discard twice). The one place
+ * every verb's prompt (close tab, close window, switch cluster, quit) gets wrapped.
+ */
+fun DiscardPrompt.dismissing(workspace: Workspace): DiscardPrompt {
+    val original = this
+    var answered = false
+    return copy(
+        onDiscard = {
+            if (!answered) {
+                answered = true
+                workspace.dismissDiscardPrompt()
+                original.onDiscard()
+            }
+        },
+        onKeepEditing = {
+            if (!answered) {
+                answered = true
+                workspace.dismissDiscardPrompt()
+                original.onKeepEditing()
+            }
+        },
+    )
 }

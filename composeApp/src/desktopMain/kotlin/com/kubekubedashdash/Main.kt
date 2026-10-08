@@ -27,7 +27,11 @@ import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.toGeometry
+import com.kubekubedashdash.yamledit.session.QuitGuard
+import com.kubekubedashdash.yamledit.session.YamlEditRegistry
 import org.slf4j.LoggerFactory
+import java.awt.Desktop
+import javax.swing.SwingUtilities
 
 fun main() {
     System.setProperty("LOG_DIR", SystemDirectories.logsDirectory)
@@ -79,6 +83,8 @@ fun main() {
     // compiling, so re-try that drag with two cluster tabs open before deleting it.
     ComposeFoundationFlags.isSelectionAutoScrollEnabled = false
 
+    installQuitHandler()
+
     application {
         val workspaces by WorkspaceManager.workspaces.collectAsState()
         val appIcon = remember { BitmapPainter(useResource("icon.png", ::loadImageBitmap)) }
@@ -112,7 +118,7 @@ fun main() {
                         .collect { workspace.updateGeometry(it) }
                 }
                 Window(
-                    onCloseRequest = { WorkspaceManager.closeWorkspace(workspace.id) },
+                    onCloseRequest = { WorkspaceManager.requestCloseWorkspace(workspace.id) },
                     title = "KubeKubeDashDash",
                     state = windowState,
                     icon = appIcon,
@@ -122,7 +128,7 @@ fun main() {
                         workspace = workspace,
                         windowScope = this,
                         windowState = windowState,
-                        onClose = { WorkspaceManager.closeWorkspace(workspace.id) },
+                        onClose = { WorkspaceManager.requestCloseWorkspace(workspace.id) },
                     )
                 }
             }
@@ -131,5 +137,47 @@ fun main() {
         // The YAML editor windows (one per object being edited) live beside the workspace windows,
         // not inside one: they belong to the process-wide registry, not to a workspace.
         YamlEditorWindows(icon = appIcon)
+    }
+}
+
+/**
+ * Cmd+Q on macOS: asks about unsaved YAML edits before the app goes down. Without a handler the
+ * OS quits the JVM at once and every open editor with it. [QuitGuard] performs the quit
+ * itself when nothing is unsaved, and otherwise shows its question in a window
+ * ([WorkspaceManager.showQuitPrompt]); either way the answer reaches the OS through the quit
+ * response exactly once. `performQuit()` is the call macOS makes today with no handler, so the same JVM
+ * shutdown hooks run (`app-shutdown` above, and `session-save`). Other platforms have no quit
+ * handler: closing the last window goes through [WorkspaceManager.requestCloseWorkspace].
+ *
+ * Must run before `application { }` so the handler is in place before the first window opens.
+ */
+private fun installQuitHandler() {
+    if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.APP_QUIT_HANDLER)) return
+    val log = LoggerFactory.getLogger("QuitGuard")
+    Desktop.getDesktop().setQuitHandler { _, response ->
+        // The registry reads each editor's live text, which is EDT-only.
+        SwingUtilities.invokeLater {
+            var answered = false
+            try {
+                QuitGuard.onQuitRequested(
+                    registry = YamlEditRegistry.Default,
+                    show = WorkspaceManager::showQuitPrompt,
+                    perform = {
+                        answered = true
+                        response.performQuit()
+                    },
+                    cancel = {
+                        answered = true
+                        response.cancelQuit()
+                    },
+                )
+            } catch (t: Throwable) {
+                // A guard that fails before it answered must not leave the OS waiting. Quitting
+                // anyway could drop unsaved edits without a word, so the quit is cancelled: the
+                // person can press Cmd+Q again or close the windows (each asks on its own).
+                log.warn("Quit guard failed: {}", t::class.simpleName)
+                if (!answered) response.cancelQuit()
+            }
+        }
     }
 }
