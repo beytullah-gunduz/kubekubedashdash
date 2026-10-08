@@ -46,7 +46,27 @@ internal class ReactiveInformerFactory(
     private val log = LoggerFactory.getLogger(ReactiveInformerFactory::class.java)
     private val k8s: KubernetesClient get() = connectionManager.client
     private fun reportSuccess() = connectionManager.reportSuccess()
-    private fun reportError(message: String) = connectionManager.reportError(message)
+
+    /**
+     * Counts a failure toward the shared connection-failure threshold, unless
+     * RBAC refused the request. A 403 means the API server answered: these
+     * credentials may not list this resource at this scope (a namespace-limited
+     * account with All Namespaces selected), which says nothing about
+     * connectivity, and the liveness probe already watches that through
+     * /version. Counted, a screen with two denied informers crossed the
+     * threshold on one Retry: the reconnect overlay showed fabric8's raw
+     * refusal text, which names the caller, and a needless reconnect followed.
+     * A refusal counts as neither failure nor success; the list still emits
+     * its Error, so the screen shows its own message.
+     */
+    private fun reportFailure(e: Exception) {
+        if (isForbidden(e)) {
+            log.debug("RBAC refusal not counted as a connection failure")
+        } else {
+            connectionManager.reportError(e.message ?: "Unknown error")
+        }
+    }
+
     private val connectedTrigger: Flow<Long> =
         connectionManager.connectionVersion.filter { it > 0L }
 
@@ -154,7 +174,7 @@ internal class ReactiveInformerFactory(
                                         throw e
                                     } catch (e: Exception) {
                                         log.warn("Informer failed to map store contents: {}", e.message)
-                                        reportError(e.message ?: "Unknown error")
+                                        reportFailure(e)
                                     }
                                 }
                         }
@@ -183,7 +203,7 @@ internal class ReactiveInformerFactory(
                     throw e
                 } catch (e: Exception) {
                     log.error("Cluster-scoped informer failed: {}", e.message)
-                    reportError(e.message ?: "Unknown error")
+                    reportFailure(e)
                     send(ResourceState.Error(e.message ?: "Unknown error"))
                 }
             }
@@ -270,7 +290,7 @@ internal class ReactiveInformerFactory(
                                         throw e
                                     } catch (e: Exception) {
                                         log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
-                                        reportError(e.message ?: "Unknown error")
+                                        reportFailure(e)
                                     }
                                 }
                         }
@@ -305,7 +325,7 @@ internal class ReactiveInformerFactory(
                     throw e
                 } catch (e: Exception) {
                     log.error("Namespaced informer failed for namespace={}: {}", ns ?: "<all>", e.message)
-                    reportError(e.message ?: "Unknown error")
+                    reportFailure(e)
                     send(ResourceState.Error(e.message ?: "Unknown error"))
                 }
             }
@@ -338,7 +358,7 @@ internal class ReactiveInformerFactory(
                         throw e
                     } catch (e: Exception) {
                         log.warn("Polling fetch failed for scope={}: {}", s, e.message)
-                        reportError(e.message ?: "Unknown error")
+                        reportFailure(e)
                         if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
                     }
                     delay(intervalMs)
