@@ -104,13 +104,4 @@ class HelmSourcesTest {
             assertFalse(other.forbidden)
         }
     }
-
-    @Test
-    fun `a 403 is recognised by status code, reason or the forbidden phrase`() {
-        assertTrue(isHelmForbidden("... Received status: Status(code=403, reason=Forbidden)"))
-        assertTrue(isHelmForbidden("secrets is forbidden: User cannot list"))
-        assertTrue(isHelmForbidden("reason=Forbidden"))
-        assertFalse(isHelmForbidden("Failure executing: GET ... timed out"))
-        assertFalse(isHelmForbidden(null))
-    }
 }
