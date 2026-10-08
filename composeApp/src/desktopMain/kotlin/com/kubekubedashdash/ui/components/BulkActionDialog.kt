@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.kdRoundShape
-import com.kubekubedashdash.kdStrokeCap
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
 import com.kubekubedashdash.ui.feedback.UndoAction
@@ -81,11 +79,7 @@ internal fun <T> BulkActionDialog(
                     }
 
                     is BulkRunState.Running -> {
-                        LinearProgressIndicator(
-                            progress = { runState.done.toFloat() / runState.total },
-                            modifier = Modifier.fillMaxWidth(),
-                            strokeCap = kdStrokeCap,
-                        )
+                        ItemProgressBar(done = runState.done, total = runState.total, modifier = Modifier.fillMaxWidth())
                         Text(
                             "${verb.progressLabel} ${(runState.done + 1).coerceAtMost(runState.total)} of " +
                                 "${runState.total} — ${runState.currentItemLabel}",
