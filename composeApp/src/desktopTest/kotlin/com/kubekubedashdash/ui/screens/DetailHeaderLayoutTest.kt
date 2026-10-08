@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 
 /**
  * Pins the header's dp fit math — [verbButtonWidthDp], [overflowButtonWidthDp],
- * [headerVerbSpaceDp] and [fitHeaderVerbs] — independent of any live measurement,
+ * [headerVerbSpaceDp], [fitHeaderVerbs] and [allocateFairWidths] — independent of any live measurement,
  * density or Compose runtime (there is no Compose UI test infrastructure here).
  */
 class DetailHeaderLayoutTest {
@@ -24,11 +24,10 @@ class DetailHeaderLayoutTest {
     }
 
     @Test
-    fun `available space reserves padding, title, icon buttons and dividers, and is unbounded on an unbounded header`() {
-        assertEquals(558f, headerVerbSpaceDp(800f, hasExpand = true))
-        assertEquals(586f, headerVerbSpaceDp(800f, hasExpand = false))
-        assertEquals(0f, headerVerbSpaceDp(200f, hasExpand = true))
-        assertEquals(Float.MAX_VALUE, headerVerbSpaceDp(Float.POSITIVE_INFINITY, hasExpand = true))
+    fun `available space reserves padding, the status column and one divider, and is unbounded on an unbounded header`() {
+        assertEquals(623f, headerVerbSpaceDp(800f))
+        assertEquals(0f, headerVerbSpaceDp(150f))
+        assertEquals(Float.MAX_VALUE, headerVerbSpaceDp(Float.POSITIVE_INFINITY))
     }
 
     @Test
@@ -37,5 +36,25 @@ class DetailHeaderLayoutTest {
         assertEquals(2, fitHeaderVerbs(299f, listOf(100f, 100f, 100f), 80f))
         assertEquals(0, fitHeaderVerbs(100f, listOf(100f, 100f), 80f))
         assertEquals(0, fitHeaderVerbs(500f, emptyList(), 80f))
+    }
+
+    @Test
+    fun `an overflow-only verb reserves the overflow button even when every labelled verb would fit`() {
+        assertEquals(2, fitHeaderVerbs(1000f, listOf(100f, 100f), 80f, forceOverflow = true))
+        assertEquals(2, fitHeaderVerbs(300f, listOf(100f, 100f, 100f), 80f, forceOverflow = true))
+        assertEquals(1, fitHeaderVerbs(279f, listOf(100f, 100f, 100f), 80f, forceOverflow = true))
+        assertEquals(0, fitHeaderVerbs(500f, emptyList(), 80f, forceOverflow = true))
+    }
+
+    @Test
+    fun `fair widths serve short items in full and split the rest`() {
+        assertEquals(listOf(100, 300), allocateFairWidths(listOf(100, 300), 500))
+        assertEquals(listOf(100, 200), allocateFairWidths(listOf(100, 300), 300))
+        assertEquals(listOf(150, 100), allocateFairWidths(listOf(300, 100), 250))
+        assertEquals(listOf(150, 150), allocateFairWidths(listOf(300, 300), 300))
+        assertEquals(listOf(100, 100, 101), allocateFairWidths(listOf(200, 200, 200), 301))
+        assertEquals(listOf(0, 0), allocateFairWidths(listOf(200, 200), 0))
+        assertEquals(listOf(0, 0), allocateFairWidths(listOf(200, 200), -5))
+        assertEquals(emptyList(), allocateFairWidths(emptyList(), 0))
     }
 }

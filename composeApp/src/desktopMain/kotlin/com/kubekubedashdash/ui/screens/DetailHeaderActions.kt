@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,10 +42,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,7 @@ import com.kubekubedashdash.resources.keyboard_arrow_down_filled
 import com.kubekubedashdash.resources.view_in_ar_filled
 import com.kubekubedashdash.ui.components.ActionTooltip
 import com.kubekubedashdash.ui.components.LocalDetailHostControls
+import com.kubekubedashdash.ui.components.MiddleEllipsisText
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.BUTTON_CHEVRON_DP
@@ -76,8 +78,7 @@ import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.BUTTON_ICON_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.BUTTON_MIN_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.DIVIDER_DP
 import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.H_PADDING_DP
-import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.ICON_BUTTON_DP
-import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.TITLE_MIN_DP
+import com.kubekubedashdash.ui.screens.DetailHeaderDefaults.META_MIN_DP
 import com.kubekubedashdash.util.RelatedRef
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -87,8 +88,7 @@ import org.jetbrains.compose.resources.painterResource
 /** Pinned pixel/dp constants driving the header's fit math — see [fitHeaderVerbs]. */
 object DetailHeaderDefaults {
     const val H_PADDING_DP = 28f // 14 dp each side of the header row
-    const val TITLE_MIN_DP = 140f // the name/subtitle column is never crushed below this
-    const val ICON_BUTTON_DP = 28f // Expand, Close — true only with the provider in D2/WS1 step 5
+    const val META_MIN_DP = 140f // the status/subtitle column beside the verbs is never crushed below this
     const val DIVIDER_DP = 9f // 1 dp rule + 4 dp padding each side
     const val BUTTON_MIN_DP = 58f // ButtonDefaults.MinWidth in this Material 3 build
     const val BUTTON_H_PADDING_DP = 16f
@@ -107,18 +107,20 @@ fun verbButtonWidthDp(textWidthDp: Float, hasMenu: Boolean): Float = maxOf(
 /** Rendered width of the `Actions ▾` button — no leading icon, only the chevron. */
 fun overflowButtonWidthDp(actionsTextWidthDp: Float): Float = maxOf(BUTTON_MIN_DP, BUTTON_H_PADDING_DP + actionsTextWidthDp + BUTTON_GAP_DP + BUTTON_CHEVRON_DP)
 
-/** Space left for the verb strip. Infinite width (unbounded parent) means "everything fits". */
-fun headerVerbSpaceDp(headerWidthDp: Float, hasExpand: Boolean): Float {
+/** Space left for the verb strip on the header's second line. Infinite width (unbounded parent) means "everything fits". */
+fun headerVerbSpaceDp(headerWidthDp: Float): Float {
     if (!headerWidthDp.isFinite()) return Float.MAX_VALUE
-    val reserved = H_PADDING_DP + TITLE_MIN_DP + ICON_BUTTON_DP +
-        (if (hasExpand) ICON_BUTTON_DP else 0f) + 2 * DIVIDER_DP
+    val reserved = H_PADDING_DP + META_MIN_DP + DIVIDER_DP
     return (headerWidthDp - reserved).coerceAtLeast(0f)
 }
 
-/** How many leading verbs stay labelled; the rest go to `Actions ▾`. */
-fun fitHeaderVerbs(availableDp: Float, verbWidthsDp: List<Float>, overflowWidthDp: Float): Int {
+/**
+ * How many leading verbs stay labelled; the rest go to `Actions ▾`. [forceOverflow] (some
+ * verb is overflow-only) means `Actions ▾` is shown anyway, so its width is always reserved.
+ */
+fun fitHeaderVerbs(availableDp: Float, verbWidthsDp: List<Float>, overflowWidthDp: Float, forceOverflow: Boolean = false): Int {
     if (verbWidthsDp.isEmpty()) return 0
-    if (verbWidthsDp.sum() <= availableDp) return verbWidthsDp.size
+    if (!forceOverflow && verbWidthsDp.sum() <= availableDp) return verbWidthsDp.size
     val budget = availableDp - overflowWidthDp
     var used = 0f
     var n = 0
@@ -128,6 +130,24 @@ fun fitHeaderVerbs(availableDp: Float, verbWidthsDp: List<Float>, overflowWidthD
         n++
     }
     return n
+}
+
+/**
+ * Max-min fair split of [available] px among items wanting [desired] px each: everything
+ * fits → each gets what it wants; otherwise the smallest are served in full first and the
+ * rest share what is left equally (any remainder goes to the last served). Used by the
+ * owner breadcrumb so a short hop keeps its name and no hop is starved to zero.
+ */
+fun allocateFairWidths(desired: List<Int>, available: Int): List<Int> {
+    if (desired.sum() <= available) return desired
+    val result = IntArray(desired.size)
+    var remaining = available.coerceAtLeast(0)
+    desired.indices.sortedBy { desired[it] }.forEachIndexed { rank, i ->
+        val width = minOf(desired[i], remaining / (desired.size - rank))
+        result[i] = width
+        remaining -= width
+    }
+    return result.toList()
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -142,7 +162,7 @@ fun DetailPanelHeader(
     ownerChain: List<RelatedRef> = emptyList(),
     onOwnerClick: ((RelatedRef) -> Unit)? = null,
 ) {
-    val hostControls = LocalDetailHostControls.current
+    val removed = LocalRemovedResource.current
 
     // Delete, when present, is synthesised as the last destructive verb — see D3.
     val deleteAction = onDelete?.let {
@@ -157,94 +177,141 @@ fun DetailPanelHeader(
     }
     val safe = actions.filterNot { it.destructive }
     val danger = actions.filter { it.destructive } + listOfNotNull(deleteAction)
-    val verbs = safe + danger
+    // A deleted resource keeps its verbs in place but disabled, each saying why: nothing
+    // here can act on an object the cluster no longer has.
+    val verbs = (safe + danger).let { all ->
+        if (removed == null) {
+            all
+        } else {
+            all.map { it.copy(enabled = false, description = "Unavailable — this ${removed.kind} no longer exists in the cluster.", menuItems = emptyList()) }
+        }
+    }
+    // An overflow-only verb (Force delete) never takes a labelled slot, however wide the header.
+    val inline = verbs.filterNot { it.overflowOnly }
+    val forced = verbs.filter { it.overflowOnly }
 
     // Measured in px, converted to dp before it touches any fit-math function — see D5.
     val density = LocalDensity.current
     val labelStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
-    val labels = verbs.map { it.label } + "Actions"
+    val labels = inline.map { it.label } + "Actions"
     val widthsDp = remember(labels, labelStyle, density) {
         labels.map { label ->
             with(density) { measurer.measure(label, labelStyle, maxLines = 1).size.width.toDp().value }
         }
     }
-    val verbWidthsDp = verbs.mapIndexed { index, action -> verbButtonWidthDp(widthsDp[index], action.menuItems.isNotEmpty()) }
+    val verbWidthsDp = inline.mapIndexed { index, action -> verbButtonWidthDp(widthsDp[index], action.menuItems.isNotEmpty()) }
     val overflowWidthDp = overflowButtonWidthDp(widthsDp.last())
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val fitCount = fitHeaderVerbs(
-            headerVerbSpaceDp(maxWidth.value, hasExpand = hostControls != null),
-            verbWidthsDp,
-            overflowWidthDp,
-        )
-        val shown = verbs.take(fitCount)
-        val overflowed = verbs.drop(fitCount)
+        val fitCount = fitHeaderVerbs(headerVerbSpaceDp(maxWidth.value), verbWidthsDp, overflowWidthDp, forceOverflow = forced.isNotEmpty())
+        val shown = inline.take(fitCount)
+        // Stable sort, safe first: the menu's divider still lands before the first destructive row.
+        val overflowed = (inline.drop(fitCount) + forced).sortedBy { it.destructive }
         val shownSafe = shown.filterNot { it.destructive }
         val shownDanger = shown.filter { it.destructive }
-        val hasVerbContent = shownSafe.isNotEmpty() || shownDanger.isNotEmpty() || overflowed.isNotEmpty()
 
-        Row(
-            modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp.orCompact(6.dp)),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = KdTextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (status != null) StatusBadge(status)
-                    Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().background(KdSurfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp.orCompact(6.dp)),
+            ) {
+                // Line 1: the name, and the panel's own controls in the top-right
+                // corner — on their own line, away from the verbs, where Close is looked for.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HeaderTitle(name, Modifier.weight(1f))
+                    PanelChromeButtons(onClose)
                 }
-                // D7: rendered under the subtitle only when there is a chain to
-                // show — outermost first, so D3's nearest-first list is reversed
-                // here at the render site, never in the model.
+                Spacer(Modifier.height(2.dp))
+                // Line 2: status and subtitle, then the verbs.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FlowRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (status != null) StatusBadge(status)
+                        Text(subtitle, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    // Dp.Unspecified drops the 48 dp touch-target minimum — this is a
+                    // pointer-driven desktop header, not a touch UI (precedent: the
+                    // select-all Checkbox in ResourceTable's header row). Without it every button
+                    // below renders wider than its budgeted width.
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                        shownSafe.forEach { action -> key(action.label) { HeaderVerbButton(action) } }
+                        // Only the safe/destructive boundary gets a divider; `Actions ▾`
+                        // is not a group of its own and may hold verbs of either kind.
+                        if (shownSafe.isNotEmpty() && shownDanger.isNotEmpty()) HeaderGroupDivider()
+                        shownDanger.forEach { action -> key(action.label) { HeaderVerbButton(action) } }
+                        if (overflowed.isNotEmpty()) ActionsOverflowButton(overflowed, enabled = removed == null)
+                    }
+                }
+                // Line 3 (D7): the owner chain, outermost first, given the whole width. D3's
+                // nearest-first list is reversed here at the render site, never in the model.
                 if (ownerChain.isNotEmpty()) {
                     Spacer(Modifier.height(2.dp))
                     OwnerBreadcrumb(ownerChain.asReversed(), onOwnerClick)
                 }
             }
+            removed?.let { ResourceRemovedBanner(kind = it.kind, name = it.name) }
+        }
+    }
+}
 
-            // Dp.Unspecified drops the 48 dp touch-target minimum — this is a
-            // pointer-driven desktop header, not a touch UI (precedent: the
-            // select-all Checkbox in ResourceTable's header row). Without it every button
-            // below renders wider than its budgeted width and Close can be
-            // squeezed off the end of the row entirely.
-            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                shownSafe.forEach { action -> key(action.label) { HeaderVerbButton(action) } }
-                // Only the safe/destructive boundary gets a divider; `Actions ▾`
-                // is not a group of its own and may hold verbs of either kind.
-                if (shownSafe.isNotEmpty() && shownDanger.isNotEmpty()) HeaderGroupDivider()
-                shownDanger.forEach { action -> key(action.label) { HeaderVerbButton(action) } }
-                if (overflowed.isNotEmpty()) ActionsOverflowButton(overflowed)
-                if (hasVerbContent) HeaderGroupDivider()
-                // Expand / Restore comes from the host, so every panel gets it
-                // without a signature change; absent outside a DetailHost.
-                hostControls?.let { controls ->
-                    TooltipIconButton(
-                        Res.drawable.fit_screen_filled,
-                        if (controls.expanded) "Restore panel" else "Expand",
-                        KdTextSecondary,
-                        description = if (controls.expanded) {
-                            "Shrink the panel back to its normal size."
-                        } else {
-                            "Give the panel the whole content area — the list comes back with Restore or Esc."
-                        },
-                        onClick = controls.onToggleExpand,
-                    )
-                }
-                TooltipIconButton(Res.drawable.close_filled, "Close", KdTextSecondary, onClick = onClose)
-            }
+/** The panel's Close button: primary colour and an 18 dp glyph, so it reads as the way out rather than one more verb. */
+@Composable
+internal fun PanelCloseButton(onClose: () -> Unit) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        TooltipIconButton(
+            Res.drawable.close_filled,
+            "Close",
+            KdTextPrimary,
+            description = "Close this panel — Esc does the same.",
+            iconSize = 18.dp,
+            onClick = onClose,
+        )
+    }
+}
+
+/**
+ * Expand / Restore (from the host, so every panel gets it; absent outside a DetailHost)
+ * then Close — the end of a panel's title line, apart from the verbs.
+ */
+@Composable
+internal fun PanelChromeButtons(onClose: (() -> Unit)?) {
+    val controls = LocalDetailHostControls.current
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        controls?.let {
+            TooltipIconButton(
+                Res.drawable.fit_screen_filled,
+                if (it.expanded) "Restore panel" else "Expand",
+                KdTextSecondary,
+                description = if (it.expanded) {
+                    "Shrink the panel back to its normal size."
+                } else {
+                    "Give the panel the whole content area — the list comes back with Restore or Esc."
+                },
+                onClick = it.onToggleExpand,
+            )
+        }
+        if (onClose != null) {
+            if (controls != null) Spacer(Modifier.width(4.dp))
+            PanelCloseButton(onClose)
+        }
+    }
+}
+
+/** The header's name: one line, truncated in the middle (D4), the full name on hover. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HeaderTitle(name: String, modifier: Modifier) {
+    // The Box takes the weighted width; the tooltip area wraps only the text.
+    Box(modifier) {
+        TooltipArea(
+            tooltip = { ActionTooltip(name, null) },
+            tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
+        ) {
+            MiddleEllipsisText(name, style = MaterialTheme.typography.titleMedium, color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -252,42 +319,57 @@ fun DetailPanelHeader(
 /**
  * The owner-chain breadcrumb (D7): [hops] is already outermost-first.
  *
- * One clickable `Text` per hop rather than a single annotated string with
- * offset-mapped ranges: a hop is a real hit target that cannot drift, and the
- * mapping cannot go wrong once the line ellipsises. The row clips rather than
- * wrapping, and each hop ellipsises on its own, so a long chain degrades from
- * the right instead of pushing the header to a third line.
+ * One clickable text per hop rather than a single annotated string with offset-mapped
+ * ranges: a hop is a real hit target that cannot drift. The line never wraps. The hops
+ * share its width through [allocateFairWidths] — a hop that fits keeps its whole text,
+ * longer ones split the rest and truncate in the middle — so no hop, least of all the
+ * nearest owner at the end (often the only clickable one), is squeezed to nothing.
  */
 @Composable
 private fun OwnerBreadcrumb(hops: List<RelatedRef>, onOwnerClick: ((RelatedRef) -> Unit)?) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        hops.forEachIndexed { index, ref ->
-            if (index > 0) {
-                Text(
-                    " › ",
+    Layout(
+        content = {
+            hops.forEachIndexed { index, ref ->
+                if (index > 0) {
+                    Text(" › ", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary, maxLines = 1)
+                }
+                // A hop with no destination — a CRD owner, or a custom resource that
+                // reuses a built-in name (F16) — reads as text, as the Related chips do.
+                val click = onOwnerClick?.takeIf { relatedScreen(ref) != null }
+                MiddleEllipsisText(
+                    "${ref.kind} ${ref.name}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = KdTextSecondary,
-                    maxLines = 1,
+                    color = if (click != null) KdPrimary else KdTextSecondary,
+                    modifier = if (click != null) {
+                        Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { click(ref) }
+                    } else {
+                        Modifier
+                    },
                 )
             }
-            // A hop with no destination — a CRD owner, or a custom resource that
-            // reuses a built-in name (F16) — reads as text, as the Related chips do.
-            val click = onOwnerClick?.takeIf { relatedScreen(ref) != null }
-            Text(
-                "${ref.kind} ${ref.name}",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (click != null) KdPrimary else KdTextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = if (click != null) {
-                    Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { click(ref) }
-                } else {
-                    Modifier
-                },
-            )
+        },
+    ) { measurables, constraints ->
+        // Children alternate hop, separator, hop, …: hops sit at even indices.
+        val separators = measurables.filterIndexed { i, _ -> i % 2 == 1 }.map { it.measure(Constraints()) }
+        val hopMeasurables = measurables.filterIndexed { i, _ -> i % 2 == 0 }
+        val maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
+        val available = (maxWidth - separators.sumOf { it.width }).coerceAtLeast(0)
+        val widths = allocateFairWidths(hopMeasurables.map { it.maxIntrinsicWidth(Constraints.Infinity) }, available)
+        val hopPlaceables = hopMeasurables.mapIndexed { i, m -> m.measure(Constraints(maxWidth = widths[i])) }
+        val ordered = buildList {
+            hopPlaceables.forEachIndexed { i, p ->
+                if (i > 0) add(separators[i - 1])
+                add(p)
+            }
+        }
+        val height = ordered.maxOfOrNull { it.height } ?: 0
+        val width = ordered.sumOf { it.width }
+        layout(width.coerceIn(constraints.minWidth, constraints.maxWidth), height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            var x = 0
+            ordered.forEach { p ->
+                p.placeRelative(x, (height - p.height) / 2)
+                x += p.width
+            }
         }
     }
 }
@@ -378,7 +460,7 @@ private fun VerbButton(
  * submenu.
  */
 @Composable
-private fun ActionsOverflowButton(overflowed: List<DetailAction>) {
+private fun ActionsOverflowButton(overflowed: List<DetailAction>, enabled: Boolean) {
     var menuOpen by remember { mutableStateOf(false) }
     // A window or pane resize re-partitions the strip. Dismiss rather than let
     // rows appear under the cursor mid-click — the mis-click this feature exists
@@ -388,10 +470,14 @@ private fun ActionsOverflowButton(overflowed: List<DetailAction>) {
     Box {
         TextButton(
             onClick = { menuOpen = true },
+            enabled = enabled,
             modifier = Modifier.height(28.dp),
             shape = 6.dp.kdCorner,
             contentPadding = PaddingValues(horizontal = 8.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = KdTextPrimary),
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = KdTextPrimary,
+                disabledContentColor = KdTextPrimary.copy(alpha = 0.38f),
+            ),
         ) {
             Text("Actions", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.width(5.dp))

@@ -138,6 +138,8 @@ data class DetailActionMenuItem(
  * @param destructive When true the verb is red and grouped after the divider,
  *                    ahead of Delete; otherwise it renders in [KdTextPrimary].
  * @param enabled     Controls whether the button responds to clicks.
+ * @param overflowOnly Always listed under `Actions ▾`, never as a labelled header verb — for a
+ *                    rarely needed, dangerous verb (Force delete).
  * @param onClick     Invoked when the button is clicked.
  * @param menuItems   When non-empty, clicking opens a dropdown of these entries instead of invoking [onClick].
  */
@@ -148,6 +150,7 @@ data class DetailAction(
     val enabled: Boolean = true,
     val tint: Color? = null,
     val description: String? = null,
+    val overflowOnly: Boolean = false,
     val onClick: () -> Unit,
     val menuItems: List<DetailActionMenuItem> = emptyList(),
 )
