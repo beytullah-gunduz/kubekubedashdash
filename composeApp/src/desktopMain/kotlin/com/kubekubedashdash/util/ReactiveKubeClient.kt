@@ -1506,6 +1506,10 @@ class ReactiveKubeClient(
 
             "endpointslice" -> namespace?.let { k8s.discovery().v1().endpointSlices().inNamespace(it).withName(name).get() }
 
+            "networkpolicy" -> namespace?.let { k8s.network().v1().networkPolicies().inNamespace(it).withName(name).get() }
+
+            "endpoint", "endpoints" -> namespace?.let { k8s.endpoints().inNamespace(it).withName(name).get() }
+
             "csidriver" -> k8s.storage().v1().csiDrivers().withName(name).get()
 
             "certificatesigningrequest" -> k8s.certificates().v1().certificateSigningRequests().withName(name).get()
