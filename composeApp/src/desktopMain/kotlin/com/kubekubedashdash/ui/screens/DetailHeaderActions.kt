@@ -139,7 +139,7 @@ fun fitHeaderVerbs(availableDp: Float, verbWidthsDp: List<Float>, overflowWidthD
  * owner breadcrumb so a short hop keeps its name and no hop is starved to zero.
  */
 fun allocateFairWidths(desired: List<Int>, available: Int): List<Int> {
-    if (desired.sum() <= available) return desired
+    if (desired.sumOf { it.toLong() } <= available) return desired
     val result = IntArray(desired.size)
     var remaining = available.coerceAtLeast(0)
     desired.indices.sortedBy { desired[it] }.forEachIndexed { rank, i ->
@@ -177,14 +177,13 @@ fun DetailPanelHeader(
     }
     val safe = actions.filterNot { it.destructive }
     val danger = actions.filter { it.destructive } + listOfNotNull(deleteAction)
+    val live = safe + danger
     // A deleted resource keeps its verbs in place but disabled, each saying why: nothing
     // here can act on an object the cluster no longer has.
-    val verbs = (safe + danger).let { all ->
-        if (removed == null) {
-            all
-        } else {
-            all.map { it.copy(enabled = false, description = "Unavailable — this ${removed.kind} no longer exists in the cluster.", menuItems = emptyList()) }
-        }
+    val verbs = if (removed == null) {
+        live
+    } else {
+        live.map { it.copy(enabled = false, description = "Unavailable — this ${removed.kind} no longer exists in the cluster.", menuItems = emptyList()) }
     }
     // An overflow-only verb (Force delete) never takes a labelled slot, however wide the header.
     val inline = verbs.filterNot { it.overflowOnly }
@@ -200,7 +199,9 @@ fun DetailPanelHeader(
             with(density) { measurer.measure(label, labelStyle, maxLines = 1).size.width.toDp().value }
         }
     }
-    val verbWidthsDp = inline.mapIndexed { index, action -> verbButtonWidthDp(widthsDp[index], action.menuItems.isNotEmpty()) }
+    // Fitted on the live verbs: a deleted resource's disabled copies drop their container
+    // menu and its chevron, and must not pull another verb out of `Actions ▾` for it.
+    val verbWidthsDp = live.filterNot { it.overflowOnly }.mapIndexed { index, action -> verbButtonWidthDp(widthsDp[index], action.menuItems.isNotEmpty()) }
     val overflowWidthDp = overflowButtonWidthDp(widthsDp.last())
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -464,8 +465,8 @@ private fun ActionsOverflowButton(overflowed: List<DetailAction>, enabled: Boole
     var menuOpen by remember { mutableStateOf(false) }
     // A window or pane resize re-partitions the strip. Dismiss rather than let
     // rows appear under the cursor mid-click — the mis-click this feature exists
-    // to remove.
-    LaunchedEffect(overflowed.size) { menuOpen = false }
+    // to remove. Dismiss too when the resource is deleted under an open menu.
+    LaunchedEffect(overflowed.size, enabled) { menuOpen = false }
     val firstDestructiveIndex = overflowed.indexOfFirst { it.destructive }
     Box {
         TextButton(

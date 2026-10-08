@@ -12,6 +12,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -228,5 +229,61 @@ class DetailPanelHeaderTest {
 
         onNodeWithText("Pod example-app-0000-1111-2222-3333-driver").performClick()
         assertEquals(listOf(pod), clicked)
+    }
+
+    @Test
+    fun `deleting the resource never moves a verb in or out of the Actions menu`() = runComposeUiTest {
+        // Container pickers: on deletion their menus are dropped, and with them the chevron.
+        val containers = listOf(DetailActionMenuItem("app") {}, DetailActionMenuItem("sidecar") {})
+        val actions = listOf(
+            DetailAction(label = "Terminal", icon = Res.drawable.terminal_filled, onClick = {}, menuItems = containers),
+            DetailAction(label = "Logs", icon = Res.drawable.article_filled, onClick = {}, menuItems = containers),
+            DetailAction(label = "Evict", icon = Res.drawable.clear_all_filled, onClick = {}),
+            DetailAction(label = "Force delete", icon = Res.drawable.delete_filled, destructive = true, overflowOnly = true, tint = KdError, onClick = {}),
+        )
+        var widthDp by mutableStateOf(300)
+        var removed by mutableStateOf<RemovedResource?>(null)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                CompositionLocalProvider(LocalRemovedResource provides removed) {
+                    Column(Modifier.width(widthDp.dp)) {
+                        DetailPanelHeader(name = "example-pod", subtitle = "example-ns", status = "Running", actions = actions, onClose = {})
+                    }
+                }
+            }
+        }
+        fun labelled() = listOf("Terminal", "Logs", "Evict").filter { onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
+
+        for (width in 300..700 step 2) {
+            removed = null
+            widthDp = width
+            waitForIdle()
+            val live = labelled()
+            removed = RemovedResource("Pod", "example-pod")
+            waitForIdle()
+            assertEquals(live, labelled(), "labelled verbs at $width dp, live vs deleted")
+        }
+    }
+
+    @Test
+    fun `an open Actions menu closes when the resource is deleted`() = runComposeUiTest {
+        var removed by mutableStateOf<RemovedResource?>(null)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                CompositionLocalProvider(LocalRemovedResource provides removed) {
+                    Column(Modifier.width(1000.dp)) {
+                        DetailPanelHeader(name = "example-pod", subtitle = "example-ns", status = "Running", actions = fourActions(mutableListOf()), onClose = {})
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        onNodeWithText("Actions").performClick()
+        waitForIdle()
+        onNodeWithText("Force delete").assertExists()
+
+        removed = RemovedResource("Pod", "example-pod")
+        waitForIdle()
+        onNodeWithText("Force delete").assertDoesNotExist()
     }
 }

@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 /**
  * Pins the header's dp fit math — [verbButtonWidthDp], [overflowButtonWidthDp],
  * [headerVerbSpaceDp], [fitHeaderVerbs] and [allocateFairWidths] — independent of any live measurement,
- * density or Compose runtime (there is no Compose UI test infrastructure here).
+ * density or Compose runtime. The composed header is covered by [DetailPanelHeaderTest].
  */
 class DetailHeaderLayoutTest {
 
@@ -56,5 +56,10 @@ class DetailHeaderLayoutTest {
         assertEquals(listOf(0, 0), allocateFairWidths(listOf(200, 200), 0))
         assertEquals(listOf(0, 0), allocateFairWidths(listOf(200, 200), -5))
         assertEquals(emptyList(), allocateFairWidths(emptyList(), 0))
+    }
+
+    @Test
+    fun `fair widths do not overflow when the wanted widths sum past Int range`() {
+        assertEquals(listOf(500, 500), allocateFairWidths(listOf(1_500_000_000, 1_500_000_000), 1000))
     }
 }
