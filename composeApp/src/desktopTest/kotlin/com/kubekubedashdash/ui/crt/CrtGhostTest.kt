@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.ThemeMode
@@ -78,9 +79,15 @@ class CrtGhostTest {
     // Host layout shared by every case: a full-size clickable base, a centred 120x80 card while
     // [visible], and the sibling exit ghost at the card's z-position — exactly the shape D16
     // wires into App.kt's six modal sites. [shadow] swaps in content drawn 20 px outside the
-    // card's own bounds, for case 4 (review MAJOR-3).
+    // card's own bounds, for case 4 (review MAJOR-3); [scrimTop] is passed through to the exit ghost.
     @Composable
-    private fun GhostHost(visible: Boolean, ghost: CrtGhost, onBaseClick: () -> Unit, shadow: Boolean) {
+    private fun GhostHost(
+        visible: Boolean,
+        ghost: CrtGhost,
+        onBaseClick: () -> Unit,
+        shadow: Boolean,
+        scrimTop: Dp = 0.dp,
+    ) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().clickable { onBaseClick() }.background(Color.White))
             if (visible) {
@@ -101,7 +108,7 @@ class CrtGhostTest {
                     },
                 )
             }
-            CrtGhostExit(visible, ghost, 0.45f)
+            CrtGhostExit(visible, ghost, 0.45f, scrimTop)
         }
     }
 
@@ -272,6 +279,34 @@ class CrtGhostTest {
                 captureToImage().toPixelMap()[80, 100],
                 "content drawn outside the card's own bounds must survive the record path (review MAJOR-3)",
             )
+        }
+    }
+
+    // Modals sit under the title bar now, so the exit scrim must leave that band undimmed.
+    @Test
+    fun `case 6 - scrimTop leaves the top band undimmed`() {
+        val baseAlone = captureBaseAlone()
+        runSkikoComposeUiTest(size = HostSize, density = Density(1f)) {
+            ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+            ThemeManager.syncFromPreferences(ThemeMode.DARK)
+            mainClock.autoAdvance = false
+            var visible by mutableStateOf(true)
+            lateinit var ghost: CrtGhost
+            setContent {
+                ghost = rememberCrtGhost()
+                GhostHost(visible = visible, ghost = ghost, onBaseClick = {}, shadow = false, scrimTop = 20.dp)
+            }
+            mainClock.advanceTimeBy(200)
+            waitForIdle()
+
+            visible = false
+            mainClock.advanceTimeBy(16)
+            waitForIdle()
+
+            // Both probe points are outside the centred 120x80 card (x in [90, 210]).
+            val image = captureToImage().toPixelMap()
+            assertEquals(baseAlone, image[10, 5], "the band above scrimTop must stay undimmed")
+            assertNotEquals(baseAlone, image[10, 100], "below the band the exit scrim must still darken the base")
         }
     }
 }
