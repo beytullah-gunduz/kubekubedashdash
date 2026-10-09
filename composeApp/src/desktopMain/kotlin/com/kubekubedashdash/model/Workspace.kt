@@ -366,6 +366,25 @@ class Workspace(
     }
 
     /**
+     * Takes in [tab] dragged here from another window (a merge, or the new
+     * window of a tear-out) and makes it the active tab, whatever its kind.
+     * The All Clusters tab goes first, as it always has; a window that only
+     * holds it must still have it active, or it has nothing to show.
+     */
+    internal fun adoptTab(tab: WorkspaceTab) {
+        when (tab) {
+            is WorkspaceTab.Cluster -> addSession(tab.session, makeActive = true)
+
+            is WorkspaceTab.Terminal -> openTerminalTab(tab.session)
+
+            WorkspaceTab.AllClusters -> {
+                ensureAllClustersTabAt(0)
+                setActive(WorkspaceTab.AllClusters.key)
+            }
+        }
+    }
+
+    /**
      * Append a Terminal tab and activate it, or — if a tab with the same
      * [TerminalSession.id] already exists — focus that one. Each terminal is
      * scoped to a single container; opening "the same terminal again" should

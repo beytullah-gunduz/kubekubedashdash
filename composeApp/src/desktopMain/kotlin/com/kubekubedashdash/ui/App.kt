@@ -214,7 +214,9 @@ fun App(
         // A tab that lost its cluster keeps its screen under the reconnect
         // scrim; on a machine with no real context that must not fall back to
         // the first-run screen, which would hide the scrim (and its exits).
-        val showFirstRun = !hasRealContexts && !isConnected && !isReconnecting
+        // A window without a cluster tab (a torn-out All Clusters or terminal tab)
+        // has nothing to connect, so it never shows the first-run screen.
+        val showFirstRun = titleSession != null && !hasRealContexts && !isConnected && !isReconnecting
 
         // Pager state mirrors workspace.activeTabKey, one way: tab clicks /
         // drag-drop / close events drive activeTabKey and FollowActiveTab moves
@@ -602,110 +604,122 @@ fun App(
                 // post-import refresh keeps the splash up (via bootstrapComplete
                 // flipping) until the cluster selector pops — no FirstRunScreen
                 // flash in between.
+                // The title bar (traffic lights, sidebar toggle, Back/Forward, tabs,
+                // settings) heads every state of the window, the first-run screen too:
+                // without it an undecorated window cannot be moved or closed.
+                val windowTitleBar: @Composable () -> Unit = {
+                    // The tabs live in the title bar. A lone cluster tab that has not
+                    // picked a context yet (the picker is up at launch) shows the app
+                    // name there instead of a "Loading…" chip.
+                    val showAppTitle = tabs.size == 1 && activeSession != null && selectedContext.isBlank()
+                    val tabStripSlot: @Composable RowScope.() -> Unit = {
+                        WindowTabStrip(
+                            tabs = tabs,
+                            activeTabKey = activeTabKey,
+                            isDropTarget = isDropTarget,
+                            onSelectTab = { key ->
+                                val tab = tabs.firstOrNull { it.key == key }
+                                if (key == activeTabKey) {
+                                    // Clicking the already-active cluster tab opens the cluster
+                                    // selector so the user can swap that session's context.
+                                    if (tab is WorkspaceTab.Cluster) workspace.showClusterSelector()
+                                } else {
+                                    workspace.setActive(key)
+                                }
+                            },
+                            onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
+                            onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
+                            onDragMoveSession = { id, x, y ->
+                                WorkspaceManager.notifyDragMove(id, x, y)
+                            },
+                            onDragReleaseSession = { id, x, y ->
+                                WorkspaceManager.handleChipRelease(id, x, y)
+                            },
+                            onDragCancelled = { _ -> WorkspaceManager.cancelDrag() },
+                            onDragMoveTab = { key, x, y ->
+                                WorkspaceManager.notifyDragMoveTab(key, x, y)
+                            },
+                            onDragReleaseTab = { key, x, y ->
+                                WorkspaceManager.handleTabRelease(key, x, y)
+                            },
+                            onDragCancelledTab = { WorkspaceManager.cancelDrag() },
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Spacer(Modifier.width(TitleBarMinDragGap))
+                    }
+
+                    // The title bar is this window's drop zone for chip-on-chip merges.
+                    Column(
+                        modifier = Modifier.onGloballyPositioned { coords ->
+                            workspace.updateDropZoneScreenBounds(
+                                coords.toScreenRect(awtWindow, density),
+                            )
+                        },
+                    ) {
+                        with(windowScope) {
+                            TitleBar(
+                                title = "KubeKubeDashDash",
+                                windowState = windowState,
+                                onClose = onClose,
+                                sidebarCollapsed = sidebarCollapsed,
+                                onToggleSidebar = {
+                                    PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
+                                },
+                                onOpenSettings = { workspace.showSettings() },
+                                canGoBack = canGoBack,
+                                canGoForward = canGoForward,
+                                onBack = { workspace.goBack() },
+                                onForward = { workspace.goForward() },
+                                hiddenLogTabCount = if (drawerState == LogDrawerState.HIDDEN) visibleDrawerTabCount else 0,
+                                onShowLogDrawer = { drawerState = LogDrawerState.EXPANDED },
+                                chipSlot = if (showAppTitle) null else tabStripSlot,
+                            )
+                        }
+                    }
+                }
+
                 if (showFirstRun && (showEksDiscovery || showGkeDiscovery)) {
                     BootstrapSplash()
                 } else if (showFirstRun) {
-                    FirstRunScreen(
+                    Column(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-                        onTryDemo = {
-                            WorkspaceManager.openCluster(
-                                workspace,
-                                DemoContext.MOCK_CONTEXT_NAME,
-                                OpenTarget.CURRENT_VIEW,
-                            )
-                        },
-                        onOpenDocs = {
-                            runCatching {
-                                java.awt.Desktop.getDesktop().browse(
-                                    java.net.URI("https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/"),
+                    ) {
+                        windowTitleBar()
+                        FirstRunScreen(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            onTryDemo = {
+                                WorkspaceManager.openCluster(
+                                    workspace,
+                                    DemoContext.MOCK_CONTEXT_NAME,
+                                    OpenTarget.CURRENT_VIEW,
                                 )
-                            }
-                        },
-                        onRescan = { appViewModel.refreshContexts() },
-                        onDiscoverEks = if (awsCliAvailable) {
-                            { workspace.showEksDiscovery() }
-                        } else {
-                            null
-                        },
-                        onDiscoverGke = if (gcloudCliAvailable) {
-                            { workspace.showGkeDiscovery() }
-                        } else {
-                            null
-                        },
-                        onShowDiagnostics = { appViewModel.showDiagnostics() },
-                    )
+                            },
+                            onOpenDocs = {
+                                runCatching {
+                                    java.awt.Desktop.getDesktop().browse(
+                                        java.net.URI("https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/"),
+                                    )
+                                }
+                            },
+                            onRescan = { appViewModel.refreshContexts() },
+                            onDiscoverEks = if (awsCliAvailable) {
+                                { workspace.showEksDiscovery() }
+                            } else {
+                                null
+                            },
+                            onDiscoverGke = if (gcloudCliAvailable) {
+                                { workspace.showGkeDiscovery() }
+                            } else {
+                                null
+                            },
+                            onShowDiagnostics = { appViewModel.showDiagnostics() },
+                        )
+                    }
                 } else {
                     Column(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                     ) {
-                        // The tabs live in the title bar. A lone cluster tab that has not
-                        // picked a context yet (the picker is up at launch) shows the app
-                        // name there instead of a "Loading…" chip.
-                        val showAppTitle = tabs.size == 1 && activeSession != null && selectedContext.isBlank()
-                        val tabStripSlot: @Composable RowScope.() -> Unit = {
-                            WindowTabStrip(
-                                tabs = tabs,
-                                activeTabKey = activeTabKey,
-                                isDropTarget = isDropTarget,
-                                onSelectTab = { key ->
-                                    val tab = tabs.firstOrNull { it.key == key }
-                                    if (key == activeTabKey) {
-                                        // Clicking the already-active cluster tab opens the cluster
-                                        // selector so the user can swap that session's context.
-                                        if (tab is WorkspaceTab.Cluster) workspace.showClusterSelector()
-                                    } else {
-                                        workspace.setActive(key)
-                                    }
-                                },
-                                onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
-                                onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
-                                onDragMoveSession = { id, x, y ->
-                                    WorkspaceManager.notifyDragMove(id, x, y)
-                                },
-                                onDragReleaseSession = { id, x, y ->
-                                    WorkspaceManager.handleChipRelease(id, x, y)
-                                },
-                                onDragCancelled = { _ -> WorkspaceManager.cancelDrag() },
-                                onDragMoveTab = { key, x, y ->
-                                    WorkspaceManager.notifyDragMoveTab(key, x, y)
-                                },
-                                onDragReleaseTab = { key, x, y ->
-                                    WorkspaceManager.handleTabRelease(key, x, y)
-                                },
-                                onDragCancelledTab = { WorkspaceManager.cancelDrag() },
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            Spacer(Modifier.width(TitleBarMinDragGap))
-                        }
-
-                        // The title bar is this window's drop zone for chip-on-chip merges.
-                        Column(
-                            modifier = Modifier.onGloballyPositioned { coords ->
-                                workspace.updateDropZoneScreenBounds(
-                                    coords.toScreenRect(awtWindow, density),
-                                )
-                            },
-                        ) {
-                            with(windowScope) {
-                                TitleBar(
-                                    title = "KubeKubeDashDash",
-                                    windowState = windowState,
-                                    onClose = onClose,
-                                    sidebarCollapsed = sidebarCollapsed,
-                                    onToggleSidebar = {
-                                        PreferenceRepository.setSidebarCollapsed(!sidebarCollapsed)
-                                    },
-                                    onOpenSettings = { workspace.showSettings() },
-                                    canGoBack = canGoBack,
-                                    canGoForward = canGoForward,
-                                    onBack = { workspace.goBack() },
-                                    onForward = { workspace.goForward() },
-                                    hiddenLogTabCount = if (drawerState == LogDrawerState.HIDDEN) visibleDrawerTabCount else 0,
-                                    onShowLogDrawer = { drawerState = LogDrawerState.EXPANDED },
-                                    chipSlot = if (showAppTitle) null else tabStripSlot,
-                                )
-                            }
-                        }
+                        windowTitleBar()
 
                         // Widescreen layout (Settings → Appearance): the one LogDrawer renders
                         // inside the cluster tab the pager shows — under the content, right of

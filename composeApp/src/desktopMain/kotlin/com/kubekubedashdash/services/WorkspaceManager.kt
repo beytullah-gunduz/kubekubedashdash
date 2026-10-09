@@ -227,22 +227,14 @@ object WorkspaceManager {
         if (targetId != null) {
             val target = workspaceById(targetId) ?: return
             val tab = source.removeTab(tabKey) ?: return
-            when (tab) {
-                is WorkspaceTab.Cluster -> target.addSession(tab.session, makeActive = true)
-                is WorkspaceTab.Terminal -> target.openTerminalTab(tab.session)
-                WorkspaceTab.AllClusters -> target.ensureAllClustersTabAt(0)
-            }
+            target.adoptTab(tab)
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         } else if (source.tabs.value.size > 1) {
             val tab = source.removeTab(tabKey) ?: return
             val newWorkspace = Workspace(
                 initialPosition = WindowPosition.Absolute(screenX.dp, screenY.dp),
             )
-            when (tab) {
-                is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
-                is WorkspaceTab.Terminal -> newWorkspace.openTerminalTab(tab.session)
-                WorkspaceTab.AllClusters -> newWorkspace.ensureAllClustersTabAt(0)
-            }
+            newWorkspace.adoptTab(tab)
             _workspaces.update { it + newWorkspace }
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         }
