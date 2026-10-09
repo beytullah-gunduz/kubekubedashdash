@@ -185,12 +185,16 @@ fun GkeDiscoveryModal(
                 if (!viewModel.gcloudCliAvailable) {
                     GcloudMissing(onDismiss)
                 } else {
-                    when (step) {
-                        GkeDiscoveryStep.PICK_PROJECTS -> FirstStep(viewModel, mode)
-                        GkeDiscoveryStep.SCANNING -> ScanningStep(viewModel)
-                        GkeDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
-                        GkeDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
-                        GkeDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                    // Weighted, so the footer below is measured first and the step is
+                    // what shrinks in a short window.
+                    Box(Modifier.weight(1f, fill = false)) {
+                        when (step) {
+                            GkeDiscoveryStep.PICK_PROJECTS -> FirstStep(viewModel, mode)
+                            GkeDiscoveryStep.SCANNING -> ScanningStep(viewModel)
+                            GkeDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
+                            GkeDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
+                            GkeDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                        }
                     }
                     errorMessage?.let { msg ->
                         HorizontalDivider(color = KdBorder)
@@ -516,10 +520,13 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
                 }
             }
         }
-        VerticalScrollbar(
-            adapter = rememberScrollbarAdapter(listState),
-            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-        )
+        // In a box of its own so the list, not the scrollbar, sets the height.
+        Box(Modifier.matchParentSize()) {
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
+        }
     }
 }
 
@@ -656,10 +663,12 @@ private fun ScanningStep(viewModel: GkeDiscoveryViewModel) {
             LazyColumn(state = listState) {
                 items(rows, key = { it.projectId }) { row -> ScanRow(row) }
             }
-            VerticalScrollbar(
-                adapter = rememberScrollbarAdapter(listState),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            )
+            Box(Modifier.matchParentSize()) {
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
+            }
         }
     }
 }
@@ -832,10 +841,12 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
                         CandidateRow(candidate, viewModel)
                     }
                 }
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
+                Box(Modifier.matchParentSize()) {
+                    VerticalScrollbar(
+                        adapter = rememberScrollbarAdapter(listState),
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    )
+                }
             }
         }
     }
@@ -946,10 +957,12 @@ private fun ImportingStep(viewModel: GkeDiscoveryViewModel) {
                     key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
-            VerticalScrollbar(
-                adapter = rememberScrollbarAdapter(listState),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            )
+            Box(Modifier.matchParentSize()) {
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
+            }
         }
     }
 }
@@ -1085,10 +1098,12 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
                     key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
-            VerticalScrollbar(
-                adapter = rememberScrollbarAdapter(listState),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            )
+            Box(Modifier.matchParentSize()) {
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
+            }
         }
     }
 }
