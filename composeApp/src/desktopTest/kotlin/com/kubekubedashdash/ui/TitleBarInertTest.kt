@@ -13,13 +13,18 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.arrow_back_filled
 import com.kubekubedashdash.util.SystemDirectories
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -103,6 +108,28 @@ class TitleBarInertTest {
             val bounds = onNodeWithTag("modal").getUnclippedBoundsInRoot()
             assertEquals(titleBarHeight(), bounds.top, "the modal must start where the title bar ends")
             assertEquals(300.dp, bounds.bottom, "the modal must reach the bottom of the window")
+        }
+    }
+
+    // An arrow takes a click only when it has somewhere to go AND the title bar is not inert.
+    // A first version let the inert flag stand in for the arrow's own state, so an arrow with no
+    // history was clickable whenever no modal was open.
+    @Test
+    fun `a history arrow is clickable only with somewhere to go and an active bar`() {
+        for ((enabled, clickable) in listOf(true to true, true to false, false to true, false to false)) {
+            runSkikoComposeUiTest(size = Size(100f, 100f), density = Density(1f)) {
+                var clicks = 0
+                setContent {
+                    HistoryButton(Res.drawable.arrow_back_filled, "Back", enabled, { clicks++ }, clickable = clickable)
+                }
+                val arrow = onNodeWithContentDescription("Back")
+                arrow.performMouseInput { click(center) }
+                waitForIdle()
+
+                val expected = enabled && clickable
+                if (expected) arrow.assertIsEnabled() else arrow.assertIsNotEnabled()
+                assertEquals(if (expected) 1 else 0, clicks, "enabled=$enabled clickable=$clickable")
+            }
         }
     }
 }

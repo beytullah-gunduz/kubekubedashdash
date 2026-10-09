@@ -357,7 +357,7 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit, enabled
 }
 
 @Composable
-private fun HistoryButton(
+internal fun HistoryButton(
     icon: DrawableResource,
     contentDescription: String,
     enabled: Boolean,
