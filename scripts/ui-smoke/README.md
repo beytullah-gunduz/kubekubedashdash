@@ -17,10 +17,13 @@ Python 3.10+, standard library only. It does not depend on anything outside this
   opened) on a terminal tab, where it must pass through to the shell.
 - The cluster picker in a 1000x600 window: its footer rows (All Clusters view, Discover EKS,
   Discover GKE) keep their room instead of being squeezed out by the list.
+- An open modal (the cluster picker, in a 1000x280 window) sits under the title bar, the title
+  bar's Settings and Back buttons are disabled and Cmd/Ctrl+[ passes through until the picker
+  closes.
 
 Scenarios: `first-run-title-bar`, `discovery-splash-title-bar`, `tear-out-all-clusters`,
 `merge-all-clusters-back`, `history-stays-in-its-window`, `rapid-back-forward`,
-`history-shortcut-tab-kinds`, `cluster-selector-short-window`.
+`history-shortcut-tab-kinds`, `cluster-selector-short-window`, `modal-keeps-title-bar`.
 
 ## What it does not cover
 
