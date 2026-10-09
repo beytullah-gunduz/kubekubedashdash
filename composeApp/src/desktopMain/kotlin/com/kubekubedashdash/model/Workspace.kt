@@ -5,6 +5,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.window.WindowPosition
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.portforward.PortForwardRequest
+import com.kubekubedashdash.ui.screens.viewmodel.NavigationHistoryHost
+import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,25 +33,6 @@ enum class CloseTabFocus {
     PREVIOUS_ACTIVE,
 }
 
-/**
- * When the multi-tab strip is shown.
- *
- * Stored in [com.kubekubedashdash.data.repository.PreferenceRepository.tabStripVisibility]
- * as the enum's `name`. Default ([AUTO]) preserves the original compact behavior — most
- * users keep a single cluster open most of the time, so the inline title-bar chip + "+"
- * is enough on its own. Power users who want the strip always visible can flip to
- * [ALWAYS] in Settings.
- */
-enum class TabStripVisibility {
-    /** Show the strip when there are ≥2 tabs or any non-cluster tab; otherwise use
-     *  the inline title-bar cluster chip + "+" affordance. */
-    AUTO,
-
-    /** Show the strip even with a single cluster tab. The inline title-bar chip is
-     *  hidden in this mode to avoid two competing affordances. */
-    ALWAYS,
-}
-
 /** A request to open the logs drawer on a specific pod/container (screenshot driver). */
 data class LogRequest(
     val podName: String,
@@ -59,8 +42,9 @@ data class LogRequest(
 
 /**
  * One OS window's worth of tabs. A workspace holds an ordered list of
- * [WorkspaceTab]s (rendered as a strip when N≥2 or any non-cluster tab is open)
- * and tracks which one is currently active.
+ * [WorkspaceTab]s (rendered in the window's title bar) and tracks which one is
+ * currently active. It also keeps the window's one Back/Forward history across
+ * those tabs ([navigationHistory]).
  *
  * Per-window concerns also live here: the cluster-picker visibility flag is
  * scoped per window (Decision 1 in `.docs/multi-cluster-plan.md`) so two open
@@ -102,6 +86,30 @@ class Workspace(
     private val historyLock = Any()
     private val activationHistory = ArrayDeque<SessionId>()
     private val historyCapacity = 16
+
+    // One chronological Back/Forward history across this window's tabs (not the
+    // close-focus [activationHistory] above).
+    private val navigation = WindowHistory()
+    val navigationHistory: StateFlow<NavigationHistoryState> = navigation.state
+
+    // How this window's cluster sessions report navigations. A private object:
+    // Workspace is public and the hook interface is internal.
+    private val sessionHistoryHost = object : NavigationHistoryHost {
+        override fun beforeNavigate(session: SessionViewModel) {
+            val key = tabKeyOf(session) ?: return
+            // A background tab changes nothing the user sees.
+            if (key != _activeTabKey.value) return
+            val snapshot = session.historySnapshot()
+            navigation.recordNavigation(
+                snapshot?.let { (screen, pane) -> HistoryLocation(key, session.selectedContext.value, screen, pane) },
+            )
+        }
+
+        override fun contextReplaced(session: SessionViewModel, context: String) {
+            val key = tabKeyOf(session) ?: return
+            navigation.prune { it.tabKey == key && it.screen != null && it.context != context }
+        }
+    }
 
     private val _showClusterSelector = MutableStateFlow(false)
     val showClusterSelector: StateFlow<Boolean> = _showClusterSelector.asStateFlow()
@@ -153,9 +161,9 @@ class Workspace(
     val dismissPortForwardRequest: StateFlow<Boolean> = _dismissPortForwardRequest.asStateFlow()
 
     /**
-     * Screen-space rectangle of this window's chip-drop zone — the chip slot in
-     * the title bar at N=1 or the [com.kubekubedashdash.ui.WindowTabStrip] row
-     * at N≥2. Updated by the corresponding composable via `onGloballyPositioned`
+     * Screen-space rectangle of this window's chip-drop zone — the title bar,
+     * which holds the [com.kubekubedashdash.ui.WindowTabStrip]. Updated by the
+     * corresponding composable via `onGloballyPositioned`
      * (see [com.kubekubedashdash.ui.App]) and queried by
      * [com.kubekubedashdash.services.WorkspaceManager.handleChipRelease] to hit-
      * test the cursor at drag end and decide between chip-on-chip merge and
@@ -196,10 +204,8 @@ class Workspace(
 
     internal fun addTab(tab: WorkspaceTab, makeActive: Boolean = true) {
         _tabs.value = _tabs.value + tab
-        if (makeActive) {
-            pushHistory(_activeTabKey.value)
-            _activeTabKey.value = tab.key
-        }
+        (tab as? WorkspaceTab.Cluster)?.session?.viewModel?.historyHost = sessionHistoryHost
+        if (makeActive) switchTo(tab.key)
     }
 
     internal fun removeTab(
@@ -214,9 +220,16 @@ class Workspace(
                 activationHistory.removeAll { it == tab.session.id }
             }
         }
+        (tab as? WorkspaceTab.Cluster)?.session?.viewModel?.let { vm ->
+            if (vm.historyHost === sessionHistoryHost) vm.historyHost = null
+        }
+        // A closed (or moved) tab cannot be gone back to.
+        navigation.prune { it.tabKey == key }
         val newActive = if (_activeTabKey.value == key) computeNewActiveKey(closedIndex, newList, behavior) else _activeTabKey.value
         if (newActive != _activeTabKey.value) _activeTabKey.value = newActive
         _tabs.value = newList
+        // Focus may have moved, and the prune may have left this very place on top.
+        navigation.focusMoved(locationOf(_activeTabKey.value))
         return tab
     }
 
@@ -245,10 +258,74 @@ class Workspace(
     }
 
     internal fun setActive(key: String) {
-        if (_tabs.value.any { it.key == key }) {
-            pushHistory(_activeTabKey.value)
-            _activeTabKey.value = key
+        if (key == _activeTabKey.value) return
+        if (_tabs.value.any { it.key == key }) switchTo(key)
+    }
+
+    /** A user switch to [key]: recorded in the window history and the close-focus activation history. */
+    private fun switchTo(key: String) {
+        navigation.beforeTabSwitch(locationOf(_activeTabKey.value))
+        pushHistory(_activeTabKey.value)
+        _activeTabKey.value = key
+        navigation.afterTabSwitch(locationOf(key))
+    }
+
+    /** Back through this window's history; may switch tabs. Waits while the active tab is on a connection screen. */
+    fun goBack() {
+        if (activeSession?.viewModel?.canNavigateHistory() == false) return
+        val active = _activeTabKey.value
+        val target = navigation.back(locationOf(active)) { usable(it, active) } ?: return
+        show(target)
+    }
+
+    /** Forward through this window's history; may switch tabs. Waits like [goBack]. */
+    fun goForward() {
+        if (activeSession?.viewModel?.canNavigateHistory() == false) return
+        val active = _activeTabKey.value
+        val target = navigation.forward(locationOf(active)) { usable(it, active) } ?: return
+        show(target)
+    }
+
+    /** Session restore opens the saved tabs one by one; that is not history the user made. */
+    internal fun clearNavigationHistory() = navigation.clear()
+
+    private fun tabKeyOf(session: SessionViewModel): String? = _tabs.value.firstOrNull { it is WorkspaceTab.Cluster && it.session.viewModel === session }?.key
+
+    /** Where [key]'s tab is now; a cluster tab on a connection screen has no screen. */
+    private fun locationOf(key: String?): HistoryLocation? {
+        if (key == null) return null
+        return when (val tab = _tabs.value.firstOrNull { it.key == key }) {
+            null -> null
+
+            is WorkspaceTab.Cluster -> {
+                val vm = tab.session.viewModel
+                val snapshot = vm.historySnapshot()
+                HistoryLocation(key, vm.selectedContext.value, snapshot?.first, snapshot?.second)
+            }
+
+            else -> HistoryLocation(key)
         }
+    }
+
+    // Still worth landing on: its tab is open, a cluster entry is for the cluster
+    // the tab shows now, and a bare "that tab" entry is not the active tab itself.
+    private fun usable(entry: HistoryLocation, active: String?): Boolean = when (val tab = _tabs.value.firstOrNull { it.key == entry.tabKey }) {
+        null -> false
+        is WorkspaceTab.Cluster -> if (entry.screen == null) entry.tabKey != active else tab.session.viewModel.selectedContext.value == entry.context
+        else -> entry.tabKey != active
+    }
+
+    private fun show(entry: HistoryLocation) {
+        if (_activeTabKey.value != entry.tabKey) {
+            pushHistory(_activeTabKey.value)
+            _activeTabKey.value = entry.tabKey
+        }
+        // The tab already shows this place (a jump screen strips to the same entry):
+        // leave it as it is, so its list is not rebuilt.
+        if (locationOf(entry.tabKey) == entry) return
+        val screen = entry.screen ?: return
+        val tab = _tabs.value.firstOrNull { it.key == entry.tabKey } as? WorkspaceTab.Cluster ?: return
+        tab.session.viewModel.showHistoryEntry(screen, entry.extraPane)
     }
 
     /** Convenience for callers that still think in [SessionId]. */
@@ -280,8 +357,30 @@ class Workspace(
     internal fun removeAllClustersTab() {
         val key = WorkspaceTab.AllClusters.key
         _tabs.value = _tabs.value.filterNot { it.key == key }
+        navigation.prune { it.tabKey == key }
         if (_activeTabKey.value == key) {
             _activeTabKey.value = _tabs.value.firstOrNull()?.key
+        }
+        // Focus may have moved, and the prune may have left this very place on top.
+        navigation.focusMoved(locationOf(_activeTabKey.value))
+    }
+
+    /**
+     * Takes in [tab] dragged here from another window (a merge, or the new
+     * window of a tear-out) and makes it the active tab, whatever its kind.
+     * The All Clusters tab goes first, as it always has; a window that only
+     * holds it must still have it active, or it has nothing to show.
+     */
+    internal fun adoptTab(tab: WorkspaceTab) {
+        when (tab) {
+            is WorkspaceTab.Cluster -> addSession(tab.session, makeActive = true)
+
+            is WorkspaceTab.Terminal -> openTerminalTab(tab.session)
+
+            WorkspaceTab.AllClusters -> {
+                ensureAllClustersTabAt(0)
+                setActive(WorkspaceTab.AllClusters.key)
+            }
         }
     }
 
@@ -295,7 +394,7 @@ class Workspace(
         val key = "terminal:${session.id.value}"
         val existing = _tabs.value.firstOrNull { it.key == key }
         if (existing != null) {
-            _activeTabKey.value = existing.key
+            setActive(existing.key)
         } else {
             addTab(WorkspaceTab.Terminal(session), makeActive = true)
         }

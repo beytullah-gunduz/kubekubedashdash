@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,12 +57,15 @@ import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
+import com.kubekubedashdash.resources.arrow_back_filled
+import com.kubekubedashdash.resources.arrow_forward_filled
 import com.kubekubedashdash.resources.article_filled
 import com.kubekubedashdash.resources.left_panel_close
 import com.kubekubedashdash.resources.left_panel_open
 import com.kubekubedashdash.resources.settings_filled
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.kdFocusRing
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
@@ -72,6 +76,27 @@ private val MacMaximize = Color(0xFF28C840)
 private val MacSymbolColor = Color(0x80000000)
 private val WinCloseHover = Color(0xFFE81123)
 
+/** Empty title bar the tab strip always leaves free, so the window can still be grabbed. */
+internal val TitleBarMinDragGap = 48.dp
+
+/**
+ * Eats presses so a click on a title-bar control never starts a window drag
+ * (or, on a double click, maximizes): [TitleBar]'s own handler and Windows'
+ * WindowDraggableArea both skip a consumed press. Children see the press
+ * first (the Main pass runs child to parent), so their clicks and drags
+ * still work.
+ */
+internal fun Modifier.consumeTitleBarPress(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Main)
+            if (event.type == PointerEventType.Press) {
+                event.changes.forEach { it.consume() }
+            }
+        }
+    }
+}
+
 @Composable
 fun WindowScope.TitleBar(
     title: String,
@@ -80,7 +105,11 @@ fun WindowScope.TitleBar(
     sidebarCollapsed: Boolean,
     onToggleSidebar: () -> Unit,
     onOpenSettings: () -> Unit,
-    chipSlot: (@Composable () -> Unit)? = null,
+    canGoBack: Boolean = false,
+    canGoForward: Boolean = false,
+    onBack: () -> Unit = {},
+    onForward: () -> Unit = {},
+    chipSlot: (@Composable RowScope.() -> Unit)? = null,
     // Drawer tabs this window keeps while its log drawer is hidden; above zero, a chip shows them.
     hiddenLogTabCount: Int = 0,
     onShowLogDrawer: () -> Unit = {},
@@ -152,10 +181,21 @@ fun WindowScope.TitleBar(
             }
 
             SidebarToggleButton(sidebarCollapsed, onToggleSidebar)
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(2.dp))
+            // Back / Forward walk the window's history across its tabs; the caller
+            // greys them out when there is nowhere to go.
+            HistoryButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack)
+            HistoryButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
+            Spacer(Modifier.width(8.dp))
 
             if (chipSlot != null) {
-                chipSlot()
+                // The tab strip. Whatever width it leaves free stays window-drag area.
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    chipSlot()
+                }
             } else {
                 Text(
                     text = title,
@@ -166,9 +206,8 @@ fun WindowScope.TitleBar(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.weight(1f))
             }
-
-            Spacer(Modifier.weight(1f))
 
             if (hiddenLogTabCount > 0) {
                 HiddenLogTabsChip(count = hiddenLogTabCount, onClick = onShowLogDrawer)
@@ -216,16 +255,7 @@ internal fun HiddenLogTabsChip(count: Int, onClick: () -> Unit) {
             .clip(12.dp.kdCorner)
             .border(BorderStroke(kdOutlineWidth, KdBorder), 12.dp.kdCorner)
             .kdFocusRing()
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        if (event.type == PointerEventType.Press) {
-                            event.changes.forEach { it.consume() }
-                        }
-                    }
-                }
-            }
+            .consumeTitleBarPress()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -255,16 +285,7 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
             .size(28.dp)
             .clip(4.dp.kdCorner)
             .kdFocusRing()
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        if (event.type == PointerEventType.Press) {
-                            event.changes.forEach { it.consume() }
-                        }
-                    }
-                }
-            }
+            .consumeTitleBarPress()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -282,22 +303,45 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+private fun HistoryButton(
+    icon: DrawableResource,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(4.dp.kdCorner)
+            .kdFocusRing()
+            // Consumed even while disabled: a press on a greyed-out arrow
+            // must not start a window drag either.
+            .consumeTitleBarPress()
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(16.dp),
+            tint = if (enabled) KdTextSecondary else KdTextSecondary.copy(alpha = 0.35f),
+        )
+    }
+}
+
+@Composable
 private fun SettingsButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(28.dp)
             .clip(4.dp.kdCorner)
             .kdFocusRing()
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        if (event.type == PointerEventType.Press) {
-                            event.changes.forEach { it.consume() }
-                        }
-                    }
-                }
-            }
+            .consumeTitleBarPress()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

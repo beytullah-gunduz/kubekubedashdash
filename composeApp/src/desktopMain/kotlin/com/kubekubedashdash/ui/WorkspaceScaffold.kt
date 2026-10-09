@@ -74,8 +74,6 @@ internal fun SessionPaneContent(
     val sessionVm = session.viewModel
     val currentScreen by sessionVm.currentScreen.collectAsState()
     val extraPaneScreen by sessionVm.extraPaneScreen.collectAsState()
-    val canGoBack by sessionVm.canGoBack.collectAsState()
-    val canGoForward by sessionVm.canGoForward.collectAsState()
     val searchQuery by sessionVm.searchQuery.collectAsState()
     val namespaceScope by sessionVm.namespaceScope.collectAsState()
     val namespaceList by sessionVm.namespaces.collectAsState()
@@ -150,10 +148,6 @@ internal fun SessionPaneContent(
                     Column(modifier = Modifier.fillMaxSize()) {
                         SessionContentHeader(
                             screen = currentScreen,
-                            canGoBack = canGoBack,
-                            canGoForward = canGoForward,
-                            onBack = sessionVm::goBack,
-                            onForward = sessionVm::goForward,
                             searchFocusRequests = searchFocusRequests,
                             namespaceScope = namespaceScope,
                             namespaces = namespaceList,

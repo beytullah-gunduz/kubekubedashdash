@@ -47,7 +47,6 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Cluster colors", "Cluster colors", listOf("color", "colour", "identify", "tab")),
     SettingsEntry("Default namespace", "Default namespace", listOf("namespace", "cluster", "startup", "connect")),
     SettingsEntry("Tab behavior", "When closing the active tab, focus:", listOf("close", "tab")),
-    SettingsEntry("Tab behavior", "Tab strip", listOf("tabs", "hide")),
     SettingsEntry("Tab behavior", "Restore last session", listOf("launch", "startup", "open")),
     SettingsEntry("Live data", "Topology auto-refresh", listOf("refresh", "interval", "poll", "update", "topology")),
     SettingsEntry("Keyboard shortcuts", "Keyboard shortcuts", listOf("hotkey", "cheat sheet", "cmd")),

@@ -12,7 +12,6 @@ import com.kubekubedashdash.data.datastore.PreferenceStorageState
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
-import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
@@ -114,12 +113,6 @@ class SettingsScreenViewModel : ViewModel() {
 
     fun setCloseTabFocus(value: CloseTabFocus) {
         PreferenceRepository.setCloseTabFocus(value)
-    }
-
-    val tabStripVisibility: StateFlow<TabStripVisibility> = PreferenceRepository.tabStripVisibility
-
-    fun setTabStripVisibility(value: TabStripVisibility) {
-        PreferenceRepository.setTabStripVisibility(value)
     }
 
     val maskSecretValues: StateFlow<Boolean> = PreferenceRepository.maskSecretValues

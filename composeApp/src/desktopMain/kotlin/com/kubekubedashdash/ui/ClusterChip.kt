@@ -85,8 +85,8 @@ import kotlin.math.sqrt
 /**
  * The always-visible cluster chip that anchors a session.
  *
- * Single chip lives inline in the title bar at N=1; chips lift into a
- * [WindowTabStrip] at N≥2. When [onDragRelease] is non-null, the chip becomes
+ * Each cluster tab is one of these in the [WindowTabStrip], which sits in the
+ * title bar. When [onDragRelease] is non-null, the chip becomes
  * a drag handle: once the cursor has moved [DRAG_THRESHOLD_PX] pixels in screen
  * space the gesture is "committed", subsequent moves stream through
  * [onDragMove] (so other windows can highlight their chip-drop zones), and the
@@ -139,8 +139,8 @@ fun ClusterChip(
     /**
      * When true, the active chip gets a vibrant bottom underline drawn
      * across its full width — the visual "this tab is selected" signal.
-     * Only meaningful in a multi-chip strip; the single-chip-in-title-bar
-     * caller leaves this off because there's nothing to compare against.
+     * Only meaningful among several chips; [WindowTabStrip] leaves it off
+     * for a lone tab because there's nothing to compare against.
      */
     showActiveIndicator: Boolean = false,
     onClick: (() -> Unit)? = null,

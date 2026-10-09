@@ -112,7 +112,6 @@ import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.model.CloseTabFocus
-import com.kubekubedashdash.model.TabStripVisibility
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.close
@@ -1027,40 +1026,6 @@ fun SettingsScreen(
                                 }
 
                                 Spacer(Modifier.height(20.dp.orCompact(14.dp)))
-
-                                val tabStripVisibility by viewModel.tabStripVisibility.collectAsState()
-
-                                SettingsRowTitle("Tab strip")
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "Whether to show the tab strip when only one cluster is open.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = KdTextSecondary,
-                                )
-                                Spacer(Modifier.height(12.dp))
-
-                                val tabStripOptions = listOf(
-                                    TabStripVisibility.AUTO to "Compact (only with multiple tabs)",
-                                    TabStripVisibility.ALWAYS to "Always show",
-                                )
-
-                                FullWidthSingleChoiceSegmentedButtonRow {
-                                    tabStripOptions.forEachIndexed { index, (value, label) ->
-                                        SegmentedButton(
-                                            selected = tabStripVisibility == value,
-                                            onClick = { viewModel.setTabStripVisibility(value) },
-                                            shape = SegmentedButtonDefaults.itemShape(
-                                                index = index,
-                                                count = tabStripOptions.size,
-                                                baseShape = kdRoundShape,
-                                            ),
-                                        ) {
-                                            Text(label, maxLines = 1, softWrap = false)
-                                        }
-                                    }
-                                }
-
-                                Spacer(Modifier.height(16.dp))
 
                                 val restoreSession by viewModel.restoreSessionOnLaunch.collectAsState()
                                 SettingsRowTitle("Restore last session")

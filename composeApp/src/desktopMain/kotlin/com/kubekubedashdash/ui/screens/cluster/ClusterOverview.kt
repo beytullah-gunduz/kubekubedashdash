@@ -32,7 +32,6 @@ import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdInfo
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSuccess
-import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.Screen
@@ -352,13 +351,6 @@ private fun NamespaceScopeNote(scope: NamespaceScope.Only) {
 
 @Composable
 private fun ClusterHeader(name: String, server: String, version: String) {
-    Text(
-        "Cluster Overview",
-        style = MaterialTheme.typography.headlineMedium,
-        color = KdTextPrimary,
-        fontWeight = FontWeight.SemiBold,
-    )
-    Spacer(Modifier.height(4.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(name, style = MaterialTheme.typography.bodyMedium, color = KdPrimary)
         if (version.isNotBlank()) {

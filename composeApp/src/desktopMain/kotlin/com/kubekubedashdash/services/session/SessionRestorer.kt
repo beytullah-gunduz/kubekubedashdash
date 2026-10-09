@@ -46,6 +46,8 @@ object SessionRestorer {
             }
             val clusterTabs = workspace.tabs.value.filterIsInstance<WorkspaceTab.Cluster>()
             clusterTabs.getOrNull(planned.activeTab)?.let { workspace.setActive(it.key) }
+            // Opening the saved tabs one by one is not history the user made.
+            workspace.clearNavigationHistory()
         }
         if (opened > 0) log.info("Restored {} cluster tab(s) across {} window(s)", opened, plan.size)
         return opened
