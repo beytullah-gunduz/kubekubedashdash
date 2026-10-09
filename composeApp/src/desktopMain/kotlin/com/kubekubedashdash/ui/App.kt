@@ -99,9 +99,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
-import java.awt.EventQueue
-import java.awt.event.WindowEvent
-import java.awt.event.WindowFocusListener
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -135,24 +132,9 @@ fun App(
             onDispose { if (workspace.awtWindow === awtWindow) workspace.awtWindow = null }
         }
 
-        // Stamp NSWindowStyleMaskResizable onto this window at idle so macOS
-        // edge-tiling works — without mutating the NSWindow from inside the
-        // title-bar drag gesture, which can deadlock the UI when it races the
-        // post-connect render burst (see NativeWindowDrag.ensureResizable). Runs
-        // on every focus gain (idempotent); invokeLater lets AppKit's key-window
-        // assignment settle before we read [NSApp keyWindow].
-        if (NativeWindowDrag.isMacOS) {
-            DisposableEffect(awtWindow) {
-                val stamp = { EventQueue.invokeLater { NativeWindowDrag.ensureResizable() } }
-                val focusListener = object : WindowFocusListener {
-                    override fun windowGainedFocus(e: WindowEvent?) = stamp()
-                    override fun windowLostFocus(e: WindowEvent?) = Unit
-                }
-                awtWindow.addWindowFocusListener(focusListener)
-                if (awtWindow.isFocused) stamp()
-                onDispose { awtWindow.removeWindowFocusListener(focusListener) }
-            }
-        }
+        // Edge-tiling on macOS needs NSWindowStyleMaskResizable on this undecorated window;
+        // stamped at idle on focus, never from the drag gesture (see KeepResizableOnMac).
+        KeepResizableOnMac(awtWindow)
 
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
