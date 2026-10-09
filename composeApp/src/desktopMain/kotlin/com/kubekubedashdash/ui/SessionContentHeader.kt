@@ -278,13 +278,13 @@ internal fun Screen.showsNamespaceSelector(): Boolean = when (this) {
     else -> false
 }
 
-/** "Apply YAML": a quiet text button, 28 dp tall like the selector beside it. */
+/** "Apply YAML": a quiet text button, as tall as the selector and the filter beside it, so the row keeps its height. */
 @Composable
 private fun ApplyYamlButton(onClick: () -> Unit) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
         TextButton(
             onClick = onClick,
-            modifier = Modifier.height(28.dp),
+            modifier = Modifier.height(ContentHeaderControlHeight),
             shape = kdRoundShape,
             colors = ButtonDefaults.textButtonColors(contentColor = KdTextSecondary),
             contentPadding = PaddingValues(horizontal = 8.dp),
