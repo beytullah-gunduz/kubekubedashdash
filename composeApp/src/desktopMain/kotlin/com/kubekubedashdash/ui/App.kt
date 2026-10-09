@@ -91,15 +91,14 @@ import com.kubekubedashdash.ui.screens.FirstRunScreen
 import com.kubekubedashdash.ui.screens.allclusters.AllClustersScreen
 import com.kubekubedashdash.ui.screens.settings.SettingsDialog
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
+import com.kubekubedashdash.ui.yamledit.DiscardPromptDialog
+import com.kubekubedashdash.ui.yamledit.rememberApplyYamlOpener
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.ShellEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
-import java.awt.EventQueue
-import java.awt.event.WindowEvent
-import java.awt.event.WindowFocusListener
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -133,24 +132,9 @@ fun App(
             onDispose { if (workspace.awtWindow === awtWindow) workspace.awtWindow = null }
         }
 
-        // Stamp NSWindowStyleMaskResizable onto this window at idle so macOS
-        // edge-tiling works — without mutating the NSWindow from inside the
-        // title-bar drag gesture, which can deadlock the UI when it races the
-        // post-connect render burst (see NativeWindowDrag.ensureResizable). Runs
-        // on every focus gain (idempotent); invokeLater lets AppKit's key-window
-        // assignment settle before we read [NSApp keyWindow].
-        if (NativeWindowDrag.isMacOS) {
-            DisposableEffect(awtWindow) {
-                val stamp = { EventQueue.invokeLater { NativeWindowDrag.ensureResizable() } }
-                val focusListener = object : WindowFocusListener {
-                    override fun windowGainedFocus(e: WindowEvent?) = stamp()
-                    override fun windowLostFocus(e: WindowEvent?) = Unit
-                }
-                awtWindow.addWindowFocusListener(focusListener)
-                if (awtWindow.isFocused) stamp()
-                onDispose { awtWindow.removeWindowFocusListener(focusListener) }
-            }
-        }
+        // Edge-tiling on macOS needs NSWindowStyleMaskResizable on this undecorated window;
+        // stamped at idle on focus, never from the drag gesture (see KeepResizableOnMac).
+        KeepResizableOnMac(awtWindow)
 
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
@@ -231,6 +215,7 @@ fun App(
         FollowActiveTab(pagerState, activeIndex, tabs.size)
 
         val settingsOpen by workspace.showSettings.collectAsState()
+        val discardPrompt by workspace.discardPrompt.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
         var shortcutsOpen by remember { mutableStateOf(false) }
         var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
@@ -457,6 +442,7 @@ fun App(
         }
 
         val sessionForPalette = activeSession ?: titleSession
+        val onApplyYaml = rememberApplyYamlOpener(sessionForPalette)
         val paletteEntries = rememberPaletteEntries(
             activeSession = sessionForPalette,
             tabs = tabs,
@@ -466,6 +452,7 @@ fun App(
             onSelectNamespace = { ns -> sessionForPalette?.viewModel?.setNamespaceScope(NamespaceScope.single(ns)) },
             onCaptureLogs = onCaptureLogs,
             onTailLogs = onTailLogs,
+            onApplyYaml = onApplyYaml,
         )
 
         // Provide the title session's locals at App scope for modals and the
@@ -626,7 +613,7 @@ fun App(
                                     workspace.setActive(key)
                                 }
                             },
-                            onCloseTab = { key -> WorkspaceManager.closeTab(workspace, key) },
+                            onCloseTab = { key -> WorkspaceManager.requestCloseTab(workspace, key) },
                             onAddCluster = { workspace.showClusterSelector(OpenTarget.NEW_TAB) },
                             onDragMoveSession = { id, x, y ->
                                 WorkspaceManager.notifyDragMove(id, x, y)
@@ -690,7 +677,7 @@ fun App(
                         FirstRunScreen(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             onTryDemo = {
-                                WorkspaceManager.openCluster(
+                                WorkspaceManager.requestOpenCluster(
                                     workspace,
                                     DemoContext.MOCK_CONTEXT_NAME,
                                     OpenTarget.CURRENT_VIEW,
@@ -828,7 +815,7 @@ fun App(
                         defaultTarget = clusterSelectorDefault,
                         onOpenCluster = { ctx, target ->
                             workspace.dismissClusterSelector()
-                            WorkspaceManager.openCluster(workspace, ctx, target)
+                            WorkspaceManager.requestOpenCluster(workspace, ctx, target)
                         },
                         onDismiss = { workspace.dismissClusterSelector() },
                         onDiscoverEks = { workspace.showEksDiscovery() },
@@ -948,6 +935,10 @@ fun App(
                         onDismiss = { pendingPortForward = null },
                     )
                 }
+
+                // Last of the dialogs, so it sits above every other surface: a quit prompt can
+                // arrive while Settings, the palette or any dialog is already up.
+                discardPrompt?.let { DiscardPromptDialog(it) }
 
                 if (UiTestHooksEnabled) {
                     UiTestHooks(

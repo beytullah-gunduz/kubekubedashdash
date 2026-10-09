@@ -109,6 +109,15 @@ private val yamlSearchSpecs = listOf(
     ShortcutSpec("Esc", "Esc", "Clear the query"),
 )
 
+private val yamlEditorSpecs = listOf(
+    ShortcutSpec("⌘S", "Ctrl+S", "Review changes"),
+    ShortcutSpec("⌘F", "Ctrl+F", "Find"),
+    ShortcutSpec("⌘Z", "Ctrl+Z", "Undo"),
+    ShortcutSpec("⇧⌘Z", "Ctrl+Y", "Redo"),
+    ShortcutSpec("⌘W", "Ctrl+W", "Close the editor"),
+    ShortcutSpec("Tab", "Tab", "Insert two spaces"),
+)
+
 private val dialogsSpecs = listOf(
     ShortcutSpec("Esc", "Esc", "Dismiss"),
 )
@@ -124,6 +133,7 @@ fun appShortcuts(mac: Boolean): List<ShortcutGroup> = listOf(
     ShortcutGroup("All-clusters events", allClustersEventsSpecs.map { it.toShortcut(mac) }),
     ShortcutGroup("Command palette", commandPaletteSpecs.map { it.toShortcut(mac) }),
     ShortcutGroup("YAML search", yamlSearchSpecs.map { it.toShortcut(mac) }),
+    ShortcutGroup("YAML editor window", yamlEditorSpecs.map { it.toShortcut(mac) }),
     ShortcutGroup("Dialogs", dialogsSpecs.map { it.toShortcut(mac) }),
 )
 

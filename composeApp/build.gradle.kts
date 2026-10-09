@@ -84,6 +84,7 @@ kotlin {
             implementation(libs.json.path)
             implementation(libs.jediterm.core)
             implementation(libs.jediterm.ui)
+            implementation(libs.rsyntaxtextarea)
         }
     }
 }
@@ -370,7 +371,7 @@ fun JavaExec.runReleaseCanary(sandbox: File) {
 }
 
 tasks.register<JavaExec>("releaseCanary") {
-    description = "Boots the ProGuard-shrunk release jars headlessly on the full JDK and exercises logging, JSONPath, JediTerm, the demo cluster and an MCP session."
+    description = "Boots the ProGuard-shrunk release jars headlessly on the full JDK and exercises logging, JSONPath, JediTerm, the YAML editor, the demo cluster and an MCP session."
     runReleaseCanary(releaseCanaryDir.resolve("full-jdk"))
 }
 

@@ -17,7 +17,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
@@ -53,7 +52,6 @@ import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.check_circle_filled
 import com.kubekubedashdash.resources.clear_all_filled
-import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.code_filled
 import com.kubekubedashdash.resources.event_note_filled
 import com.kubekubedashdash.resources.info_filled
@@ -67,7 +65,6 @@ import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
 import com.kubekubedashdash.ui.components.StatusBadge
-import com.kubekubedashdash.ui.components.TooltipIconButton
 import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.restartCountColor
@@ -83,6 +80,8 @@ import com.kubekubedashdash.ui.screens.DetailFieldsCard
 import com.kubekubedashdash.ui.screens.DetailPanelHeader
 import com.kubekubedashdash.ui.screens.GenericYamlTab
 import com.kubekubedashdash.ui.screens.events.EventListItem
+import com.kubekubedashdash.ui.yamledit.rememberYamlEditEntry
+import com.kubekubedashdash.ui.yamledit.yamlEditDetailAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -179,6 +178,7 @@ internal fun NodeDetailPanel(
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
+                val editEntry = rememberYamlEditEntry("Node", node.name, null, null, null, null)
                 val cordonAction = DetailAction(
                     icon = if (node.unschedulable) Res.drawable.check_circle_filled else Res.drawable.lock_filled,
                     label = if (node.unschedulable) "Uncordon" else "Cordon",
@@ -209,9 +209,10 @@ internal fun NodeDetailPanel(
                     name = node.name,
                     subtitle = "Node",
                     status = node.status,
-                    actions = listOf(cordonAction, drainAction),
+                    actions = listOf(cordonAction, drainAction) + listOfNotNull(editEntry?.let(::yamlEditDetailAction)),
                     onClose = onClose,
                 )
+                editEntry?.Dialog()
 
                 SecondaryTabRow(
                     selectedTabIndex = tabs.indexOf(activeTab).coerceAtLeast(0),

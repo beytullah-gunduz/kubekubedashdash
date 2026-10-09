@@ -13,6 +13,7 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.account_tree_filled
+import com.kubekubedashdash.resources.add_filled
 import com.kubekubedashdash.resources.category_filled
 import com.kubekubedashdash.resources.cloud_filled
 import com.kubekubedashdash.resources.code_filled
@@ -51,10 +52,24 @@ import com.kubekubedashdash.util.DemoContext
 import org.jetbrains.compose.resources.DrawableResource
 
 /**
+ * The "Apply YAML…" entry: opens the Apply YAML window. In the Actions group (the `>` prefix reaches
+ * it), where the namespace log entries are.
+ */
+internal fun applyYamlPaletteEntry(onApplyYaml: () -> Unit): PaletteEntry = PaletteEntry(
+    id = "action:apply-yaml",
+    label = "Apply YAML…",
+    sublabel = "create or update resources from a manifest",
+    category = "Actions",
+    icon = Res.drawable.add_filled,
+    onActivate = onApplyYaml,
+)
+
+/**
  * Collects palette entries for the active cluster session — sidebar
  * destinations, cluster tabs (for switching), namespaces, plus pods,
  * deployments, and nodes already cached on the reactive client. Returns a
- * list shaped for [CommandPalette].
+ * list shaped for [CommandPalette]. [onApplyYaml] opens the Apply YAML
+ * window; null (no connected session) leaves the entry out.
  */
 @Composable
 internal fun rememberPaletteEntries(
@@ -67,6 +82,7 @@ internal fun rememberPaletteEntries(
     onSelectNamespace: (String) -> Unit,
     onCaptureLogs: (String) -> Unit,
     onTailLogs: (String) -> Unit,
+    onApplyYaml: (() -> Unit)?,
 ): List<PaletteEntry> {
     val screenEntries = remember(onNavigate) {
         listOf(
@@ -177,6 +193,11 @@ internal fun rememberPaletteEntries(
         }
     }
 
+    // First among the Actions, so it shows in the empty query's capped list before the per-namespace log entries.
+    val applyEntries = remember(onApplyYaml) {
+        if (onApplyYaml != null) listOf(applyYamlPaletteEntry(onApplyYaml)) else emptyList()
+    }
+
     val captureEntries = remember(namespacesState?.value, onCaptureLogs) {
         (namespacesState?.value ?: emptyList()).map { ns ->
             PaletteEntry(
@@ -280,7 +301,7 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + captureEntries + tailEntries + verbEntries
+    return screenEntries + clusterEntries + namespaceEntries + resourceEntries + crdEntries + applyEntries + captureEntries + tailEntries + verbEntries
 }
 
 /**

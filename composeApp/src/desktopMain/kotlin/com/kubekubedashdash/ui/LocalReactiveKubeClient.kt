@@ -1,6 +1,7 @@
 package com.kubekubedashdash.ui
 
 import androidx.compose.runtime.compositionLocalOf
+import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.util.ReactiveKubeClient
 
 /**
@@ -27,3 +28,10 @@ val LocalReactiveKubeClient = compositionLocalOf<ReactiveKubeClient> {
 
 val LocalIsConnected = compositionLocalOf { false }
 val LocalConnectionError = compositionLocalOf<String?> { null }
+
+/**
+ * The cluster tab's [ClusterSession], scoped the same way as [LocalReactiveKubeClient]. Null outside a
+ * session (a bare composition in a test or a screenshot). Read by the YAML editor's launcher, which
+ * binds an editor window to the tab (its id) and to the session's connection manager.
+ */
+val LocalClusterSession = compositionLocalOf<ClusterSession?> { null }
