@@ -62,8 +62,11 @@ then `N passed, M failed`. Exit code: 0 all passed, 1 a check failed or the run 
 - It refuses to start while another hot run of the same worktree is up (the MCP server follows
   one pid file and would attach to it). Stop other Hot Reload MCP servers of this worktree
   first.
-- It only ever signals processes it started: the app, the processes below it, and the MCP
-  server's own process group. There are no pattern kills.
+- It only ever signals processes it started: the app, the processes below it, and the process
+  group of the Gradle client that runs the MCP server. The server's own JVM (a single-use Gradle
+  daemon in another process group) is not signalled; it exits when that client goes away. An app
+  whose launch was interrupted is stopped too, but only when it started after that launch began.
+  There are no pattern kills.
 
 ## Where things go
 

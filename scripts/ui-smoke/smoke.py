@@ -65,6 +65,7 @@ class Ctx:
         self.skipped = 0
         self.scenario_failed = 0
         self.app_pid = None
+        self.launch_started = None
         self.gradle = None
 
 
@@ -129,6 +130,17 @@ def descendants(pid, depth=4):
         if depth > 1:
             out.extend(descendants(child, depth - 1))
     return out
+
+
+def started_since(pid, since):
+    """True when `pid` started at or after the wall-clock time `since` (ps etime has a 1 s resolution)."""
+    out = subprocess.run(["ps", "-o", "etime=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    m = re.fullmatch(r"(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)", out)
+    if not m:
+        return False
+    days, hours, minutes, seconds = (int(g or 0) for g in m.groups())
+    elapsed = ((days * 24 + hours) * 60 + minutes) * 60 + seconds
+    return time.time() - elapsed >= since - 2
 
 
 def signal_pids(pids, sig):
@@ -306,6 +318,7 @@ def launch_app(data_dir):
     if code != 0:
         raise StepFailed("hotRunDesktopArgfile failed:\n" + tail(text))
     require_isolation(data_dir, "before the launch")
+    CTX.launch_started = time.time()
     code, text = run_gradle([":composeApp:hotRunDesktopAsync", prop], "gradle-launch.log")
     if code != 0:
         raise StepFailed("hotRunDesktopAsync failed:\n" + tail(text))
@@ -314,10 +327,36 @@ def launch_app(data_dir):
         raise StepFailed("hotRunDesktopAsync printed no \"Started ... in background (<pid>)\" line:\n" + tail(text))
     pid = int(m.group(1))
     CTX.app_pid = pid
+    CTX.launch_started = None
     require_isolation(data_dir, "after the launch")
     if not wait_until(lambda: pid_file_pid() == pid, 60):
         raise StepFailed(f"the pid file never named the launched app (pid {pid})")
     return pid
+
+
+def orphan_app_pid():
+    """The app of a launch whose pid this run never learned (an abort during the Gradle launch, or no
+    "Started" line), or None. Taken from this launch's log, else from the pid file, and only when the pid
+    file was written and the process started after the launch began: a stale pid file or a recycled pid
+    is never adopted. A hot run of this worktree that someone else starts during the launch would still
+    look like ours; the startup guard and the README rule out a concurrent one, not a racing one."""
+    since = CTX.launch_started
+    if since is None:
+        return None
+    log = CTX.scenario_dir / "gradle-launch.log" if CTX.scenario_dir is not None else None
+    if log is not None and log.is_file():
+        m = re.search(r"Started '[^']*' in background \((\d+)\)", log.read_text(errors="replace"))
+        if m:
+            pid = int(m.group(1))
+            return pid if alive(pid) and started_since(pid, since) else None
+    try:
+        written = pid_file().stat().st_mtime
+    except OSError:
+        return None
+    pid = pid_file_pid()
+    if pid is None or written < since - 2:
+        return None
+    return pid if alive(pid) and started_since(pid, since) else None
 
 
 # ---------------------------------------------------------------- MCP client
@@ -794,8 +833,7 @@ def s4_merge_all_clusters_back():
     click_desc(new, "ui-test:merge:" + ALL_CLUSTERS)
     must(lambda: len(windows()) == 1, "one window after the merge")
     left = windows()[0]["id"]
-    must_state(left, lambda s: s.get("tabs"), "the remaining window's state")
-    s = st(left)
+    s = must_state(left, lambda s: s.get("tabs"), "the remaining window's state")
     check("All Clusters is the first tab of the remaining window", (s.get("tabs") or [None])[0] == ALL_CLUSTERS, f"tabs={s.get('tabs')}")
     check("All Clusters is active in the remaining window", s.get("active") == ALL_CLUSTERS, f"active={s.get('active')}")
     shot(left, "merged")
@@ -958,6 +996,9 @@ def run_scenario(name, fn, keep_app):
     except Exception:
         check("scenario ran to the end", False, "unexpected error:\n" + traceback.format_exc())
     finally:
+        if CTX.app_pid is None:
+            CTX.app_pid = orphan_app_pid()
+        CTX.launch_started = None
         failed = CTX.scenario_failed > 0
         if failed and CTX.app_pid is not None and CTX.mcp.ready and not CTX.mcp.dead:
             dump_failure()
@@ -991,7 +1032,7 @@ def main():
     if not ((CTX.repo / "gradlew").is_file() and (CTX.repo / "composeApp").is_dir()):
         refuse(2, "run this from the repository root (./gradlew and composeApp/ must be in the current directory)")
     if os.environ.get("ORG_GRADLE_PROJECT_hotRunKubeconfig"):
-        refuse(1, "ORG_GRADLE_PROJECT_hotRunKubeconfig is set: a hot run could read a kubeconfig other than the empty one; unset it")
+        refuse(2, "ORG_GRADLE_PROJECT_hotRunKubeconfig is set: a hot run could read a kubeconfig other than the empty one; unset it")
     CTX.java_home = resolve_java_home()
     if not CTX.java_home:
         refuse(2, "no JDK 21: set JAVA_HOME (or run on macOS with a JDK 21 installed)")
@@ -1033,6 +1074,8 @@ def main():
                 os.killpg(CTX.gradle.pid, signal.SIGTERM)
             except OSError:
                 pass
+        if CTX.app_pid is None and not kept:
+            CTX.app_pid = orphan_app_pid()
         if CTX.app_pid is not None and not kept:
             try:
                 stop_app(CTX.app_pid)
