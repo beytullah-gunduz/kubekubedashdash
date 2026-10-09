@@ -362,8 +362,9 @@ private fun HistoryButton(
     contentDescription: String,
     enabled: Boolean,
     onClick: () -> Unit,
-    // Off while the title bar is inert; separate from [enabled] so the glyph keeps its look.
-    clickable: Boolean = enabled,
+    // False while the title bar is inert. It only takes the click away: the glyph still
+    // follows [enabled], so an arrow with somewhere to go keeps its look under the fade.
+    clickable: Boolean = true,
 ) {
     Box(
         modifier = Modifier
@@ -374,7 +375,7 @@ private fun HistoryButton(
             // must not start a window drag either.
             .consumeTitleBarPress()
             .clickable(
-                enabled = clickable,
+                enabled = enabled && clickable,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
