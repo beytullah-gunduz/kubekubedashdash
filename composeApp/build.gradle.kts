@@ -298,6 +298,36 @@ tasks.matching { it.name.startsWith("hotRun") }.configureEach {
     }
 }
 
+// UI smoke (opt-in; a macOS desktop session; opens real windows): uismoke.UiSmoke drives fresh
+// demo-only hot runs of the app through the Compose Hot Reload MCP server. It is compiled with the
+// other tests, so a broken smoke fails the CI build, but only this task runs it:
+//   ./gradlew :composeApp:uiSmoke                                    every scenario, in order
+//   ./gradlew :composeApp:uiSmoke --tests '*s3-tear-out-all-clusters' one scenario
+//   ./gradlew :composeApp:uiSmoke -PuiSmokeKeepApp=true              leave a failing scenario's app running
+val uiSmokeTestClass = "com.kubekubedashdash.uismoke.UiSmoke"
+tasks.named<Test>("desktopTest") {
+    filter { excludeTestsMatching(uiSmokeTestClass) }
+}
+tasks.register<Test>("uiSmoke") {
+    group = "verification"
+    description = "Drives fresh demo-only hot runs of the app through the Compose Hot Reload MCP server (macOS desktop session; opens windows)."
+    val testCompilation = kotlin.targets.getByName("desktop").compilations.getByName("test")
+    testClassesDirs = testCompilation.output.classesDirs
+    classpath = files(testCompilation.output.allOutputs, testCompilation.runtimeDependencyFiles)
+    useJUnit()
+    filter { includeTestsMatching(uiSmokeTestClass) }
+    systemProperty("kkdd.uiSmoke", "true")
+    systemProperty("kkdd.uiSmoke.repo", rootDir.absolutePath)
+    systemProperty("kkdd.uiSmoke.keepApp", providers.gradleProperty("uiSmokeKeepApp").getOrElse("false"))
+    // It checks the running app, not its inputs: never up to date.
+    outputs.upToDateWhen { false }
+    testLogging {
+        showStandardStreams = true
+        events("passed", "failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
 // Release-build verification. Nothing else ever runs the ProGuard-shrunk jars before a
 // user does: every test runs unshrunk, and ProGuard itself stays silent about the
 // breakage it causes. Both past outages were green on every other check — stale
