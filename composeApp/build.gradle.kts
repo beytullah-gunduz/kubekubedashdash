@@ -273,7 +273,7 @@ tasks.named<JavaExec>("generateScreenshots") {
 // (build/hot-run-data, reset by `clean`) keeps the developer's preferences, session, cluster
 // colours and app.log untouched (main() points LOG_DIR at SystemDirectories.logsDirectory,
 // which follows kkdd.dataDir). `hotMcpServerDesktop` then lets an agent drive this instance.
-// -PhotRunDataDir=<dir> points a hot run at another throwaway data dir; scripts/ui-smoke starts
+// -PhotRunDataDir=<dir> points a hot run at another throwaway data dir; the UI smoke (uiSmoke) starts
 // each scenario on a fresh one.
 val hotRunDataDir = providers.gradleProperty("hotRunDataDir").map { file(it) }
     .getOrElse(layout.buildDirectory.dir("hot-run-data").get().asFile)
@@ -287,7 +287,7 @@ tasks.matching { it.name.startsWith("hotRun") }.configureEach {
         // context, to exercise the connection-error screen); never point it at a real one.
         systemProperty("kubeconfig", providers.gradleProperty("hotRunKubeconfig").getOrElse(emptyKubeconfig.get().asFile.absolutePath))
         systemProperty("kkdd.dataDir", hotRunDataDir.absolutePath)
-        // Hidden test hooks for scripts/ui-smoke (tab drags between windows, the history
+        // Hidden test hooks for the UI smoke (tab drags between windows, the history
         // shortcuts); hot runs only, never a release build.
         systemProperty("kkdd.uiTestHooks", "true")
         // Cloud CLIs off (ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY): aws, gcloud and the auth

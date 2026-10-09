@@ -1,5 +1,7 @@
 package com.kubekubedashdash.uismoke
 
+import com.kubekubedashdash.model.WorkspaceTab
+import com.kubekubedashdash.ui.UiTestHookNames
 import com.kubekubedashdash.ui.UiTestState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -181,3 +183,78 @@ internal fun dumpFailure() {
         // Best effort: the scenario already failed, and the app may be gone.
     }
 }
+
+// ---------------------------------------------------------------- shared scenario steps
+
+/** The key of the All Clusters tab. */
+internal val ALL_CLUSTERS: String = WorkspaceTab.AllClusters.key
+
+// The demo cluster's tab chips end with these (the chip text reads "D demo-cluster (mock) #1").
+internal const val TAB1_SUFFIX = "demo-cluster (mock) #1"
+internal const val TAB2_SUFFIX = "demo-cluster (mock) #2"
+
+/** The window size (width to height, in points) the short-window scenarios resize to. */
+internal val SHORT_WINDOW = 1000 to 600
+
+/** From the first-run screen: open the demo cluster, then a second one. Returns (tab 1 key, tab 2 key). */
+internal fun twoDemoTabs(win: String): Pair<String, String?> {
+    must("the first-run screen", 120.seconds) { find(win, text = "Try demo cluster", match = Match.PREFIX, timeout = Duration.ZERO) != null }
+    clickText(win, "Try demo cluster", Match.PREFIX)
+    val first = mustState(win, "the first demo cluster's overview") {
+        it.active?.startsWith("cluster:") == true && !it.firstRun && it.screen == "Cluster Overview"
+    }
+    val tab1 = checkNotNull(first.active)
+    clickDesc(win, "Open another cluster")
+    clickText(win, "In-memory mock cluster with sample data", Match.CONTAINS)
+    val second = mustState(win, "the second demo cluster's overview") {
+        it.tabs.size == 2 && it.active != tab1 && it.screen == "Cluster Overview"
+    }
+    settle(win)
+    return tab1 to second.active
+}
+
+/** Open the All Clusters tab from the cluster picker. */
+internal fun openAllClusters(win: String) {
+    clickDesc(win, "Open another cluster")
+    clickText(win, "All Clusters view", Match.PREFIX)
+    mustState(win, "the All Clusters tab to become active") { it.active == ALL_CLUSTERS }
+}
+
+/** Two demo tabs + All Clusters, then tear All Clusters out. Returns the new window's id (or null). */
+internal fun tearOutAllClusters(win: String): String? {
+    twoDemoTabs(win)
+    openAllClusters(win)
+    clickDesc(win, UiTestHookNames.TEAR_OUT + ALL_CLUSTERS)
+    must("a second window after the tear-out") { windows().size == 2 }
+    return windowFor { it.tabs == listOf(ALL_CLUSTERS) }
+}
+
+/** The window root's height in px, waiting out a tree that is briefly empty. */
+internal fun rootHeight(win: String, timeout: Duration = 10.seconds): Double {
+    var found = 0.0
+    must("the window's semantic tree", timeout) {
+        val height = tree(win).firstOrNull()?.bounds?.height ?: 0.0
+        if (height != 0.0) found = height
+        height != 0.0
+    }
+    return found
+}
+
+/** The window's height in points from list_windows, waiting out an empty answer. */
+internal fun windowHeightPt(win: String, timeout: Duration = 10.seconds): Double {
+    var found = 0.0
+    must("the window in list_windows", timeout) {
+        val hits = windows().filter { it.id == win && it.height != 0.0 }.map { it.height }
+        if (hits.isNotEmpty()) found = hits.last()
+        hits.isNotEmpty()
+    }
+    return found
+}
+
+/** The node with this exact contentDescription inside the title bar band, or null. */
+internal fun titleBarNode(win: String, desc: String, barPx: Double): SemNode? = findNodes(win, desc = desc, clickable = false).lastOrNull { node ->
+    node.bounds?.let { it.y < barPx } == true
+}
+
+/** A pixel count as text, without a trailing ".0". */
+internal fun plain(value: Double): String = value.toString().removeSuffix(".0")

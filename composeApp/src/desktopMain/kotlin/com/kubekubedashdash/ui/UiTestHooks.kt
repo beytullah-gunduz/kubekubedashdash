@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 /** True only when a hot run starts the app (`-Dkkdd.uiTestHooks=true`): never in a release build. */
 internal val UiTestHooksEnabled: Boolean = System.getProperty("kkdd.uiTestHooks") == "true"
 
-/** contentDescription prefixes the hooks use; scripts/ui-smoke matches on them. */
+/** contentDescription prefixes the hooks use; the UI smoke (uismoke.UiSmoke) matches on them. */
 internal object UiTestHookNames {
     const val STATE = "ui-test:state:"
     const val TEAR_OUT = "ui-test:tear-out:"
@@ -113,8 +113,9 @@ private fun mergeIntoNextWindow(workspace: Workspace, tabKey: String) {
 }
 
 /**
- * Invisible, zero-size nodes that let scripts/ui-smoke drive what the Compose
- * Hot Reload MCP cannot: tab drags between windows and the history shortcuts.
+ * Invisible, zero-size nodes that let the UI smoke (uismoke.UiSmoke,
+ * ./gradlew :composeApp:uiSmoke) drive what the Compose Hot Reload MCP
+ * cannot: tab drags between windows and the history shortcuts.
  * Each node's contentDescription names its action and the MCP's click runs it
  * through the semantic onClick. One more node reports this window's state as
  * JSON in its contentDescription. Composed only when [UiTestHooksEnabled].
