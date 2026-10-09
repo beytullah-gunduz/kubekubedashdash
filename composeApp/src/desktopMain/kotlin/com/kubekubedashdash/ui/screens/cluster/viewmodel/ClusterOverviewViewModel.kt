@@ -14,6 +14,8 @@ import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.formatAge
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -38,6 +41,14 @@ private const val AGE_TICK_INTERVAL_MS = 10_000L
 
 class ClusterOverviewViewModel(
     private val reactiveClient: ReactiveKubeClient,
+    /**
+     * Where the flows that walk every pod, node or event (the recent cards, the
+     * phase counts, the top nodes) do that work; their stateIn stays on
+     * viewModelScope, the Swing EDT. Every open cluster tab keeps one of these
+     * collecting, on screen or not. The flows that write the usage histories
+     * stay on viewModelScope, ordered with the namespace reset in init.
+     */
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     /**
@@ -81,6 +92,7 @@ class ClusterOverviewViewModel(
                 null
             }
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     // ── Usage card data ─────────────────────────────────────────────────────────
@@ -155,6 +167,7 @@ class ClusterOverviewViewModel(
                 .sortedByDescending { it.pressureFraction }
                 .take(CLUSTER_OVERVIEW_TOP_NODES)
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ── Recent activity lists ───────────────────────────────────────────────────
@@ -181,65 +194,47 @@ class ClusterOverviewViewModel(
 
     val recentNodes: StateFlow<RecentSlice<NodeInfo>> = combine(reactiveClient.nodes, ageTicker) { s, _ ->
         val now = Instant.now()
-        sliceRecent(s.refreshNodeAges(now)) {
-            sortedWith(
-                compareByDescending<NodeInfo> { nodeStatusSeverity(it.status) }
-                    .thenByDescending { it.creationTimestamp },
-            )
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
+        sliceRecent(s, { nodeStatusSeverity(it.status) }, { it.creationTimestamp }) { it.copy(age = formatAge(it.creationTimestamp, now)) }
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
 
     val recentPods: StateFlow<RecentSlice<PodInfo>> = combine(reactiveClient.pods, ageTicker) { s, _ ->
         val now = Instant.now()
-        sliceRecent(s.refreshPodAges(now)) {
-            sortedWith(
-                compareByDescending<PodInfo> { podStatusSeverity(it.status) }
-                    .thenByDescending { it.creationTimestamp },
-            )
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
+        sliceRecent(s, { podStatusSeverity(it.status) }, { it.creationTimestamp }) { it.copy(age = formatAge(it.creationTimestamp, now)) }
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
 
     val recentEvents: StateFlow<RecentSlice<EventInfo>> = combine(reactiveClient.events, ageTicker) { s, _ ->
         val now = Instant.now()
-        sliceRecent(s.refreshEventAges(now)) {
-            sortedWith(
-                compareByDescending<EventInfo> { eventTypeSeverity(it.type) }
-                    .thenByDescending { it.lastSeenTimestamp },
-            )
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
+        sliceRecent(s, { eventTypeSeverity(it.type) }, { it.lastSeenTimestamp }) { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) }
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecentSlice.empty())
+}
 
-    private fun ResourceState<List<NodeInfo>>.refreshNodeAges(now: Instant): ResourceState<List<NodeInfo>> = if (this is ResourceState.Success) {
-        ResourceState.Success(data.map { it.copy(age = formatAge(it.creationTimestamp, now)) })
-    } else {
-        this
+/**
+ * The first [CLUSTER_OVERVIEW_RECENT_LIMIT] of [s]'s items, most severe first,
+ * then newest first by [timestamp] (both descending, ties in list order), with
+ * [refresh] applied to the kept items only; the total counts them all.
+ *
+ * Each item's severity is computed once rather than in every comparison, and
+ * only the kept items get a fresh age: the order never reads the age, and
+ * formatting every item on each pass was most of these cards' cost.
+ */
+internal fun <T> sliceRecent(
+    s: ResourceState<List<T>>,
+    severity: (T) -> HealthSeverity,
+    timestamp: (T) -> String,
+    refresh: (T) -> T,
+): RecentSlice<T> = when (s) {
+    is ResourceState.Success -> {
+        val kept = s.data
+            .map { it to severity(it) }
+            .sortedWith(compareByDescending<Pair<T, HealthSeverity>> { it.second }.thenByDescending { timestamp(it.first) })
+            .take(CLUSTER_OVERVIEW_RECENT_LIMIT)
+            .map { refresh(it.first) }
+        RecentSlice(items = kept, total = s.data.size, loading = false, errorMessage = null)
     }
 
-    private fun ResourceState<List<PodInfo>>.refreshPodAges(now: Instant): ResourceState<List<PodInfo>> = if (this is ResourceState.Success) {
-        ResourceState.Success(data.map { it.copy(age = formatAge(it.creationTimestamp, now)) })
-    } else {
-        this
-    }
+    is ResourceState.Loading -> RecentSlice(emptyList(), total = 0, loading = true, errorMessage = null)
 
-    private fun ResourceState<List<EventInfo>>.refreshEventAges(now: Instant): ResourceState<List<EventInfo>> = if (this is ResourceState.Success) {
-        ResourceState.Success(data.map { it.copy(lastSeen = formatAge(it.lastSeenTimestamp, now)) })
-    } else {
-        this
-    }
-
-    private fun <T> sliceRecent(
-        s: ResourceState<List<T>>,
-        sort: List<T>.() -> List<T>,
-    ): RecentSlice<T> = when (s) {
-        is ResourceState.Success -> {
-            val all = s.data.sort()
-            RecentSlice(items = all.take(CLUSTER_OVERVIEW_RECENT_LIMIT), total = all.size, loading = false, errorMessage = null)
-        }
-
-        is ResourceState.Loading -> RecentSlice(emptyList(), total = 0, loading = true, errorMessage = null)
-
-        is ResourceState.Error -> RecentSlice(emptyList(), total = 0, loading = false, errorMessage = s.message)
-    }
+    is ResourceState.Error -> RecentSlice(emptyList(), total = 0, loading = false, errorMessage = s.message)
 }
 
 data class RecentSlice<T>(

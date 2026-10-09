@@ -23,11 +23,11 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -174,7 +174,9 @@ fun AllClustersChip(
             Icon(
                 painter = painterResource(Res.drawable.hub),
                 contentDescription = null,
-                modifier = Modifier.size(14.dp).rotate(hubRotation.value),
+                // Read in the layer block, not in composition: the hub turns for as long as
+                // the tab is active, and rotate(value) recomposed the whole chip every frame.
+                modifier = Modifier.size(14.dp).graphicsLayer { rotationZ = hubRotation.value },
                 tint = ringAndIconColor,
             )
         }
