@@ -947,6 +947,30 @@ def s7_history_shortcut_tab_kinds():
     shot(win, "terminal")
 
 
+SHORT_WINDOW = (1000, 600)
+
+
+@scenario("cluster-selector-short-window")
+def s8_cluster_selector_short_window():
+    """In a short window the cluster picker still shows its footer rows (All Clusters view, Discover EKS/GKE)."""
+    win = main_window()
+    two_demo_tabs(win)  # "All Clusters view" is offered from two cluster tabs on: the tallest footer
+    width, height = SHORT_WINDOW
+    before = tree(win)[0]["bounds"]["height"]
+    CTX.mcp.call("resize_window", {"window_id": win, "width": width, "height": height})
+    must(lambda: (tree(win) or [{}])[0].get("bounds", {}).get("height") not in (None, before),
+         f"the window to shrink to {width}x{height}")
+    click_desc(win, "Open another cluster")
+    must(lambda: find(win, text="Select Cluster", prefix=True, clickable=False, timeout=0), "the cluster picker")
+    window_height = tree(win)[0]["bounds"]["height"]
+    for label in ("All Clusters view", "Discover EKS clusters", "Discover GKE clusters"):
+        node = find(win, text=label, prefix=True, clickable=False, timeout=5)
+        b = (node or {}).get("bounds") or {}
+        visible = node is not None and b.get("height", 0) > 0 and b.get("y", 0) + b.get("height", 0) <= window_height
+        check(f"'{label}' is visible in a {width}x{height} window", visible, f"bounds={b}, window height={window_height}")
+    shot(win, "selector-short")
+
+
 # ---------------------------------------------------------------- runner
 
 

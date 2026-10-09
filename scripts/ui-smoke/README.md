@@ -15,10 +15,12 @@ Python 3.10+, standard library only. It does not depend on anything outside this
   newest place, with no UI error.
 - The Cmd/Ctrl+[ handler on a cluster tab, on All Clusters, and (when a terminal can be
   opened) on a terminal tab, where it must pass through to the shell.
+- The cluster picker in a 1000x600 window: its footer rows (All Clusters view, Discover EKS,
+  Discover GKE) keep their room instead of being squeezed out by the list.
 
 Scenarios: `first-run-title-bar`, `discovery-splash-title-bar`, `tear-out-all-clusters`,
 `merge-all-clusters-back`, `history-stays-in-its-window`, `rapid-back-forward`,
-`history-shortcut-tab-kinds`.
+`history-shortcut-tab-kinds`, `cluster-selector-short-window`.
 
 ## What it does not cover
 
