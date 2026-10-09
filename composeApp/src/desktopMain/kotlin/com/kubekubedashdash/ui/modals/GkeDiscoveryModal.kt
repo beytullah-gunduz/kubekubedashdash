@@ -186,7 +186,9 @@ fun GkeDiscoveryModal(
                     GcloudMissing(onDismiss)
                 } else {
                     // Weighted, so the footer below is measured first and the step is
-                    // what shrinks in a short window.
+                    // what shrinks in a short window. The lists inside keep their fixed
+                    // height (their scrollbar fills it), so a list that grows or is
+                    // filtered while the modal is open does not move the card.
                     Box(Modifier.weight(1f, fill = false)) {
                         when (step) {
                             GkeDiscoveryStep.PICK_PROJECTS -> FirstStep(viewModel, mode)
@@ -520,13 +522,10 @@ private fun LoadedProjects(projects: List<GcpProject>, viewModel: GkeDiscoveryVi
                 }
             }
         }
-        // In a box of its own so the list, not the scrollbar, sets the height.
-        Box(Modifier.matchParentSize()) {
-            VerticalScrollbar(
-                adapter = rememberScrollbarAdapter(listState),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            )
-        }
+        VerticalScrollbar(
+            adapter = rememberScrollbarAdapter(listState),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        )
     }
 }
 
@@ -663,12 +662,10 @@ private fun ScanningStep(viewModel: GkeDiscoveryViewModel) {
             LazyColumn(state = listState) {
                 items(rows, key = { it.projectId }) { row -> ScanRow(row) }
             }
-            Box(Modifier.matchParentSize()) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
@@ -841,12 +838,10 @@ private fun ClustersStep(viewModel: GkeDiscoveryViewModel) {
                         CandidateRow(candidate, viewModel)
                     }
                 }
-                Box(Modifier.matchParentSize()) {
-                    VerticalScrollbar(
-                        adapter = rememberScrollbarAdapter(listState),
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    )
-                }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
             }
         }
     }
@@ -957,12 +952,10 @@ private fun ImportingStep(viewModel: GkeDiscoveryViewModel) {
                     key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
-            Box(Modifier.matchParentSize()) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
@@ -1098,12 +1091,10 @@ private fun DoneStep(viewModel: GkeDiscoveryViewModel, @Suppress("UNUSED_PARAMET
                     key = { it.cluster.projectId + "/" + it.cluster.location + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
-            Box(Modifier.matchParentSize()) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }

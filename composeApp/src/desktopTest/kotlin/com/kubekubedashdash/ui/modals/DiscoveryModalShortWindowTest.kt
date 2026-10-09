@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
@@ -26,6 +27,7 @@ import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -105,6 +107,34 @@ class DiscoveryModalShortWindowTest {
         val bounds = onNodeWithText("Cancel").getUnclippedBoundsInRoot()
         assertTrue(bounds.height > 0.dp, "the footer's Cancel button has no height: $bounds")
         assertTrue(bounds.bottom <= WINDOW_HEIGHT, "the footer's Cancel button ends past the $WINDOW_HEIGHT window: $bounds")
+    }
+
+    // The project list keeps its height while the filter narrows it: a list that shrank to its
+    // rows re-centred the card on every keystroke and moved the field being typed in.
+    @Test
+    fun `GKE project filter does not move the filter field`() = runComposeUiTest {
+        val fake = FakeGkeDiscoveryGateway(kubeconfigFile).apply {
+            initialMode = DiscoveryMode.BROWSE
+            projects = (1..40).map { GcpProject("example-project-%02d".format(it), "Example project $it") }
+        }
+        val vm = GkeDiscoveryViewModel(fake).also { gkeViewModel = it }
+        setContent {
+            MaterialTheme {
+                Box(Modifier.size(1000.dp, 900.dp)) {
+                    GkeDiscoveryModal(onDismiss = {}, onCompleted = {}, vm = vm)
+                }
+            }
+        }
+
+        waitUntilAtLeastOneExists(hasText("example-project-01"), timeoutMillis = 5_000)
+        waitForIdle()
+        val before = onNode(hasSetTextAction()).getUnclippedBoundsInRoot().top
+
+        vm.setProjectFilter("example-project-07")
+        waitForIdle()
+        val after = onNode(hasSetTextAction()).getUnclippedBoundsInRoot().top
+
+        assertEquals(before, after, "the filter field moved when the filter narrowed the list")
     }
 
     private companion object {

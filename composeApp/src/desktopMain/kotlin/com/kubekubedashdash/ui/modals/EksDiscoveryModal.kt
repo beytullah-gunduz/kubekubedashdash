@@ -182,7 +182,9 @@ fun EksDiscoveryModal(
                     AwsCliMissing(onDismiss)
                 } else {
                     // Weighted, so the footer below is measured first and the step is
-                    // what shrinks in a short window.
+                    // what shrinks in a short window. The lists inside keep their fixed
+                    // height (their scrollbar fills it), so a list that grows or is
+                    // filtered while the modal is open does not move the card.
                     Box(Modifier.weight(1f, fill = false)) {
                         when (step) {
                             EksDiscoveryStep.PICK_PROFILE -> FirstStep(viewModel, mode)
@@ -419,13 +421,10 @@ private fun ProfileStep(viewModel: EksDiscoveryViewModel) {
                         }
                     }
                 }
-                // In a box of its own so the list, not the scrollbar, sets the height.
-                Box(Modifier.matchParentSize()) {
-                    VerticalScrollbar(
-                        adapter = rememberScrollbarAdapter(listState),
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    )
-                }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
             }
         }
     }
@@ -643,12 +642,10 @@ private fun ScanningStep(viewModel: EksDiscoveryViewModel) {
                     items(profileRows, key = { "${it.profile}/${it.region}" }) { row -> ScanRow(row) }
                 }
             }
-            Box(Modifier.matchParentSize()) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
@@ -838,12 +835,10 @@ private fun ClustersStep(viewModel: EksDiscoveryViewModel) {
                         }
                     }
                 }
-                Box(Modifier.matchParentSize()) {
-                    VerticalScrollbar(
-                        adapter = rememberScrollbarAdapter(listState),
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    )
-                }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
             }
         }
     }
@@ -922,12 +917,10 @@ private fun ImportingStep(viewModel: EksDiscoveryViewModel) {
                     key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
-            Box(Modifier.matchParentSize()) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
@@ -1054,12 +1047,10 @@ private fun DoneStep(viewModel: EksDiscoveryViewModel, @Suppress("UNUSED_PARAMET
                     key = { it.cluster.profile + "/" + it.cluster.region + "/" + it.cluster.name },
                 ) { row -> ImportRowView(row) }
             }
-            Box(Modifier.matchParentSize()) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
