@@ -24,6 +24,8 @@ import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
 import com.kubekubedashdash.ui.screens.allclusters.rankTopNodes
 import com.kubekubedashdash.util.ReactiveKubeClient
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -37,6 +39,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.runningFold
@@ -44,12 +47,21 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class AllClustersViewModel internal constructor(
     /** The open [WorkspaceTab.Cluster] tabs; tests pass their own. */
     private val clusterTabs: Flow<List<WorkspaceTab.Cluster>>,
+    /**
+     * Where the derived flows below merge, sort, filter and count; their
+     * stateIn stays on viewModelScope. That scope is Dispatchers.Main.immediate,
+     * the Swing EDT: computed there, every change to any tab's events took the
+     * UI thread (43 % of its samples with an All Clusters tab open on real clusters).
+     */
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     companion object {
@@ -133,6 +145,15 @@ class AllClustersViewModel internal constructor(
         }
     }
 
+    /**
+     * Each event timestamp parsed once, keyed by its text. Five flows below
+     * re-apply the time window to every event on each change (the cluster
+     * summaries also every 30 s); parsing each time was the largest share of
+     * their cost. Pruned to the merged events' timestamps on each merge, and
+     * filled from several [computeDispatcher] threads at once.
+     */
+    private val lastSeenInstants = ConcurrentHashMap<String, Optional<Instant>>()
+
     /** Merged events from all open sessions, each tagged with its source cluster name. */
     val aggregatedEvents: StateFlow<List<EventInfo>> = clusterTabs
         .flatMapLatest { tabs ->
@@ -152,8 +173,13 @@ class AllClustersViewModel internal constructor(
                         }
                     }
                 },
-            ) { arrays -> arrays.flatMap { it }.sortedByDescending { it.lastSeenTimestamp } }
+            ) { arrays ->
+                val merged = arrays.flatMap { it }.sortedByDescending { it.lastSeenTimestamp }
+                lastSeenInstants.keys.retainAll(merged.mapTo(HashSet(merged.size)) { it.lastSeenTimestamp })
+                merged
+            }
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ── Filter state ─────────────────────────────────────────────────────────────
@@ -175,6 +201,7 @@ class AllClustersViewModel internal constructor(
      */
     val availableClusters: StateFlow<Set<String>> = aggregatedEvents
         .map { events -> events.mapNotNull { it.cluster }.toSet() }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     /**
@@ -182,6 +209,7 @@ class AllClustersViewModel internal constructor(
      */
     val availableNamespaces: StateFlow<Set<String>> = aggregatedEvents
         .map { events -> events.map { it.namespace }.toSet() }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     /**
@@ -191,10 +219,10 @@ class AllClustersViewModel internal constructor(
     val availableReasons: StateFlow<Set<String>> = combine(aggregatedEvents, _filters) { events, f ->
         val cutoff = Instant.now().minusSeconds(f.timeWindow.minutes * 60)
         events
-            .filter { ev -> ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true }
+            .filter { ev -> isRecent(ev, cutoff) }
             .map { it.reason }
             .toSet()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     /**
      * Debounced search text to avoid recomputing on every keystroke.
@@ -219,15 +247,15 @@ class AllClustersViewModel internal constructor(
                 (effectiveClusters == null || ev.cluster in effectiveClusters) &&
                 (effectiveNamespaces == null || ev.namespace in effectiveNamespaces) &&
                 (effectiveReasons == null || ev.reason in effectiveReasons) &&
-                (ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true) &&
+                isRecent(ev, cutoff) &&
                 (search.isBlank() || matchesSearch(ev, search))
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Grouped events sorted by totalCount desc, ties broken by lastSeenInstant desc. */
     val groupedEvents: StateFlow<List<EventGroup>> = combine(filteredEvents, _filters) { events, filters ->
         buildGroups(events, filters.timeWindow)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * Heatmap data: cluster × reason matrix. Applies time-window, type, and namespace
@@ -242,7 +270,7 @@ class AllClustersViewModel internal constructor(
         val filtered = events.filter { ev ->
             (f.types.isEmpty() || ev.type in f.types) &&
                 (effectiveNamespaces == null || ev.namespace in effectiveNamespaces) &&
-                (ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true)
+                isRecent(ev, cutoff)
         }
 
         if (filtered.isEmpty()) return@combine HeatmapData(emptyList(), emptyList(), emptyMap())
@@ -275,7 +303,7 @@ class AllClustersViewModel internal constructor(
             reasons = top12Reasons,
             cells = cellMap,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HeatmapData(emptyList(), emptyList(), emptyMap()))
+    }.flowOn(computeDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HeatmapData(emptyList(), emptyList(), emptyMap()))
 
     /** Clicking a heatmap cell narrows the cluster and reason filters. */
     fun onHeatmapCellClick(cluster: String, reason: String) {
@@ -317,7 +345,7 @@ class AllClustersViewModel internal constructor(
                         val recentErrors = events.count { ev ->
                             ev.cluster == b.ctx &&
                                 (ev.type == "Warning" || ev.type == "Error") &&
-                                (ev.lastSeenTimestamp.isBlank() || parseInstantOrNull(ev.lastSeenTimestamp)?.isAfter(cutoff) == true)
+                                isRecent(ev, cutoff)
                         }
                         ClusterSummary(
                             sessionId = b.sessionId,
@@ -337,6 +365,7 @@ class AllClustersViewModel internal constructor(
                 },
             ) { it.toList() }
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ── Preset state ──────────────────────────────────────────────────────────────
@@ -411,7 +440,8 @@ class AllClustersViewModel internal constructor(
     val memHistory: StateFlow<List<Float>> = _memHistory.asStateFlow()
 
     // The (tab, namespace) set the CPU/memory histories were sampled over.
-    // Touched only from aggregatedUsage's upstream, which has one collector.
+    // Touched only from aggregatedUsage's upstream, which has one collector
+    // (on computeDispatcher, one coroutine at a time).
     private var usageHistoryScope: Set<TabNamespace>? = null
 
     /** Summed cluster-level counts across all open sessions. */
@@ -440,6 +470,7 @@ class AllClustersViewModel internal constructor(
                 }
             }
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
@@ -486,6 +517,7 @@ class AllClustersViewModel internal constructor(
             }
         }
         .map { it.value }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Sum of allocatable pod slots across all nodes in all open sessions. */
@@ -496,6 +528,7 @@ class AllClustersViewModel internal constructor(
                 states.sumOf { state -> podSlots(state) }
             }
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
@@ -536,6 +569,7 @@ class AllClustersViewModel internal constructor(
             ScopedSum(sample.scope, sample.value?.let { (kept + it).takeLast(20) } ?: kept)
         }
         .map { it.value }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** A node's usage and the open cluster tab it was read from. */
@@ -554,6 +588,7 @@ class AllClustersViewModel internal constructor(
                 },
             ) { perTab -> rankTopNodes(perTab.toList()) }
         }
+        .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
@@ -575,6 +610,14 @@ class AllClustersViewModel internal constructor(
         null
     }
 
+    /** [ev]'s lastSeenTimestamp as an instant, parsed at most once while the merged events hold it. */
+    private fun lastSeenOf(ev: EventInfo): Instant? = lastSeenInstants
+        .computeIfAbsent(ev.lastSeenTimestamp) { Optional.ofNullable(parseInstantOrNull(it)) }
+        .orElse(null)
+
+    /** Whether [ev] falls after [cutoff]; one without a timestamp always does, one that does not parse never. */
+    private fun isRecent(ev: EventInfo, cutoff: Instant): Boolean = ev.lastSeenTimestamp.isBlank() || lastSeenOf(ev)?.isAfter(cutoff) == true
+
     private fun matchesSearch(ev: EventInfo, query: String): Boolean {
         val q = query.lowercase()
         return ev.objectRef.lowercase().contains(q) ||
@@ -591,8 +634,8 @@ class AllClustersViewModel internal constructor(
 
         val grouped = events.groupBy { GroupKey(it.type, it.reason, it.objectRef) }
         return grouped.map { (key, members) ->
-            val latest = members.maxByOrNull { parseInstantOrNull(it.lastSeenTimestamp) ?: Instant.MIN }
-            val lastSeenInstant = latest?.let { parseInstantOrNull(it.lastSeenTimestamp) } ?: Instant.MIN
+            val latest = members.maxByOrNull { lastSeenOf(it) ?: Instant.MIN }
+            val lastSeenInstant = latest?.let { lastSeenOf(it) } ?: Instant.MIN
             val perCluster = members
                 .groupBy { it.cluster ?: "?" }
                 .mapValues { (_, evs) -> evs.sumOf { it.count } }
@@ -602,7 +645,7 @@ class AllClustersViewModel internal constructor(
             // k8s already aggregated repeats into count — we have no per-occurrence timestamps.
             val histogram = MutableList(bucketCount) { 0 }
             members.forEach { ev ->
-                val eventInstant = parseInstantOrNull(ev.lastSeenTimestamp) ?: return@forEach
+                val eventInstant = lastSeenOf(ev) ?: return@forEach
                 val offsetSeconds = eventInstant.epochSecond - windowStart.epochSecond
                 val bucketIndex = (offsetSeconds / bucketWidthSeconds).toInt().coerceIn(0, bucketCount - 1)
                 histogram[bucketIndex]++
