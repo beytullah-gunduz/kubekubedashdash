@@ -58,12 +58,15 @@ then `N passed, M failed`. Exit code: 0 all passed, 1 a check failed or the run 
 - Each scenario launches the app with `-PhotRunDataDir=<run>/<scenario>/data`, a data
   directory that did not exist before. Your preferences, session and logs are not touched.
 - The kubeconfig stays the empty test one, so the demo cluster is the only cluster.
-  Scenarios never open EKS/GKE discovery (that would run `aws` / `gcloud`); the splash is
+- The cloud CLIs are off: hot runs start with `-Dkkdd.disableCloudClis=true`, which makes `aws`,
+  `gcloud`, `gke-gcloud-auth-plugin`, `az` and `kubelogin` resolve as missing in the app. No click,
+  intended or stray, can start a real EKS/GKE discovery against your accounts; the first-run
+  screen shows no Discover button, and `first-run-title-bar` checks that. The discovery splash is
   forced through a hook.
 - Before the app starts and again after, the runner reads the JVM argfile and aborts unless it
-  holds the empty kubeconfig, this scenario's data directory and `-Dkkdd.uiTestHooks=true`.
-  No semantic tree is read before that. It also aborts when
-  `ORG_GRADLE_PROJECT_hotRunKubeconfig` is set.
+  holds the empty kubeconfig, this scenario's data directory, `-Dkkdd.uiTestHooks=true` and
+  `-Dkkdd.disableCloudClis=true`. No semantic tree is read before that. It refuses to start when
+  `ORG_GRADLE_PROJECT_hotRunKubeconfig` or `ORG_GRADLE_PROJECT_hotRunCloudClis` is set.
 - It refuses to start while another hot run of the same worktree is up (the MCP server follows
   one pid file and would attach to it). Stop other Hot Reload MCP servers of this worktree
   first.

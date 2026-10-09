@@ -94,7 +94,23 @@ object ShellEnvironment {
         commandCache.clear()
     }
 
+    /**
+     * The CLIs that act on the developer's real cloud accounts. With [DISABLE_CLOUD_CLIS_PROPERTY]
+     * set to "true" — every hot run sets it (build.gradle.kts) — they resolve as missing, so
+     * neither EKS/GKE discovery nor anything else can start them, whatever an agent or the UI
+     * smoke clicks. Exec credential plugins named in a kubeconfig bypass this; hot runs use the
+     * empty test kubeconfig.
+     */
+    private val cloudClis = setOf("aws", "gcloud", "gke-gcloud-auth-plugin", "az", "kubelogin")
+
+    const val DISABLE_CLOUD_CLIS_PROPERTY = "kkdd.disableCloudClis"
+
     fun resolveCommand(command: String): String? {
+        // Checked on every call and never cached, so the switch can't leave a stale answer behind.
+        if (command in cloudClis && System.getProperty(DISABLE_CLOUD_CLIS_PROPERTY) == "true") {
+            log.debug("Command '{}' treated as missing: cloud CLIs are disabled ({})", command, DISABLE_CLOUD_CLIS_PROPERTY)
+            return null
+        }
         val cached = commandCache[command]
         if (cached != null) return cached.orElse(null)
         val found = scanForExecutable(command)

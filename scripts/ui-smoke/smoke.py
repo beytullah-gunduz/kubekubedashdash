@@ -274,6 +274,8 @@ def isolation_problems(data_dir):
         problems.append("-Dkkdd.dataDir is not this scenario's data directory")
     if props.get("kkdd.uiTestHooks") != "true":
         problems.append("-Dkkdd.uiTestHooks=true is missing")
+    if props.get("kkdd.disableCloudClis") != "true":
+        problems.append("-Dkkdd.disableCloudClis=true is missing: aws/gcloud would be reachable from the app")
     return problems
 
 
@@ -784,6 +786,9 @@ def s1_first_run_title_bar():
         n = find(win, desc=d, clickable=False, timeout=5)
         check(f"{d!r} is disabled", n is not None and not enabled(n), "node missing" if n is None else "")
     check("state.firstRun is true", st(win).get("firstRun") is True)
+    # With the cloud CLIs off, the screen must not offer a discovery that would run aws/gcloud.
+    offered = [_hay(n.get("text")) for n in find_nodes(win, text="Discover", prefix=True, clickable=False)]
+    check("the first-run screen offers no EKS/GKE discovery", not offered, f"found {offered}")
     shot(win, "first-run")
 
 
@@ -991,11 +996,32 @@ def s8_cluster_selector_short_window():
     click_desc(win, "Open another cluster")
     must(lambda: find(win, text="Select Cluster", prefix=True, clickable=False, timeout=0), "the cluster picker")
     window_height = root_height(win)
-    for label in ("All Clusters view", "Discover EKS clusters", "Discover GKE clusters"):
-        node = find(win, text=label, prefix=True, clickable=False, timeout=5)
-        b = (node or {}).get("bounds") or {}
-        visible = node is not None and b.get("height", 0) > 0 and b.get("y", 0) + b.get("height", 0) <= window_height
-        check(f"'{label}' is visible in a {width}x{height} window", visible, f"bounds={b}, window height={window_height}")
+    scale = window_height / window_height_pt(win)
+    all_row = find(win, text="All Clusters view", prefix=True, clickable=False, timeout=5)
+    ab = (all_row or {}).get("bounds") or {}
+    all_bottom = ab.get("y", 0) + ab.get("height", 0)
+    check(f"'All Clusters view' is visible in a {width}x{height} window",
+          all_row is not None and ab.get("height", 0) > 0 and all_bottom <= window_height,
+          f"bounds={ab}, window height={window_height}")
+    card = find(win, text="Select Cluster", prefix=True, clickable=False, timeout=5)
+    cb = (card or {}).get("bounds") or {}
+    card_bottom = cb.get("y", 0) + cb.get("height", 0)
+    for label in ("Discover EKS clusters", "Discover GKE clusters"):
+        node = find(win, text=label, prefix=True, clickable=False, timeout=2)
+        if node is not None:
+            b = node.get("bounds") or {}
+            visible = b.get("height", 0) > 0 and b.get("y", 0) + b.get("height", 0) <= window_height
+            detail = f"bounds={b}, window height={window_height}"
+        else:
+            # With the cloud CLIs off the row is not clickable, so its text merges into the card's
+            # node: it is on screen when the card holds it, fits the window and keeps room for the
+            # two Discover rows (about 56 dp each) under a laid-out All Clusters view row (a
+            # squeezed footer leaves that row 0x0, which would make the room look like the card).
+            room = card_bottom - all_bottom
+            visible = (card is not None and label in _hay(card.get("text")) and card_bottom <= window_height
+                       and ab.get("height", 0) > 0 and room >= 100 * scale)
+            detail = f"card={cb}, room under All Clusters view={room}px, window height={window_height}"
+        check(f"'{label}' is visible in a {width}x{height} window", visible, detail)
     shot(win, "selector-short")
 
 
@@ -1139,6 +1165,8 @@ def main():
         refuse(2, f"unknown scenario(s): {', '.join(unknown)}\nknown: {', '.join(names)}")
     if not ((CTX.repo / "gradlew").is_file() and (CTX.repo / "composeApp").is_dir()):
         refuse(2, "run this from the repository root (./gradlew and composeApp/ must be in the current directory)")
+    if os.environ.get("ORG_GRADLE_PROJECT_hotRunCloudClis"):
+        refuse(2, "ORG_GRADLE_PROJECT_hotRunCloudClis is set: the app could run aws/gcloud against real accounts; unset it")
     if os.environ.get("ORG_GRADLE_PROJECT_hotRunKubeconfig"):
         refuse(2, "ORG_GRADLE_PROJECT_hotRunKubeconfig is set: a hot run could read a kubeconfig other than the empty one; unset it")
     CTX.java_home = resolve_java_home()

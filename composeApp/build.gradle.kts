@@ -289,6 +289,11 @@ tasks.matching { it.name.startsWith("hotRun") }.configureEach {
         // Hidden test hooks for scripts/ui-smoke (tab drags between windows, the history
         // shortcuts); hot runs only, never a release build.
         systemProperty("kkdd.uiTestHooks", "true")
+        // Cloud CLIs off (ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY): aws, gcloud and the auth
+        // plugins resolve as missing, so nothing in a hot run reaches the developer's real
+        // AWS/GCP accounts. -PhotRunCloudClis=true turns them back on for a deliberate manual
+        // check of EKS/GKE discovery.
+        systemProperty("kkdd.disableCloudClis", (providers.gradleProperty("hotRunCloudClis").orNull != "true").toString())
     }
 }
 
