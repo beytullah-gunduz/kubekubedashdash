@@ -483,6 +483,20 @@ fun App(
         val refreshBarBackground by PreferenceRepository.crtRefreshBarBackground.collectAsState()
         val refreshBar = rememberCrtRefreshBar()
         CrtRefreshBarDriver(refreshBar, crtPowerOn, active = ThemeManager.isRetro && scanlines, mode = refreshBarMode, rollInBackground = refreshBarBackground)
+        // Cmd/Ctrl+[ and ] through the window's history, across tabs. Not on a terminal
+        // tab: Ctrl+[ is Escape to the shell there. True when the shortcut was used.
+        val historyShortcut: (back: Boolean) -> Boolean = { back ->
+            if (activeTab is WorkspaceTab.Terminal) {
+                false
+            } else {
+                if (back) workspace.goBack() else workspace.goForward()
+                true
+            }
+        }
+        // Hot-run test hooks only (UiTestHooks): what the last hooked shortcut did, and a
+        // forced discovery splash, so a smoke never opens the real EKS/GKE discovery.
+        var uiTestLastShortcut by remember { mutableStateOf("none") }
+        var uiTestForceDiscoverySplash by remember { mutableStateOf(false) }
         MaybeProvideSessionLocals(titleSession) {
             Box(
                 modifier = Modifier
@@ -532,26 +546,11 @@ fun App(
                                 activeSession != null
                             }
 
-                            // Cmd+[ / Ctrl+[: back through the window's history, across tabs.
-                            // Not on a terminal tab: Ctrl+[ is Escape to the shell there.
-                            event.key == Key.LeftBracket && metaOrCtrl -> {
-                                if (activeTab is WorkspaceTab.Terminal) {
-                                    false
-                                } else {
-                                    workspace.goBack()
-                                    true
-                                }
-                            }
+                            // Cmd+[ / Ctrl+[: back through the window's history (historyShortcut).
+                            event.key == Key.LeftBracket && metaOrCtrl -> historyShortcut(true)
 
-                            // Cmd+] / Ctrl+]: forward, with the same terminal exception.
-                            event.key == Key.RightBracket && metaOrCtrl -> {
-                                if (activeTab is WorkspaceTab.Terminal) {
-                                    false
-                                } else {
-                                    workspace.goForward()
-                                    true
-                                }
-                            }
+                            // Cmd+] / Ctrl+]: forward.
+                            event.key == Key.RightBracket && metaOrCtrl -> historyShortcut(false)
 
                             // Cmd+= / Cmd++ / Cmd+NumPad+: zoom in.
                             (event.key == Key.Equals || event.key == Key.Plus || event.key == Key.NumPadAdd) && metaOrCtrl -> {
@@ -678,8 +677,11 @@ fun App(
                     }
                 }
 
-                if (showFirstRun && (showEksDiscovery || showGkeDiscovery)) {
-                    BootstrapSplash()
+                if (showFirstRun && (showEksDiscovery || showGkeDiscovery || uiTestForceDiscoverySplash)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        windowTitleBar()
+                        BootstrapSplash(Modifier.weight(1f))
+                    }
                 } else if (showFirstRun) {
                     Column(
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -946,6 +948,23 @@ fun App(
                         onDismiss = { pendingPortForward = null },
                     )
                 }
+
+                if (UiTestHooksEnabled) {
+                    UiTestHooks(
+                        workspace = workspace,
+                        tabs = tabs,
+                        activeTabKey = activeTabKey,
+                        activeSession = activeSession,
+                        pagerState = pagerState,
+                        history = navHistory,
+                        firstRun = showFirstRun,
+                        lastShortcut = uiTestLastShortcut,
+                        onHistoryShortcut = { back ->
+                            uiTestLastShortcut = if (historyShortcut(back)) "handled" else "passed"
+                        },
+                        onForceDiscoverySplash = { uiTestForceDiscoverySplash = true },
+                    )
+                }
             }
         }
     }
@@ -959,9 +978,9 @@ fun App(
  * cluster selector reads as a continuation rather than a content swap.
  */
 @Composable
-private fun BootstrapSplash() {
+private fun BootstrapSplash(modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
