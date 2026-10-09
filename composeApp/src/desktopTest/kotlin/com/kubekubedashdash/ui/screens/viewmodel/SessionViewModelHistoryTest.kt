@@ -1,40 +1,47 @@
 package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.model.ClusterSession
+import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.models.PodInfo
-import com.kubekubedashdash.util.KubeConnectionManager
-import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
- * History semantics for [SessionViewModel]'s back/forward navigation.
+ * History semantics for one cluster tab, driven through its window's
+ * Back/Forward ([Workspace.goBack]).
  */
 class SessionViewModelHistoryTest {
 
-    private lateinit var scope: CoroutineScope
-    private lateinit var manager: KubeConnectionManager
+    private lateinit var session: ClusterSession
+    private lateinit var workspace: Workspace
     private lateinit var viewModel: SessionViewModel
 
     @BeforeTest
+    fun guardDataDirectory() {
+        assertTrue(
+            SystemDirectories.dataDirectory.contains("test-data"),
+            "refusing to run against a data directory that is not the Gradle test-data directory",
+        )
+    }
+
+    @BeforeTest
     fun setUp() {
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        manager = KubeConnectionManager()
-        viewModel = SessionViewModel(ReactiveKubeClient(scope, manager), scope)
+        session = ClusterSession()
+        workspace = Workspace()
+        workspace.addSession(session, makeActive = true)
+        viewModel = session.viewModel
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(scope, label = "SessionViewModelHistoryTest", manager = manager)
+        shutdownCleanly(session.scope, label = "SessionViewModelHistoryTest", manager = session.connectionManager)
     }
 
     private val detail = Screen.Detail.ResourceDetail(kind = "Pod", name = "p1", namespace = "ns-a")
@@ -60,7 +67,7 @@ class SessionViewModelHistoryTest {
     fun `back returns to the previous main screen`() {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Nodes(), viewModel.currentScreen.value)
         assertEquals(null, viewModel.extraPaneScreen.value)
     }
@@ -72,10 +79,10 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(detail)
         assertEquals(detail, viewModel.extraPaneScreen.value)
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(null, viewModel.extraPaneScreen.value)
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Nodes(), viewModel.currentScreen.value)
         assertEquals(null, viewModel.extraPaneScreen.value)
     }
@@ -85,12 +92,12 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods())
         viewModel.navigate(detail)
-        viewModel.goBack()
-        viewModel.goBack()
-        viewModel.goForward()
+        workspace.goBack()
+        workspace.goBack()
+        workspace.goForward()
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertEquals(null, viewModel.extraPaneScreen.value)
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertEquals(detail, viewModel.extraPaneScreen.value)
     }
@@ -99,11 +106,11 @@ class SessionViewModelHistoryTest {
     fun `a new navigation clears the forward stack`() {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.goBack()
+        workspace.goBack()
         viewModel.navigate(Screen.Main.Deployments())
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(Screen.Main.Deployments(), viewModel.currentScreen.value)
-        runBlocking { withTimeout(5_000) { viewModel.canGoForward.first { !it } } }
+        assertFalse(workspace.navigationHistory.value.canGoForward)
     }
 
     @Test
@@ -111,14 +118,14 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods())
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Nodes(), viewModel.currentScreen.value)
     }
 
     @Test
     fun `the transient Connecting screen is never recorded`() {
         viewModel.navigate(Screen.Main.Nodes())
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Nodes(), viewModel.currentScreen.value)
     }
 
@@ -128,7 +135,7 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(detail)
         viewModel.closeExtraPane()
         assertEquals(null, viewModel.extraPaneScreen.value)
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(detail, viewModel.extraPaneScreen.value)
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
     }
@@ -137,13 +144,13 @@ class SessionViewModelHistoryTest {
     fun `back is blocked on the connection-error screen`() {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.ConnectionError("boom", 10))
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.ConnectionError("boom", 10), viewModel.currentScreen.value)
     }
 
     @Test
     fun `back on an empty stack is a no-op`() {
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Connecting, viewModel.currentScreen.value)
     }
 
@@ -154,7 +161,7 @@ class SessionViewModelHistoryTest {
         var changes = 0
         repeat(70) {
             val before = viewModel.currentScreen.value to viewModel.extraPaneScreen.value
-            viewModel.goBack()
+            workspace.goBack()
             if (viewModel.currentScreen.value to viewModel.extraPaneScreen.value != before) changes++
         }
         assertEquals(50, changes)
@@ -165,10 +172,10 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods(selectPodUid = "abc"))
         viewModel.navigate(detail)
-        viewModel.goBack()
-        viewModel.goBack()
+        workspace.goBack()
+        workspace.goBack()
         assertEquals(Screen.Main.Nodes(), viewModel.currentScreen.value)
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertEquals(null, viewModel.extraPaneScreen.value)
     }
@@ -177,10 +184,10 @@ class SessionViewModelHistoryTest {
     fun `leaving a transient screen clears the forward stack`() {
         viewModel.navigate(Screen.Main.Nodes())
         viewModel.navigate(Screen.Main.Pods())
-        viewModel.goBack()
+        workspace.goBack()
         viewModel.navigate(Screen.Main.ConnectionError("boom", 10))
         viewModel.navigate(Screen.Main.Deployments())
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(Screen.Main.Deployments(), viewModel.currentScreen.value)
     }
 
@@ -191,7 +198,7 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(Screen.Detail.PodDetail(pod("u-1", status = "Running")))
         viewModel.navigate(Screen.Detail.PodDetail(pod("u-1", status = "Pending")))
         assertEquals("Pending", (viewModel.extraPaneScreen.value as Screen.Detail.PodDetail).pod.status)
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(null, viewModel.extraPaneScreen.value)
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
     }
@@ -202,7 +209,7 @@ class SessionViewModelHistoryTest {
         viewModel.navigate(Screen.Main.Pods())
         viewModel.navigate(Screen.Detail.PodDetail(pod("u-1", name = "web-0")))
         viewModel.navigate(Screen.Detail.PodDetail(pod("u-2", name = "web-1")))
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals("u-1", (viewModel.extraPaneScreen.value as Screen.Detail.PodDetail).pod.uid)
     }
 }

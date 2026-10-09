@@ -1,8 +1,5 @@
 package com.kubekubedashdash.helm
 
-/** True when a list/watch failure is an RBAC refusal. Matches fabric8's KubernetesClientException text. */
-fun isHelmForbidden(message: String?): Boolean = message != null && ("code=403" in message || "reason=Forbidden" in message || " is forbidden" in message)
-
 const val HELM_FORBIDDEN_MESSAGE =
     "Listing Helm releases needs permission to list and watch Secrets labelled owner=helm " +
         "in the selected namespaces, and your credentials were refused (HTTP 403). " +

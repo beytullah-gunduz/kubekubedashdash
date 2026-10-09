@@ -50,6 +50,7 @@ import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.components.StatusBadge
 import com.kubekubedashdash.ui.components.UsageBar
@@ -156,7 +157,7 @@ private fun resourceQuotaUsageTab(
     when {
         rows == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                BusyIndicator(modifier = Modifier.padding(16.dp))
+                BusyScanner(ringSize = 40.dp, modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -218,7 +219,7 @@ private fun policyRulesTab(
     when {
         rules == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                BusyIndicator(modifier = Modifier.padding(16.dp))
+                BusyScanner(ringSize = 40.dp, modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -275,7 +276,7 @@ private fun roleBindingTab(
     when {
         !loaded -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                BusyIndicator(modifier = Modifier.padding(16.dp))
+                BusyScanner(ringSize = 40.dp, modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -404,7 +405,7 @@ private fun endpointSliceTab(
     when {
         !loaded -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                BusyIndicator(modifier = Modifier.padding(16.dp))
+                BusyScanner(ringSize = 40.dp, modifier = Modifier.padding(16.dp))
             }
         }
 

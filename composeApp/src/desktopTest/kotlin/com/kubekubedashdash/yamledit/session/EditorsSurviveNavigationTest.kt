@@ -1,19 +1,17 @@
 package com.kubekubedashdash.yamledit.session
 
 import com.kubekubedashdash.Screen
+import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.SessionId
+import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.ui.screens.viewmodel.SessionViewModel
-import com.kubekubedashdash.util.KubeConnectionManager
-import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
 import com.kubekubedashdash.yamledit.TEST_NAMESPACE
 import com.kubekubedashdash.yamledit.WriterMock
 import com.kubekubedashdash.yamledit.YamlWriter
 import com.kubekubedashdash.yamledit.configMapTarget
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
@@ -38,22 +36,32 @@ class EditorsSurviveNavigationTest {
     private val context = "cluster-a"
     private val tab = SessionId("tab-1")
     private lateinit var mock: WriterMock
-    private lateinit var viewScope: CoroutineScope
-    private lateinit var viewManager: KubeConnectionManager
+    private lateinit var session: ClusterSession
+    private lateinit var workspace: Workspace
     private lateinit var viewModel: SessionViewModel
+
+    @BeforeTest
+    fun guardDataDirectory() {
+        assertTrue(
+            SystemDirectories.dataDirectory.contains("test-data"),
+            "refusing to run against a data directory that is not the Gradle test-data directory",
+        )
+    }
 
     @BeforeTest
     fun setUp() {
         mock = WriterMock(context)
         mock.seedConfigMap()
-        viewScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        viewManager = KubeConnectionManager()
-        viewModel = SessionViewModel(ReactiveKubeClient(viewScope, viewManager), viewScope)
+        // Back/Forward belong to the window: a real tab in a real window, never connected.
+        session = ClusterSession()
+        workspace = Workspace()
+        workspace.addSession(session, makeActive = true)
+        viewModel = session.viewModel
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(viewScope, label = "EditorsSurviveNavigationTest", manager = viewManager)
+        shutdownCleanly(session.scope, label = "EditorsSurviveNavigationTest", manager = session.connectionManager)
         mock.stop("EditorsSurviveNavigationTest")
     }
 
@@ -106,15 +114,15 @@ class EditorsSurviveNavigationTest {
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertUntouched("leaving the screen")
 
-        viewModel.goBack()
+        workspace.goBack()
         assertEquals(null, viewModel.extraPaneScreen.value)
         assertUntouched("back")
-        viewModel.goBack()
+        workspace.goBack()
         assertUntouched("back again")
         assertEquals(otherDetail, viewModel.extraPaneScreen.value, "positive control: the history really moved")
-        viewModel.goForward()
+        workspace.goForward()
         assertUntouched("forward")
-        viewModel.goForward()
+        workspace.goForward()
         assertEquals(Screen.Main.Pods(), viewModel.currentScreen.value)
         assertUntouched("forward again")
 

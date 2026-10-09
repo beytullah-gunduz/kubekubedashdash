@@ -3,6 +3,8 @@ package com.kubekubedashdash.helm
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.isForbidden
+import com.kubekubedashdash.util.restartListFlow
 import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
@@ -18,12 +20,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.util.Base64
 import java.util.Queue
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,12 +41,14 @@ import kotlin.test.assertTrue
 /**
  * The Helm informers and the payload fetch, against a loopback mock server: the label selector
  * keeps unrelated Secrets out, both drivers are read, a payload decodes through the production
- * codec, and a 403 reaches the screen as an Error that isHelmForbidden recognises.
+ * codec, and a 403 reaches the screen as an Error that isForbidden recognises, without tripping
+ * the connection-failure counter.
  */
 class ReactiveKubeClientHelmTest {
 
     // The informer's initial list: label-selected server-side, so the unrelated Secret never arrives.
     private val secretListPath = "/api/v1/secrets?labelSelector=owner%3Dhelm&resourceVersion=0"
+    private val configMapListPath = "/api/v1/configmaps?labelSelector=owner%3Dhelm&resourceVersion=0"
 
     private lateinit var responses: MutableMap<ServerRequest, Queue<ServerResponse>>
     private lateinit var server: KubernetesMockServer
@@ -201,7 +208,7 @@ class ReactiveKubeClientHelmTest {
     }
 
     @Test
-    fun `a 403 on the label-selected list is an Error that isHelmForbidden recognises`() = runBlocking {
+    fun `a 403 on the label-selected list is an Error that isForbidden recognises`() = runBlocking {
         startClient {
             server.expect().get().withPath(secretListPath)
                 .andReturn(
@@ -215,6 +222,52 @@ class ReactiveKubeClientHelmTest {
         val state = withTimeout(10_000) { client.helmReleaseSecrets.first { it !is ResourceState.Loading } }
 
         val error = assertIs<ResourceState.Error>(state)
-        assertTrue(isHelmForbidden(error.message), "message: ${error.message}")
+        assertTrue(isForbidden(error.message), "message: ${error.message}")
+    }
+
+    private fun deny(path: String, resource: String) {
+        server.expect().get().withPath(path)
+            .andReturn(403, StatusBuilder().withCode(403).withReason("Forbidden").withMessage("$resource is forbidden").build())
+            .always()
+    }
+
+    /** Waits until each of [paths] has been requested again, up to five seconds in all. */
+    private fun awaitRequests(paths: Set<String>): Boolean {
+        val pending = paths.toMutableSet()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (pending.isNotEmpty() && System.nanoTime() < deadline) {
+            val request = server.takeRequest(200, TimeUnit.MILLISECONDS) ?: continue
+            pending.remove(request.path)
+        }
+        return pending.isEmpty()
+    }
+
+    @Test
+    fun `Retry on a screen whose two Helm lists are both refused never sets connectionError`() = runBlocking {
+        // Two denied informers per attempt: counted, the first Retry crossed the
+        // three-failure threshold and the reconnect overlay showed the refusal text.
+        startClient {
+            deny(secretListPath, "secrets")
+            deny(configMapListPath, "configmaps")
+        }
+        val lists = listOf(client.helmReleaseSecrets, client.helmReleaseConfigMaps)
+        val observedErrors = CopyOnWriteArrayList<String?>()
+        collectors += scope.launch { manager.connectionError.collect { observedErrors += it } }
+        lists.forEach { list -> collectors += scope.launch { list.collect {} } }
+        assertTrue(awaitRequests(setOf(secretListPath, configMapListPath)), "both lists were requested")
+
+        repeat(3) { retry ->
+            lists.forEach { withTimeout(5_000) { while (it.value !is ResourceState.Error) delay(20) } }
+            delay(100)
+            // What the screen's Retry does.
+            lists.forEach { assertTrue(restartListFlow(it)) }
+            assertTrue(awaitRequests(setOf(secretListPath, configMapListPath)), "Retry ${retry + 1} listed both again")
+        }
+        lists.forEach { withTimeout(5_000) { while (it.value !is ResourceState.Error) delay(20) } }
+        delay(300)
+
+        lists.forEach { assertTrue(isForbidden(assertIs<ResourceState.Error>(it.value).message)) }
+        val nonNull = observedErrors.filterNotNull()
+        assertTrue(nonNull.isEmpty(), "an RBAC refusal must never set connectionError (saw: $nonNull)")
     }
 }

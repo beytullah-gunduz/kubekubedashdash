@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdSurface
@@ -34,7 +35,8 @@ import org.jetbrains.compose.resources.painterResource
  * [description] line beneath it (what the action does and why you'd use it) —
  * so the action is understandable without prior Kubernetes knowledge. [label]
  * also serves as the icon's accessibility description, and the tooltip shows
- * regardless of [enabled] so a disabled action still explains itself.
+ * regardless of [enabled] so a disabled action still explains itself. The glyph
+ * is [iconSize] square (16 dp by default).
  *
  * Matches the app's existing TooltipArea convention (see ClusterActionTooltip /
  * SidebarItemTooltip).
@@ -47,6 +49,7 @@ fun TooltipIconButton(
     tint: Color,
     description: String? = null,
     enabled: Boolean = true,
+    iconSize: Dp = 16.dp,
     onClick: () -> Unit,
 ) {
     TooltipArea(
@@ -54,7 +57,7 @@ fun TooltipIconButton(
         tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         IconButton(onClick = onClick, modifier = Modifier.size(28.dp), enabled = enabled, shape = kdRoundShape) {
-            Icon(painterResource(icon), label, Modifier.size(16.dp), tint = tint)
+            Icon(painterResource(icon), label, Modifier.size(iconSize), tint = tint)
         }
     }
 }

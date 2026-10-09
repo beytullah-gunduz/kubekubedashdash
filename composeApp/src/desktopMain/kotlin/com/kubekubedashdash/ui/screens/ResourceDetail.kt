@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -34,10 +33,8 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.kdCorner
-import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.article_filled
-import com.kubekubedashdash.resources.close_filled
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -99,9 +96,7 @@ fun ResourceDetailScreen(
 
             if (onClose != null) {
                 Spacer(Modifier.width(8.dp))
-                IconButton(onClick = onClose, modifier = Modifier.size(28.dp), shape = kdRoundShape) {
-                    Icon(painterResource(Res.drawable.close_filled), "Close", Modifier.size(16.dp), tint = KdTextSecondary)
-                }
+                PanelCloseButton(onClose)
             }
         }
 

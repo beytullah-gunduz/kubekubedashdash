@@ -2,7 +2,9 @@ package com.kubekubedashdash.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.CrdPreferenceRepository
 import com.kubekubedashdash.model.ClusterSession
@@ -75,6 +77,8 @@ internal fun rememberPaletteEntries(
     tabs: List<WorkspaceTab>,
     onNavigate: (Screen) -> Unit,
     onActivateTab: (tabKey: String) -> Unit,
+    /** Non-null while ≥2 cluster tabs are open anywhere: shows the "All Clusters" entry. */
+    onOpenAllClusters: (() -> Unit)?,
     onSelectNamespace: (String) -> Unit,
     onCaptureLogs: (String) -> Unit,
     onTailLogs: (String) -> Unit,
@@ -207,7 +211,20 @@ internal fun rememberPaletteEntries(
         }
     }
 
-    val clusterEntries = remember(tabs, onActivateTab) {
+    val openAllClusters by rememberUpdatedState(onOpenAllClusters)
+    val clusterEntries = remember(tabs, onActivateTab, onOpenAllClusters != null) {
+        val fleet = if (onOpenAllClusters != null) {
+            PaletteEntry(
+                id = "all-clusters",
+                label = "All Clusters",
+                sublabel = "compare the open clusters",
+                category = "Clusters",
+                icon = Res.drawable.hub,
+                onActivate = { openAllClusters?.invoke() },
+            )
+        } else {
+            null
+        }
         tabs.filterIsInstance<WorkspaceTab.Cluster>().mapNotNull { tab ->
             val ctx = tab.session.connectionManager.getCurrentContext().ifBlank { return@mapNotNull null }
             PaletteEntry(
@@ -218,7 +235,7 @@ internal fun rememberPaletteEntries(
                 icon = Res.drawable.hub,
                 onActivate = { onActivateTab(tab.key) },
             )
-        }
+        } + listOfNotNull(fleet)
     }
 
     val activeContext = DemoContext.preferenceKey(activeSession?.connectionManager?.getCurrentContext().orEmpty())

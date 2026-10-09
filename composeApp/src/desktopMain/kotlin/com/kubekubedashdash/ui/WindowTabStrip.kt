@@ -9,14 +9,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -38,10 +35,10 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdRoundShape
 import com.kubekubedashdash.model.SessionId
 import com.kubekubedashdash.model.WorkspaceTab
-import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add
 import org.jetbrains.compose.resources.painterResource
@@ -57,17 +54,19 @@ private data class ClusterDisplay(
 )
 
 /**
- * Tab strip rendered between the title bar and the content scaffold when the
- * workspace has ≥2 tabs or any non-cluster tab. Each cluster tab is a
- * [ClusterChip] with a close ×; terminal and all-clusters tabs render their
- * own chips. Plus a trailing `+` button that opens the cluster picker.
+ * The window's tabs, rendered inside the title bar for every tab count. Each
+ * cluster tab is a [ClusterChip] with a close ×; terminal and all-clusters
+ * tabs render their own chips. A trailing `+` opens the cluster picker. A
+ * lone cluster tab drops its × and active underline (closing it would close
+ * the window; there is nothing to compare it with).
  *
  * Tab labels use the kubeconfig context name, with `(2)`, `(3)`, … appended on
  * collisions within the workspace (Decision 4).
  *
- * The whole strip doubles as the chip-on-chip drop zone for cross-window
- * merges — when [isDropTarget] is true (because another window's chip is
- * being dragged over us), the background lightens to advertise the drop.
+ * The strip eats presses so a click or drag on a chip never moves the window;
+ * the title bar around it stays draggable. When [isDropTarget] is true
+ * (another window's chip is being dragged over this window) its background
+ * lightens to advertise the drop; a lone cluster chip also draws its drop border.
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -146,132 +145,129 @@ fun WindowTabStrip(
         target.bringIntoView()
     }
 
-    Box(modifier = modifier.fillMaxWidth()) {
+    val loneTab = tabs.size == 1
+
+    Row(
+        modifier = modifier
+            .consumeTitleBarPress()
+            .clip(6.dp.kdCorner)
+            .background(targetBg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(targetBg)
-                .padding(horizontal = 8.dp, vertical = 4.dp.orCompact(2.dp)),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .drawWithContent {
-                        drawContent()
-                        val fadePx = EDGE_FADE_WIDTH.toPx()
-                        if (scrollState.canScrollBackward) {
-                            drawRect(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(targetBg, Color.Transparent),
-                                    startX = 0f,
-                                    endX = fadePx,
-                                ),
-                                topLeft = Offset.Zero,
-                                size = Size(fadePx, size.height),
-                            )
-                        }
-                        if (scrollState.canScrollForward) {
-                            drawRect(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(Color.Transparent, targetBg),
-                                    startX = size.width - fadePx,
-                                    endX = size.width,
-                                ),
-                                topLeft = Offset(size.width - fadePx, 0f),
-                                size = Size(fadePx, size.height),
-                            )
-                        }
+                .weight(1f, fill = false)
+                .drawWithContent {
+                    drawContent()
+                    val fadePx = EDGE_FADE_WIDTH.toPx()
+                    if (scrollState.canScrollBackward) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(targetBg, Color.Transparent),
+                                startX = 0f,
+                                endX = fadePx,
+                            ),
+                            topLeft = Offset.Zero,
+                            size = Size(fadePx, size.height),
+                        )
                     }
-                    .horizontalScroll(scrollState)
-                    .onPointerEvent(PointerEventType.Scroll) { event ->
-                        val change = event.changes.firstOrNull() ?: return@onPointerEvent
-                        val delta = change.scrollDelta
-                        if (delta.x == 0f && delta.y != 0f) {
-                            scrollState.dispatchRawDelta(delta.y * SCROLL_PIXELS_PER_WHEEL_TICK)
-                            change.consume()
-                        }
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                tabs.forEach { tab ->
-                    val requester = requesters.getOrPut(tab.key) { BringIntoViewRequester() }
-                    val chipModifier = Modifier.bringIntoViewRequester(requester)
-                    when (tab) {
-                        is WorkspaceTab.Cluster -> {
-                            val display = clusterDisplayByKey[tab.key] ?: return@forEach
-                            ClusterChip(
-                                modifier = chipModifier,
-                                label = display.label,
-                                color = ClusterColor.effectiveColor(display.context, clusterColorOverrides),
-                                initial = clusterInitial(display.context),
-                                isActive = tab.key == activeTabKey,
-                                isConnected = display.connected,
-                                isConnecting = display.connecting,
-                                showActiveIndicator = true,
-                                onClick = { onSelectTab(tab.key) },
-                                onClose = { onCloseTab(tab.key) },
-                                onDragMove = { x, y -> onDragMoveSession(tab.session.id, x, y) },
-                                onDragRelease = { x, y -> onDragReleaseSession(tab.session.id, x, y) },
-                                onDragCancelled = { onDragCancelled(tab.session.id) },
-                            )
-                        }
+                    if (scrollState.canScrollForward) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, targetBg),
+                                startX = size.width - fadePx,
+                                endX = size.width,
+                            ),
+                            topLeft = Offset(size.width - fadePx, 0f),
+                            size = Size(fadePx, size.height),
+                        )
+                    }
+                }
+                .horizontalScroll(scrollState)
+                .onPointerEvent(PointerEventType.Scroll) { event ->
+                    val change = event.changes.firstOrNull() ?: return@onPointerEvent
+                    val delta = change.scrollDelta
+                    if (delta.x == 0f && delta.y != 0f) {
+                        scrollState.dispatchRawDelta(delta.y * SCROLL_PIXELS_PER_WHEEL_TICK)
+                        change.consume()
+                    }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            tabs.forEach { tab ->
+                val requester = requesters.getOrPut(tab.key) { BringIntoViewRequester() }
+                val chipModifier = Modifier.bringIntoViewRequester(requester)
+                when (tab) {
+                    is WorkspaceTab.Cluster -> {
+                        val display = clusterDisplayByKey[tab.key] ?: return@forEach
+                        ClusterChip(
+                            modifier = chipModifier,
+                            label = display.label,
+                            color = ClusterColor.effectiveColor(display.context, clusterColorOverrides),
+                            initial = clusterInitial(display.context),
+                            isActive = tab.key == activeTabKey,
+                            isConnected = display.connected,
+                            isConnecting = display.connecting,
+                            // A lone chip also draws the chip-level drop cue — its 1.5 dp border
+                            // (its fill matches the strip's tint) — as it did alone in the title bar.
+                            isDropTarget = loneTab && isDropTarget,
+                            showActiveIndicator = !loneTab,
+                            onClick = { onSelectTab(tab.key) },
+                            onClose = if (loneTab) {
+                                null
+                            } else {
+                                { onCloseTab(tab.key) }
+                            },
+                            onDragMove = { x, y -> onDragMoveSession(tab.session.id, x, y) },
+                            onDragRelease = { x, y -> onDragReleaseSession(tab.session.id, x, y) },
+                            onDragCancelled = { onDragCancelled(tab.session.id) },
+                        )
+                    }
 
-                        is WorkspaceTab.AllClusters -> {
-                            val clusterCount = tabs.count { it is WorkspaceTab.Cluster }
-                            AllClustersChip(
-                                modifier = chipModifier,
-                                isActive = tab.key == activeTabKey,
-                                onClick = { onSelectTab(tab.key) },
-                                onClose = if (clusterCount >= 2) {
-                                    null
-                                } else {
-                                    { onCloseTab(tab.key) }
-                                },
-                                onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
-                                onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
-                                onDragCancelled = { onDragCancelledTab() },
-                            )
-                        }
+                    is WorkspaceTab.AllClusters -> {
+                        AllClustersChip(
+                            modifier = chipModifier,
+                            isActive = tab.key == activeTabKey,
+                            onClick = { onSelectTab(tab.key) },
+                            onClose = { onCloseTab(tab.key) },
+                            onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
+                            onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
+                            onDragCancelled = { onDragCancelledTab() },
+                        )
+                    }
 
-                        is WorkspaceTab.Terminal -> {
-                            TerminalChip(
-                                modifier = chipModifier,
-                                label = tab.session.displayLabel,
-                                isActive = tab.key == activeTabKey,
-                                onClick = { onSelectTab(tab.key) },
-                                onClose = { onCloseTab(tab.key) },
-                                onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
-                                onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
-                                onDragCancelled = { onDragCancelledTab() },
-                            )
-                        }
+                    is WorkspaceTab.Terminal -> {
+                        TerminalChip(
+                            modifier = chipModifier,
+                            label = tab.session.displayLabel,
+                            isActive = tab.key == activeTabKey,
+                            onClick = { onSelectTab(tab.key) },
+                            onClose = { onCloseTab(tab.key) },
+                            onDragMove = { x, y -> onDragMoveTab(tab.key, x, y) },
+                            onDragRelease = { x, y -> onDragReleaseTab(tab.key, x, y) },
+                            onDragCancelled = { onDragCancelledTab() },
+                        )
                     }
                 }
             }
-
-            Spacer(Modifier.width(4.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(kdRoundShape)
-                    .clickable(onClick = onAddCluster),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painterResource(Res.drawable.add),
-                    contentDescription = "Open another cluster",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
-        HorizontalDivider(
-            modifier = Modifier.align(Alignment.BottomStart),
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant,
-        )
+
+        Spacer(Modifier.width(4.dp))
+
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(kdRoundShape)
+                .clickable(onClick = onAddCluster),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painterResource(Res.drawable.add),
+                contentDescription = "Open another cluster",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

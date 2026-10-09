@@ -13,3 +13,4 @@ local.properties
 .docs
 samples
 logs/
+__pycache__/

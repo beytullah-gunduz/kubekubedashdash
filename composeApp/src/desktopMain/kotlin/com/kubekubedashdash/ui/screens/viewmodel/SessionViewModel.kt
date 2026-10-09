@@ -18,8 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -36,14 +36,12 @@ import java.util.concurrent.atomic.AtomicLong
 fun screenKeyOf(screen: Screen): String = if (screen is Screen.Main) screen::class.simpleName.orEmpty() else ""
 
 /**
- * One entry in a session's navigation history: the main screen plus whichever
- * detail pane was open alongside it. Capturing the pane makes "back" from an
- * open detail close the pane first (browser-like) before a further "back"
- * changes the main screen.
+ * A (main screen, detail pane) snapshot of this session. [forHistory] strips
+ * jump parameters before it becomes a window-history entry; capturing the pane
+ * makes Back from an open detail close the pane first (browser-like) before a
+ * further Back changes the main screen.
  */
 private data class NavEntry(val screen: Screen, val extraPane: Screen?)
-
-private const val MAX_HISTORY = 50
 
 /** Transient connection screens are neither recorded in history nor valid
  *  places to navigate back/forward from — the connection reducer owns them. */
@@ -69,6 +67,19 @@ private fun NavEntry.forHistory(): NavEntry = when (val s = screen) {
 private fun Screen.filterScope(): Screen = NavEntry(this, null).forHistory().screen
 
 /**
+ * The window history a session reports to: set by the
+ * [com.kubekubedashdash.model.Workspace] whose tab holds the session, cleared
+ * when the tab leaves it.
+ */
+internal interface NavigationHistoryHost {
+    /** [session] is about to change its screen or detail pane for the user. */
+    fun beforeNavigate(session: SessionViewModel)
+
+    /** [session] starts a fresh connect to [context]: what it recorded for another cluster no longer applies. */
+    fun contextReplaced(session: SessionViewModel, context: String)
+}
+
+/**
  * Per-cluster-session UI state. One instance per [com.kubekubedashdash.model.ClusterSession]
  * — owns the navigation state, namespace selection, connection-status flags, and retry
  * scheduling for that single cluster.
@@ -80,24 +91,20 @@ class SessionViewModel(
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Main.Connecting)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
-    // Back/forward history of (screen, extra pane) snapshots. The connection
-    // reducer's direct _currentScreen writes (Connecting / ConnectionError /
-    // post-connect ClusterOverview) bypass history on purpose: transient
-    // connection screens must never be reachable via Back, and the reducer
-    // stays the sole writer of connection transitions.
-    // All of navigate/goBack/goForward/closeExtraPane run on the Compose UI
-    // thread; the stack updates are not atomic across the two screen writes
-    // and must not be called from background coroutines.
-    private val _backStack = MutableStateFlow<List<NavEntry>>(emptyList())
-    private val _forwardStack = MutableStateFlow<List<NavEntry>>(emptyList())
+    // Back/Forward live in the window ([com.kubekubedashdash.model.Workspace]):
+    // one chronological history across its tabs. This session reports each user
+    // navigation to [historyHost] before it happens and shows the entries the
+    // window hands back ([showHistoryEntry]). The connection reducer's direct
+    // _currentScreen writes (Connecting / ConnectionError / post-connect
+    // ClusterOverview) bypass history on purpose: transient connection screens
+    // must never be reachable via Back, and the reducer stays the sole writer of
+    // connection transitions. navigate/closeExtraPane/showHistoryEntry run on
+    // the Compose UI thread.
+    @Volatile internal var historyHost: NavigationHistoryHost? = null
 
-    val canGoBack: StateFlow<Boolean> =
-        combine(_backStack, _currentScreen) { stack, cur -> stack.isNotEmpty() && cur.allowsHistoryNav() }
-            .stateIn(scope, SharingStarted.Eagerly, false)
-
-    val canGoForward: StateFlow<Boolean> =
-        combine(_forwardStack, _currentScreen) { stack, cur -> stack.isNotEmpty() && cur.allowsHistoryNav() }
-            .stateIn(scope, SharingStarted.Eagerly, false)
+    /** False on a connection screen: Back/Forward wait while the connection reducer owns the screen. */
+    val historyNavAllowed: StateFlow<Boolean> =
+        _currentScreen.map { it.allowsHistoryNav() }.stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _extraPaneScreen = MutableStateFlow<Screen?>(null)
     val extraPaneScreen: StateFlow<Screen?> = _extraPaneScreen.asStateFlow()
@@ -521,32 +528,31 @@ class SessionViewModel(
         _extraPaneScreen.value = target.extraPane
     }
 
-    fun goBack() {
-        if (!_currentScreen.value.allowsHistoryNav()) return
-        val entry = _backStack.value.lastOrNull() ?: return
-        _backStack.update { it.dropLast(1) }
-        _forwardStack.update { it + currentEntry().forHistory() }
-        if (entry.screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
-        if (entry.extraPane == null) {
-            _extraPaneScreen.value = null
-            _extraPaneExpanded.value = false
-        }
-        _currentScreen.value = entry.screen
-        _extraPaneScreen.value = entry.extraPane
+    /**
+     * Where this session is, as a window-history entry: the main screen and pane
+     * without jump parameters ([forHistory]), or null on a connection screen,
+     * which is never recorded.
+     */
+    internal fun historySnapshot(): Pair<Screen, Screen?>? {
+        val entry = currentEntry()
+        if (!entry.screen.allowsHistoryNav()) return null
+        val clean = entry.forHistory()
+        return clean.screen to clean.extraPane
     }
 
-    fun goForward() {
+    /** True unless a connection screen is up (the connection reducer owns those). */
+    internal fun canNavigateHistory(): Boolean = _currentScreen.value.allowsHistoryNav()
+
+    /** Shows an entry the window's Back/Forward landed on. No-op on a connection screen. */
+    internal fun showHistoryEntry(screen: Screen, extraPane: Screen?) {
         if (!_currentScreen.value.allowsHistoryNav()) return
-        val entry = _forwardStack.value.lastOrNull() ?: return
-        _forwardStack.update { it.dropLast(1) }
-        _backStack.update { it + currentEntry().forHistory() }
-        if (entry.screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
-        if (entry.extraPane == null) {
+        if (screen != _currentScreen.value.filterScope()) _searchQuery.value = ""
+        if (extraPane == null) {
             _extraPaneScreen.value = null
             _extraPaneExpanded.value = false
         }
-        _currentScreen.value = entry.screen
-        _extraPaneScreen.value = entry.extraPane
+        _currentScreen.value = screen
+        _extraPaneScreen.value = extraPane
     }
 
     fun closeExtraPane() {
@@ -579,16 +585,10 @@ class SessionViewModel(
 
     private fun currentEntry() = NavEntry(_currentScreen.value, _extraPaneScreen.value)
 
-    /** Shared "a new navigation happened" bookkeeping: clear the forward
-     *  stack and push the outgoing state. The clear happens even when the
-     *  outgoing screen is a transient connection screen (a real navigation
-     *  always invalidates forward history); only the push is skipped there,
-     *  so Back can never land on a connection screen. */
+    /** Shared "a new navigation happened" hook: the window records where the user
+     *  was (never a connection screen) and clears Forward. */
     private fun recordCurrent() {
-        _forwardStack.value = emptyList()
-        val current = currentEntry()
-        if (!current.screen.allowsHistoryNav()) return
-        _backStack.update { (it + current.forHistory()).takeLast(MAX_HISTORY) }
+        historyHost?.beforeNavigate(this)
     }
 
     /**
@@ -604,6 +604,9 @@ class SessionViewModel(
     @Synchronized
     fun connectToCluster(ctx: String, isReconnect: Boolean = false) {
         if (isReconnect && freshConnectInFlight) return
+        // A fresh connect replaces what the tab shows: window-history entries this
+        // tab recorded for another cluster no longer apply. A reconnect keeps them.
+        if (!isReconnect) historyHost?.contextReplaced(this, ctx)
         retryJob?.cancel()
         connectJob?.cancel()
         val attempt = connectAttempt.incrementAndGet()

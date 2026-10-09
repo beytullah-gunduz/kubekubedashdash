@@ -85,15 +85,12 @@ import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.add_filled
-import com.kubekubedashdash.resources.arrow_back_filled
-import com.kubekubedashdash.resources.arrow_forward_filled
 import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.close_filled
 import com.kubekubedashdash.resources.expand_more_filled
 import com.kubekubedashdash.resources.folder_special_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.retroChrome
-import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 private val sessionHeaderIsMacOS: Boolean =
@@ -104,8 +101,17 @@ private val sessionHeaderIsMacOS: Boolean =
 // without it reserve its slot, which pins the selector's right edge; the
 // selector's own fixed width pins its left edge whatever the namespace name.
 private val SearchFieldWidth = 200.dp
-private val SearchFieldHeight = if (sessionHeaderIsMacOS) 30.dp else 32.dp
 private val NamespaceSelectorWidth = 150.dp
+
+/**
+ * Height of the header's controls (filter field, namespace selector) and of the
+ * sidebar's nav search box beside it, which shares the row's band. Windows and
+ * Linux fonts need 2 dp more to show a full line of text.
+ */
+internal val ContentHeaderControlHeight = if (sessionHeaderIsMacOS) 24.dp else 26.dp
+
+/** Vertical padding of the header row; the sidebar's search box uses the same so the band lines up. */
+internal val ContentHeaderVerticalPadding: Dp get() = 3.dp.orCompact(2.dp)
 
 /**
  * Per-tab toolbar above the resource list (right of the sidebar). Hosts the
@@ -125,10 +131,6 @@ private val NamespaceSelectorWidth = 150.dp
 @Composable
 internal fun SessionContentHeader(
     screen: Screen,
-    canGoBack: Boolean,
-    canGoForward: Boolean,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
     namespaceScope: NamespaceScope,
     onApplyYaml: (() -> Unit)?,
     namespaces: List<String>,
@@ -143,12 +145,10 @@ internal fun SessionContentHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp.orCompact(3.dp)),
+                .padding(horizontal = 12.dp, vertical = ContentHeaderVerticalPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            HistoryNavButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack)
-            HistoryNavButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
             // Page title. The cluster name already lives in the tab chip and
             // title bar; repeating it here left the screen itself unnamed.
             // CustomResource titles are the CRD kind — cluster data, so they
@@ -156,7 +156,7 @@ internal fun SessionContentHeader(
             val isCrdTitle = screen is Screen.Main.CustomResource
             Text(
                 text = screen.title,
-                style = if (isCrdTitle) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleMedium.retroChrome(10.sp),
+                style = if (isCrdTitle) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleSmall.retroChrome(10.sp),
                 color = if (ThemeManager.isRetro && !isCrdTitle) KdAccent else KdTextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -189,7 +189,7 @@ internal fun SessionContentHeader(
                 targetState = screen.title.takeIf { screen.showsSearchField() },
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                 contentKey = { it != null },
-                modifier = Modifier.size(SearchFieldWidth, SearchFieldHeight),
+                modifier = Modifier.size(SearchFieldWidth, ContentHeaderControlHeight),
             ) { title ->
                 if (title != null) {
                     val searchFocusRequester = remember { FocusRequester() }
@@ -296,23 +296,6 @@ private fun ApplyYamlButton(onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun HistoryNavButton(
-    icon: DrawableResource,
-    contentDescription: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(22.dp), shape = kdRoundShape) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = contentDescription,
-            tint = if (enabled) KdTextSecondary else KdTextSecondary.copy(alpha = 0.35f),
-            modifier = Modifier.size(15.dp),
-        )
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CompactSearchField(
@@ -336,7 +319,7 @@ private fun CompactSearchField(
         textStyle = MaterialTheme.typography.bodySmall.copy(color = KdTextPrimary),
         cursorBrush = SolidColor(KdPrimary),
         interactionSource = interactionSource,
-        modifier = Modifier.width(SearchFieldWidth).height(SearchFieldHeight).focusRequester(focusRequester),
+        modifier = Modifier.width(SearchFieldWidth).height(ContentHeaderControlHeight).focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
                 value = searchQuery,
@@ -365,7 +348,7 @@ private fun CompactSearchField(
                     }
                 },
                 colors = colors,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                 container = {
                     OutlinedTextFieldDefaults.Container(
                         enabled = true,
@@ -404,7 +387,7 @@ internal fun CompactNamespaceSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    val buttonHeight = 28.dp
+    val buttonHeight = ContentHeaderControlHeight
     // A selected namespace the list lacks (not loaded yet, or deleted since)
     // still gets a row, so it can be unticked.
     val rows = remember(namespaces, scope) {

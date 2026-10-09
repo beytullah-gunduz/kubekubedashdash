@@ -214,6 +214,9 @@ fun Sidebar(
                 query = searchQuery,
                 onChange = { searchQuery = it },
                 placeholder = "Search",
+                // Same band as the content header beside it.
+                height = ContentHeaderControlHeight,
+                verticalPadding = ContentHeaderVerticalPadding,
             )
         }
         Column(
@@ -456,7 +459,14 @@ private fun SidebarTierDivider(collapsed: Boolean) {
 // can search both built-in kinds and CRDs.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+fun SidebarSearchBox(
+    query: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 32.dp,
+    verticalPadding: Dp = 4.dp,
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val colors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = KdBorder,
@@ -473,8 +483,8 @@ fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: Str
         interactionSource = interactionSource,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .height(32.dp),
+            .padding(horizontal = 8.dp, vertical = verticalPadding)
+            .height(height),
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
                 value = query,
@@ -495,7 +505,7 @@ fun SidebarSearchBox(query: String, onChange: (String) -> Unit, placeholder: Str
                     )
                 },
                 colors = colors,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = if (height < 32.dp) 2.dp else 4.dp),
                 container = {
                     OutlinedTextFieldDefaults.Container(
                         enabled = true,

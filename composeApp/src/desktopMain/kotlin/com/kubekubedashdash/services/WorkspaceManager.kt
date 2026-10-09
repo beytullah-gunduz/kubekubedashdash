@@ -20,15 +20,10 @@ import com.kubekubedashdash.yamledit.session.DiscardPrompt
 import com.kubekubedashdash.yamledit.session.GuardVerb
 import com.kubekubedashdash.yamledit.session.UnsavedEditGuard
 import com.kubekubedashdash.yamledit.session.YamlEditRegistry
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * Where a freshly-picked cluster lands when the user confirms it from the
@@ -50,6 +45,17 @@ enum class OpenTarget { CURRENT_VIEW, NEW_TAB, NEW_WINDOW }
 internal fun replacesLiveCluster(activeContext: String?, ctx: String, target: OpenTarget): Boolean = target == OpenTarget.CURRENT_VIEW && !activeContext.isNullOrBlank() && activeContext != ctx
 
 /**
+ * Where a request to show the All Clusters tab lands: the window that already
+ * holds that (singleton) tab, else [requesting]. Null while fewer than two
+ * cluster tabs are open across [workspaces] — there is nothing to compare.
+ */
+internal fun allClustersHost(workspaces: List<Workspace>, requesting: Workspace): Workspace? {
+    val clusterTabs = workspaces.sumOf { ws -> ws.tabs.value.count { it is WorkspaceTab.Cluster } }
+    if (clusterTabs < 2) return null
+    return workspaces.firstOrNull { ws -> ws.tabs.value.any { it is WorkspaceTab.AllClusters } } ?: requesting
+}
+
+/**
  * Process-wide coordinator for [Workspace]s (one per OS window) and the
  * [ClusterSession]s they contain (one per cluster tab).
  *
@@ -69,7 +75,7 @@ object WorkspaceManager {
      * The workspace whose drop zone currently sits under the cursor mid-drag,
      * or null when no other window is being targeted (or no drag is in
      * progress). Each window's [com.kubekubedashdash.ui.App] subscribes to this
-     * to render the drag-over highlight on its own chip slot / tab strip.
+     * to render the drag-over highlight on its own title-bar tab strip.
      *
      * Updated by [notifyDragMove] as the source chip's screen position changes,
      * and cleared at drag end (either through [handleChipRelease] or
@@ -78,15 +84,6 @@ object WorkspaceManager {
      */
     private val _dragTarget = MutableStateFlow<WorkspaceId?>(null)
     val dragTarget: StateFlow<WorkspaceId?> = _dragTarget.asStateFlow()
-
-    /**
-     * Internal scope for fire-and-forget UI scheduling — currently used to
-     * defer the AllClusters-tab reconcile in [openCluster] off the click frame
-     * so the AllClusters insertion's structural reordering of tab indices
-     * doesn't pile onto the recomposition that builds the new session's pane.
-     * See `.docs/feature/second-cluster-pick-perf.md`.
-     */
-    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /**
      * Stands between every user-initiated close or switch and the YAML editors it would take
@@ -166,7 +163,6 @@ object WorkspaceManager {
                 session.viewModel.connectToCluster(ctx)
             }
         }
-        scheduleAllClustersReconcile()
     }
 
     /**
@@ -180,28 +176,6 @@ object WorkspaceManager {
             guarded(workspace, listOf(active.id), GuardVerb.SwitchCluster) { openCluster(workspace, ctx, target) }
         } else {
             openCluster(workspace, ctx, target)
-        }
-    }
-
-    /**
-     * Defer the AllClusters tab insertion off the click frame. When opening
-     * the second cluster, totalClusters just hit 2 → reconcile would insert
-     * AllClusters at index 0, which shifts existing pages' indices. That
-     * structural reordering forces the pager to compose the previous active
-     * session's pane alongside the new one (doubled first-composition).
-     * Deferring by a frame keeps the click-driven recomposition focused on
-     * the new cluster only. See `.docs/feature/second-cluster-pick-perf.md`.
-     *
-     * Deliberate, perf-tuned timing — NOT incidental. The 50 ms delay is the
-     * documented workaround; do not inline or shorten it without re-checking
-     * second-cluster-pick recomposition cost (there is no automated guard).
-     * Extracted from [openCluster] only to give the hack a name + single
-     * home (audit A4, scoped slice — behaviour/timing unchanged).
-     */
-    private fun scheduleAllClustersReconcile() {
-        managerScope.launch {
-            delay(50)
-            reconcileAllClustersTab()
         }
     }
 
@@ -301,22 +275,14 @@ object WorkspaceManager {
         if (targetId != null) {
             val target = workspaceById(targetId) ?: return
             val tab = source.removeTab(tabKey) ?: return
-            when (tab) {
-                is WorkspaceTab.Cluster -> target.addSession(tab.session, makeActive = true)
-                is WorkspaceTab.Terminal -> target.openTerminalTab(tab.session)
-                WorkspaceTab.AllClusters -> target.ensureAllClustersTabAt(0)
-            }
+            target.adoptTab(tab)
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         } else if (source.tabs.value.size > 1) {
             val tab = source.removeTab(tabKey) ?: return
             val newWorkspace = Workspace(
                 initialPosition = WindowPosition.Absolute(screenX.dp, screenY.dp),
             )
-            when (tab) {
-                is WorkspaceTab.Cluster -> newWorkspace.addSession(tab.session, makeActive = true)
-                is WorkspaceTab.Terminal -> newWorkspace.openTerminalTab(tab.session)
-                WorkspaceTab.AllClusters -> newWorkspace.ensureAllClustersTabAt(0)
-            }
+            newWorkspace.adoptTab(tab)
             _workspaces.update { it + newWorkspace }
             if (source.tabs.value.isEmpty()) closeWorkspace(source.id)
         }
@@ -426,7 +392,20 @@ object WorkspaceManager {
         return true
     }
 
-    /** Un-minimizes [workspace]'s window, if it is minimized, and brings it to the front. */
+    /**
+     * Shows the All Clusters tab: focuses it where it already is (raising that
+     * window), else appends it to [workspace] and activates it. No-op below two
+     * open cluster tabs. The tab is never added on its own any more — the
+     * palette and the cluster picker call this.
+     */
+    fun openAllClusters(workspace: Workspace) {
+        val host = allClustersHost(_workspaces.value, workspace) ?: return
+        host.ensureAllClustersTabAt(host.tabs.value.size)
+        host.setActive(WorkspaceTab.AllClusters.key)
+        if (host !== workspace) raiseWindow(host)
+    }
+
+    /** Un-minimizes [workspace]'s window and brings it to the front. */
     private fun raiseWindow(workspace: Workspace) {
         workspace.awtWindow?.let { win ->
             (win as? java.awt.Frame)?.let { frame ->
@@ -586,8 +565,9 @@ object WorkspaceManager {
     }
 
     /**
-     * Ensure the singleton AllClusters tab is present in exactly one workspace
-     * when totalClusters ≥ 2, and absent from all workspaces otherwise.
+     * Remove the All Clusters tab from every workspace once fewer than two
+     * cluster tabs are open anywhere, and close any window that held only it.
+     * The tab is only ever added on request ([openAllClusters]).
      *
      * Re-entrancy guard prevents infinite recursion when empty-workspace cleanup
      * inside this method calls [closeWorkspace], which also calls this function.
@@ -601,14 +581,7 @@ object WorkspaceManager {
             val totalClusters = _workspaces.value.sumOf { ws ->
                 ws.tabs.value.count { it is WorkspaceTab.Cluster }
             }
-            if (totalClusters >= 2) {
-                val already = _workspaces.value.firstOrNull { ws ->
-                    ws.tabs.value.any { it is WorkspaceTab.AllClusters }
-                }
-                if (already == null) {
-                    _workspaces.value.first().ensureAllClustersTabAt(0)
-                }
-            } else {
+            if (totalClusters < 2) {
                 _workspaces.value.forEach { it.removeAllClustersTab() }
                 // Close any workspaces that only held AllClusters and are now empty
                 _workspaces.value

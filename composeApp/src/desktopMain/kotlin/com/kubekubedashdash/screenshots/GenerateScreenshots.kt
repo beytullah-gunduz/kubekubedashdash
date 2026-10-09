@@ -394,9 +394,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         sessionVm.setNamespaceScope(NamespaceScope.All)
         delay(1_000)
 
-        // 14. fleet: two more demo tabs (they mint the next screenshot labels), then the
-        // All Clusters tab. openCluster inserts that tab ~50 ms after the second cluster opens,
-        // and setActive ignores an unknown key, so wait for the tab before activating it.
+        // 14. fleet: two more demo tabs (they mint the next screenshot labels), then the All Clusters tab, which only opens on request.
         log.info("Capturing fleet (All Clusters)")
         WorkspaceManager.openCluster(
             initialWorkspace,
@@ -418,7 +416,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(800)
         tab3Vm.navigate(Screen.Main.Services)
 
-        initialWorkspace.tabs.first { tabs -> tabs.any { it is WorkspaceTab.AllClusters } }
+        WorkspaceManager.openAllClusters(initialWorkspace)
         // Let the pager finish scrolling to the new tab first: a settle that lands mid-way
         // writes its own page back as the active tab. Re-activate until the choice sticks.
         delay(5_000)

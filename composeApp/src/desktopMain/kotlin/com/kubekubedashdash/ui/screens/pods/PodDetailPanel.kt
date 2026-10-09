@@ -84,7 +84,7 @@ import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
-import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.EMPTY_DASH
 import com.kubekubedashdash.ui.components.KeyValueChipFlow
@@ -455,6 +455,7 @@ private fun PanelHeader(
         label = "Force delete",
         tint = KdError,
         destructive = true,
+        overflowOnly = true,
         description = "Immediately delete this pod (grace period 0) — only for a stuck/unresponsive pod; skips graceful shutdown and can orphan resources.",
         enabled = actionsEnabled,
         onClick = onForceDeleteClick,
@@ -669,7 +670,7 @@ private fun PodEventsTab(
         )
 
         state is ResourceState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            BusyIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = KdPrimary)
+            BusyScanner(ringSize = 24.dp, strokeWidth = 2.dp, color = KdPrimary)
         }
 
         state is ResourceState.Error -> ResourceErrorMessage(state.message, onRetry = onRetry)
