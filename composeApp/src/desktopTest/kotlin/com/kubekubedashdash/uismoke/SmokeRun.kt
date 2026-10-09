@@ -42,8 +42,8 @@ internal object SmokeRun {
 
     @Volatile var gradle: Process? = null
 
-    /** Set when the run aborted; later scenarios are skipped. */
-    var abortReason: String? = null
+    /** Set when the run aborted (also from the shutdown hook); later scenarios are skipped. */
+    @Volatile var abortReason: String? = null
 
     /** Set when -PuiSmokeKeepApp left a failing scenario's app running; later scenarios are skipped. */
     var keptApp = false
@@ -106,6 +106,13 @@ internal fun startedSince(pid: Long, since: Instant): Boolean {
     return !start.isBefore(since.minusSeconds(2))
 }
 
+/** False for pids no app of this run can have: 0, 1, this JVM and its ancestors. */
+internal fun isSignallable(pid: Long): Boolean {
+    val self = ProcessHandle.current()
+    if (pid <= 1 || pid == self.pid()) return false
+    return generateSequence(self.parent().orElse(null)) { it.parent().orElse(null) }.none { it.pid() == pid }
+}
+
 /** SIGTERM [pids] that still exist. */
 private fun terminate(pids: List<Long>) = pids.forEach { pid -> ProcessHandle.of(pid).ifPresent { it.destroy() } }
 
@@ -146,6 +153,7 @@ internal fun must(what: String, timeout: Duration = 30.seconds, fn: () -> Boolea
 
 /** Run ./gradlew with the run's JDK, output to a log file in the scenario dir. Returns (exit code, log text). */
 internal fun runGradle(args: List<String>, logName: String, timeout: Duration = 15.minutes): Pair<Int, String> {
+    SmokeRun.abortReason?.let { throw AbortRun(it) }
     val log = File(SmokeRun.scenarioDir, logName)
     val builder = ProcessBuilder(listOf("./gradlew", "--console=plain") + args)
         .directory(SmokeRun.repo)
@@ -192,7 +200,7 @@ internal fun pidFilePid(): Long? = runCatching { parsePidFile(pidFile().readText
 /** Abort the run unless the argfile proves isolation. */
 internal fun requireIsolation(dataDir: File, label: String) {
     val problems = try {
-        isolationProblems(argfileProps(argfile().readText()), dataDir)
+        isolationProblems(argfileProps(argfile().readText()), dataDir, File(SmokeRun.repo, "composeApp/$EMPTY_KUBECONFIG_SUFFIX"))
     } catch (e: IOException) {
         listOf("cannot read ${rel(argfile())}: ${e.message}")
     }
@@ -204,6 +212,11 @@ internal fun requireIsolation(dataDir: File, label: String) {
  * files and the MCP link to clear. [quick] (the shutdown hook) skips the two 30 s waits.
  */
 internal fun stopApp(pid: Long, quick: Boolean = false) {
+    if (!isSignallable(pid)) {
+        say("warning: not signalling pid $pid: it is this JVM, one of its ancestors or a system pid")
+        SmokeRun.appPid = null
+        return
+    }
     val victims = descendantsOf(pid).map { it.pid() } + pid
     terminate(victims)
     waitUntil(10.seconds) { victims.none { alive(it) } }

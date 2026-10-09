@@ -29,6 +29,8 @@ class HotRunFilesTest {
         otherDir.deleteRecursively()
     }
 
+    private val emptyKubeconfig = File("/tmp/example-repo/composeApp/build/test-kubeconfig/empty.yaml")
+
     private fun goodProps(): Map<String, String> = mapOf(
         "kubeconfig" to "/tmp/example-repo/composeApp/build/test-kubeconfig/empty.yaml",
         "kkdd.dataDir" to dataDir.path,
@@ -108,49 +110,58 @@ class HotRunFilesTest {
 
     @Test
     fun `isolationProblems is empty for a demo-only throwaway run`() {
-        assertEquals(emptyList(), isolationProblems(goodProps(), dataDir))
+        assertEquals(emptyList(), isolationProblems(goodProps(), dataDir, emptyKubeconfig))
     }
 
     @Test
     fun `isolationProblems accepts the data directory by another spelling of its path`() {
         val spelled = File(dataDir, "../" + dataDir.name).path
-        assertEquals(emptyList(), isolationProblems(goodProps() + ("kkdd.dataDir" to spelled), dataDir))
+        assertEquals(emptyList(), isolationProblems(goodProps() + ("kkdd.dataDir" to spelled), dataDir, emptyKubeconfig))
     }
 
     @Test
     fun `isolationProblems accepts a kubeconfig path that needs normalising`() {
         val kube = "/tmp/example-repo/composeApp/build/../build/test-kubeconfig/empty.yaml"
-        assertEquals(emptyList(), isolationProblems(goodProps() + ("kubeconfig" to kube), dataDir))
+        assertEquals(emptyList(), isolationProblems(goodProps() + ("kubeconfig" to kube), dataDir, emptyKubeconfig))
     }
 
     @Test
     fun `isolationProblems names a kubeconfig that is not the empty one`() {
         val expected = listOf("-Dkubeconfig is not the empty test kubeconfig (build/test-kubeconfig/empty.yaml)")
-        assertEquals(expected, isolationProblems(goodProps() + ("kubeconfig" to "/tmp/example-repo/fake/config"), dataDir))
-        assertEquals(expected, isolationProblems(goodProps() + ("kubeconfig" to ""), dataDir))
-        assertEquals(expected, isolationProblems(goodProps() - "kubeconfig", dataDir))
+        assertEquals(expected, isolationProblems(goodProps() + ("kubeconfig" to "/tmp/example-repo/fake/config"), dataDir, emptyKubeconfig))
+        assertEquals(expected, isolationProblems(goodProps() + ("kubeconfig" to ""), dataDir, emptyKubeconfig))
+        assertEquals(expected, isolationProblems(goodProps() - "kubeconfig", dataDir, emptyKubeconfig))
+    }
+
+    @Test
+    fun `isolationProblems names another repository's empty kubeconfig and a look-alike name`() {
+        val expected = listOf("-Dkubeconfig is not the empty test kubeconfig (build/test-kubeconfig/empty.yaml)")
+        val elsewhere = "/tmp/other-repo/composeApp/build/test-kubeconfig/empty.yaml"
+        assertEquals(expected, isolationProblems(goodProps() + ("kubeconfig" to elsewhere), dataDir, emptyKubeconfig))
+        val glued = "/tmp/example-repo/composeApp/not-a-build/test-kubeconfig/empty.yaml"
+        assertEquals(expected, isolationProblems(goodProps() + ("kubeconfig" to glued), dataDir, emptyKubeconfig))
     }
 
     @Test
     fun `isolationProblems names a data directory that is not the scenario's`() {
         val expected = listOf("-Dkkdd.dataDir is not this scenario's data directory")
-        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.dataDir" to otherDir.path), dataDir))
-        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.dataDir" to ""), dataDir))
-        assertEquals(expected, isolationProblems(goodProps() - "kkdd.dataDir", dataDir))
+        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.dataDir" to otherDir.path), dataDir, emptyKubeconfig))
+        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.dataDir" to ""), dataDir, emptyKubeconfig))
+        assertEquals(expected, isolationProblems(goodProps() - "kkdd.dataDir", dataDir, emptyKubeconfig))
     }
 
     @Test
     fun `isolationProblems names missing test hooks`() {
         val expected = listOf("-Dkkdd.uiTestHooks=true is missing")
-        assertEquals(expected, isolationProblems(goodProps() - "kkdd.uiTestHooks", dataDir))
-        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.uiTestHooks" to "false"), dataDir))
+        assertEquals(expected, isolationProblems(goodProps() - "kkdd.uiTestHooks", dataDir, emptyKubeconfig))
+        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.uiTestHooks" to "false"), dataDir, emptyKubeconfig))
     }
 
     @Test
     fun `isolationProblems names reachable cloud CLIs`() {
         val expected = listOf("-Dkkdd.disableCloudClis=true is missing: aws/gcloud would be reachable from the app")
-        assertEquals(expected, isolationProblems(goodProps() - "kkdd.disableCloudClis", dataDir))
-        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.disableCloudClis" to "false"), dataDir))
+        assertEquals(expected, isolationProblems(goodProps() - "kkdd.disableCloudClis", dataDir, emptyKubeconfig))
+        assertEquals(expected, isolationProblems(goodProps() + ("kkdd.disableCloudClis" to "false"), dataDir, emptyKubeconfig))
     }
 
     @Test
@@ -162,7 +173,7 @@ class HotRunFilesTest {
                 "-Dkkdd.uiTestHooks=true is missing",
                 "-Dkkdd.disableCloudClis=true is missing: aws/gcloud would be reachable from the app",
             ),
-            isolationProblems(emptyMap(), dataDir),
+            isolationProblems(emptyMap(), dataDir, emptyKubeconfig),
         )
     }
 
@@ -185,6 +196,9 @@ class HotRunFilesTest {
         assertNull(parseStartedPid(""))
         assertNull(parseStartedPid("Started 'desktopMain' in background (not-a-pid)"))
         assertNull(parseStartedPid("Started in background (123)"))
+        // No app can be pid 0 or 1 (init).
+        assertNull(parseStartedPid("Started 'desktopMain' in background (1)"))
+        assertNull(parseStartedPid("Started 'desktopMain' in background (0)"))
     }
 
     // ---------------------------------------------------------------- parsePidFile
@@ -201,6 +215,9 @@ class HotRunFilesTest {
         assertNull(parsePidFile(""))
         assertNull(parsePidFile("# only a comment\n"))
         assertNull(parsePidFile("pid=\n"))
+        assertNull(parsePidFile("pid=0\n"))
+        assertNull(parsePidFile("pid=1\n"))
+        assertNull(parsePidFile("pid=-1\n"))
         assertNull(parsePidFile("pid=abc\n"))
         assertNull(parsePidFile("other=1\n"))
     }

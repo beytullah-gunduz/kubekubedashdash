@@ -10,11 +10,11 @@ internal const val EMPTY_KUBECONFIG_SUFFIX = "build/test-kubeconfig/empty.yaml"
 private val startedLine = Regex("""Started '[^']*' in background \((\d+)\)""")
 
 /** The app's pid in hotRunDesktopAsync's "Started '...' in background (<pid>)" line, or null. */
-internal fun parseStartedPid(log: String): Long? = startedLine.find(log)?.groupValues?.get(1)?.toLongOrNull()
+internal fun parseStartedPid(log: String): Long? = startedLine.find(log)?.groupValues?.get(1)?.toLongOrNull()?.takeIf { it > 1 }
 
 /** The `pid` of the hot-run pid file (a Java properties file), or null. */
 internal fun parsePidFile(text: String): Long? = runCatching {
-    Properties().apply { load(StringReader(text)) }.getProperty("pid")?.trim()?.toLongOrNull()
+    Properties().apply { load(StringReader(text)) }.getProperty("pid")?.trim()?.toLongOrNull()?.takeIf { it > 1 }
 }.getOrNull()
 
 /** The -Dkey=value system properties of a JVM argfile (quotes stripped); the last one wins. */
@@ -34,11 +34,14 @@ internal fun argfileProps(text: String): Map<String, String> {
     return props
 }
 
-/** What the argfile lacks to prove a demo-only, throwaway-data, hooks-on run; empty = fine. */
-internal fun isolationProblems(props: Map<String, String>, dataDir: File): List<String> {
+/**
+ * What the argfile lacks to prove a demo-only, throwaway-data, hooks-on run; empty = fine.
+ * [emptyKubeconfig] is this repository's generated empty kubeconfig.
+ */
+internal fun isolationProblems(props: Map<String, String>, dataDir: File, emptyKubeconfig: File): List<String> {
     val problems = mutableListOf<String>()
     val kube = props["kubeconfig"].orEmpty()
-    if (!File(kube).normalize().invariantSeparatorsPath.endsWith(EMPTY_KUBECONFIG_SUFFIX)) {
+    if (kube.isEmpty() || File(kube).canonicalFile != emptyKubeconfig.canonicalFile) {
         problems += "-Dkubeconfig is not the empty test kubeconfig ($EMPTY_KUBECONFIG_SUFFIX)"
     }
     val got = props["kkdd.dataDir"].orEmpty()

@@ -80,6 +80,8 @@ internal class HotReloadMcp(private val repo: File, private val env: Map<String,
         try {
             runBlocking { withTimeout(remaining) { mcpClient.connect(mcpTransport) } }
         } catch (e: Exception) {
+            // A client whose handshake failed cannot connect again: the run stops here.
+            transportClosed = true
             throw McpError("the MCP handshake failed (see mcp.err in the run directory): ${e.message}", e)
         }
         ready = true
@@ -110,9 +112,15 @@ internal class HotReloadMcp(private val repo: File, private val env: Map<String,
         val started = process ?: return
         // Taken before the parent goes: once it exits its children are reparented and out of reach.
         val below = started.descendants().toList()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         started.destroy()
         below.forEach { it.destroy() }
         if (!started.waitFor(10, TimeUnit.SECONDS)) started.destroyForcibly()
+        // The processes below get what is left of the same 10 s to exit on their own.
+        for (handle in below) {
+            val left = deadline - System.nanoTime()
+            if (left > 0) runCatching { handle.onExit().get(left, TimeUnit.NANOSECONDS) }
+        }
         below.filter { it.isAlive }.forEach { it.destroyForcibly() }
     }
 

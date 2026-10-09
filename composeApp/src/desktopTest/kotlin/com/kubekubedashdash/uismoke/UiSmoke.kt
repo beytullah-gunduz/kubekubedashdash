@@ -26,8 +26,9 @@ import kotlin.time.Duration.Companion.seconds
  * repository.
  *
  * What it covers, by test method:
- * - `s1-first-run-title-bar`, `s2-discovery-splash-title-bar`: the first-run screen and the EKS/GKE
- *   discovery splash have a title bar with window buttons and a disabled Back/Forward.
+ * - `s1-first-run-title-bar`: the first-run screen has a title bar with window buttons and a
+ *   disabled Back/Forward.
+ * - `s2-discovery-splash-title-bar`: the EKS/GKE discovery splash keeps the title bar.
  * - `s3-tear-out-all-clusters`, `s4-merge-all-clusters-back`: tearing the All Clusters tab out into
  *   its own window, and merging it back.
  * - `s5-history-stays-in-its-window`: the window-wide history after a tab moved to another window:
@@ -81,8 +82,9 @@ import kotlin.time.Duration.Companion.seconds
  *   `ORG_GRADLE_PROJECT_hotRunCloudClis` is set.
  * - [startRun] also fails while another hot run of the same worktree is up (the MCP server follows
  *   one pid file and would attach to it). Stop other Hot Reload MCP servers of this worktree first.
- * - It only ever signals processes it started: the app, the processes below it, and the Gradle
- *   client that runs the MCP server with every process under it. An app whose launch was
+ * - It only ever signals processes it started: the app, the processes below it, the Gradle
+ *   client that runs the MCP server with every process under it, and a Gradle call in flight
+ *   with every process under it. An app whose launch was
  *   interrupted is stopped too, but only when it started after that launch began. There are no
  *   pattern kills.
  *
@@ -165,6 +167,8 @@ class UiSmoke {
          */
         private fun cleanUp(fromHook: Boolean) {
             if (!cleaned.compareAndSet(false, true)) return
+            // The test thread may still be running: stop it from launching anything new.
+            if (fromHook && SmokeRun.abortReason == null) SmokeRun.abortReason = "interrupted"
             SmokeRun.gradle?.let { terminateTree(it) }
             if (SmokeRun.appPid == null && !SmokeRun.keptApp) SmokeRun.appPid = orphanAppPid()
             val pid = SmokeRun.appPid
@@ -455,7 +459,11 @@ class UiSmoke {
         shot(win, "picker-open")
 
         clickDesc(win, "Close")
-        must("the picker to close") { findNodes(win, text = "Select Cluster", match = Match.PREFIX, clickable = false).isEmpty() }
+        // A tree read can come back empty while the window recomposes: that is not a closed picker.
+        must("the picker to close") {
+            val all = nodes(win)
+            all.isNotEmpty() && all.matching(text = "Select Cluster", match = Match.PREFIX, clickable = false).isEmpty()
+        }
         settings = titleBarNode(win, "Settings", barPx)
         check("'Settings' is enabled again once the picker is closed", settings != null && settings.enabled, "node=${settings?.json}")
         back = titleBarNode(win, "Back", barPx)
@@ -489,7 +497,9 @@ class UiSmoke {
             check("scenario ran to the end", false, e.message.orEmpty())
         } catch (e: McpError) {
             check("scenario ran to the end", false, "MCP error: ${e.message}")
-            if (SmokeRun.mcp.dead) abort("the MCP server exited (see mcp.err in the run directory)")
+            if (SmokeRun.mcp.dead) {
+                abort(if (SmokeRun.mcp.ready) "the MCP server exited (see mcp.err in the run directory)" else "the MCP handshake failed (see mcp.err in the run directory)")
+            }
         } catch (e: AbortRun) {
             abort(e.message.orEmpty())
             check("scenario ran to the end", false, e.message.orEmpty())
@@ -498,14 +508,17 @@ class UiSmoke {
         } finally {
             if (SmokeRun.appPid == null) SmokeRun.appPid = orphanAppPid()
             SmokeRun.launchStarted = null
+            // An aborted scenario's app (the isolation gate failed, the run was interrupted) is
+            // never read, dumped or kept: it may not be the demo-only run the gate insists on.
+            val aborted = SmokeRun.abortReason != null
             val failed = SmokeRun.scenarioFailures.isNotEmpty()
             val pid = SmokeRun.appPid
-            if (failed && pid != null && SmokeRun.mcp.ready && !SmokeRun.mcp.dead) dumpFailure()
-            if (pid != null && !(failed && keepApp)) stopApp(pid)
+            if (failed && !aborted && pid != null && SmokeRun.mcp.ready && !SmokeRun.mcp.dead) dumpFailure()
+            if (pid != null && !(failed && keepApp && !aborted)) stopApp(pid)
         }
         val failures = SmokeRun.scenarioFailures.toList()
         val keptPid = SmokeRun.appPid
-        if (failures.isNotEmpty() && keepApp && keptPid != null) {
+        if (failures.isNotEmpty() && keepApp && keptPid != null && SmokeRun.abortReason == null) {
             say("-PuiSmokeKeepApp: the app of $name is still running (pid $keptPid); stop it with: kill $keptPid")
             SmokeRun.keptApp = true
         }

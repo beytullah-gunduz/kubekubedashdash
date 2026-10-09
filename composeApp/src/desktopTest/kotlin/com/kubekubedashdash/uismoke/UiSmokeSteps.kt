@@ -251,9 +251,17 @@ internal fun windowHeightPt(win: String, timeout: Duration = 10.seconds): Double
     return found
 }
 
-/** The node with this exact contentDescription inside the title bar band, or null. */
-internal fun titleBarNode(win: String, desc: String, barPx: Double): SemNode? = findNodes(win, desc = desc, clickable = false).lastOrNull { node ->
-    node.bounds?.let { it.y < barPx } == true
+/**
+ * The node with this exact contentDescription inside the title bar band, or null. Polled for up to
+ * [timeout]: a read right after a modal closes can miss the bar while the window recomposes.
+ */
+internal fun titleBarNode(win: String, desc: String, barPx: Double, timeout: Duration = 5.seconds): SemNode? {
+    var found: SemNode? = null
+    waitUntil(timeout) {
+        found = findNodes(win, desc = desc, clickable = false).lastOrNull { node -> node.bounds?.let { it.y < barPx } == true }
+        found != null
+    }
+    return found
 }
 
 /** A pixel count as text, without a trailing ".0". */
