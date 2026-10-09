@@ -303,8 +303,11 @@ fun ClusterSelectorModal(
                     val projectOrder = gkeByProject.keys.sorted()
                     val showProjectHeaders = projectOrder.size > 1
                     val listState = rememberLazyListState()
+                    // Weighted, so the footer below is measured first and the list is
+                    // what shrinks in a short window.
                     Box(
                         modifier = Modifier
+                            .weight(1f, fill = false)
                             .fillMaxWidth()
                             .heightIn(max = 700.dp),
                     ) {
@@ -399,10 +402,14 @@ fun ClusterSelectorModal(
                                 }
                             }
                         }
-                        VerticalScrollbar(
-                            adapter = rememberScrollbarAdapter(listState),
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                        )
+                        // In a box of its own so the list, not the scrollbar, sets the height:
+                        // a fillMaxHeight scrollbar here made the list area as tall as allowed.
+                        Box(Modifier.matchParentSize()) {
+                            VerticalScrollbar(
+                                adapter = rememberScrollbarAdapter(listState),
+                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            )
+                        }
                     }
                 }
 
