@@ -6,9 +6,16 @@ import com.kubekubedashdash.logging.AppLogEntry;
 import com.kubekubedashdash.logging.AppLogStore;
 import com.kubekubedashdash.logging.InMemoryAppender;
 import com.kubekubedashdash.mcp.McpServerManager;
+import com.kubekubedashdash.ui.yamledit.KkddYamlTokenMaker;
 import com.kubekubedashdash.util.CrdJsonPath;
 import com.kubekubedashdash.util.MockClusterHandle;
 import com.kubekubedashdash.util.MockClusterProvider;
+import com.kubekubedashdash.util.SecretYamlMasking;
+import com.kubekubedashdash.yamledit.DiffOp;
+import com.kubekubedashdash.yamledit.EditorYaml;
+import com.kubekubedashdash.yamledit.LineDiff;
+import com.kubekubedashdash.yamledit.MaskTokenGuard;
+import com.kubekubedashdash.yamledit.YamlParse;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import java.io.BufferedReader;
@@ -24,10 +31,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import javax.swing.text.Segment;
+import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -35,7 +47,8 @@ import org.slf4j.LoggerFactory;
  * {@code releaseCanary} and {@code releaseCanaryLimitedModules} Gradle tasks with those
  * jars FIRST on the classpath. Each check drives a code path that a shrinker can break
  * while every unit test (which runs unshrunk) stays green: logging configuration loaded
- * by class name, reflective JSONPath and enum lookups, the demo cluster's mock server
+ * by class name, reflective JSONPath and enum lookups, the YAML editor's dump/parse
+ * engine and its RSyntaxTextArea highlighter, the demo cluster's mock server
  * (signed BouncyCastle jars), and the MCP server's Ktor/SSE stack (where a dropped
  * direct interface made the first coroutine Job fail verification).
  *
@@ -115,6 +128,31 @@ public final class ReleaseCanary {
             require(missing.equals("<none>"), "missing=" + missing);
         });
 
+        check("yaml-edit-engine", () -> {
+            // The editor's YAML dump and parse (snakeyaml-engine, reflective in places), its mask-token
+            // guard and its line diff: a shrinker that strips any of them leaves every unit test green.
+            Map<String, Object> source = new LinkedHashMap<>();
+            source.put("name", "demo-cm");
+            source.put("script", "line one\nline two\nline three\n");
+            source.put("count", 3);
+            source.put("flag", true);
+            String yaml = EditorYaml.INSTANCE.dump(source);
+            require(yaml.contains("|"), "a multi-line string is not dumped as a literal block");
+            YamlParse parsed = EditorYaml.INSTANCE.parseSingle(yaml);
+            require(parsed instanceof YamlParse.Ok, "the dump does not parse back: " + parsed);
+            Object value = ((YamlParse.Ok) parsed).getValue();
+            require(source.equals(value), "the dump did not round-trip: " + value);
+
+            String token = MaskTokenGuard.INSTANCE.firstToken("x: " + SecretYamlMasking.PLACEHOLDER);
+            require(token != null, "the guard missed a mask token");
+            require(MaskTokenGuard.INSTANCE.firstToken("x: plain") == null, "the guard flagged plain text");
+
+            List<DiffOp> ops = LineDiff.INSTANCE.diff(List.of("a", "b"), List.of("a", "c"), 4000);
+            long deletes = ops.stream().filter(op -> op instanceof DiffOp.Delete).count();
+            long inserts = ops.stream().filter(op -> op instanceof DiffOp.Insert).count();
+            require(deletes == 1 && inserts == 1, "the diff of a one-line change was " + ops);
+        });
+
         check("jediterm", () -> {
             ClassLoader loader = ReleaseCanary.class.getClassLoader();
             for (String name : new String[] {
@@ -131,11 +169,33 @@ public final class ReleaseCanary {
             Class.forName("com.jediterm.terminal.TextStyle", true, loader);
         });
 
+        check("rsyntaxtextarea", () -> {
+            ClassLoader loader = ReleaseCanary.class.getClassLoader();
+            for (String name : new String[] {
+                "org.fife.ui.rsyntaxtextarea.RSyntaxTextArea", "org.fife.ui.rtextarea.RTextScrollPane",
+                "org.fife.ui.rsyntaxtextarea.RSyntaxDocument", "com.kubekubedashdash.ui.yamledit.KkddYamlTokenMaker",
+            }) {
+                // Linked, not initialised: reflection runs the verifier, and no component can be built headless.
+                Class.forName(name, false, loader).getDeclaredMethods();
+            }
+            // The library's message bundle is a resource read by name when the first editor is built.
+            require(loader.getResource("org/fife/ui/rsyntaxtextarea/RSyntaxTextArea.properties") != null,
+                "the shrunk jars lack RSyntaxTextArea's message bundle");
+            // The highlighter itself, with no component: `key` is a key, so the first token is a RESERVED_WORD.
+            char[] line = "key: \"v\"".toCharArray();
+            Token first = new KkddYamlTokenMaker().getTokenList(new Segment(line, 0, line.length), TokenTypes.NULL, 0);
+            require(first != null && first.getType() == TokenTypes.RESERVED_WORD,
+                "the first token of a key line has type " + (first == null ? "null" : first.getType()));
+        });
+
         check("demo-cluster", () -> {
             MockClusterHandle handle = MockClusterProvider.INSTANCE.acquire("canary");
             try {
                 int pods = handle.getClient().pods().inAnyNamespace().list().getItems().size();
                 require(pods > 0, "the demo cluster listed " + pods + " pods");
+                // The raw path the YAML editor reads and writes through.
+                String configMap = handle.getClient().raw("/api/v1/namespaces/default/configmaps/app-config");
+                require(configMap != null && configMap.contains("app-config"), "a raw GET of a demo ConfigMap returned " + configMap);
             } finally {
                 handle.close();
             }

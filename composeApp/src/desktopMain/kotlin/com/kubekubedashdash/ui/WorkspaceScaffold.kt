@@ -46,6 +46,7 @@ import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
 import com.kubekubedashdash.ui.portforward.PortForwardLauncher
 import com.kubekubedashdash.ui.screens.viewmodel.screenKeyOf
+import com.kubekubedashdash.ui.yamledit.rememberApplyYamlOpener
 
 /**
  * Per-session content area: sidebar + one DetailHost that lays the
@@ -105,6 +106,7 @@ internal fun SessionPaneContent(
     val pulseAnnotationsOnEntry = annotationQuery.isNotBlank()
 
     val density = LocalDensity.current
+    val onApplyYaml = rememberApplyYamlOpener(session)
 
     // Where the bottom slot sits in this page, so the reconnect scrim can leave
     // the log drawer uncovered. The page's coordinates live in a plain holder
@@ -121,6 +123,7 @@ internal fun SessionPaneContent(
     CompositionLocalProvider(
         LocalViewModelStoreOwner provides session,
         LocalReactiveKubeClient provides session.reactiveClient,
+        LocalClusterSession provides session,
         LocalIsConnected provides sessionIsConnected,
         LocalConnectionError provides sessionConnectionError,
         LocalPortForwardLauncher provides portForwardLauncher,
@@ -150,6 +153,7 @@ internal fun SessionPaneContent(
                             screen = currentScreen,
                             searchFocusRequests = searchFocusRequests,
                             namespaceScope = namespaceScope,
+                            onApplyYaml = onApplyYaml,
                             namespaces = namespaceList,
                             onNamespaceScopeChange = { sessionVm.setNamespaceScope(it) },
                             searchQuery = searchQuery,

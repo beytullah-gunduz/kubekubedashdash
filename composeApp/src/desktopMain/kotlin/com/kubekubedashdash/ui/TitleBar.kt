@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -71,6 +72,10 @@ import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
+import java.awt.EventQueue
+import java.awt.Window
+import java.awt.event.WindowEvent
+import java.awt.event.WindowFocusListener
 
 private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
 
@@ -144,6 +149,12 @@ internal fun Modifier.consumeTitleBarPress(): Modifier = pointerInput(Unit) {
     }
 }
 
+/**
+ * The app's own window chrome: traffic lights (or Windows' caption buttons), the drag area and
+ * double-click to maximize. [windowTools] = false leaves out the controls only a workspace window
+ * has (sidebar toggle, Back/Forward, the log-tabs chip and Settings): a secondary window such as
+ * the YAML editor keeps the same look and behaviour with just its [title].
+ */
 @Composable
 fun WindowScope.TitleBar(
     title: String,
@@ -160,6 +171,7 @@ fun WindowScope.TitleBar(
     // Drawer tabs this window keeps while its log drawer is hidden; above zero, a chip shows them.
     hiddenLogTabCount: Int = 0,
     onShowLogDrawer: () -> Unit = {},
+    windowTools: Boolean = true,
     // False while an in-app modal is open: the controls between the window buttons go inert
     // (dimmed, no pointer input); the window buttons and the window drag keep working.
     controlsEnabled: Boolean = true,
@@ -231,13 +243,15 @@ fun WindowScope.TitleBar(
             }
 
             TitleBarControls(inert = !controlsEnabled) {
-                SidebarToggleButton(sidebarCollapsed, onToggleSidebar, enabled = controlsEnabled)
-                Spacer(Modifier.width(2.dp))
-                // Back / Forward walk the window's history across its tabs; the caller
-                // greys them out when there is nowhere to go.
-                HistoryButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack, clickable = controlsEnabled)
-                HistoryButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward, clickable = controlsEnabled)
-                Spacer(Modifier.width(8.dp))
+                if (windowTools) {
+                    SidebarToggleButton(sidebarCollapsed, onToggleSidebar, enabled = controlsEnabled)
+                    Spacer(Modifier.width(2.dp))
+                    // Back / Forward walk the window's history across its tabs; the caller
+                    // greys them out when there is nowhere to go.
+                    HistoryButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack, clickable = controlsEnabled)
+                    HistoryButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward, clickable = controlsEnabled)
+                    Spacer(Modifier.width(8.dp))
+                }
 
                 if (chipSlot != null) {
                     // The tab strip. Whatever width it leaves free stays window-drag area.
@@ -260,11 +274,13 @@ fun WindowScope.TitleBar(
                     Spacer(Modifier.weight(1f))
                 }
 
-                if (hiddenLogTabCount > 0) {
-                    HiddenLogTabsChip(count = hiddenLogTabCount, onClick = onShowLogDrawer, enabled = controlsEnabled)
-                    Spacer(Modifier.width(6.dp))
+                if (windowTools) {
+                    if (hiddenLogTabCount > 0) {
+                        HiddenLogTabsChip(count = hiddenLogTabCount, onClick = onShowLogDrawer, enabled = controlsEnabled)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    SettingsButton(onClick = onOpenSettings, enabled = controlsEnabled)
                 }
-                SettingsButton(onClick = onOpenSettings, enabled = controlsEnabled)
             }
 
             if (!isMacOS) {
@@ -287,6 +303,28 @@ fun WindowScope.TitleBar(
         WindowDraggableArea {
             rowContent()
         }
+    }
+}
+
+/**
+ * Keeps an undecorated [window] resizable for macOS edge-tiling: stamps NSWindowStyleMaskResizable
+ * at idle on every focus gain (idempotent), never from inside the title-bar drag gesture, which
+ * can deadlock the UI when it races a render burst (see [NativeWindowDrag.ensureResizable]).
+ * invokeLater lets AppKit's key-window assignment settle before [NSApp keyWindow] is read.
+ * No-op off macOS.
+ */
+@Composable
+internal fun KeepResizableOnMac(window: Window) {
+    if (!NativeWindowDrag.isMacOS) return
+    DisposableEffect(window) {
+        val stamp = { EventQueue.invokeLater { NativeWindowDrag.ensureResizable() } }
+        val focusListener = object : WindowFocusListener {
+            override fun windowGainedFocus(e: WindowEvent?) = stamp()
+            override fun windowLostFocus(e: WindowEvent?) = Unit
+        }
+        window.addWindowFocusListener(focusListener)
+        if (window.isFocused) stamp()
+        onDispose { window.removeWindowFocusListener(focusListener) }
     }
 }
 
