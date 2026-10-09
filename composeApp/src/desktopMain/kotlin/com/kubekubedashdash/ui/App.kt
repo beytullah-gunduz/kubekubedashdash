@@ -474,11 +474,10 @@ fun App(
         val refreshBarBackground by PreferenceRepository.crtRefreshBarBackground.collectAsState()
         val refreshBar = rememberCrtRefreshBar()
         CrtRefreshBarDriver(refreshBar, crtPowerOn, active = ThemeManager.isRetro && scanlines, mode = refreshBarMode, rollInBackground = refreshBarBackground)
-        // Cmd/Ctrl+[ and ] through the window's history, across tabs. Not on a terminal
-        // tab: Ctrl+[ is Escape to the shell there. Not while a modal is open either, like the
-        // title bar's arrows. True when the shortcut was used.
+        // Cmd/Ctrl+[ and ] through the window's history, across tabs, where
+        // historyShortcutApplies allows it. True when the shortcut was used.
         val historyShortcut: (back: Boolean) -> Boolean = { back ->
-            if (activeTab is WorkspaceTab.Terminal || modalOpen) {
+            if (!historyShortcutApplies(activeTab, modalOpen)) {
                 false
             } else {
                 if (back) workspace.goBack() else workspace.goForward()
@@ -981,6 +980,12 @@ fun App(
         }
     }
 }
+
+/**
+ * Whether Cmd/Ctrl+[ and ] walk the window's history. Not on a terminal tab, where Ctrl+[ is
+ * Escape to the shell, and not while an in-app modal is open, like the title bar's arrows.
+ */
+internal fun historyShortcutApplies(activeTab: WorkspaceTab?, modalOpen: Boolean): Boolean = activeTab !is WorkspaceTab.Terminal && !modalOpen
 
 /**
  * Splash shown while AppViewModel runs its initial prereq checks + first

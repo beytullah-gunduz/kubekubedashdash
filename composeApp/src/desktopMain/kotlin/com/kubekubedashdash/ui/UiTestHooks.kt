@@ -18,15 +18,13 @@ import com.kubekubedashdash.model.NavigationHistoryState
 import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.services.WorkspaceManager
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /** True only when a hot run starts the app (`-Dkkdd.uiTestHooks=true`): never in a release build. */
 internal val UiTestHooksEnabled: Boolean = System.getProperty("kkdd.uiTestHooks") == "true"
 
-/** contentDescription prefixes the hooks use; scripts/ui-smoke matches on them. */
+/** contentDescription prefixes the hooks use; the UI smoke (uismoke.UiSmoke) matches on them. */
 internal object UiTestHookNames {
     const val STATE = "ui-test:state:"
     const val TEAR_OUT = "ui-test:tear-out:"
@@ -36,7 +34,25 @@ internal object UiTestHookNames {
     const val DISCOVERY_SPLASH = "ui-test:discovery-splash"
 }
 
-/** What the state node reports for one window, as one line of JSON. */
+/**
+ * What the state node reports for one window. The UI smoke (`uismoke.UiSmoke` in the tests)
+ * decodes the same class, so a renamed or retyped field breaks its compilation, not a run.
+ */
+@Serializable
+internal data class UiTestState(
+    val window: String,
+    val active: String?,
+    val page: String?,
+    val tabs: List<String>,
+    val back: List<String>,
+    val forward: List<String>,
+    val firstRun: Boolean,
+    val screen: String?,
+    val pane: Boolean,
+    val lastShortcut: String,
+)
+
+/** [UiTestState] for one window, as one line of JSON. */
 internal fun uiTestStateJson(
     workspaceId: String,
     activeTabKey: String?,
@@ -47,18 +63,21 @@ internal fun uiTestStateJson(
     screenTitle: String?,
     paneOpen: Boolean,
     lastShortcut: String,
-): String = buildJsonObject {
-    put("window", workspaceId)
-    put("active", activeTabKey)
-    put("page", pagerPageKey)
-    put("tabs", buildJsonArray { tabKeys.forEach { add(JsonPrimitive(it)) } })
-    put("back", buildJsonArray { history.back.forEach { add(JsonPrimitive(it.tabKey)) } })
-    put("forward", buildJsonArray { history.forward.forEach { add(JsonPrimitive(it.tabKey)) } })
-    put("firstRun", firstRun)
-    put("screen", screenTitle)
-    put("pane", paneOpen)
-    put("lastShortcut", lastShortcut)
-}.toString()
+): String = Json.encodeToString(
+    UiTestState.serializer(),
+    UiTestState(
+        window = workspaceId,
+        active = activeTabKey,
+        page = pagerPageKey,
+        tabs = tabKeys,
+        back = history.back.map { it.tabKey },
+        forward = history.forward.map { it.tabKey },
+        firstRun = firstRun,
+        screen = screenTitle,
+        pane = paneOpen,
+        lastShortcut = lastShortcut,
+    ),
+)
 
 /** The first of [candidates] that no window's drop zone contains, or null. */
 internal fun firstPointOutside(candidates: List<Offset>, zones: List<Rect>): Offset? = candidates.firstOrNull { p -> zones.none { it.contains(p) } }
@@ -94,8 +113,9 @@ private fun mergeIntoNextWindow(workspace: Workspace, tabKey: String) {
 }
 
 /**
- * Invisible, zero-size nodes that let scripts/ui-smoke drive what the Compose
- * Hot Reload MCP cannot: tab drags between windows and the history shortcuts.
+ * Invisible, zero-size nodes that let the UI smoke (uismoke.UiSmoke,
+ * ./gradlew :composeApp:uiSmoke) drive what the Compose Hot Reload MCP
+ * cannot: tab drags between windows and the history shortcuts.
  * Each node's contentDescription names its action and the MCP's click runs it
  * through the semantic onClick. One more node reports this window's state as
  * JSON in its contentDescription. Composed only when [UiTestHooksEnabled].

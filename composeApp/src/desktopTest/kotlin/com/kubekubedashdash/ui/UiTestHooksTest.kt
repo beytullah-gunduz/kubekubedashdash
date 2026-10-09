@@ -70,4 +70,35 @@ class UiTestHooksTest {
         val zones = listOf(Rect(0f, 0f, 100f, 100f))
         assertNull(firstPointOutside(listOf(Offset(10f, 10f)), zones))
     }
+
+    @Test
+    fun `the state decodes back into UiTestState`() {
+        val json = uiTestStateJson(
+            workspaceId = "w1",
+            activeTabKey = null,
+            pagerPageKey = "all-clusters",
+            tabKeys = listOf("all-clusters"),
+            history = NavigationHistoryState(forward = listOf(HistoryLocation("all-clusters"))),
+            firstRun = true,
+            screenTitle = null,
+            paneOpen = false,
+            lastShortcut = "passed",
+        )
+        val decoded = Json.decodeFromString(UiTestState.serializer(), json)
+        assertEquals(
+            UiTestState(
+                window = "w1",
+                active = null,
+                page = "all-clusters",
+                tabs = listOf("all-clusters"),
+                back = emptyList(),
+                forward = listOf("all-clusters"),
+                firstRun = true,
+                screen = null,
+                pane = false,
+                lastShortcut = "passed",
+            ),
+            decoded,
+        )
+    }
 }

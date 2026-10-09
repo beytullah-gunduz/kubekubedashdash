@@ -88,8 +88,11 @@ private val WinCloseHover = Color(0xFFE81123)
 /** Empty title bar the tab strip always leaves free, so the window can still be grabbed. */
 internal val TitleBarMinDragGap = 48.dp
 
+/** The title bar's height on macOS at the default density, in dp; the UI smoke measures against it. */
+internal const val MAC_TITLE_BAR_HEIGHT_DP = 38
+
 /** The title bar's height: 38 dp on macOS, 42 dp elsewhere, 4 dp less at the compact density. */
-internal fun titleBarHeight(): Dp = if (isMacOS) 38.dp.orCompact(34.dp) else 42.dp.orCompact(38.dp)
+internal fun titleBarHeight(): Dp = if (isMacOS) MAC_TITLE_BAR_HEIGHT_DP.dp.orCompact(34.dp) else 42.dp.orCompact(38.dp)
 
 /**
  * Lays an in-app modal out under the title bar, so its scrim and card leave the window

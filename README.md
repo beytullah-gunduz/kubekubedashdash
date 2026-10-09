@@ -340,6 +340,14 @@ If you don't have a Kubernetes cluster handy, the application ships with a built
 
 The application opens a 1440×960 window on first launch (later launches restore the last window size and position while **Restore last session** is on), runs a prerequisites check, and presents the cluster selector.
 
+### UI smoke test (developers, macOS)
+
+`./gradlew :composeApp:uiSmoke` launches fresh demo-only copies of the app and checks windows, tabs and
+the window-wide history through the Compose Hot Reload MCP server. It opens real windows, so run it on
+a desktop session and leave the mouse alone; it never reads your kubeconfig, preferences or cloud
+accounts. What it covers and how it stays isolated: the KDoc of
+`composeApp/src/desktopTest/kotlin/com/kubekubedashdash/uismoke/UiSmoke.kt`.
+
 ## Building distributable packages
 
 ```bash
