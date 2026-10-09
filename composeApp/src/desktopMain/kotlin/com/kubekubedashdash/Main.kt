@@ -22,6 +22,7 @@ import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.ui.App
+import com.kubekubedashdash.ui.yamledit.EditorWarmup
 import com.kubekubedashdash.ui.yamledit.YamlEditorWindows
 import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
@@ -84,6 +85,10 @@ fun main() {
     ComposeFoundationFlags.isSelectionAutoScrollEnabled = false
 
     installQuitHandler()
+
+    // The YAML editor's first window otherwise froze the app for seconds on macOS while AWT
+    // registered every installed font on the EDT; do that now, in the background.
+    EditorWarmup.start()
 
     application {
         val workspaces by WorkspaceManager.workspaces.collectAsState()
