@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -24,8 +25,10 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.ThemeManager
@@ -52,10 +55,11 @@ fun rememberCrtGhost(): CrtGhost {
  * Plays [ghost]'s power-off collapse for 140 ms after [visible] flips true → false, in Retro
  * only, and only if a snapshot was recorded. Draw-only: it adds no pointer, focus or key
  * handling, so the UI under it receives input from the first frame (D6). Place it directly
- * after the `if (visible) { Modal(…) }` it belongs to, inside the same root Box.
+ * after the `if (visible) { Modal(…) }` it belongs to, inside the same root Box. [scrimTop]
+ * leaves that band at the top undimmed — the title bar, which modals no longer cover.
  */
 @Composable
-fun CrtGhostExit(visible: Boolean, ghost: CrtGhost, scrimAlpha: Float) {
+fun CrtGhostExit(visible: Boolean, ghost: CrtGhost, scrimAlpha: Float, scrimTop: Dp = 0.dp) {
     // Default never ghosts, so it must not pay for the transition either: without this early
     // return every Default modal close would still run a 140 ms frame loop nobody reads.
     // Switching to Retro while a modal is open is safe — the fresh transition starts settled.
@@ -78,7 +82,12 @@ fun CrtGhostExit(visible: Boolean, ghost: CrtGhost, scrimAlpha: Float) {
     val density = LocalDensity.current
     Box(
         Modifier.fillMaxSize().onGloballyPositioned { hostTopLeftInRoot = it.positionInRoot() }.drawBehind {
-            drawRect(Color.Black.copy(alpha = scrimAlpha * progress))
+            val top = scrimTop.toPx()
+            drawRect(
+                Color.Black.copy(alpha = scrimAlpha * progress),
+                topLeft = Offset(0f, top),
+                size = Size(size.width, (size.height - top).coerceAtLeast(0f)),
+            )
         },
     ) {
         Box(

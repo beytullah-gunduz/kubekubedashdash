@@ -10,10 +10,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,6 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -43,6 +46,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.WindowPlacement
@@ -83,6 +87,49 @@ private val WinCloseHover = Color(0xFFE81123)
 
 /** Empty title bar the tab strip always leaves free, so the window can still be grabbed. */
 internal val TitleBarMinDragGap = 48.dp
+
+/** The title bar's height: 38 dp on macOS, 42 dp elsewhere, 4 dp less at the compact density. */
+internal fun titleBarHeight(): Dp = if (isMacOS) 38.dp.orCompact(34.dp) else 42.dp.orCompact(38.dp)
+
+/**
+ * Lays an in-app modal out under the title bar, so its scrim and card leave the window
+ * buttons and the window drag free (see [TitleBar]'s controlsEnabled).
+ */
+@Composable
+internal fun BelowTitleBar(content: @Composable BoxScope.() -> Unit) {
+    Box(Modifier.fillMaxSize().padding(top = titleBarHeight()), content = content)
+}
+
+/** How much the inert title-bar controls fade while a modal is open. */
+private const val INERT_CONTROLS_ALPHA = 0.4f
+
+/**
+ * The title bar's controls between the window buttons. While [inert] (a modal is open) they
+ * are dimmed and a shield on top takes every pointer event without consuming it: Compose
+ * stops hit-testing at the topmost sibling hit, so the controls see nothing, and the press
+ * still reaches [TitleBar]'s drag handler unconsumed — a press there drags the window like
+ * a press on empty title bar.
+ */
+@Composable
+internal fun RowScope.TitleBarControls(inert: Boolean, content: @Composable RowScope.() -> Unit) {
+    Box(Modifier.weight(1f).fillMaxHeight()) {
+        Row(
+            // graphicsLayer, not alpha(): alpha() also clips the row to its bounds.
+            modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (inert) INERT_CONTROLS_ALPHA else 1f },
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+        if (inert) {
+            Box(
+                Modifier.matchParentSize().pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) awaitPointerEvent()
+                    }
+                },
+            )
+        }
+    }
+}
 
 /**
  * Eats presses so a click on a title-bar control never starts a window drag
@@ -125,6 +172,9 @@ fun WindowScope.TitleBar(
     hiddenLogTabCount: Int = 0,
     onShowLogDrawer: () -> Unit = {},
     windowTools: Boolean = true,
+    // False while an in-app modal is open: the controls between the window buttons go inert
+    // (dimmed, no pointer input); the window buttons and the window drag keep working.
+    controlsEnabled: Boolean = true,
 ) {
     val toggleMaximize = {
         windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
@@ -138,7 +188,7 @@ fun WindowScope.TitleBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (isMacOS) 38.dp.orCompact(34.dp) else 42.dp.orCompact(38.dp))
+                .height(titleBarHeight())
                 .background(KdSurface)
                 .pointerInput(Unit) {
                     var lastPressTime = 0L
@@ -192,43 +242,45 @@ fun WindowScope.TitleBar(
                 Spacer(Modifier.width(12.dp))
             }
 
-            if (windowTools) {
-                SidebarToggleButton(sidebarCollapsed, onToggleSidebar)
-                Spacer(Modifier.width(2.dp))
-                // Back / Forward walk the window's history across its tabs; the caller
-                // greys them out when there is nowhere to go.
-                HistoryButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack)
-                HistoryButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward)
-                Spacer(Modifier.width(8.dp))
-            }
-
-            if (chipSlot != null) {
-                // The tab strip. Whatever width it leaves free stays window-drag area.
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    chipSlot()
+            TitleBarControls(inert = !controlsEnabled) {
+                if (windowTools) {
+                    SidebarToggleButton(sidebarCollapsed, onToggleSidebar, enabled = controlsEnabled)
+                    Spacer(Modifier.width(2.dp))
+                    // Back / Forward walk the window's history across its tabs; the caller
+                    // greys them out when there is nowhere to go.
+                    HistoryButton(Res.drawable.arrow_back_filled, "Back", canGoBack, onBack, clickable = controlsEnabled)
+                    HistoryButton(Res.drawable.arrow_forward_filled, "Forward", canGoForward, onForward, clickable = controlsEnabled)
+                    Spacer(Modifier.width(8.dp))
                 }
-            } else {
-                Text(
-                    text = title,
-                    color = if (ThemeManager.isRetro) KdAccent else KdTextSecondary,
-                    style = LocalTextStyle.current
-                        .copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
-                        .retroChrome(9.sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.weight(1f))
-            }
 
-            if (windowTools) {
-                if (hiddenLogTabCount > 0) {
-                    HiddenLogTabsChip(count = hiddenLogTabCount, onClick = onShowLogDrawer)
-                    Spacer(Modifier.width(6.dp))
+                if (chipSlot != null) {
+                    // The tab strip. Whatever width it leaves free stays window-drag area.
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        chipSlot()
+                    }
+                } else {
+                    Text(
+                        text = title,
+                        color = if (ThemeManager.isRetro) KdAccent else KdTextSecondary,
+                        style = LocalTextStyle.current
+                            .copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
+                            .retroChrome(9.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.weight(1f))
                 }
-                SettingsButton(onClick = onOpenSettings)
+
+                if (windowTools) {
+                    if (hiddenLogTabCount > 0) {
+                        HiddenLogTabsChip(count = hiddenLogTabCount, onClick = onShowLogDrawer, enabled = controlsEnabled)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    SettingsButton(onClick = onOpenSettings, enabled = controlsEnabled)
+                }
             }
 
             if (!isMacOS) {
@@ -282,7 +334,7 @@ internal fun KeepResizableOnMac(window: Window) {
  * other title-bar buttons, so a click never starts a window drag.
  */
 @Composable
-internal fun HiddenLogTabsChip(count: Int, onClick: () -> Unit) {
+internal fun HiddenLogTabsChip(count: Int, onClick: () -> Unit, enabled: Boolean = true) {
     val label = logTabCount(count)
     val textStyle = LocalTextStyle.current
         .copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
@@ -295,6 +347,7 @@ internal fun HiddenLogTabsChip(count: Int, onClick: () -> Unit) {
             .kdFocusRing()
             .consumeTitleBarPress()
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
@@ -316,7 +369,7 @@ internal fun HiddenLogTabsChip(count: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
+private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
     val icon = if (collapsed) Res.drawable.left_panel_open else Res.drawable.left_panel_close
     Box(
         modifier = Modifier
@@ -325,6 +378,7 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
             .kdFocusRing()
             .consumeTitleBarPress()
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
@@ -341,11 +395,14 @@ private fun SidebarToggleButton(collapsed: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HistoryButton(
+internal fun HistoryButton(
     icon: DrawableResource,
     contentDescription: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    // False while the title bar is inert. It only takes the click away: the glyph still
+    // follows [enabled], so an arrow with somewhere to go keeps its look under the fade.
+    clickable: Boolean = true,
 ) {
     Box(
         modifier = Modifier
@@ -356,7 +413,7 @@ private fun HistoryButton(
             // must not start a window drag either.
             .consumeTitleBarPress()
             .clickable(
-                enabled = enabled,
+                enabled = enabled && clickable,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
@@ -373,7 +430,7 @@ private fun HistoryButton(
 }
 
 @Composable
-private fun SettingsButton(onClick: () -> Unit) {
+private fun SettingsButton(onClick: () -> Unit, enabled: Boolean = true) {
     Box(
         modifier = Modifier
             .size(28.dp)
@@ -381,6 +438,7 @@ private fun SettingsButton(onClick: () -> Unit) {
             .kdFocusRing()
             .consumeTitleBarPress()
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,

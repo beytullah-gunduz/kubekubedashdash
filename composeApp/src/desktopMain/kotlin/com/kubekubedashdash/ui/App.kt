@@ -218,6 +218,10 @@ fun App(
         val discardPrompt by workspace.discardPrompt.collectAsState()
         var paletteOpen by remember { mutableStateOf(false) }
         var shortcutsOpen by remember { mutableStateOf(false) }
+        // One of the seven in-app modals is up: they lay out under the title bar
+        // (BelowTitleBar), which then keeps only the window buttons and the window drag.
+        val modalOpen = (showPrerequisites && prerequisiteResult != null) || showClusterSelector ||
+            showEksDiscovery || showGkeDiscovery || settingsOpen || paletteOpen || shortcutsOpen
         var drawerState by rememberSaveable { mutableStateOf(LogDrawerState.HIDDEN) }
 
         // Scope pod-log tabs to this window's clusters so they don't bleed
@@ -471,9 +475,10 @@ fun App(
         val refreshBar = rememberCrtRefreshBar()
         CrtRefreshBarDriver(refreshBar, crtPowerOn, active = ThemeManager.isRetro && scanlines, mode = refreshBarMode, rollInBackground = refreshBarBackground)
         // Cmd/Ctrl+[ and ] through the window's history, across tabs. Not on a terminal
-        // tab: Ctrl+[ is Escape to the shell there. True when the shortcut was used.
+        // tab: Ctrl+[ is Escape to the shell there. Not while a modal is open either, like the
+        // title bar's arrows. True when the shortcut was used.
         val historyShortcut: (back: Boolean) -> Boolean = { back ->
-            if (activeTab is WorkspaceTab.Terminal) {
+            if (activeTab is WorkspaceTab.Terminal || modalOpen) {
                 false
             } else {
                 if (back) workspace.goBack() else workspace.goForward()
@@ -658,6 +663,7 @@ fun App(
                                 onForward = { workspace.goForward() },
                                 hiddenLogTabCount = if (drawerState == LogDrawerState.HIDDEN) visibleDrawerTabCount else 0,
                                 onShowLogDrawer = { drawerState = LogDrawerState.EXPANDED },
+                                controlsEnabled = !modalOpen,
                                 chipSlot = if (showAppTitle) null else tabStripSlot,
                             )
                         }
@@ -798,109 +804,124 @@ fun App(
                 // render a loading-state modal — the splash covers that window now.
                 val prereqSnapshot = prerequisiteResult
                 if (showPrerequisites && prereqSnapshot != null) {
-                    PrerequisitesModal(
-                        result = prereqSnapshot,
-                        onQuit = onClose,
-                        onIgnore = { appViewModel.dismissPrerequisites() },
-                        onDiscoverEks = { workspace.showEksDiscovery() },
-                        onDiscoverGke = { workspace.showGkeDiscovery() },
-                        crtGhost = prereqGhost,
-                    )
+                    BelowTitleBar {
+                        PrerequisitesModal(
+                            result = prereqSnapshot,
+                            onQuit = onClose,
+                            onIgnore = { appViewModel.dismissPrerequisites() },
+                            onDiscoverEks = { workspace.showEksDiscovery() },
+                            onDiscoverGke = { workspace.showGkeDiscovery() },
+                            crtGhost = prereqGhost,
+                        )
+                    }
                 } else if (showClusterSelector) {
                     val clusterSelectorDefault by workspace.clusterSelectorDefaultTarget.collectAsState()
-                    ClusterSelectorModal(
-                        contexts = contexts,
-                        selectedContext = selectedContext,
-                        canAddTab = isConnected,
-                        defaultTarget = clusterSelectorDefault,
-                        onOpenCluster = { ctx, target ->
-                            workspace.dismissClusterSelector()
-                            WorkspaceManager.requestOpenCluster(workspace, ctx, target)
-                        },
-                        onDismiss = { workspace.dismissClusterSelector() },
-                        onDiscoverEks = { workspace.showEksDiscovery() },
-                        onDiscoverGke = { workspace.showGkeDiscovery() },
-                        // Not while the picker is locked open on a tab with no cluster yet
-                        // (dismissable false): the row would close it and leave that tab blank.
-                        onOpenAllClusters = openAllClusters?.takeIf { selectedContext.isNotBlank() }?.let { open ->
-                            {
+                    BelowTitleBar {
+                        ClusterSelectorModal(
+                            contexts = contexts,
+                            selectedContext = selectedContext,
+                            canAddTab = isConnected,
+                            defaultTarget = clusterSelectorDefault,
+                            onOpenCluster = { ctx, target ->
                                 workspace.dismissClusterSelector()
-                                open()
-                            }
-                        },
-                        dismissable = selectedContext.isNotBlank(),
-                        crtGhost = selectorGhost,
-                    )
+                                WorkspaceManager.requestOpenCluster(workspace, ctx, target)
+                            },
+                            onDismiss = { workspace.dismissClusterSelector() },
+                            onDiscoverEks = { workspace.showEksDiscovery() },
+                            onDiscoverGke = { workspace.showGkeDiscovery() },
+                            // Not while the picker is locked open on a tab with no cluster yet
+                            // (dismissable false): the row would close it and leave that tab blank.
+                            onOpenAllClusters = openAllClusters?.takeIf { selectedContext.isNotBlank() }?.let { open ->
+                                {
+                                    workspace.dismissClusterSelector()
+                                    open()
+                                }
+                            },
+                            dismissable = selectedContext.isNotBlank(),
+                            crtGhost = selectorGhost,
+                        )
+                    }
                 }
-                CrtGhostExit(visible = showPrerequisites && prereqSnapshot != null, ghost = prereqGhost, scrimAlpha = 0.45f)
+                CrtGhostExit(visible = showPrerequisites && prereqSnapshot != null, ghost = prereqGhost, scrimAlpha = 0.45f, scrimTop = titleBarHeight())
                 CrtGhostExit(
                     visible = !(showPrerequisites && prereqSnapshot != null) && showClusterSelector,
                     ghost = selectorGhost,
                     scrimAlpha = 0.45f,
+                    scrimTop = titleBarHeight(),
                 )
 
                 if (showEksDiscovery) {
-                    EksDiscoveryModal(
-                        onDismiss = { workspace.dismissEksDiscovery() },
-                        onCompleted = {
-                            workspace.dismissEksDiscovery()
-                            appViewModel.onEksImportComplete()
-                        },
-                        launchedFromClusterSelector = showClusterSelector,
-                        crtGhost = eksGhost,
-                    )
+                    BelowTitleBar {
+                        EksDiscoveryModal(
+                            onDismiss = { workspace.dismissEksDiscovery() },
+                            onCompleted = {
+                                workspace.dismissEksDiscovery()
+                                appViewModel.onEksImportComplete()
+                            },
+                            launchedFromClusterSelector = showClusterSelector,
+                            crtGhost = eksGhost,
+                        )
+                    }
                 }
-                CrtGhostExit(visible = showEksDiscovery, ghost = eksGhost, scrimAlpha = 0.55f)
+                CrtGhostExit(visible = showEksDiscovery, ghost = eksGhost, scrimAlpha = 0.55f, scrimTop = titleBarHeight())
 
                 if (showGkeDiscovery) {
-                    GkeDiscoveryModal(
-                        onDismiss = { workspace.dismissGkeDiscovery() },
-                        onCompleted = {
-                            workspace.dismissGkeDiscovery()
-                            appViewModel.onEksImportComplete()
-                        },
-                        launchedFromClusterSelector = showClusterSelector,
-                        crtGhost = gkeGhost,
-                    )
+                    BelowTitleBar {
+                        GkeDiscoveryModal(
+                            onDismiss = { workspace.dismissGkeDiscovery() },
+                            onCompleted = {
+                                workspace.dismissGkeDiscovery()
+                                appViewModel.onEksImportComplete()
+                            },
+                            launchedFromClusterSelector = showClusterSelector,
+                            crtGhost = gkeGhost,
+                        )
+                    }
                 }
-                CrtGhostExit(visible = showGkeDiscovery, ghost = gkeGhost, scrimAlpha = 0.55f)
+                CrtGhostExit(visible = showGkeDiscovery, ghost = gkeGhost, scrimAlpha = 0.55f, scrimTop = titleBarHeight())
 
                 if (settingsOpen) {
-                    SettingsDialog(
-                        onDismiss = { workspace.dismissSettings() },
-                        onDiscoverEks = {
-                            workspace.dismissSettings()
-                            workspace.showEksDiscovery()
-                        },
-                        onDiscoverGke = {
-                            workspace.dismissSettings()
-                            workspace.showGkeDiscovery()
-                        },
-                        onShowAppLogs = {
-                            workspace.dismissSettings()
-                            LogStreamRegistry.openOrFocusAppLog()
-                            if (drawerState == LogDrawerState.HIDDEN) {
-                                drawerState = LogDrawerState.EXPANDED
-                            }
-                        },
-                        crtGhost = settingsGhost,
-                    )
+                    BelowTitleBar {
+                        SettingsDialog(
+                            onDismiss = { workspace.dismissSettings() },
+                            onDiscoverEks = {
+                                workspace.dismissSettings()
+                                workspace.showEksDiscovery()
+                            },
+                            onDiscoverGke = {
+                                workspace.dismissSettings()
+                                workspace.showGkeDiscovery()
+                            },
+                            onShowAppLogs = {
+                                workspace.dismissSettings()
+                                LogStreamRegistry.openOrFocusAppLog()
+                                if (drawerState == LogDrawerState.HIDDEN) {
+                                    drawerState = LogDrawerState.EXPANDED
+                                }
+                            },
+                            crtGhost = settingsGhost,
+                        )
+                    }
                 }
-                CrtGhostExit(visible = settingsOpen, ghost = settingsGhost, scrimAlpha = 0.45f)
+                CrtGhostExit(visible = settingsOpen, ghost = settingsGhost, scrimAlpha = 0.45f, scrimTop = titleBarHeight())
 
                 if (paletteOpen) {
-                    CommandPalette(
-                        entries = paletteEntries,
-                        session = sessionForPalette,
-                        onVerb = { pendingVerb = it },
-                        onDismiss = { paletteOpen = false },
-                    )
+                    BelowTitleBar {
+                        CommandPalette(
+                            entries = paletteEntries,
+                            session = sessionForPalette,
+                            onVerb = { pendingVerb = it },
+                            onDismiss = { paletteOpen = false },
+                        )
+                    }
                 }
 
                 if (shortcutsOpen) {
-                    ShortcutSheet(onDismiss = { shortcutsOpen = false }, crtGhost = shortcutsGhost)
+                    BelowTitleBar {
+                        ShortcutSheet(onDismiss = { shortcutsOpen = false }, crtGhost = shortcutsGhost)
+                    }
                 }
-                CrtGhostExit(visible = shortcutsOpen, ghost = shortcutsGhost, scrimAlpha = 0.45f)
+                CrtGhostExit(visible = shortcutsOpen, ghost = shortcutsGhost, scrimAlpha = 0.45f, scrimTop = titleBarHeight())
 
                 captureDialogNamespace?.let { ns ->
                     activeSession?.let { session ->

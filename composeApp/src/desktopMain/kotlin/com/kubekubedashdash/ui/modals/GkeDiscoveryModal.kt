@@ -185,12 +185,18 @@ fun GkeDiscoveryModal(
                 if (!viewModel.gcloudCliAvailable) {
                     GcloudMissing(onDismiss)
                 } else {
-                    when (step) {
-                        GkeDiscoveryStep.PICK_PROJECTS -> FirstStep(viewModel, mode)
-                        GkeDiscoveryStep.SCANNING -> ScanningStep(viewModel)
-                        GkeDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
-                        GkeDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
-                        GkeDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                    // Weighted, so the footer below is measured first and the step is
+                    // what shrinks in a short window. The lists inside keep their fixed
+                    // height (their scrollbar fills it), so a list that grows or is
+                    // filtered while the modal is open does not move the card.
+                    Box(Modifier.weight(1f, fill = false)) {
+                        when (step) {
+                            GkeDiscoveryStep.PICK_PROJECTS -> FirstStep(viewModel, mode)
+                            GkeDiscoveryStep.SCANNING -> ScanningStep(viewModel)
+                            GkeDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
+                            GkeDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
+                            GkeDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                        }
                     }
                     errorMessage?.let { msg ->
                         HorizontalDivider(color = KdBorder)

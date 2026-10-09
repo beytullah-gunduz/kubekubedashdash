@@ -181,13 +181,19 @@ fun EksDiscoveryModal(
                 if (!viewModel.awsCliAvailable) {
                     AwsCliMissing(onDismiss)
                 } else {
-                    when (step) {
-                        EksDiscoveryStep.PICK_PROFILE -> FirstStep(viewModel, mode)
-                        EksDiscoveryStep.PICK_REGIONS -> RegionStep(viewModel)
-                        EksDiscoveryStep.SCANNING -> ScanningStep(viewModel)
-                        EksDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
-                        EksDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
-                        EksDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                    // Weighted, so the footer below is measured first and the step is
+                    // what shrinks in a short window. The lists inside keep their fixed
+                    // height (their scrollbar fills it), so a list that grows or is
+                    // filtered while the modal is open does not move the card.
+                    Box(Modifier.weight(1f, fill = false)) {
+                        when (step) {
+                            EksDiscoveryStep.PICK_PROFILE -> FirstStep(viewModel, mode)
+                            EksDiscoveryStep.PICK_REGIONS -> RegionStep(viewModel)
+                            EksDiscoveryStep.SCANNING -> ScanningStep(viewModel)
+                            EksDiscoveryStep.PICK_CLUSTERS -> ClustersStep(viewModel)
+                            EksDiscoveryStep.IMPORTING -> ImportingStep(viewModel)
+                            EksDiscoveryStep.DONE -> DoneStep(viewModel, onCompleted)
+                        }
                     }
                     errorMessage?.let { msg ->
                         HorizontalDivider(color = KdBorder)
