@@ -8,6 +8,7 @@ import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,7 +42,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -50,6 +53,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -73,8 +79,11 @@ import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.hub
 import com.kubekubedashdash.resources.open_in_new_filled
 import com.kubekubedashdash.resources.science_filled
+import com.kubekubedashdash.resources.star_filled
+import com.kubekubedashdash.resources.star_outline
 import com.kubekubedashdash.resources.tab_filled
 import com.kubekubedashdash.services.OpenTarget
+import com.kubekubedashdash.ui.SidebarSearchBox
 import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.LoadingCaption
 import com.kubekubedashdash.ui.crt.CrtGhost
@@ -92,7 +101,7 @@ private val EksOrange = Color(0xFFFF9900)
 private val GkeBlue = Color(0xFF4285F4)
 private val MockTeal = Color(0xFF00BFA5)
 
-private data class ParsedContext(
+internal data class ParsedContext(
     val rawName: String,
     val isEks: Boolean,
     val isMock: Boolean = false,
@@ -105,7 +114,7 @@ private data class ParsedContext(
     val gcpLocation: String? = null,
 )
 
-private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
+internal fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
     if (DemoContext.isMockContext(ctx)) {
         // Bare prefix (picker template) → "Demo Cluster"; live "$prefix #N" → "Demo Cluster #N".
         val suffix = ctx.removePrefix(DemoContext.MOCK_CONTEXT_NAME).trim()
@@ -149,6 +158,115 @@ private fun parseContext(ctx: String, awsProfile: String?): ParsedContext {
     }
 }
 
+/** Test tags for the picker's search field, sections, rows and stars. */
+internal object ClusterPickerTags {
+    const val SEARCH = "cluster-picker-search"
+    const val FAVOURITES_HEADER = "cluster-picker-favourites-header"
+    const val NO_MATCH = "cluster-picker-no-match"
+
+    fun row(ctx: String) = "cluster-picker-row/$ctx"
+
+    fun star(ctx: String) = "cluster-picker-star/$ctx"
+}
+
+/** One entry of the picker's list, in display order. Keys are unique across kinds. */
+internal sealed interface PickerItem {
+    val key: String
+
+    data class FavouritesHeader(val count: Int) : PickerItem {
+        override val key: String get() = "favourites-header"
+    }
+
+    data object FavouritesDivider : PickerItem {
+        override val key: String get() = "favourites-divider"
+    }
+
+    data class AwsAccountHeader(val account: String, val count: Int) : PickerItem {
+        override val key: String get() = "account-header/$account"
+    }
+
+    data class GcpProjectHeader(val project: String, val count: Int) : PickerItem {
+        override val key: String get() = "project-header/$project"
+    }
+
+    data class Row(val parsed: ParsedContext) : PickerItem {
+        override val key: String get() = "row/${parsed.rawName}"
+    }
+}
+
+/**
+ * True when every whitespace-separated token of [query] appears, ignoring case, in one of
+ * the row's fields: context name, display name, AWS account/region/profile, GCP
+ * project/location. A blank query matches every row.
+ */
+internal fun matchesClusterQuery(parsed: ParsedContext, query: String): Boolean {
+    // A non-breaking space (Option+Space on a Mac) separates words like a space.
+    val tokens = query.trim().lowercase().split(Regex("[\\s\\u00A0]+")).filter { it.isNotEmpty() }
+    if (tokens.isEmpty()) return true
+    val fields = listOfNotNull(
+        parsed.rawName,
+        parsed.clusterName,
+        parsed.awsAccount,
+        parsed.awsRegion,
+        parsed.awsProfile,
+        parsed.gcpProject,
+        parsed.gcpLocation,
+    ).map { it.lowercase() }
+    return tokens.all { token -> fields.any { token in it } }
+}
+
+/**
+ * The picker's list in display order. Favourites come first, in [favouriteKeys] order
+ * ([DemoContext.preferenceKey] values; a key with no context is skipped), and are left out
+ * of the groups below, so a starred cluster is listed once. Then, as before: the demo
+ * cluster, plain contexts, EKS by account and GKE by project, with a group header only when
+ * more than one account (project) is listed. [query] filters every section, and a section
+ * left without rows is dropped with its header.
+ */
+internal fun pickerItems(
+    parsed: List<ParsedContext>,
+    favouriteKeys: List<String>,
+    query: String,
+): List<PickerItem> {
+    val matching = parsed.filter { matchesClusterQuery(it, query) }
+    val keys = favouriteKeys.distinct()
+    val favourites = keys.flatMap { key -> matching.filter { DemoContext.preferenceKey(it.rawName) == key } }
+    val keySet = keys.toSet()
+    val rest = matching.filter { DemoContext.preferenceKey(it.rawName) !in keySet }
+
+    val (mock, rest1) = rest.partition { it.isMock }
+    val (eks, rest2) = rest1.partition { it.isEks }
+    val (gke, other) = rest2.partition { it.isGke }
+    val eksByAccount = eks.groupBy { it.awsAccount.orEmpty() }
+    val gkeByProject = gke.groupBy { it.gcpProject.orEmpty() }
+
+    val items = mutableListOf<PickerItem>()
+    if (favourites.isNotEmpty()) {
+        items += PickerItem.FavouritesHeader(favourites.size)
+        favourites.forEach { items += PickerItem.Row(it) }
+        if (rest.isNotEmpty()) items += PickerItem.FavouritesDivider
+    }
+    mock.forEach { items += PickerItem.Row(it) }
+    other.forEach { items += PickerItem.Row(it) }
+    eksByAccount.keys.sorted().forEach { account ->
+        val list = eksByAccount.getValue(account)
+        if (eksByAccount.size > 1) items += PickerItem.AwsAccountHeader(account, list.size)
+        list.forEach { items += PickerItem.Row(it) }
+    }
+    gkeByProject.keys.sorted().forEach { project ->
+        val list = gkeByProject.getValue(project)
+        if (gkeByProject.size > 1) items += PickerItem.GcpProjectHeader(project, list.size)
+        list.forEach { items += PickerItem.Row(it) }
+    }
+    return items
+}
+
+/**
+ * [favourites] are the starred [DemoContext.preferenceKey] values, live: they fill the
+ * stars. The list's order reads them once per opening, re-reading when [favouritesReady]
+ * turns true (the stored ones have loaded), so a star never moves a row under the pointer.
+ * [onToggleFavourite] receives the row's context; null hides the stars.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ClusterSelectorModal(
@@ -163,6 +281,9 @@ fun ClusterSelectorModal(
     canAddTab: Boolean = false,
     defaultTarget: OpenTarget = OpenTarget.CURRENT_VIEW,
     crtGhost: CrtGhost? = null,
+    favourites: List<String> = emptyList(),
+    favouritesReady: Boolean = true,
+    onToggleFavourite: ((String) -> Unit)? = null,
 ) {
     var bindings by remember { mutableStateOf(emptyMap<String, ContextBinding>()) }
     LaunchedEffect(contexts) {
@@ -170,21 +291,98 @@ fun ClusterSelectorModal(
             KubeconfigReader.Default.contextBindings().associateBy { it.name }
         }
     }
+    var query by remember { mutableStateOf("") }
+    // Index into `rows`; -1 = nothing highlighted.
+    var highlighted by remember { mutableStateOf(-1) }
+    // A copy: the caller may pass a mutable list, and the order must not follow it.
+    val layoutFavourites = remember(favouritesReady) { favourites.toList() }
+    val favouriteKeySet = favourites.toSet()
+    val parsedContexts = remember(contexts, bindings) {
+        contexts.map { ctx -> parseContext(ctx, bindings[ctx]?.awsProfile) }
+    }
+    val items = remember(parsedContexts, layoutFavourites, query) {
+        pickerItems(parsedContexts, layoutFavourites, query)
+    }
+    val rows = remember(items) { items.filterIsInstance<PickerItem.Row>() }
+    val listState = rememberLazyListState()
+    val searchFocus = remember { FocusRequester() }
+    // The arrows and Enter drive the highlight only from the search field: a row or
+    // button reached with Tab keeps its own Enter.
+    var searchFocused by remember { mutableStateOf(false) }
+    // The list area's height with no query: a filtered list keeps it, so the card and the
+    // field in it do not shrink towards the centre on every keystroke.
+    val density = LocalDensity.current
+    var unfilteredListHeight by remember { mutableStateOf(0.dp) }
     val awsCliAvailable = remember { EksClusterDiscoverer.isAwsCliAvailable() }
     val gcloudCliAvailable = remember { GkeClusterDiscoverer.isGcloudAvailable() }
     val modalFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { modalFocus.requestFocus() } }
+    LaunchedEffect(Unit) {
+        runCatching { searchFocus.requestFocus() }
+            .onFailure { runCatching { modalFocus.requestFocus() } }
+    }
+    LaunchedEffect(highlighted, items) {
+        val target = rows.getOrNull(highlighted) ?: return@LaunchedEffect
+        // The first row scrolls the list to its top, so the Favourites header above it shows too.
+        val index = if (highlighted == 0) 0 else items.indexOfFirst { it.key == target.key }
+        if (index < 0) return@LaunchedEffect
+        val info = listState.layoutInfo
+        val shown = info.visibleItemsInfo.firstOrNull { it.index == index }
+        when {
+            shown == null -> listState.animateScrollToItem(index)
+
+            shown.offset < info.viewportStartOffset ->
+                listState.animateScrollBy((shown.offset - info.viewportStartOffset).toFloat())
+
+            shown.offset + shown.size > info.viewportEndOffset ->
+                listState.animateScrollBy((shown.offset + shown.size - info.viewportEndOffset).toFloat())
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
             .focusRequester(modalFocus)
             .focusable()
             .onPreviewKeyEvent { e ->
-                if (dismissable && e.type == KeyEventType.KeyDown && e.key == Key.Escape) {
-                    onDismiss()
-                    true
-                } else {
-                    false
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (e.key) {
+                    // A query is cleared first; the next Escape closes the picker.
+                    Key.Escape -> when {
+                        query.isNotEmpty() -> {
+                            query = ""
+                            highlighted = -1
+                            true
+                        }
+
+                        dismissable -> {
+                            onDismiss()
+                            true
+                        }
+
+                        else -> false
+                    }
+
+                    Key.DirectionDown -> {
+                        if (!searchFocused) return@onPreviewKeyEvent false
+                        if (rows.isNotEmpty()) highlighted = (highlighted + 1).coerceAtMost(rows.lastIndex)
+                        true
+                    }
+
+                    Key.DirectionUp -> {
+                        if (!searchFocused) return@onPreviewKeyEvent false
+                        if (rows.isNotEmpty()) highlighted = (highlighted - 1).coerceAtLeast(0)
+                        true
+                    }
+
+                    Key.Enter, Key.NumPadEnter -> {
+                        if (!searchFocused) return@onPreviewKeyEvent false
+                        rows.getOrNull(highlighted)?.let { row ->
+                            onOpenCluster(row.parsed.rawName, defaultTarget)
+                            onDismiss()
+                        }
+                        true
+                    }
+
+                    else -> false
                 }
             }
             .background(Color.Black.copy(alpha = 0.45f))
@@ -204,6 +402,9 @@ fun ClusterSelectorModal(
         Surface(
             modifier = Modifier
                 .widthIn(max = 700.dp)
+                // Swallows clicks without taking focus, so a click on the card's
+                // background leaves the search field focused.
+                .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -245,10 +446,10 @@ fun ClusterSelectorModal(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            if (contexts.isEmpty()) {
-                                "Loading…"
-                            } else {
-                                "${contexts.size} context${if (contexts.size != 1) "s" else ""} available"
+                            when {
+                                contexts.isEmpty() -> "Loading…"
+                                query.isNotBlank() -> "${rows.size} of ${contexts.size} context${if (contexts.size != 1) "s" else ""}"
+                                else -> "${contexts.size} context${if (contexts.size != 1) "s" else ""} available"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = KdTextSecondary,
@@ -266,6 +467,22 @@ fun ClusterSelectorModal(
                         )
                     }
                 }
+
+                SidebarSearchBox(
+                    query = query,
+                    onChange = {
+                        query = it
+                        highlighted = if (it.isBlank()) -1 else 0
+                    },
+                    placeholder = "Filter by name, account, region or project",
+                    modifier = Modifier
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                        .focusRequester(searchFocus)
+                        .onFocusChanged { searchFocused = it.isFocused }
+                        .testTag(ClusterPickerTags.SEARCH),
+                    height = 32.dp,
+                    verticalPadding = 0.dp,
+                )
 
                 HorizontalDivider(color = KdBorder, thickness = 1.dp)
 
@@ -286,30 +503,32 @@ fun ClusterSelectorModal(
                             )
                         }
                     }
-                } else {
-                    val parsedContexts = remember(contexts, bindings) {
-                        contexts.map { ctx ->
-                            val awsProfile = bindings[ctx]?.awsProfile
-                            ctx to parseContext(ctx, awsProfile)
-                        }
+                } else if (rows.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .fillMaxWidth()
+                            .heightIn(min = unfilteredListHeight)
+                            .padding(horizontal = 20.dp, vertical = 24.dp)
+                            .testTag(ClusterPickerTags.NO_MATCH),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "No clusters match \"${query.trim()}\"",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KdTextSecondary,
+                        )
                     }
-                    val (mockItems, rest1) = parsedContexts.partition { it.second.isMock }
-                    val (eksItems, rest2) = rest1.partition { it.second.isEks }
-                    val (gkeItems, otherItems) = rest2.partition { it.second.isGke }
-                    val eksByAccount = eksItems.groupBy { it.second.awsAccount.orEmpty() }
-                    val accountOrder = eksByAccount.keys.sorted()
-                    val showAccountHeaders = accountOrder.size > 1
-                    val gkeByProject = gkeItems.groupBy { it.second.gcpProject.orEmpty() }
-                    val projectOrder = gkeByProject.keys.sorted()
-                    val showProjectHeaders = projectOrder.size > 1
-                    val listState = rememberLazyListState()
+                } else {
                     // Weighted, so the footer below is measured first and the list is
                     // what shrinks in a short window.
                     Box(
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .fillMaxWidth()
-                            .heightIn(max = 700.dp),
+                            .heightIn(max = 700.dp)
+                            .then(if (query.isNotBlank()) Modifier.heightIn(min = unfilteredListHeight) else Modifier)
+                            .onSizeChanged { if (query.isBlank()) unfilteredListHeight = with(density) { it.height.toDp() } },
                     ) {
                         LazyColumn(
                             state = listState,
@@ -317,87 +536,61 @@ fun ClusterSelectorModal(
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp),
                         ) {
-                            // Light up the "Demo Cluster" picker row whenever any mock
-                            // instance ("…#N") is the active session — otherwise the
-                            // bare-prefix entry would never match a live label.
-                            mockItems.forEach { (ctx, parsed) ->
-                                item(key = ctx) {
-                                    ClusterRow(
-                                        ctx = ctx,
-                                        parsed = parsed,
-                                        isSelected = ctx == selectedContext ||
-                                            DemoContext.isMockContext(selectedContext),
-                                        canAddTab = canAddTab,
-                                        defaultTarget = defaultTarget,
-                                        onOpenCluster = onOpenCluster,
-                                        onDismiss = onDismiss,
-                                        modifier = Modifier.animateItem(),
-                                    )
-                                }
-                            }
-                            otherItems.forEach { (ctx, parsed) ->
-                                item(key = ctx) {
-                                    ClusterRow(
-                                        ctx = ctx,
-                                        parsed = parsed,
-                                        isSelected = ctx == selectedContext,
-                                        canAddTab = canAddTab,
-                                        defaultTarget = defaultTarget,
-                                        onOpenCluster = onOpenCluster,
-                                        onDismiss = onDismiss,
-                                        modifier = Modifier.animateItem(),
-                                    )
-                                }
-                            }
-                            accountOrder.forEach { account ->
-                                val list = eksByAccount.getValue(account)
-                                if (showAccountHeaders) {
-                                    item(key = "account-header/$account") {
-                                        AwsAccountSectionHeader(
-                                            account = account.ifBlank { "(unknown account)" },
-                                            count = list.size,
+                            items.forEach { entry ->
+                                item(key = entry.key) {
+                                    when (entry) {
+                                        is PickerItem.FavouritesHeader -> FavouritesSectionHeader(
+                                            count = entry.count,
                                             modifier = Modifier.animateItem(),
                                         )
-                                    }
-                                }
-                                list.forEach { (ctx, parsed) ->
-                                    item(key = ctx) {
-                                        ClusterRow(
-                                            ctx = ctx,
-                                            parsed = parsed,
-                                            isSelected = ctx == selectedContext,
-                                            canAddTab = canAddTab,
-                                            defaultTarget = defaultTarget,
-                                            onOpenCluster = onOpenCluster,
-                                            onDismiss = onDismiss,
+
+                                        PickerItem.FavouritesDivider -> HorizontalDivider(
+                                            modifier = Modifier
+                                                .animateItem()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            color = KdBorder,
+                                            thickness = 1.dp,
+                                        )
+
+                                        is PickerItem.AwsAccountHeader -> AwsAccountSectionHeader(
+                                            account = entry.account.ifBlank { "(unknown account)" },
+                                            count = entry.count,
                                             modifier = Modifier.animateItem(),
                                         )
-                                    }
-                                }
-                            }
-                            projectOrder.forEach { project ->
-                                val list = gkeByProject.getValue(project)
-                                if (showProjectHeaders) {
-                                    item(key = "project-header/$project") {
-                                        GcpProjectSectionHeader(
-                                            project = project.ifBlank { "(unknown project)" },
-                                            count = list.size,
+
+                                        is PickerItem.GcpProjectHeader -> GcpProjectSectionHeader(
+                                            project = entry.project.ifBlank { "(unknown project)" },
+                                            count = entry.count,
                                             modifier = Modifier.animateItem(),
                                         )
-                                    }
-                                }
-                                list.forEach { (ctx, parsed) ->
-                                    item(key = ctx) {
-                                        ClusterRow(
-                                            ctx = ctx,
-                                            parsed = parsed,
-                                            isSelected = ctx == selectedContext,
-                                            canAddTab = canAddTab,
-                                            defaultTarget = defaultTarget,
-                                            onOpenCluster = onOpenCluster,
-                                            onDismiss = onDismiss,
-                                            modifier = Modifier.animateItem(),
-                                        )
+
+                                        is PickerItem.Row -> {
+                                            val ctx = entry.parsed.rawName
+                                            ClusterRow(
+                                                ctx = ctx,
+                                                parsed = entry.parsed,
+                                                // Light up the "Demo Cluster" row whenever any mock
+                                                // instance ("…#N") is the active session — otherwise the
+                                                // bare-prefix entry would never match a live label.
+                                                isSelected = ctx == selectedContext ||
+                                                    (entry.parsed.isMock && DemoContext.isMockContext(selectedContext)),
+                                                isHighlighted = rows.getOrNull(highlighted)?.key == entry.key,
+                                                isFavourite = DemoContext.preferenceKey(ctx) in favouriteKeySet,
+                                                // A click focuses the star (desktop clickables take focus on
+                                                // press); hand it back so typing, the arrows and Enter go on working.
+                                                onToggleFavourite = onToggleFavourite?.let { toggle ->
+                                                    {
+                                                        toggle(ctx)
+                                                        runCatching { searchFocus.requestFocus() }
+                                                    }
+                                                },
+                                                canAddTab = canAddTab,
+                                                defaultTarget = defaultTarget,
+                                                onOpenCluster = onOpenCluster,
+                                                onDismiss = onDismiss,
+                                                modifier = Modifier.animateItem(),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -607,6 +800,9 @@ private fun LazyItemScope.ClusterRow(
     ctx: String,
     parsed: ParsedContext,
     isSelected: Boolean,
+    isHighlighted: Boolean,
+    isFavourite: Boolean,
+    onToggleFavourite: (() -> Unit)?,
     canAddTab: Boolean,
     defaultTarget: OpenTarget,
     onOpenCluster: (String, OpenTarget) -> Unit,
@@ -616,11 +812,12 @@ private fun LazyItemScope.ClusterRow(
     var hovered by remember { mutableStateOf(false) }
     val bg = when {
         isSelected -> KdSelected
-        hovered -> KdHover
+        hovered || isHighlighted -> KdHover
         else -> Color.Transparent
     }
     Row(
         modifier = modifier
+            .testTag(ClusterPickerTags.row(ctx))
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
             .clip(8.dp.kdCorner)
@@ -750,6 +947,37 @@ private fun LazyItemScope.ClusterRow(
                 )
             }
         }
+        if (onToggleFavourite != null) {
+            Spacer(Modifier.width(8.dp))
+            TooltipArea(
+                tooltip = { ClusterActionTooltip(if (isFavourite) "Remove from favourites" else "Add to favourites") },
+                tooltipPlacement = TooltipPlacement.CursorPoint(
+                    offset = DpOffset(0.dp, 16.dp),
+                ),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(6.dp.kdCorner)
+                        .background(if (hovered) KdSurfaceVariant else Color.Transparent)
+                        .clickable(onClick = onToggleFavourite)
+                        .testTag(ClusterPickerTags.star(ctx)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Same convention as a pinned table row: always present, faint until hovered.
+                    Icon(
+                        painterResource(if (isFavourite) Res.drawable.star_filled else Res.drawable.star_outline),
+                        contentDescription = if (isFavourite) {
+                            "Remove $ctx from favourites"
+                        } else {
+                            "Add $ctx to favourites"
+                        },
+                        tint = if (isFavourite) KdPrimary else KdTextSecondary.copy(alpha = if (hovered) 0.6f else 0.25f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
         if (canAddTab) {
             Spacer(Modifier.width(8.dp))
             // Hide the per-row tab button when row-click already
@@ -825,6 +1053,37 @@ private fun LazyItemScope.ClusterRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun FavouritesSectionHeader(count: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(ClusterPickerTags.FAVOURITES_HEADER)
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painterResource(Res.drawable.star_filled),
+            contentDescription = null,
+            tint = KdPrimary,
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "Favourites",
+            color = KdTextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$count cluster${if (count != 1) "s" else ""}",
+            color = KdTextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
