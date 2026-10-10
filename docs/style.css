@@ -430,6 +430,14 @@ main img[data-zoom]:focus-visible {
 .hero-looks[hidden] {
     display: none;
 }
+.looks-label {
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+}
 .looks {
     display: flex;
     flex-wrap: wrap;
@@ -451,6 +459,9 @@ main img[data-zoom]:focus-visible {
     font-weight: 600;
     line-height: 1.2;
     cursor: pointer;
+    position: relative; /* the tour's fill (::after) sits inside the pill */
+    isolation: isolate; /* …above the pill's background, below its label */
+    overflow: hidden;
     transition:
         color 0.15s ease,
         background 0.15s ease,
@@ -512,6 +523,87 @@ main img[data-zoom]:focus-visible {
     margin: 14px 0 0;
     font-size: 0.875rem;
     color: var(--fg-faint);
+}
+
+/* The look tour (script: "Hero look switcher" → "Tour"): a fade layer over the shot, a badge
+   naming the look with a pause button, and a timer fill in the active chip. */
+.hero-shot .hero-fade {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.45s ease; /* FADE_MS in the script */
+}
+.hero-shot .hero-fade.is-in {
+    opacity: 1;
+}
+.hero-shot .hero-fade.no-anim {
+    transition: none;
+}
+.look-tour {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 4px 4px 12px;
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(5, 9, 16, 0.78);
+    color: #e9eff7; /* over any look, light or dark, so not theme tokens */
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.3;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.5);
+}
+.look-tour[hidden] {
+    display: none;
+}
+.look-tour-toggle {
+    padding: 4px 11px;
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+.look-tour-toggle:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+.look-tour-toggle:focus-visible {
+    outline-color: #6cb4ff;
+    border-radius: var(--radius-pill);
+}
+.looks.is-touring .look[aria-checked="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    animation: look-fill var(--tour-slot, 2s) linear forwards;
+    pointer-events: none;
+}
+/* more specific than the fill rule above, whose animation shorthand would otherwise reset
+   play-state to running */
+.looks.is-touring.is-paused .look[aria-checked="true"]::after {
+    animation-play-state: paused;
+}
+@keyframes look-fill {
+    to {
+        transform: scaleX(1);
+    }
 }
 
 /* ---------------------------------------------------------- section eyebrow */
