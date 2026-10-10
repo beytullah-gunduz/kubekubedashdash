@@ -214,6 +214,11 @@ class AppViewModel private constructor() : ViewModel() {
         }
     }
 
+    /** Stars or unstars [context] in the cluster picker. */
+    fun toggleFavouriteCluster(context: String) {
+        viewModelScope.launch { PreferenceRepository.toggleFavouriteCluster(context) }
+    }
+
     /**
      * Called when the EKS-import flow completes (with or without imports). If
      * the prereq modal is still showing (the user installed an aws CLI mid-flow

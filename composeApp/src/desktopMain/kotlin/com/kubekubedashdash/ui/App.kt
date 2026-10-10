@@ -815,6 +815,8 @@ fun App(
                     }
                 } else if (showClusterSelector) {
                     val clusterSelectorDefault by workspace.clusterSelectorDefaultTarget.collectAsState()
+                    val favouriteClusters by PreferenceRepository.favouriteClusters.collectAsState()
+                    val preferencesLoaded by PreferenceRepository.preferencesLoaded.collectAsState()
                     BelowTitleBar {
                         ClusterSelectorModal(
                             contexts = contexts,
@@ -838,6 +840,9 @@ fun App(
                             },
                             dismissable = selectedContext.isNotBlank(),
                             crtGhost = selectorGhost,
+                            favourites = favouriteClusters,
+                            favouritesReady = preferencesLoaded,
+                            onToggleFavourite = { ctx -> appViewModel.toggleFavouriteCluster(ctx) },
                         )
                     }
                 }

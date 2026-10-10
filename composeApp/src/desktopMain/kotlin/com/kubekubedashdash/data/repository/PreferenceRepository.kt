@@ -75,6 +75,7 @@ object PreferenceRepository {
     private val EVENT_TRIAGE_PRESETS by lazy { stringPreferencesKey("event_triage_presets") }
     private val PINNED_RESOURCES by lazy { stringPreferencesKey("pinned_resources") }
     private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
+    private val FAVOURITE_CLUSTERS by lazy { stringPreferencesKey("favourite_clusters") }
     private val DEFAULT_NAMESPACE_BY_CONTEXT by lazy { stringPreferencesKey("default_namespace_by_context") }
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
@@ -174,6 +175,12 @@ object PreferenceRepository {
 
     private val _clusterColorOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
     val clusterColorOverrides: StateFlow<Map<String, String>> = _clusterColorOverrides.asStateFlow()
+
+    // Cluster-picker favourites: DemoContext.preferenceKey values in the order they
+    // were starred. A key whose context left the kubeconfig stays stored (it comes
+    // back with the context) and is simply not listed.
+    private val _favouriteClusters = MutableStateFlow<List<String>>(emptyList())
+    val favouriteClusters: StateFlow<List<String>> = _favouriteClusters.asStateFlow()
 
     // Default namespace to select on a fresh connect, keyed by
     // DemoContext.preferenceKey(context). Absent key = no default (falls
@@ -276,7 +283,7 @@ object PreferenceRepository {
                 // A's commit re-seeds B). After the first emission the in-memory
                 // flow is authoritative; the process has exactly one DataStore,
                 // and the mutators that persist first (togglePinned, the
-                // cluster-colour and default-namespace pairs) update their flow
+                // cluster-colour and default-namespace pairs, toggleFavouriteCluster) update their flow
                 // from the committed value themselves. The map blobs are merged
                 // on top of the persisted ones so a toggle that races ahead of
                 // this first emission is not thrown away; the palette list is
@@ -324,6 +331,7 @@ object PreferenceRepository {
                     _customPresets.value = decodePresets(p[EVENT_TRIAGE_PRESETS])
                     _pinnedResources.value = decodePinnedResources(p[PINNED_RESOURCES])
                     _clusterColorOverrides.value = StringMapCodec.decode(p[CLUSTER_COLOR_OVERRIDES])
+                    _favouriteClusters.value = StringListCodec.decode(p[FAVOURITE_CLUSTERS])
                     _defaultNamespaceByContext.value = StringMapCodec.decode(p[DEFAULT_NAMESPACE_BY_CONTEXT])
                     _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
                     _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
@@ -588,7 +596,7 @@ object PreferenceRepository {
         ioScope.launch { dataStore.edit { it[EVENT_TRIAGE_PRESETS] = json.encodeToString(value) } }
     }
 
-    // The five mutators below persist first and then set their flow from the
+    // The mutators below persist first and then set their flow from the
     // committed Preferences: the collector seeds once (see init), so nothing
     // else would ever bring these flows up to date. Under one mutex, so the
     // flow assignments land in commit order whatever dispatcher the callers
@@ -626,6 +634,19 @@ object PreferenceRepository {
             prefs[CLUSTER_COLOR_OVERRIDES] = StringMapCodec.encode(current)
         }
         _clusterColorOverrides.value = StringMapCodec.decode(committed[CLUSTER_COLOR_OVERRIDES])
+    }
+
+    // Stars or unstars [context] in the cluster picker (see toggledFavouriteClusters):
+    // a minted demo label stars the one demo row.
+    suspend fun toggleFavouriteCluster(context: String) {
+        if (context.isBlank()) return
+        persistFirst.withLock {
+            val committed = dataStore.edit { prefs ->
+                val next = toggledFavouriteClusters(StringListCodec.decode(prefs[FAVOURITE_CLUSTERS]), context)
+                if (next.isEmpty()) prefs.remove(FAVOURITE_CLUSTERS) else prefs[FAVOURITE_CLUSTERS] = StringListCodec.encode(next)
+            }
+            _favouriteClusters.value = StringListCodec.decode(committed[FAVOURITE_CLUSTERS])
+        }
     }
 
     suspend fun setDefaultNamespace(context: String, namespace: String) = persistFirst.withLock {
