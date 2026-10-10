@@ -595,7 +595,8 @@ main img[data-zoom]:focus-visible {
     animation: look-fill var(--tour-slot, 2s) linear forwards;
     pointer-events: none;
 }
-/* as specific as the fill rule above, whose animation shorthand would reset play-state */
+/* more specific than the fill rule above, whose animation shorthand would otherwise reset
+   play-state to running */
 .looks.is-touring.is-paused .look[aria-checked="true"]::after {
     animation-play-state: paused;
 }

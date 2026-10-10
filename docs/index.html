@@ -978,16 +978,11 @@
                                 fn();
                             }
                             fade.onload = function () {
-                                if (!fade.decode) return settle(resolve);
-                                // decode() can reject spuriously; the image has loaded either way
-                                fade.decode().then(
-                                    function () {
-                                        settle(resolve);
-                                    },
-                                    function () {
-                                        settle(resolve);
-                                    },
-                                );
+                                // The image has loaded: don't let a decode() that rejects or
+                                // never settles (seen in a hidden Chromium view) time the tour out.
+                                decoded(fade).then(function () {
+                                    settle(resolve);
+                                });
                             };
                             fade.onerror = function () {
                                 settle(reject);
