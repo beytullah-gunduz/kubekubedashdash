@@ -38,6 +38,7 @@ import com.kubekubedashdash.ui.screens.allclusters.viewmodel.AllClustersViewMode
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.DemoContext
+import com.kubekubedashdash.util.MockClusterProvider
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.CoroutineScope
@@ -215,17 +216,28 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         delay(240_000)
 
         // 4. Hero variants: the Cluster Overview in every look the landing page's switcher offers.
-        log.info("Capturing hero variants")
-        for (variant in HERO_VARIANTS) {
-            ThemeManager.setMode(variant.mode)
-            ThemeManager.setStyle(variant.style)
-            ThemeManager.setPalette(variant.palette)
-            if (variant.scanlines) PreferenceRepository.setCrtScanlines(true)
-            // Retro runs a 370 ms CRT power-on first; let it finish before the capture.
-            delay(if (variant.style == ThemeStyle.RETRO) 1_500 else 1_200)
-            captureWindow(initialWorkspace.id, outDir.resolve("hero-${variant.slug}.png"))
-            log.info("captured hero-{}", variant.slug)
-            if (variant.scanlines) PreferenceRepository.setCrtScanlines(false)
+        // The page crossfades between them, so all ten must show the same moment: pause the demo
+        // cluster (the Settings switch) and let the ticks already in flight land first — a loop
+        // that passed its pause check still acts once after its delay (the node loop acts up to
+        // 12 s after the pause and the overview's usage poll runs every 10 s).
+        log.info("Pausing the demo cluster for the hero variants")
+        MockClusterProvider.simulators().forEach { it.setPaused(true) }
+        try {
+            delay(HERO_FREEZE_SETTLE_MS)
+            log.info("Capturing hero variants")
+            for (variant in HERO_VARIANTS) {
+                ThemeManager.setMode(variant.mode)
+                ThemeManager.setStyle(variant.style)
+                ThemeManager.setPalette(variant.palette)
+                if (variant.scanlines) PreferenceRepository.setCrtScanlines(true)
+                // Retro runs a 370 ms CRT power-on first; let it finish before the capture.
+                delay(if (variant.style == ThemeStyle.RETRO) 1_500 else 1_200)
+                captureWindow(initialWorkspace.id, outDir.resolve("hero-${variant.slug}.png"))
+                log.info("captured hero-{}", variant.slug)
+                if (variant.scanlines) PreferenceRepository.setCrtScanlines(false)
+            }
+        } finally {
+            MockClusterProvider.simulators().forEach { it.setPaused(false) }
         }
         ThemeManager.setMode(ThemeMode.DARK)
         ThemeManager.setStyle(ThemeStyle.DEFAULT)
@@ -487,6 +499,9 @@ private val CHIP_COLORS = listOf(
 
 /** How many times the Retro power-on is slowed while its frame sequence is captured. */
 private const val CRT_TIME_SCALE = 8
+
+/** How long the paused demo cluster settles before the hero variants are captured. */
+private const val HERO_FREEZE_SETTLE_MS = 25_000L
 
 /**
  * Race-proof modal closer: AppViewModel.runPrerequisiteChecks auto-shows the cluster
