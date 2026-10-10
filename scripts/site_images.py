@@ -66,14 +66,14 @@ CROPS: dict[str, Box | list[Box] | None] = {
     "bulk": (292, 40, 1640, 600),
     "tail": [(0, 808, 1100, 911), (0, 923, 1100, 1160)],  # drawer header, first whole line on
     "port-forward": (547, 332, 1093, 828),  # dialog + 16 dp scrim
-    "palette": (516, 80, 1126, 590),
-    "secret": (1070, 80, 1640, 445),  # pane header to end of YAML
+    "palette": (516, 119, 1126, 629),
+    "secret": (1070, 76, 1640, 441),  # pane header to end of YAML
 }
 
 # Phone-width crops of the wide tiles, written as img/<name>-mobile.webp. These are dp boxes of
 # the same capture, not output sizes; the page's width/height attributes follow the output.
 MOBILE_CROPS: dict[str, Box | list[Box]] = {
-    "fleet": (0, 84, 658, 711),  # Total + first cluster panel, heatmap, the event feed's left columns
+    "fleet": (0, 46, 658, 673),  # Total + first cluster panel, heatmap, the event feed's left columns
     "bulk": (292, 40, 1020, 600),  # checkboxes, names, statuses, "6 pods selected"
     "tail": [(0, 808, 620, 911), (0, 923, 620, 1160)],
 }
