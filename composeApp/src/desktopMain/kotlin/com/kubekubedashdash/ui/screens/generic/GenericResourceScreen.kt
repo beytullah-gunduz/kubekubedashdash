@@ -83,6 +83,7 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
+import com.kubekubedashdash.ui.crdGroupIcon
 import com.kubekubedashdash.ui.crt.crtContentCut
 import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
@@ -390,7 +391,7 @@ fun GenericResourceScreen(
                             }
                             if (filtered.isEmpty()) {
                                 EmptyState(
-                                    icon = kindIcon(kind),
+                                    icon = if (isCustomResource && apiGroup != null) crdGroupIcon(apiGroup) else kindIcon(kind),
                                     kind = pluralizeKind(kind),
                                 )
                             } else {

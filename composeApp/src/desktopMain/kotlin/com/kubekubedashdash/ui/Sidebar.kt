@@ -111,7 +111,6 @@ import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.chevron_right_filled
 import com.kubekubedashdash.resources.expand_more_filled
-import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.more_horiz_filled
 import com.kubekubedashdash.resources.search_filled
 import com.kubekubedashdash.retroChrome
@@ -405,7 +404,7 @@ private fun CrdShortcutRow(
     val isSelected = currentScreen is Screen.Main.CustomResource &&
         currentScreen.group == crd.group && currentScreen.kind == crd.kind
     SidebarItem(
-        icon = Res.drawable.extension_filled,
+        icon = crdGroupIcon(crd.group),
         label = crd.kind,
         selected = isSelected,
         collapsed = collapsed,

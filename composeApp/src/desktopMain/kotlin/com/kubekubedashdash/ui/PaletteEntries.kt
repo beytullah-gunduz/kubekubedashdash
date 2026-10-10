@@ -22,7 +22,6 @@ import com.kubekubedashdash.resources.dashboard_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.dns_filled
 import com.kubekubedashdash.resources.dynamic_feed_filled
-import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.resources.filter_list_filled
 import com.kubekubedashdash.resources.folder_open_filled
 import com.kubekubedashdash.resources.folder_special_filled
@@ -248,7 +247,7 @@ internal fun rememberPaletteEntries(
                 label = crd.kind,
                 sublabel = "${crd.group}/${crd.version}",
                 category = "Custom Resources",
-                icon = Res.drawable.extension_filled,
+                icon = crdGroupIcon(crd.group),
                 onActivate = {
                     onNavigate(
                         Screen.Main.CustomResource(

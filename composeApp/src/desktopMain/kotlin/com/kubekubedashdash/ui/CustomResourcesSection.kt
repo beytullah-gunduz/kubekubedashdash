@@ -85,9 +85,9 @@ fun CustomResourcesSection(
 
     SidebarSection(title = "Custom Resources", collapsed = collapsed, defaultExpanded = false) {
         if (collapsed) {
-            // One icon, not one per CRD: they all share the extension icon, so
-            // a column of them could not be told apart and grew with the
-            // cluster. The menu keeps the expanded rail's order and labels.
+            // One icon, not one per CRD: a column of them grew with the cluster
+            // and the icons only tell groups apart. The menu keeps the expanded
+            // rail's order, labels and group icons.
             if (visible.isNotEmpty()) {
                 SidebarFlyoutItem(
                     icon = Res.drawable.extension_filled,
@@ -163,7 +163,7 @@ private fun CrdInfo.screen(): Screen.Main.CustomResource = Screen.Main.CustomRes
 // stay on the expanded rail's rows.
 @Composable
 private fun CrdFlyoutEntry(crd: CrdInfo, currentScreen: Screen, onNavigate: (Screen) -> Unit, dismiss: () -> Unit) {
-    SidebarFlyoutEntry(Res.drawable.extension_filled, crd.kind, crd.isCurrent(currentScreen)) {
+    SidebarFlyoutEntry(crdGroupIcon(crd.group), crd.kind, crd.isCurrent(currentScreen)) {
         dismiss()
         onNavigate(crd.screen())
     }
@@ -181,7 +181,7 @@ private fun CrdRow(
     onToggleFavourite: (CrdInfo) -> Unit,
 ) {
     SidebarItem(
-        icon = Res.drawable.extension_filled,
+        icon = crdGroupIcon(crd.group),
         label = crd.kind,
         selected = crd.isCurrent(currentScreen),
         onClick = { onNavigate(crd.screen()) },

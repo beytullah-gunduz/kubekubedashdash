@@ -22,8 +22,6 @@ import com.kubekubedashdash.Screen
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.ResourceState
-import com.kubekubedashdash.resources.Res
-import com.kubekubedashdash.resources.extension_filled
 import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.ui.components.EmptyState
 import com.kubekubedashdash.ui.crt.SwapStyle
@@ -356,7 +354,7 @@ fun ContentRouter(
                         CrdRoute.Loading -> ConnectingScreen()
 
                         is CrdRoute.Missing -> EmptyState(
-                            icon = Res.drawable.extension_filled,
+                            icon = crdGroupIcon(target.group),
                             kind = "${target.kind} not available",
                             subtitle = route.reason,
                         )
