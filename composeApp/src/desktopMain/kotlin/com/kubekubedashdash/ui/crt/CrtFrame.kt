@@ -235,18 +235,20 @@ fun Modifier.crtCardReveal(ghost: CrtGhost? = null): Modifier {
  * Plays once at window creation in Retro; plays again whenever the window enters Retro (the
  * Style switch) or its dark/light mode flips while in Retro. Never plays on the way out of
  * Retro.
+ *
+ * Each (retro, dark) pair gets its own progress, created in composition, so the first frame drawn
+ * in the new look already sees the dark tube. Snapping one progress to 0 from the effect came too
+ * late: the effect runs after that frame, which then showed the finished Retro screen before the
+ * power-on (for as long as the slow first Retro frame took).
  */
 @Composable
 fun rememberCrtScreenPowerOn(): Animatable<Float, AnimationVector1D> {
     val retro = ThemeManager.isRetro
     val dark = ThemeManager.isDarkTheme
-    val progress = remember { Animatable(if (retro) 0f else 1f) }
-    LaunchedEffect(retro, dark) {
-        if (retro) {
-            if (progress.value >= 1f) progress.snapTo(0f)
+    val progress = remember(retro, dark) { Animatable(if (retro) 0f else 1f) }
+    LaunchedEffect(progress) {
+        if (progress.value < 1f) {
             progress.animateTo(1f, tween(370 * ScreenshotHooks.crtTimeScale.value, easing = LinearEasing))
-        } else {
-            progress.snapTo(1f)
         }
     }
     return progress
