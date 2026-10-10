@@ -157,7 +157,8 @@ class CrdGroupBlockTest {
         val certificate = onNodeWithText("Certificate", useUnmergedTree = true).bounds()
         val gapAbove = header.top - events.bottom
         val gapBelow = certificate.top - header.bottom
-        assertTrue(gapAbove - gapBelow >= 8 * dp, "gap above ${gapAbove / dp} dp, below ${gapBelow / dp} dp")
+        // The difference is the header's space above, whatever the font: the rows around it are alike.
+        assertEquals(12f, (gapAbove - gapBelow) / dp, 1.5f, "gap above ${gapAbove / dp} dp, below ${gapBelow / dp} dp")
 
         val eventsRow = onNodeWithText("Events").bounds()
         val headerRow = onNodeWithText("cert-manager.io").bounds()
@@ -179,7 +180,8 @@ class CrdGroupBlockTest {
         val certificate = onNodeWithText("Certificate", useUnmergedTree = true).bounds()
         val gapAbove = header.top - events.bottom
         val gapBelow = certificate.top - header.bottom
-        assertTrue(gapAbove - gapBelow >= 8 * dp, "gap above ${gapAbove / dp} dp, below ${gapBelow / dp} dp")
+        // The difference is the header's space above, whatever the font: the rows around it are alike.
+        assertEquals(8f, (gapAbove - gapBelow) / dp, 1.5f, "gap above ${gapAbove / dp} dp, below ${gapBelow / dp} dp")
 
         val eventsRow = onNodeWithText("Events").bounds()
         val headerRow = onNodeWithText("cert-manager.io").bounds()

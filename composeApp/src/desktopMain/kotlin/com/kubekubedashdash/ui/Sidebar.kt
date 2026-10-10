@@ -389,10 +389,10 @@ private fun NavShortcutRow(
     }
 }
 
-// A CRD favourite row. CrdRow (CustomResourcesSection.kt) is
-// file-private and cannot be called here, so this is a plain SidebarItem with
-// only the favourite toggle in its context menu — no pin/hide, which stay
-// exclusive to the main Custom Resources section.
+// A CRD favourite row: a plain SidebarItem rather than CrdRow
+// (CustomResourcesSection.kt), so its context menu holds only the favourite
+// toggle — no pin/hide, which stay exclusive to the main Custom Resources
+// section.
 @Composable
 private fun CrdShortcutRow(
     crd: CrdInfo,
@@ -583,6 +583,8 @@ fun SidebarItem(
     onCountClick: ((Screen.Main) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
+    // A collapsed row is nothing but its icon: without one it would be a blank, unnamed button.
+    require(icon != null || !collapsed) { "a collapsed sidebar row needs an icon: $label" }
     var hovered by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
