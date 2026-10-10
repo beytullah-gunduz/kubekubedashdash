@@ -1376,6 +1376,11 @@ internal fun seedCrInstance(
     namespace: String?,
     instance: GenericKubernetesResource,
 ): GenericKubernetesResource {
+    // A mismatch never fails cleanly on the mock: a namespaced instance POSTed to the cluster path hangs until
+    // the client times out, and a null namespace for a namespaced kind is stored as is.
+    require(instance.metadata?.namespace == namespace) {
+        "instance ${instance.metadata?.name} has namespace ${instance.metadata?.namespace}, but was seeded into $namespace"
+    }
     val rdc = ResourceDefinitionContext.Builder()
         .withGroup(group)
         .withVersion(version)

@@ -29,6 +29,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -55,7 +56,12 @@ class MockClusterSeedCrdTest {
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(label = "MockClusterSeedCrdTest", client = client, servers = listOf(server))
+        // A failed guard or a failed createClient() leaves these unset; the server must still go down.
+        shutdownCleanly(
+            label = "MockClusterSeedCrdTest",
+            client = if (::client.isInitialized) client else null,
+            servers = if (::server.isInitialized) listOf(server) else emptyList(),
+        )
     }
 
     private fun mappedCrds(): List<CrdInfo> = client.apiextensions().v1().customResourceDefinitions().list().items
@@ -135,7 +141,7 @@ class MockClusterSeedCrdTest {
     }
 
     @Test
-    fun `instances read back the way the sidebar's informers list them`() {
+    fun `instances list back from the mock server, cluster-scoped ones included`() {
         fun names(crd: CrdInfo, namespace: String? = null): Set<String> {
             val resources = client.genericKubernetesResources(crd.context())
             val listed = when {
@@ -151,5 +157,16 @@ class MockClusterSeedCrdTest {
         assertEquals(setOf("require-labels"), names(crd("kyverno.io/ClusterPolicy")))
         assertEquals(emptySet(), names(crd("acme.cert-manager.io/Order")))
         assertEquals(setOf("orders-db"), names(crd("postgresql.cnpg.io/Cluster"), namespace = "production"))
+    }
+
+    @Test
+    fun `seeding an instance into a namespace other than its own fails at once`() {
+        // Without the check, the cluster-path POST of a namespaced instance hangs until the client times out.
+        assertFailsWith<IllegalArgumentException> {
+            seedCrInstance(client, "widgets.example.io", "v1alpha1", "widgets", null, demoCrInstance("widgets.example.io/v1alpha1", "Widget", "stray", "default"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            seedCrInstance(client, "widgets.example.io", "v1alpha1", "widgets", "default", demoCrInstance("widgets.example.io/v1alpha1", "Widget", "stray", null))
+        }
     }
 }
