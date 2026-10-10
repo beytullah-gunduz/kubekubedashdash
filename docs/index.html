@@ -151,11 +151,18 @@
                                 />
                             </picture>
                         </figure>
+                        <!-- The look tour's badge: the look on screen and a pause button. The
+                             look-switcher script reveals it only while its one-time tour runs. -->
+                        <div class="look-tour" hidden>
+                            <span class="look-tour-name" aria-hidden="true">Default</span>
+                            <button class="look-tour-toggle" type="button" aria-label="Pause the theme preview">Pause</button>
+                        </div>
                     </div>
 
                     <!-- Hidden until the look-switcher script runs: without JS the chips would do nothing. -->
                     <div class="hero-looks" hidden>
-                        <div class="looks" role="radiogroup" aria-label="Theme preview">
+                        <p class="looks-label" id="looks-label">Preview a look</p>
+                        <div class="looks" role="radiogroup" aria-labelledby="looks-label">
                             <button type="button" class="look" role="radio" aria-checked="true" tabindex="0" data-look="default-dark"><span class="look-dot" aria-hidden="true"></span>Default</button>
                             <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="default-light"><span class="look-dot" aria-hidden="true"></span>Light</button>
                             <button type="button" class="look" role="radio" aria-checked="false" tabindex="-1" data-look="retro"><span class="look-dot" aria-hidden="true"></span>Retro</button>
@@ -784,31 +791,56 @@
                         });
                 }
 
-                function select(radio, moveFocus) {
-                    var look = radio.getAttribute("data-look");
+                // The chips' state: aria-checked and the roving tabindex.
+                function mark(radio) {
                     radios.forEach(function (r) {
                         var on = r === radio;
                         r.setAttribute("aria-checked", on ? "true" : "false");
                         r.tabIndex = on ? 0 : -1;
                     });
+                }
+
+                // The shot itself.
+                function show(look) {
                     dropStaticSources();
                     img.srcset = srcsetFor(look);
                     img.src = "img/hero-" + look + ".webp";
+                }
+
+                function select(radio, moveFocus) {
+                    mark(radio);
+                    show(radio.getAttribute("data-look"));
                     if (moveFocus) radio.focus();
+                }
+
+                function radioFor(look) {
+                    for (var i = 0; i < radios.length; i++) {
+                        if (radios[i].getAttribute("data-look") === look) return radios[i];
+                    }
+                    return null;
+                }
+
+                function checkedRadio() {
+                    for (var i = 0; i < radios.length; i++) {
+                        if (radios[i].getAttribute("aria-checked") === "true") return radios[i];
+                    }
+                    return radios[0];
                 }
 
                 var prefersLight =
                     window.matchMedia &&
                     window.matchMedia("(prefers-color-scheme: light)").matches;
                 var initial = prefersLight ? "default-light" : "default-dark";
-                radios.forEach(function (r) {
-                    if (r.getAttribute("data-look") === initial) select(r, false);
-                });
+                var initialRadio = radioFor(initial);
+                if (initialRadio) select(initialRadio, false);
                 wrap.hidden = false;
+
+                var stopTour = setUpTour();
 
                 radios.forEach(function (r) {
                     var look = r.getAttribute("data-look");
                     r.addEventListener("click", function () {
+                        stopTour();
                         select(r, false);
                     });
                     r.addEventListener("pointerenter", function () {
@@ -835,8 +867,355 @@
                         return;
                     }
                     e.preventDefault();
+                    stopTour();
                     select(radios[next], true);
                 });
+
+                // ---- Tour: one pass through a few looks, the first time the shot is in view ----
+                // Holds the first look, crossfades through distinct looks and back to the first,
+                // naming each in a badge on the shot (with a Pause button) while the active chip
+                // fills like a timer. Pauses while the shot is mostly off screen, the tab is
+                // hidden, the pointer is on the chips, or Pause is on; the timer then resumes
+                // where it stopped. Any chip, the shot's lightbox, or reduced motion turned on
+                // ends it for good. Never starts with reduced motion, below 720 px, on Save-Data
+                // or a 2G connection. Returns the function that ends it (a no-op when it can't run).
+                function setUpTour() {
+                    var HOLD_MS = 2500; // the first look, once the shot is in view
+                    var FADE_MS = 450; // keep in sync with .hero-fade's transition in style.css
+                    var DWELL_MS = 1800; // each later look, after its fade
+                    var SLOT_MS = FADE_MS + DWELL_MS;
+                    var LOAD_TIMEOUT_MS = 4000;
+                    var MIN_RATIO = 0.25; // share of the shot on screen, as for the CRT loop
+                    // Distinct looks only: most dark palettes are hard to tell apart at hero size.
+                    var MIDDLE = ["nord", "retro", "solarized", "high-contrast"];
+                    var STOPPED = {};
+
+                    function noop() {}
+
+                    var badge = document.querySelector(".look-tour");
+                    var badgeName = badge && badge.querySelector(".look-tour-name");
+                    var toggle = badge && badge.querySelector(".look-tour-toggle");
+                    var figure = img.closest(".hero-shot");
+                    var mq = window.matchMedia;
+                    var conn = navigator.connection;
+                    if (
+                        !badge ||
+                        !badgeName ||
+                        !toggle ||
+                        !figure ||
+                        !mq ||
+                        !("IntersectionObserver" in window) ||
+                        !window.Promise ||
+                        mq("(prefers-reduced-motion: reduce)").matches ||
+                        !mq("(min-width: 720px)").matches ||
+                        (conn && (conn.saveData || /2g$/.test(conn.effectiveType || "")))
+                    )
+                        return noop;
+
+                    var other = initial === "default-dark" ? "default-light" : "default-dark";
+                    var steps = [other].concat(MIDDLE, [initial]);
+                    var next = 0; // index in steps of the look the next fade shows
+                    var started = false;
+                    var over = false; // ended or stopped: never runs again on this page load
+                    var run = 0; // bumped on stop: callbacks of the stopped pass bail out
+                    var slotTimer = null;
+                    var slotStart = 0;
+                    var slotLeft = 0;
+                    var pending = false; // a slot ran out while paused
+                    var nextReady = null; // resolves once the fade layer holds steps[next], decoded
+                    var why = {
+                        view: true,
+                        hidden: document.visibilityState === "hidden",
+                        chips: false,
+                        user: false,
+                    };
+
+                    // The fade layer: a second <img> over the shot. Not zoomable (no data-zoom),
+                    // not in the accessibility tree.
+                    var fade = document.createElement("img");
+                    fade.className = "hero-fade";
+                    fade.alt = "";
+                    fade.setAttribute("aria-hidden", "true");
+                    fade.decoding = "async";
+                    fade.sizes = img.sizes;
+                    figure.appendChild(fade);
+
+                    function wait(ms) {
+                        return new Promise(function (resolve) {
+                            setTimeout(resolve, ms);
+                        });
+                    }
+
+                    function frames(n) {
+                        return new Promise(function (resolve) {
+                            (function tick(left) {
+                                if (!left) return resolve();
+                                requestAnimationFrame(function () {
+                                    tick(left - 1);
+                                });
+                            })(n);
+                        });
+                    }
+
+                    // Waits for el's current image to decode, at most a second.
+                    function decoded(el) {
+                        var d = el.decode ? el.decode().catch(noop) : Promise.resolve();
+                        return Promise.race([d, wait(1000)]);
+                    }
+
+                    // Loads a look into the (transparent) fade layer; resolves once decoded.
+                    function loadFade(look) {
+                        var p = new Promise(function (resolve, reject) {
+                            var settled = false;
+                            var timer = setTimeout(function () {
+                                settle(reject);
+                            }, LOAD_TIMEOUT_MS);
+                            function settle(fn) {
+                                if (settled) return;
+                                settled = true;
+                                clearTimeout(timer);
+                                fade.onload = fade.onerror = null;
+                                fn();
+                            }
+                            fade.onload = function () {
+                                if (!fade.decode) return settle(resolve);
+                                // decode() can reject spuriously; the image has loaded either way
+                                fade.decode().then(
+                                    function () {
+                                        settle(resolve);
+                                    },
+                                    function () {
+                                        settle(resolve);
+                                    },
+                                );
+                            };
+                            fade.onerror = function () {
+                                settle(reject);
+                            };
+                            fade.srcset = srcsetFor(look);
+                            fade.src = "img/hero-" + look + ".webp";
+                        });
+                        p.catch(noop); // a stopped tour never consumes it
+                        return p;
+                    }
+
+                    function hideFade() {
+                        fade.classList.add("no-anim");
+                        fade.classList.remove("is-in");
+                        void fade.offsetWidth; // commit opacity 0 before the transition returns
+                        fade.classList.remove("no-anim");
+                    }
+
+                    function setName(radio) {
+                        badgeName.textContent = radio.textContent.trim();
+                    }
+
+                    // The chip's fill runs for ms; set it before the chip that fills changes.
+                    function setFill(ms) {
+                        group.style.setProperty("--tour-slot", ms + "ms");
+                    }
+
+                    function paused() {
+                        return why.view || why.hidden || why.chips || why.user;
+                    }
+
+                    function pause() {
+                        group.classList.add("is-paused");
+                        if (!slotTimer) return;
+                        clearTimeout(slotTimer);
+                        slotTimer = null;
+                        slotLeft = Math.max(0, slotLeft - (Date.now() - slotStart));
+                    }
+
+                    function resume() {
+                        if (paused()) return pause();
+                        group.classList.remove("is-paused");
+                        if (pending) {
+                            pending = false;
+                            slotEnded();
+                        } else if (!slotTimer && slotLeft > 0) {
+                            slotStart = Date.now();
+                            slotTimer = setTimeout(slotEnded, slotLeft);
+                        }
+                    }
+
+                    function startSlot(ms) {
+                        clearTimeout(slotTimer);
+                        slotTimer = null;
+                        slotLeft = ms;
+                        resume();
+                    }
+
+                    function slotEnded() {
+                        slotTimer = null;
+                        slotLeft = 0;
+                        var r = run;
+                        nextReady.then(
+                            function () {
+                                if (r !== run) return;
+                                if (paused()) {
+                                    pending = true;
+                                    return;
+                                }
+                                fadeTo(steps[next]);
+                            },
+                            function () {
+                                if (r === run) stop(); // the next look never loaded: stay on this one
+                            },
+                        );
+                    }
+
+                    function fadeTo(look) {
+                        var r = run;
+                        var radio = radioFor(look);
+                        var last = next === steps.length - 1;
+                        next++;
+                        if (last) group.classList.remove("is-touring");
+                        else setFill(SLOT_MS);
+                        mark(radio);
+                        setName(radio);
+                        fade.classList.add("is-in");
+                        var handedOff = wait(FADE_MS + 50)
+                            .then(function () {
+                                if (r !== run) throw STOPPED;
+                                show(look); // a cache hit: the layer above already shows it
+                                return decoded(img);
+                            })
+                            .then(function () {
+                                return frames(2);
+                            })
+                            .then(function () {
+                                if (r !== run) throw STOPPED;
+                                hideFade();
+                            });
+                        if (last) {
+                            handedOff.then(finish, noop);
+                            return;
+                        }
+                        nextReady = handedOff.then(function () {
+                            return loadFade(steps[next]);
+                        });
+                        nextReady.catch(noop);
+                        startSlot(SLOT_MS);
+                    }
+
+                    function begin() {
+                        started = true;
+                        setName(checkedRadio());
+                        setFill(HOLD_MS);
+                        group.classList.add("is-touring");
+                        badge.hidden = false;
+                        nextReady = loadFade(steps[0]);
+                        startSlot(HOLD_MS);
+                    }
+
+                    // Badge and chip fill away. Hiding the badge must not drop keyboard focus
+                    // on the page body.
+                    function endUi() {
+                        group.classList.remove("is-touring");
+                        group.classList.remove("is-paused");
+                        group.style.removeProperty("--tour-slot");
+                        if (document.activeElement === toggle) checkedRadio().focus();
+                        badge.hidden = true;
+                    }
+
+                    function finish() {
+                        if (over) return;
+                        over = true;
+                        io.disconnect();
+                        endUi();
+                    }
+
+                    function stop() {
+                        if (over) return;
+                        over = true;
+                        io.disconnect();
+                        if (!started) return;
+                        run++;
+                        clearTimeout(slotTimer);
+                        slotTimer = null;
+                        pending = false;
+                        fade.onload = fade.onerror = null;
+                        // Mid-fade the layer already shows the checked look: drop it only once
+                        // the shot has it too, so the previous look never flashes back.
+                        show(checkedRadio().getAttribute("data-look"));
+                        decoded(img)
+                            .then(function () {
+                                return frames(1);
+                            })
+                            .then(hideFade, hideFade);
+                        endUi();
+                    }
+
+                    function update() {
+                        if (over) return;
+                        if (!started) {
+                            if (!paused() && img.complete && img.naturalWidth > 0) begin();
+                        } else if (paused()) {
+                            pause();
+                        } else {
+                            resume();
+                        }
+                    }
+
+                    var io = new IntersectionObserver(
+                        function (entries) {
+                            var e = entries[entries.length - 1];
+                            why.view = !(e.isIntersecting && e.intersectionRatio >= MIN_RATIO);
+                            update();
+                        },
+                        { threshold: [0, MIN_RATIO] },
+                    );
+                    io.observe(img);
+
+                    img.addEventListener("load", update);
+                    document.addEventListener("visibilitychange", function () {
+                        why.hidden = document.visibilityState === "hidden";
+                        update();
+                    });
+                    window.addEventListener("pagehide", function () {
+                        why.hidden = true;
+                        update();
+                    });
+                    window.addEventListener("pageshow", function () {
+                        why.hidden = document.visibilityState === "hidden";
+                        update();
+                    });
+                    group.addEventListener("pointerenter", function () {
+                        why.chips = true;
+                        update();
+                    });
+                    group.addEventListener("pointerleave", function () {
+                        why.chips = false;
+                        update();
+                    });
+                    toggle.addEventListener("click", function () {
+                        why.user = !why.user;
+                        toggle.textContent = why.user ? "Play" : "Pause";
+                        toggle.setAttribute(
+                            "aria-label",
+                            why.user ? "Play the theme preview" : "Pause the theme preview",
+                        );
+                        update();
+                    });
+
+                    // Ends for good: keyboard focus entering the chips, the shot's lightbox
+                    // (registered before the lightbox's own listeners, so it reads the committed
+                    // look), reduced motion switched on.
+                    group.addEventListener("focusin", stop);
+                    img.addEventListener("click", stop);
+                    img.addEventListener("keydown", function (e) {
+                        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") stop();
+                    });
+                    var reduce = mq("(prefers-reduced-motion: reduce)");
+                    var onReduce = function () {
+                        if (reduce.matches) stop();
+                    };
+                    if (reduce.addEventListener) reduce.addEventListener("change", onReduce);
+                    else if (reduce.addListener) reduce.addListener(onReduce);
+
+                    return stop;
+                }
             })();
 
             // ---- Retro CRT loop: pause control + animate only while in view ----
