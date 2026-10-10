@@ -1108,11 +1108,12 @@ internal fun seedResources(client: KubernetesClient) {
 
     // ── CRDs + CR instances ─────────────────────────────────────────────────
     seedSparkAndArgo(client)
+    seedShowcaseCrds(client)
 
     MockClusterProvider.log.info(
         "Mock cluster seeded: 3 namespaces, 1 node, {} pods, {} deployments, 3 services, 1 configmap, 1 secret, {} events, " +
             "{} storage classes, {} PVs, {} PVCs, {} statefulsets, {} daemonsets, {} cronjobs, {} endpoints, 3 networkpolicies, " +
-            "2 CRDs",
+            "{} CRDs",
         totalPodsSeeded,
         deployDefs.size,
         eventDefs.size,
@@ -1123,6 +1124,7 @@ internal fun seedResources(client: KubernetesClient) {
         dsDefs.size,
         cjDefs.size,
         epDefs.size,
+        client.apiextensions().v1().customResourceDefinitions().list().items.size,
     )
 
     // ── Helm releases (read by the Helm Releases view) ──────────────────────
@@ -1246,6 +1248,81 @@ internal fun seedSparkAndArgo(client: KubernetesClient) {
     }
 }
 
+/**
+ * Seed CRDs from well-known API groups, a few with instances, so the Custom Resources section shows one icon
+ * per group (see crdGroupIcon) in demo mode, plus one made-up group that keeps the fallback icon. Returns how many
+ * CRDs it created.
+ */
+internal fun seedShowcaseCrds(client: KubernetesClient): Int {
+    fun column(name: String, type: String, jsonPath: String) = CustomResourceColumnDefinitionBuilder()
+        .withName(name).withType(type).withJsonPath(jsonPath).build()
+
+    var created = 0
+
+    // Every CRD ends with the Age column, after its own columns.
+    fun crd(
+        group: String,
+        version: String,
+        kind: String,
+        plural: String,
+        singular: String,
+        shortNames: List<String> = emptyList(),
+        namespaced: Boolean = true,
+        columns: List<io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceColumnDefinition> = emptyList(),
+    ) {
+        seedCrd(
+            client = client,
+            group = group,
+            version = version,
+            kind = kind,
+            plural = plural,
+            singular = singular,
+            shortNames = shortNames,
+            namespaced = namespaced,
+            columns = columns + column("Age", "date", ".metadata.creationTimestamp"),
+        )
+        created++
+    }
+
+    crd("cert-manager.io", "v1", "Certificate", "certificates", "certificate", listOf("cert", "certs"), columns = listOf(column("Secret", "string", ".spec.secretName")))
+    crd("cert-manager.io", "v1", "Issuer", "issuers", "issuer")
+    crd("cert-manager.io", "v1", "ClusterIssuer", "clusterissuers", "clusterissuer", namespaced = false)
+    crd("acme.cert-manager.io", "v1", "Order", "orders", "order", columns = listOf(column("State", "string", ".status.state")))
+    crd("external-secrets.io", "v1", "ExternalSecret", "externalsecrets", "externalsecret", listOf("es"), columns = listOf(column("Store", "string", ".spec.secretStoreRef.name")))
+    crd("external-secrets.io", "v1", "ClusterSecretStore", "clustersecretstores", "clustersecretstore", listOf("css"), namespaced = false)
+    crd("monitoring.coreos.com", "v1", "ServiceMonitor", "servicemonitors", "servicemonitor", listOf("smon"))
+    crd("monitoring.coreos.com", "v1", "PrometheusRule", "prometheusrules", "prometheusrule", listOf("promrule"))
+    crd("networking.istio.io", "v1", "VirtualService", "virtualservices", "virtualservice", listOf("vs"))
+    crd("cilium.io", "v2", "CiliumNetworkPolicy", "ciliumnetworkpolicies", "ciliumnetworkpolicy", listOf("cnp"))
+    crd("autoscaling.k8s.io", "v1", "VerticalPodAutoscaler", "verticalpodautoscalers", "verticalpodautoscaler", listOf("vpa"), columns = listOf(column("Mode", "string", ".spec.updatePolicy.updateMode")))
+    crd("kyverno.io", "v1", "ClusterPolicy", "clusterpolicies", "clusterpolicy", listOf("cpol"), namespaced = false)
+    crd("velero.io", "v1", "Backup", "backups", "backup", columns = listOf(column("Status", "string", ".status.phase")))
+    crd("postgresql.cnpg.io", "v1", "Cluster", "clusters", "cluster", columns = listOf(column("Instances", "integer", ".spec.instances"), column("Status", "string", ".status.phase")))
+    crd("elbv2.k8s.aws", "v1beta1", "TargetGroupBinding", "targetgroupbindings", "targetgroupbinding")
+    crd("widgets.example.io", "v1alpha1", "Widget", "widgets", "widget")
+
+    // Instances; Order, ClusterSecretStore, PrometheusRule, CiliumNetworkPolicy and TargetGroupBinding stay empty
+    // so their lists show the empty state with a group icon.
+    fun instance(group: String, version: String, plural: String, kind: String, name: String, ns: String?, spec: Map<String, Any> = emptyMap(), status: Map<String, Any>? = null) {
+        seedCrInstance(client, group, version, plural, ns, demoCrInstance("$group/$version", kind, name, ns, spec, status))
+    }
+
+    instance("cert-manager.io", "v1", "certificates", "Certificate", "web-tls", "default", spec = mapOf("secretName" to "web-tls", "dnsNames" to listOf("web.example.com")))
+    instance("cert-manager.io", "v1", "certificates", "Certificate", "api-tls", "production", spec = mapOf("secretName" to "api-tls", "dnsNames" to listOf("api.example.com")))
+    instance("cert-manager.io", "v1", "issuers", "Issuer", "selfsigned", "default", spec = mapOf("selfSigned" to emptyMap<String, Any>()))
+    instance("cert-manager.io", "v1", "clusterissuers", "ClusterIssuer", "letsencrypt-staging", null, spec = mapOf("acme" to mapOf("server" to "https://acme.example.com/directory")))
+    instance("external-secrets.io", "v1", "externalsecrets", "ExternalSecret", "db-credentials", "production", spec = mapOf("secretStoreRef" to mapOf("name" to "vault-backend", "kind" to "ClusterSecretStore")))
+    instance("monitoring.coreos.com", "v1", "servicemonitors", "ServiceMonitor", "web", "monitoring", spec = mapOf("endpoints" to listOf(mapOf("port" to "http"))))
+    instance("networking.istio.io", "v1", "virtualservices", "VirtualService", "web", "default", spec = mapOf("hosts" to listOf("web.example.com")))
+    instance("autoscaling.k8s.io", "v1", "verticalpodautoscalers", "VerticalPodAutoscaler", "web-vpa", "default", spec = mapOf("updatePolicy" to mapOf("updateMode" to "Auto")))
+    instance("kyverno.io", "v1", "clusterpolicies", "ClusterPolicy", "require-labels", null, spec = mapOf("validationFailureAction" to "Audit"))
+    instance("velero.io", "v1", "backups", "Backup", "nightly", "production", spec = mapOf("includedNamespaces" to listOf("production")), status = mapOf("phase" to "Completed"))
+    instance("postgresql.cnpg.io", "v1", "clusters", "Cluster", "orders-db", "production", spec = mapOf("instances" to 3), status = mapOf("phase" to "Cluster in healthy state"))
+    instance("widgets.example.io", "v1alpha1", "widgets", "Widget", "sample-widget", "default", spec = mapOf("size" to "small"))
+
+    return created
+}
+
 internal fun seedCrd(
     client: KubernetesClient,
     group: String,
@@ -1296,7 +1373,7 @@ internal fun seedCrInstance(
     group: String,
     version: String,
     plural: String,
-    namespace: String,
+    namespace: String?,
     instance: GenericKubernetesResource,
 ): GenericKubernetesResource {
     val rdc = ResourceDefinitionContext.Builder()
@@ -1304,9 +1381,10 @@ internal fun seedCrInstance(
         .withVersion(version)
         .withKind(instance.kind)
         .withPlural(plural)
-        .withNamespaced(true)
+        .withNamespaced(namespace != null)
         .build()
-    return client.genericKubernetesResources(rdc).inNamespace(namespace).resource(instance).create()
+    val resources = client.genericKubernetesResources(rdc)
+    return if (namespace != null) resources.inNamespace(namespace).resource(instance).create() else resources.resource(instance).create()
 }
 
 internal fun sparkInstance(
@@ -1355,6 +1433,29 @@ internal fun workflowInstance(
     r.additionalProperties["spec"] = mapOf("entrypoint" to "main")
     r.additionalProperties["status"] = mapOf("phase" to phase)
     return r to ns
+}
+
+/** A made-up custom resource instance for the demo cluster; [ns] null means cluster-scoped. */
+internal fun demoCrInstance(
+    apiVersion: String,
+    kind: String,
+    name: String,
+    ns: String?,
+    spec: Map<String, Any> = emptyMap(),
+    status: Map<String, Any>? = null,
+): GenericKubernetesResource {
+    val r = GenericKubernetesResource()
+    r.apiVersion = apiVersion
+    r.kind = kind
+    r.metadata = ObjectMeta().apply {
+        this.name = name
+        this.namespace = ns
+        // The mock overwrites this on POST; the value only documents intent.
+        this.creationTimestamp = MockClusterProvider.minutesAgo(90)
+    }
+    r.additionalProperties["spec"] = spec
+    if (status != null) r.additionalProperties["status"] = status
+    return r
 }
 
 /** The size [grafanaDashboardsJson] aims for, in characters: a ConfigMap holds at most 1 MiB, so this leaves headroom. */
