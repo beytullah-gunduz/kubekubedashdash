@@ -6,6 +6,7 @@ import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -822,6 +823,10 @@ private fun LazyItemScope.ClusterRow(
             .padding(horizontal = 8.dp)
             .clip(8.dp.kdCorner)
             .background(bg)
+            // The keyboard highlight is a ring, like kdFocusRing, so it shows on the
+            // selected row too (whose background already says "selected") and stays
+            // distinct from a mouse hover.
+            .then(if (isHighlighted) Modifier.border(2.dp, KdPrimary, 8.dp.kdCorner) else Modifier)
             .clickable {
                 onOpenCluster(ctx, defaultTarget)
                 onDismiss()
