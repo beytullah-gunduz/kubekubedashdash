@@ -65,6 +65,7 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -555,7 +556,9 @@ private fun CrdSection(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SidebarItem(
-    icon: DrawableResource,
+    // Null leaves the icon column empty, so the label still lines up with its siblings': a CRD row
+    // under its group header, which carries the icon. Expanded rows only; a collapsed row is its icon.
+    icon: DrawableResource?,
     label: String,
     selected: Boolean,
     collapsed: Boolean = false,
@@ -652,12 +655,16 @@ fun SidebarItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
             ) {
-                Icon(
-                    painterResource(icon),
-                    contentDescription = if (collapsed) label else null,
-                    modifier = Modifier.size(16.dp),
-                    tint = if (selected) KdPrimary else KdTextSecondary,
-                )
+                if (icon != null) {
+                    Icon(
+                        painterResource(icon),
+                        contentDescription = if (collapsed) label else null,
+                        modifier = Modifier.size(16.dp).testTag(SIDEBAR_ITEM_ICON_TAG),
+                        tint = if (selected) KdPrimary else KdTextSecondary,
+                    )
+                } else {
+                    Spacer(Modifier.size(16.dp))
+                }
                 if (!collapsed) {
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -860,13 +867,17 @@ fun SidebarSection(
 // to the rendered label so the two cannot drift apart.
 private val SidebarLabelInset = 44.dp
 
+// Tags a row's icon, so a test can tell a row with an icon from one without.
+internal const val SIDEBAR_ITEM_ICON_TAG = "sidebar-item-icon"
+
 // Second-level label inside a section: More's three source groups, and the
-// Custom Resources section's Pinned and per-API-group blocks. It must read as
-// neither a section header (icon column, hairline, chevron, accent in Retro)
-// nor a row (icon, body text), so it starts in the row-label column, is small
-// and secondary, and has less space above it than a header (8 dp, not 14).
-// [chrome] is app wording: uppercased, pixel voice in Retro. Pass false for
-// cluster data such as a CRD API group, which keeps its own spelling and the
+// Custom Resources section's Pinned block (its API groups have their own
+// header row, CrdGroupHeader). It must read as neither a section header (icon
+// column, hairline, chevron, accent in Retro) nor a row (icon, body text), so
+// it starts in the row-label column, is small and secondary, and has less
+// space above it than a header (8 dp, not 14). [chrome] is app wording:
+// uppercased, pixel voice in Retro. Pass false for cluster data such as a CRD
+// API group in the collapsed rail's menu, which keeps its own spelling and the
 // reading font — retroChrome's contract excludes data. [inset] moves it to a
 // flyout menu's icon column, where it heads the entries below it.
 @Composable

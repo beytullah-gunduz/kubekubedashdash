@@ -1,14 +1,32 @@
 package com.kubekubedashdash.ui
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.CrdInfo
+import com.kubekubedashdash.orCompact
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.extension_filled
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Sidebar section listing every CRD discovered on the cluster as its own
@@ -20,12 +38,13 @@ import com.kubekubedashdash.resources.extension_filled
  * 1. Pinned subgroup. Shown above all groups when non-empty. Pinning is
  *    per-cluster-context so a user's "I always look at SparkApplications"
  *    survives session restarts.
- * 2. Per-API-group expand/collapse. Each `spec.group` becomes its own mini
- *    section. Hidden CRDs are excluded from these groups; they remain
- *    reachable through the command palette (Cmd-K).
+ * 2. Per-API-group blocks. Each `spec.group` gets a header row with the
+ *    group's icon (crdGroupIcon) and name; its kinds follow without an icon,
+ *    so the empty icon column reads as their indent. Hidden CRDs are excluded
+ *    from these groups; they remain reachable through the command palette (Cmd-K).
  *
  * In the collapsed icon rail the whole section is one icon whose menu lists
- * the same two layers (see SidebarFlyoutItem).
+ * the same two layers, every entry with its own icon (see SidebarFlyoutItem).
  *
  * [searchQuery] is the rail-wide search box's text, owned and rendered by
  * `Sidebar`. When non-blank (and the rail is expanded), this composable
@@ -129,7 +148,7 @@ fun CustomResourcesSection(
 }
 
 @Composable
-private fun GroupBlock(
+internal fun GroupBlock(
     groupName: String,
     items: List<CrdInfo>,
     currentScreen: Screen,
@@ -140,11 +159,44 @@ private fun GroupBlock(
     onToggleHide: (CrdInfo) -> Unit,
     onToggleFavourite: (CrdInfo) -> Unit,
 ) {
-    // An API group is cluster data, so it keeps its own spelling. The gap
-    // between groups is the label's own space above it.
-    SidebarSubLabel(groupName, chrome = false)
+    CrdGroupHeader(groupName)
     items.forEach { crd ->
-        CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite)
+        CrdRow(crd, currentScreen, pinned, favourites, onNavigate, onTogglePin, onToggleHide, onToggleFavourite, showIcon = false)
+    }
+}
+
+// Tags a group header's icon, so a test can find it.
+internal const val CRD_GROUP_ICON_TAG = "crd-group-icon"
+
+// The parent row of one API group's kinds: the group's icon in the rows' icon column and its
+// name in their label column, with space above and none below so it binds to the rows under it.
+// Those rows carry no icon (CrdRow with showIcon off): the empty icon column is their indent.
+// An API group is cluster data, so it keeps its own spelling and the reading font.
+@Composable
+private fun CrdGroupHeader(group: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp.orCompact(8.dp))
+            .height(20.dp.orCompact(18.dp))
+            .padding(horizontal = 18.dp)
+            .semantics(mergeDescendants = true) { heading() },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painterResource(crdGroupIcon(group)),
+            contentDescription = null,
+            modifier = Modifier.size(16.dp).testTag(CRD_GROUP_ICON_TAG),
+            tint = KdTextPrimary,
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            group,
+            style = MaterialTheme.typography.labelMedium,
+            color = KdTextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -170,7 +222,7 @@ private fun CrdFlyoutEntry(crd: CrdInfo, currentScreen: Screen, onNavigate: (Scr
 }
 
 @Composable
-private fun CrdRow(
+internal fun CrdRow(
     crd: CrdInfo,
     currentScreen: Screen,
     pinned: Set<String>,
@@ -179,9 +231,10 @@ private fun CrdRow(
     onTogglePin: (CrdInfo) -> Unit,
     onToggleHide: (CrdInfo) -> Unit,
     onToggleFavourite: (CrdInfo) -> Unit,
+    showIcon: Boolean = true,
 ) {
     SidebarItem(
-        icon = crdGroupIcon(crd.group),
+        icon = if (showIcon) crdGroupIcon(crd.group) else null,
         label = crd.kind,
         selected = crd.isCurrent(currentScreen),
         onClick = { onNavigate(crd.screen()) },
