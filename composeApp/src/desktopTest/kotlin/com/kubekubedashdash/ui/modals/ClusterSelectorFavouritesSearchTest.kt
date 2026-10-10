@@ -7,11 +7,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
@@ -22,12 +24,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.data.repository.toggledFavouriteClusters
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.util.DemoContext
@@ -292,6 +296,33 @@ class ClusterSelectorFavouritesSearchTest {
 
         assertTrue(abs((filtered - before).value) < 1f, "the field moved from $before to $filtered with one match")
         assertTrue(abs((noMatch - before).value) < 1f, "the field moved from $before to $noMatch with no match")
+    }
+
+    // The selected row's background already says "selected": the keyboard highlight is a ring,
+    // so Enter's target shows on that row too.
+    @Test
+    fun `the keyboard highlight shows on the selected row and on any other`() = runComposeUiTest {
+        showPicker()
+        val demo = ClusterPickerTags.row(DemoContext.MOCK_CONTEXT_NAME)
+        assertFalse(leftEdgeIsPrimary(demo), "the selected row has a ring before anything is highlighted")
+
+        onNodeWithTag(ClusterPickerTags.SEARCH).performTextInput("demo")
+        waitForIdle()
+        assertTrue(leftEdgeIsPrimary(demo), "the highlighted selected row has no ring")
+
+        onNodeWithTag(ClusterPickerTags.SEARCH).performTextClearance()
+        onNodeWithTag(ClusterPickerTags.SEARCH).performTextInput("prod")
+        waitForIdle()
+        assertTrue(leftEdgeIsPrimary(ClusterPickerTags.row("example-prod")), "the highlighted row has no ring")
+    }
+
+    // A pixel inside the 2 dp ring: the row's node starts at the row's own left edge.
+    private fun ComposeUiTest.leftEdgeIsPrimary(tag: String): Boolean {
+        val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()
+        val x = with(density) { 1.dp.toPx() }.toInt()
+        val c = pixels[x, pixels.height / 2]
+        val p = KdPrimary
+        return abs(c.red - p.red) < 0.02f && abs(c.green - p.green) < 0.02f && abs(c.blue - p.blue) < 0.02f
     }
 
     @Test
