@@ -6,6 +6,9 @@ import com.kubekubedashdash.logging.AppLogEntry;
 import com.kubekubedashdash.logging.AppLogStore;
 import com.kubekubedashdash.logging.InMemoryAppender;
 import com.kubekubedashdash.mcp.McpServerManager;
+import com.kubekubedashdash.services.metricshistory.GmpMetricsSource;
+import com.kubekubedashdash.services.metricshistory.GmpTarget;
+import com.kubekubedashdash.services.metricshistory.PrometheusHttp;
 import com.kubekubedashdash.ui.yamledit.KkddYamlTokenMaker;
 import com.kubekubedashdash.util.CrdJsonPath;
 import com.kubekubedashdash.util.MockClusterHandle;
@@ -199,6 +202,13 @@ public final class ReleaseCanary {
             } finally {
                 handle.close();
             }
+        });
+
+        // java.net.http is only in the packaged runtime because of the jlink module list; this
+        // builds the shared client under that list, on the shrunk jars.
+        check("metrics-history-http", () -> {
+            require(PrometheusHttp.Companion.getShared() != null, "the shared Prometheus HTTP client");
+            GmpMetricsSource.Companion.forTarget(new GmpTarget("example-project", "us-central1", "example-cluster"));
         });
 
         check("mcp-sse-session", ReleaseCanary::mcpSession);
