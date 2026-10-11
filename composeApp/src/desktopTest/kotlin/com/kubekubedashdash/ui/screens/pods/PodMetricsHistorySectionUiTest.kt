@@ -1,5 +1,6 @@
 package com.kubekubedashdash.ui.screens.pods
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -7,9 +8,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -34,6 +40,7 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.AfterTest
@@ -48,17 +55,29 @@ private const val NOW = 86_400L * 100
 
 private val GmpSetting = MetricsSourceSetting(MetricsSourceMode.GMP, "example-project", "us-central1", "example-cluster")
 
+/** Every text in [this] node's subtree, in tree order. */
+private fun SemanticsNode.allTexts(): List<String> = config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allTexts() }
+
 /** One query the fake source answered. */
 private data class Call(val kind: PodSeriesKind, val pod: String, val window: QueryWindow)
 
-/** Answers every kind with two points; records what it was asked. [failure] answers every kind with that failure instead. */
-private class FakeSource(private val failure: SeriesResult.Failed? = null, private val failKinds: Set<PodSeriesKind> = emptySet()) : MetricsHistorySource {
+/**
+ * Answers every kind with two points; records what it was asked. [failure] answers every kind (or
+ * [failKinds]) with that failure instead, and [empty] answers every kind with no series, as Managed
+ * Prometheus does for a pod it has no samples of yet.
+ */
+private class FakeSource(
+    private val failure: SeriesResult.Failed? = null,
+    private val failKinds: Set<PodSeriesKind> = emptySet(),
+    private val empty: Boolean = false,
+) : MetricsHistorySource {
     override val label = "Fake source"
     val calls = CopyOnWriteArrayList<Call>()
 
     override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
         calls += Call(kind, pod.name, window)
         if (failure != null && (failKinds.isEmpty() || kind in failKinds)) return failure
+        if (empty) return SeriesResult.Ok(emptyList())
         fun points() = listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, 2.0))
         return SeriesResult.Ok(
             when (kind) {
@@ -386,5 +405,88 @@ class PodMetricsHistorySectionUiTest {
         mainClock.advanceTimeBy(30_001)
         waitForIdle()
         assertEquals(first * 2, source.calls.size, "a round with a failure is repeated whole")
+    }
+
+    @Test
+    fun `Auto on a context it cannot use draws exactly the section from before metrics history`() = runComposeUiTest {
+        // CONTEXT is not a gke_ name and nothing is stored: Auto finds no source.
+        val source = FakeSource()
+        val service = serviceOver(MutableStateFlow(emptyMap()), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) {
+                    Box(Modifier.testTag("now")) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+                    Box(Modifier.testTag("before")) { PodMetricsSection(liveSnapshots) }
+                }
+            }
+        }
+        waitForIdle()
+
+        val now = onNodeWithTag("now", useUnmergedTree = true).fetchSemanticsNode().allTexts()
+        val before = onNodeWithTag("before", useUnmergedTree = true).fetchSemanticsNode().allTexts()
+        assertTrue(now.isNotEmpty(), "the live charts must render")
+        assertEquals(before, now)
+        assertTrue(source.calls.isEmpty(), "no history source may be asked: ${source.calls}")
+    }
+
+    @Test
+    fun `while the first fetch is out the live charts show under a loading line`() = runComposeUiTest {
+        val hanging = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = awaitCancellation()
+        }
+        val service = serviceOver(settingsOf(GmpSetting), hanging)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+        onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
+        // The range can still be changed while it loads.
+        onNodeWithText("1h ▾").assertExists()
+        onNodeWithText("CPU throttling").assertDoesNotExist()
+    }
+
+    @Test
+    fun `when CPU and memory answer with no point the live charts stand in`() = runComposeUiTest {
+        val service = serviceOver(settingsOf(GmpSetting), FakeSource(empty = true))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(NO_HISTORY_NOTE).assertExists()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+        onNodeWithText("CPU throttling").assertDoesNotExist()
+        onNodeWithText("No data in this range").assertDoesNotExist()
+        onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `an answer with no point is asked again at the next refresh`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = FakeSource(empty = true)
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, emptyList(), { NOW }, 30_000L) }
+            }
+        }
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        val first = source.calls.size
+        assertTrue(first >= 5, "the first round asks for every kind, got $first")
+
+        // Same window and every kind answered Ok, but nothing to draw: a new pod's points may have arrived.
+        mainClock.advanceTimeBy(30_001)
+        waitForIdle()
+        assertEquals(first * 2, source.calls.size, "an empty round is repeated")
     }
 }
