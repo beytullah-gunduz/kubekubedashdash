@@ -334,8 +334,17 @@ internal class ReactiveInformerFactory(
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
+    /**
+     * A [fetch] that throws [SkippedPoll] skips that poll: the value on screen
+     * stays through up to [MAX_SKIPPED_POLLS] skips in a row, and the failure
+     * neither counts toward the connection-failure threshold nor resets it.
+     * [skippedFallback] stands in before anything has loaded, so a poll that
+     * never succeeds doesn't load forever, and after a longer run, so a stale
+     * sample doesn't pass for a live one. Without a fallback the value stays.
+     */
     fun <T> namespacedPolling(
         intervalMs: Long = 5_000,
+        skippedFallback: T? = null,
         fetch: (scope: NamespaceScope) -> T,
     ): StateFlow<ResourceState<T>> = combine(namespaceScope, connectedTrigger) { s, _ -> s }
         .flatMapLatest { s ->
@@ -343,6 +352,7 @@ internal class ReactiveInformerFactory(
                 parkUnlessConnected()
                 emit(ResourceState.Loading)
                 var loaded = false
+                var skipped = 0
                 while (true) {
                     try {
                         // runInterruptible: fetch is a blocking fabric8 call with no
@@ -353,9 +363,15 @@ internal class ReactiveInformerFactory(
                         reportSuccess()
                         emit(ResourceState.Success(data))
                         loaded = true
+                        skipped = 0
                         log.trace("Polling fetch succeeded for scope={}", s)
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (_: SkippedPoll) {
+                        if (skippedFallback != null && (!loaded || ++skipped > MAX_SKIPPED_POLLS)) {
+                            emit(ResourceState.Success(skippedFallback))
+                            loaded = true
+                        }
                     } catch (e: Exception) {
                         log.warn("Polling fetch failed for scope={}: {}", s, e.message)
                         reportFailure(e)
@@ -368,6 +384,11 @@ internal class ReactiveInformerFactory(
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(60_000), ResourceState.Loading)
 
+    /**
+     * Keeps its value through any [fetch] failure, except a run of more than
+     * [MAX_SKIPPED_POLLS] [SkippedPoll]s in a row, which shows [initial] again
+     * rather than let a stale sample pass for a live one.
+     */
     fun <T> directPolling(
         intervalMs: Long = 5_000,
         initial: T,
@@ -377,11 +398,15 @@ internal class ReactiveInformerFactory(
             flow {
                 parkUnlessConnected()
                 emit(initial)
+                var skipped = 0
                 while (true) {
                     try {
                         emit(runInterruptible(Dispatchers.IO) { fetch() })
+                        skipped = 0
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (_: SkippedPoll) {
+                        if (++skipped > MAX_SKIPPED_POLLS) emit(initial)
                     } catch (_: Exception) {
                         // keep previous value on error
                     }
@@ -414,3 +439,15 @@ internal class ReactiveInformerFactory(
         return RestartableStateFlow(view) { restartListFlow(source) }
     }
 }
+
+/**
+ * Thrown by a polling `fetch` for a failure that says nothing about the
+ * connection, such as a metrics-server hiccup; see
+ * [ReactiveInformerFactory.namespacedPolling] and
+ * [ReactiveInformerFactory.directPolling]. Its message is fixed: fabric8's
+ * text names the request URL, which holds the server and the namespace.
+ */
+internal class SkippedPoll(cause: Exception) : Exception("poll skipped", cause)
+
+/** Skipped polls in a row a polled value outlasts; the next shows its fallback (~40 s at the 10 s metrics cadence). */
+internal const val MAX_SKIPPED_POLLS = 3
