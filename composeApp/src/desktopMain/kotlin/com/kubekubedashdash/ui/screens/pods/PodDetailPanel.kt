@@ -82,6 +82,7 @@ import com.kubekubedashdash.resources.terminal_filled
 import com.kubekubedashdash.resources.warning_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.BusyScanner
@@ -295,6 +296,7 @@ fun PodDetailPanel(
                         DetailTab.Overview -> OverviewTab(
                             pod = pod,
                             metricsHistory = metricsHistory,
+                            historyService = kubeClient.metricsHistory,
                             onNavigateToNode = onNavigateToNode,
                             related = related,
                             onNavigate = onNavigate,
@@ -537,6 +539,7 @@ private fun PanelTabs(activeTab: DetailTab, tabs: List<DetailTab>, warningCount:
 private fun OverviewTab(
     pod: PodInfo,
     metricsHistory: List<PodMetricsSnapshot>,
+    historyService: MetricsHistoryService,
     onNavigateToNode: ((String) -> Unit)? = null,
     related: RelatedResources,
     onNavigate: (Screen) -> Unit,
@@ -568,9 +571,7 @@ private fun OverviewTab(
             WarningsCallout(warningEvents, warningTotal, eventTotal, onShowAllEvents, onEventClick)
         }
 
-        if (metricsHistory.isNotEmpty()) {
-            PodMetricsSection(metricsHistory)
-        }
+        PodMetricsHistorySection(pod = pod, service = historyService, liveHistory = metricsHistory)
 
         SectionCard("Pod Info") {
             InfoRow("Status", pod.status, statusColor(pod.status))
@@ -708,9 +709,13 @@ private fun CenteredNote(title: String, body: String) {
 }
 
 @Composable
-private fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>) {
+internal fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>, note: String? = null, showTitle: Boolean = true) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        SectionLabel("Resource Usage")
+        if (showTitle) SectionLabel("Resource Usage")
+        // Why these are the live charts rather than history (see PodMetricsHistorySection).
+        if (note != null) {
+            Text(note, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -749,7 +754,7 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
 }
 
 @Composable
-private fun SectionLabel(title: String) {
+internal fun SectionLabel(title: String) {
     Text(
         title.retroCaps(),
         style = MaterialTheme.typography.labelLarge.retroChrome(8.sp),

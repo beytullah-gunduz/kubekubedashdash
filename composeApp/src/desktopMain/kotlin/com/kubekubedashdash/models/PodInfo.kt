@@ -36,4 +36,7 @@ data class PodInfo(
     // @Transient keeps it out of the MCP `list_resources pod` JSON.
     @Transient
     val resources: List<ContainerResources> = emptyList(),
+    // spec.hostNetwork: such a pod's network counters are the node's. @Transient like resources.
+    @Transient
+    val hostNetwork: Boolean = false,
 )

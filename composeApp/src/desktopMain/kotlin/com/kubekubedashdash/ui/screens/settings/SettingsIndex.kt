@@ -13,6 +13,7 @@ val SettingsSectionOrder: List<String> = listOf(
     "Default namespace",
     "Tab behavior",
     "Live data",
+    "Metrics history",
     "Keyboard shortcuts",
     "Privacy",
     "Integrations",
@@ -28,11 +29,12 @@ val SettingsSectionOrder: List<String> = listOf(
 data class SettingsEntry(val section: String, val title: String, val keywords: List<String> = emptyList())
 
 /**
- * Every row, in document order. Three entries — Cluster colors, Keyboard
- * shortcuts and Default namespace — have no row of their own inside their
- * section; their title equals the section title, so a search hit jumps to
- * the section without a row highlight (see [SettingsRowTitle] in
- * SettingsScreen.kt, which is never rendered for these three).
+ * Every row, in document order. Four entries — Cluster colors, Keyboard
+ * shortcuts, Default namespace and Metrics history — have no row of their
+ * own inside their section; their title equals the section title, so a
+ * search hit jumps to the section without a row highlight (see
+ * [SettingsRowTitle] in SettingsScreen.kt, which is never rendered for
+ * these four).
  */
 val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Appearance", "Theme", listOf("dark", "light", "system")),
@@ -49,6 +51,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Tab behavior", "When closing the active tab, focus:", listOf("close", "tab")),
     SettingsEntry("Tab behavior", "Restore last session", listOf("launch", "startup", "open")),
     SettingsEntry("Live data", "Topology auto-refresh", listOf("refresh", "interval", "poll", "update", "topology")),
+    SettingsEntry("Metrics history", "Metrics history", listOf("prometheus", "managed prometheus", "gmp", "monitoring", "history", "charts", "metrics", "gcloud")),
     SettingsEntry("Keyboard shortcuts", "Keyboard shortcuts", listOf("hotkey", "cheat sheet", "cmd")),
     SettingsEntry("Privacy", "Secret values", listOf("mask", "reveal", "hide", "helm")),
     SettingsEntry("Integrations", "MCP Server", listOf("port", "token", "integration")),

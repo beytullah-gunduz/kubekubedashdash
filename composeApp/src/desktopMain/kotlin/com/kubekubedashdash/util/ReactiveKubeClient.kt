@@ -27,6 +27,7 @@ import com.kubekubedashdash.services.LogStreamOptions
 import com.kubekubedashdash.services.logcapture.CapturePodMapper
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.LogQuery
+import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
 import io.fabric8.kubernetes.api.model.ConfigMap
 import io.fabric8.kubernetes.api.model.DeletionPropagation
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
@@ -178,6 +179,13 @@ class ReactiveKubeClient(
 
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
     fun getClusterServer(): String = connectionManager.getClusterServer()
+
+    // Pod metrics history. The source is resolved from the live context on every call, so an
+    // in-place cluster switch never queries the previous cluster.
+    val metricsHistory: MetricsHistoryService = MetricsHistoryService(
+        currentContext = { connectionManager.connectedContextOrNull() },
+        isDemo = { connectionManager.isDemo },
+    )
 
     // ── Mapping: Pods ───────────────────────────────────────────────────────────
 

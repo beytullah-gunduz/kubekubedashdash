@@ -12,6 +12,7 @@ import com.kubekubedashdash.data.datastore.PreferenceStorageState
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.mcp.McpServerManager
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.services.metricshistory.MetricsSourceSetting
 import com.kubekubedashdash.util.DemoClusterSimulator
 import com.kubekubedashdash.util.MockClusterProvider
 import kotlinx.coroutines.Dispatchers
@@ -207,6 +208,14 @@ class SettingsScreenViewModel : ViewModel() {
 
     fun clearDefaultNamespace(context: String) {
         viewModelScope.launch { PreferenceRepository.clearDefaultNamespace(context) }
+    }
+
+    // ── Metrics history source per cluster ─────────────────────────────────────
+
+    val metricsSourceByContext: StateFlow<Map<String, MetricsSourceSetting>> = PreferenceRepository.metricsSourceByContext
+
+    fun setMetricsSource(context: String, setting: MetricsSourceSetting) {
+        viewModelScope.launch { PreferenceRepository.setMetricsSource(context, setting) }
     }
 
     init {

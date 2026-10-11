@@ -12,6 +12,7 @@ import com.kubekubedashdash.ThemePalette
 import com.kubekubedashdash.ThemeStyle
 import com.kubekubedashdash.data.datastore.dataStorePreferencesInstance
 import com.kubekubedashdash.model.CloseTabFocus
+import com.kubekubedashdash.services.metricshistory.MetricsSourceSetting
 import com.kubekubedashdash.ui.components.clampUiScale
 import com.kubekubedashdash.ui.crt.CrtRefreshBarMode
 import com.kubekubedashdash.ui.screens.allclusters.EventTriagePreset
@@ -77,6 +78,7 @@ object PreferenceRepository {
     private val CLUSTER_COLOR_OVERRIDES by lazy { stringPreferencesKey("cluster_color_overrides") }
     private val FAVOURITE_CLUSTERS by lazy { stringPreferencesKey("favourite_clusters") }
     private val DEFAULT_NAMESPACE_BY_CONTEXT by lazy { stringPreferencesKey("default_namespace_by_context") }
+    private val METRICS_SOURCE_BY_CONTEXT by lazy { stringPreferencesKey("metrics_source_by_context") }
     private val TOPOLOGY_PACKET_ANIMATION_ENABLED by lazy { booleanPreferencesKey("topology_packet_animation_enabled") }
     private val TOPOLOGY_REFRESH_INTERVAL_SEC by lazy { intPreferencesKey("topology_refresh_interval_sec") }
     private val LOG_DRAWER_HEIGHT_DP by lazy { intPreferencesKey("log_drawer_height_dp") }
@@ -187,6 +189,11 @@ object PreferenceRepository {
     // through to "All Namespaces" unless a session restore wins first).
     private val _defaultNamespaceByContext = MutableStateFlow<Map<String, String>>(emptyMap())
     val defaultNamespaceByContext: StateFlow<Map<String, String>> = _defaultNamespaceByContext.asStateFlow()
+
+    // Where pod metrics history comes from, keyed by DemoContext.preferenceKey(context).
+    // An absent key is Auto (see resolveMetricsSource).
+    private val _metricsSourceByContext = MutableStateFlow<Map<String, MetricsSourceSetting>>(emptyMap())
+    val metricsSourceByContext: StateFlow<Map<String, MetricsSourceSetting>> = _metricsSourceByContext.asStateFlow()
 
     private val _topologyPacketAnimationEnabled = MutableStateFlow(true)
     val topologyPacketAnimationEnabled: StateFlow<Boolean> = _topologyPacketAnimationEnabled.asStateFlow()
@@ -333,6 +340,7 @@ object PreferenceRepository {
                     _clusterColorOverrides.value = StringMapCodec.decode(p[CLUSTER_COLOR_OVERRIDES])
                     _favouriteClusters.value = StringListCodec.decode(p[FAVOURITE_CLUSTERS])
                     _defaultNamespaceByContext.value = StringMapCodec.decode(p[DEFAULT_NAMESPACE_BY_CONTEXT])
+                    _metricsSourceByContext.value = decodeMetricsSources(p[METRICS_SOURCE_BY_CONTEXT])
                     _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
                     _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
                     _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
@@ -667,6 +675,22 @@ object PreferenceRepository {
         _defaultNamespaceByContext.value = StringMapCodec.decode(committed[DEFAULT_NAMESPACE_BY_CONTEXT])
     }
 
+    // Keyed by DemoContext.preferenceKey(context), like setClusterColor. The default
+    // setting (Auto, no fields) removes the key rather than storing it.
+    suspend fun setMetricsSource(context: String, setting: MetricsSourceSetting) = persistFirst.withLock {
+        val key = DemoContext.preferenceKey(context)
+        val committed = dataStore.edit { prefs ->
+            val current = decodeMetricsSources(prefs[METRICS_SOURCE_BY_CONTEXT]).toMutableMap()
+            if (setting == MetricsSourceSetting()) current.remove(key) else current[key] = setting
+            if (current.isEmpty()) {
+                prefs.remove(METRICS_SOURCE_BY_CONTEXT)
+            } else {
+                prefs[METRICS_SOURCE_BY_CONTEXT] = json.encodeToString<Map<String, MetricsSourceSetting>>(current)
+            }
+        }
+        _metricsSourceByContext.value = decodeMetricsSources(committed[METRICS_SOURCE_BY_CONTEXT])
+    }
+
     // ── Decoders ──────────────────────────────────────────────────────────────
     private fun decodePinnedResources(raw: String?): Set<String> = raw?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
 
@@ -680,6 +704,17 @@ object PreferenceRepository {
             emptyList()
         } catch (_: IllegalArgumentException) {
             emptyList()
+        }
+    }
+
+    private fun decodeMetricsSources(raw: String?): Map<String, MetricsSourceSetting> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            json.decodeFromString<Map<String, MetricsSourceSetting>>(raw)
+        } catch (_: SerializationException) {
+            emptyMap()
+        } catch (_: IllegalArgumentException) {
+            emptyMap()
         }
     }
 

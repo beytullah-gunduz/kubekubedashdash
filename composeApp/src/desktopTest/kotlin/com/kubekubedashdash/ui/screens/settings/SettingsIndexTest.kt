@@ -13,8 +13,8 @@ class SettingsIndexTest {
     private val knownSections = SettingsSectionOrder.toSet()
 
     @Test
-    fun `the rail order has twelve distinct sections`() {
-        assertEquals(12, SettingsSectionOrder.size)
+    fun `the rail order has thirteen distinct sections`() {
+        assertEquals(13, SettingsSectionOrder.size)
         assertEquals(SettingsSectionOrder.size, SettingsSectionOrder.toSet().size)
     }
 
@@ -193,6 +193,11 @@ class SettingsIndexTest {
     fun `scanlines finds CRT scanlines`() {
         val results = settingsSearchResults("scanlines")
         assertTrue(results.any { it.title == "CRT scanlines" })
+    }
+
+    @Test
+    fun `prometheus finds Metrics history`() {
+        assertEquals("Metrics history", settingsSearchResults("prometheus").first().title)
     }
 
     @Test

@@ -34,6 +34,13 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
+// Two protected pods held near their 1 GiB memory limit, so the Pods
+// table's memory alert always has a critical and a warning example.
+internal val DEMO_MEMORY_PRESSURE_TARGETS: Map<String, Double> = mapOf(
+    "default/backend-api-6c4f8d9b2-xyz99" to 0.95,
+    "default/frontend-7b9d5c8f4-def34" to 0.85,
+)
+
 class DemoClusterSimulator(
     private val client: KubernetesClient,
     initialTargets: Targets = Targets(),
@@ -123,12 +130,7 @@ class DemoClusterSimulator(
         "default/data-migration-job-lm4n8",
     )
 
-    // Two protected pods held near their 1 GiB memory limit, so the Pods
-    // table's memory alert always has a critical and a warning example.
-    private val memoryPressureTargets = mapOf(
-        "default/backend-api-6c4f8d9b2-xyz99" to 0.95,
-        "default/frontend-7b9d5c8f4-def34" to 0.85,
-    )
+    private val memoryPressureTargets = DEMO_MEMORY_PRESSURE_TARGETS
 
     private val appPool = listOf("frontend", "worker", "cron", "nginx", "redis", "api", "scheduler", "processor")
     private val imagePool = mapOf(

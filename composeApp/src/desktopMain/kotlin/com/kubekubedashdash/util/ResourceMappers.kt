@@ -150,6 +150,7 @@ object ResourceMappers {
                 ?.firstOrNull { it.type == "PodScheduled" && it.status == "False" }
                 ?.message.orEmpty().trim(),
             resources = containerResources(pod),
+            hostNetwork = pod.spec?.hostNetwork == true,
         )
     }
 
