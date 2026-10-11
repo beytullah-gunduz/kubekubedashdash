@@ -138,7 +138,7 @@ class ReactiveKubeClient(
     val namespaceScope: StateFlow<NamespaceScope> = _namespaceScope.asStateFlow()
 
     fun setNamespaceScope(selection: NamespaceScope) {
-        // Debug: routine; the file log still receives it (logback.xml routes com.kubekubedashdash at DEBUG to FILE).
+        // Debug: routine, and it names namespaces; the file log keeps INFO and above (logback.xml), so only the drawer shows it.
         log.debug("Namespace selection changed to: {}", selection)
         _namespaceScope.value = selection
     }
