@@ -16,6 +16,21 @@ class TimeSeriesChartMathTest {
     }
 
     @Test
+    fun `a guide line joins the axis only within twice the data's peak`() {
+        // A 500m limit over a 56m peak would flatten the line; a 50m request beside it stays.
+        assertEquals(false, isOnScale(0.5, 0.056))
+        assertEquals(true, isOnScale(0.05, 0.056))
+        assertEquals(true, isOnScale(2.0, 1.0))
+        assertEquals(false, isOnScale(2.01, 1.0))
+    }
+
+    @Test
+    fun `with no positive data every guide line joins the axis`() {
+        assertEquals(true, isOnScale(7.0, 0.0))
+        assertEquals(true, isOnScale(7.0, Double.NaN))
+    }
+
+    @Test
     fun `the y maximum is one when there is nothing positive to scale to`() {
         assertEquals(1.0, chartYMax(0.0, 0.0), 0.0)
         assertEquals(1.0, chartYMax(-3.0, 0.0), 0.0)
@@ -39,6 +54,13 @@ class TimeSeriesChartMathTest {
     @Test
     fun `axis labels are the start, the middle and the end of the window`() {
         assertEquals(listOf("00:00", "00:30", "01:00"), timeAxisLabels(0, 3_600, ZoneOffset.UTC))
+    }
+
+    @Test
+    fun `across midnight the start label names its day`() {
+        // 1970-01-01 was a Thursday; a 24 h window ends at the same clock time the next day.
+        assertEquals(listOf("Thu 00:00", "12:00", "00:00"), timeAxisLabels(0, 86_400, ZoneOffset.UTC))
+        assertEquals(listOf("Thu 22:00", "00:00", "02:00"), timeAxisLabels(79_200, 93_600, ZoneOffset.UTC))
     }
 
     @Test

@@ -72,6 +72,7 @@ private val PlotHeight = 96.dp
 
 private val ReadoutTime = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT)
 private val AxisTime = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
+private val AxisDayTime = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.ROOT)
 
 /**
  * A card with a time-series plot: one line per series on a shared time axis, a hover crosshair
@@ -98,7 +99,10 @@ fun TimeSeriesChart(
         timeAxisLabels(window.startEpochSec, window.endEpochSec, ZoneId.systemDefault())
     }
     val seriesMax = drawn.maxOfOrNull { s -> s.points.maxOfOrNull { it.value } ?: 0.0 } ?: 0.0
-    val yMax = chartYMax(seriesMax, references.maxOfOrNull { it.value } ?: 0.0)
+    // A limit far above the usage would flatten every line against the floor, so such a guide
+    // stays out of the axis and is only listed, marked off scale, in the legend.
+    val onScale = references.filter { isOnScale(it.value, seriesMax) }
+    val yMax = chartYMax(seriesMax, onScale.maxOfOrNull { it.value } ?: 0.0)
     val message = note ?: if (drawn.all { it.points.isEmpty() }) NO_DATA_TEXT else null
 
     // The pointer's position, not a sample index: a refresh moves the window under a still pointer,
@@ -167,7 +171,7 @@ fun TimeSeriesChart(
                             drawLine(KdBorder.copy(alpha = 0.4f), Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5f)
                         }
 
-                        references.forEach { ref ->
+                        onScale.forEach { ref ->
                             val y = yOf(ref.value)
                             if (ref.dashed) {
                                 drawLine(
@@ -273,7 +277,7 @@ fun TimeSeriesChart(
                     references.forEach { ref ->
                         val sample = if (ref.dashed) "- -" else "──"
                         Text(
-                            "$sample ${ref.label} ${formatValue(ref.value)}",
+                            "$sample ${ref.label} ${formatValue(ref.value)}" + if (ref in onScale) "" else " (off scale)",
                             style = MaterialTheme.typography.labelSmall,
                             color = KdTextSecondary,
                         )
@@ -315,6 +319,12 @@ private fun readoutText(
     else -> AnnotatedString("")
 }
 
+/** How far above the data's peak a guide line may sit and still join the axis. */
+internal const val REFERENCE_SCALE_FACTOR = 2.0
+
+/** True when a guide at [referenceValue] joins the axis; with no positive data every guide does. */
+internal fun isOnScale(referenceValue: Double, seriesMax: Double): Boolean = !(seriesMax > 0.0) || referenceValue <= seriesMax * REFERENCE_SCALE_FACTOR
+
 /** Larger of the two maxima plus 15 % headroom; 1.0 when both are ≤ 0. */
 internal fun chartYMax(seriesMax: Double, referenceMax: Double): Double {
     val max = maxOf(seriesMax, referenceMax)
@@ -328,9 +338,16 @@ internal fun nearestTimestampIndex(timestamps: List<Long>, startEpochSec: Long, 
     return timestamps.indices.minByOrNull { abs(timestamps[it] - target) }
 }
 
-/** Start, middle and end of the window as "HH:mm" in [zone]. */
-internal fun timeAxisLabels(startEpochSec: Long, endEpochSec: Long, zone: ZoneId): List<String> = listOf(startEpochSec, startEpochSec + (endEpochSec - startEpochSec) / 2, endEpochSec)
-    .map { AxisTime.format(Instant.ofEpochSecond(it).atZone(zone)) }
+/**
+ * Start, middle and end of the window as "HH:mm" in [zone]. Across midnight the start also names
+ * its day: a 24 h window would otherwise read the same time at both ends.
+ */
+internal fun timeAxisLabels(startEpochSec: Long, endEpochSec: Long, zone: ZoneId): List<String> {
+    val times = listOf(startEpochSec, startEpochSec + (endEpochSec - startEpochSec) / 2, endEpochSec)
+        .map { Instant.ofEpochSecond(it).atZone(zone) }
+    val startFormat = if (times.first().toLocalDate() != times.last().toLocalDate()) AxisDayTime else AxisTime
+    return listOf(startFormat.format(times[0]), AxisTime.format(times[1]), AxisTime.format(times[2]))
+}
 
 /** Splits where consecutive samples are more than 1.5 steps apart, so a gap is not drawn as a line. */
 internal fun gapSegments(points: List<SeriesPoint>, stepSec: Long): List<List<SeriesPoint>> {
