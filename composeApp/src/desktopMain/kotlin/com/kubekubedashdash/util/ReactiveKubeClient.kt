@@ -138,7 +138,7 @@ class ReactiveKubeClient(
     val namespaceScope: StateFlow<NamespaceScope> = _namespaceScope.asStateFlow()
 
     fun setNamespaceScope(selection: NamespaceScope) {
-        // Debug: the selection names namespaces, which a typed or kubeconfig value must not leak into the exported log.
+        // Debug: routine; the file log still receives it (logback.xml routes com.kubekubedashdash at DEBUG to FILE).
         log.debug("Namespace selection changed to: {}", selection)
         _namespaceScope.value = selection
     }
@@ -149,6 +149,9 @@ class ReactiveKubeClient(
     fun reportError(message: String) = connectionManager.reportError(message)
 
     private val _connectionVersion: StateFlow<Long> = connectionManager.connectionVersion
+
+    /** Bumps on every connection transition, so a list's answer can be tied to the connection it was read under. */
+    val connectionVersion: StateFlow<Long> get() = _connectionVersion
 
     /**
      * Connection-gated trigger for the reactive flows below. The underlying

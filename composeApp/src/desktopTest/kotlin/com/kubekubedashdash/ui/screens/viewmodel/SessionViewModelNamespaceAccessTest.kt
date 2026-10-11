@@ -2,11 +2,13 @@ package com.kubekubedashdash.ui.screens.viewmodel
 
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.NamespaceScope
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.KubeConnectionManager
 import com.kubekubedashdash.util.MockClusterProvider
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.isForbidden
 import com.kubekubedashdash.util.restartListFlow
 import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
@@ -29,6 +31,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Queue
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -47,7 +51,8 @@ import kotlin.test.assertTrue
  * server's wording; the view model connects through the KubeConnectionManager loadConfig seam, so
  * the connect tail that arms the narrowing runs for real. Settings and the kubeconfig are the
  * constructor's two lambdas: no DataStore, no kubeconfig file. A negative is asserted after the
- * connect settled and after a barrier on the view model's monitor, never after a sleep.
+ * connect settled and after a barrier on the view model's monitor, never after a sleep. The connect
+ * tail's order against the namespace answers is forced with [lookupGate], a latch the kubeconfig lookup waits on.
  */
 class SessionViewModelNamespaceAccessTest {
 
@@ -63,8 +68,17 @@ class SessionViewModelNamespaceAccessTest {
     private lateinit var reactiveClient: ReactiveKubeClient
     private lateinit var viewModel: SessionViewModel
 
-    /** Every value of [SessionViewModel.namespacesForbidden], in order, from the view model's creation. */
-    private val forbiddenHistory = CopyOnWriteArrayList<Boolean>()
+    /** How many refusals of the namespace list the client emitted: a restart or a reconnect emits Loading between two. */
+    private val refusalCount = AtomicInteger()
+
+    /** What a connect's config load does, so a test can point one view model at different clusters. */
+    @Volatile private var configLoader: (String?) -> Config = { config }
+
+    /** Servers a test started beside [server]. */
+    private val extraServers = CopyOnWriteArrayList<KubernetesMockServer>()
+
+    /** Held by the kubeconfig lookup of a view model made with `gated = true`, which holds the connect tail back. */
+    private val lookupGate = CountDownLatch(1)
 
     @BeforeTest
     fun setUp() {
@@ -82,17 +96,19 @@ class SessionViewModelNamespaceAccessTest {
         // No request retries: fabric8 retries a 5xx for ~100 s by default.
         config = server.createClient().use { ConfigBuilder(it.configuration).withRequestRetryBackoffLimit(0).build() }
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        manager = KubeConnectionManager(loadConfig = { config })
+        manager = KubeConnectionManager(loadConfig = { configLoader(it) })
         reactiveClient = ReactiveKubeClient(scope, manager)
     }
 
     @AfterTest
     fun tearDown() {
-        shutdownCleanly(scope, label = "SessionViewModelNamespaceAccessTest", manager = manager, client = seed, servers = listOf(server))
+        lookupGate.countDown()
+        shutdownCleanly(scope, label = "SessionViewModelNamespaceAccessTest", manager = manager, client = seed, servers = listOf(server) + extraServers)
     }
 
-    private fun denyNamespaces() {
-        server.expect().get().withPath(namespacesPath)
+    /** The namespace list answers 403 (after [delayMs]) with the API server's wording, on [target]. */
+    private fun denyNamespaces(target: KubernetesMockServer = server, delayMs: Long = 0) {
+        target.expect().get().delay(delayMs, TimeUnit.MILLISECONDS).withPath(namespacesPath)
             .andReturn(
                 403,
                 StatusBuilder().withCode(403).withReason("Forbidden")
@@ -102,10 +118,24 @@ class SessionViewModelNamespaceAccessTest {
             .always()
     }
 
-    private fun newViewModel(contextNs: String? = null, defaultNs: String? = null) {
-        val vm = SessionViewModel(reactiveClient, scope, contextNamespace = { contextNs }, defaultNamespace = { defaultNs })
+    private fun newViewModel(contextNs: String? = null, defaultNs: String? = null, gated: Boolean = false) {
+        val vm = SessionViewModel(
+            reactiveClient,
+            scope,
+            contextNamespace = {
+                if (gated) lookupGate.await(30, TimeUnit.SECONDS)
+                contextNs
+            },
+            defaultNamespace = { defaultNs },
+        )
         viewModel = vm
-        scope.launch { vm.namespacesForbidden.collect { forbiddenHistory += it } }
+        scope.launch {
+            var before: ResourceState<*>? = null
+            reactiveClient.namespaceNames.collect { state ->
+                if (state is ResourceState.Error && isForbidden(state.message) && before !is ResourceState.Error) refusalCount.incrementAndGet()
+                before = state
+            }
+        }
     }
 
     private suspend fun awaitThat(what: String, timeoutMs: Long = 20_000, condition: () -> Boolean) {
@@ -122,12 +152,20 @@ class SessionViewModelNamespaceAccessTest {
     /** Waits out a narrowing still running under the view model's monitor. */
     private fun settle() = synchronized(viewModel) { }
 
-    /** How many times the refusal was set: a restart or a reconnect clears it first, so each return counts. */
-    private fun refusals() = (listOf(false) + forbiddenHistory.toList()).zipWithNext().count { (before, after) -> !before && after }
+    private fun refusals() = refusalCount.get()
 
     private suspend fun awaitNarrowedTo(namespace: String) = awaitThat("the tab to narrow to a fallback namespace") { viewModel.namespaceScope.value == NamespaceScope.single(namespace) }
 
     private suspend fun awaitRefusals(count: Int) = awaitThat("the namespace list to be refused $count time(s)") { refusals() >= count }
+
+    /** Another loopback cluster beside [server], with its own client config. */
+    private fun startServer(): Pair<KubernetesMockServer, Config> {
+        val answers = HashMap<ServerRequest, Queue<ServerResponse>>()
+        val other = KubernetesMockServer(Context(), MockWebServer(), answers, KubernetesMixedDispatcher(answers), false)
+        other.init()
+        extraServers += other
+        return other to other.createClient().use { ConfigBuilder(it.configuration).withRequestRetryBackoffLimit(0).build() }
+    }
 
     @Test
     fun `a refused namespace list narrows the tab to the kubeconfig context's namespace`() = runBlocking<Unit> {
@@ -267,6 +305,75 @@ class SessionViewModelNamespaceAccessTest {
 
         awaitNarrowedTo("team-a")
         awaitThat("the typed name to be forgotten") { viewModel.namespaces.value == listOf("team-a") }
+    }
+
+    @Test
+    fun `a refusal that arrives before the tail arms the narrowing still narrows, and only once`() = runBlocking<Unit> {
+        denyNamespaces()
+        newViewModel(contextNs = "team-a", gated = true)
+
+        viewModel.connectToCluster(context)
+        awaitThat("the refusal, with the connect tail held back") { viewModel.namespacesForbidden.value }
+        settle()
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value, "nothing is armed yet")
+
+        lookupGate.countDown()
+        awaitNarrowedTo("team-a")
+        awaitConnectSettled()
+        awaitRefusals(1)
+
+        viewModel.setNamespaceScope(NamespaceScope.All)
+        assertTrue(restartListFlow(reactiveClient.namespaceNames), "the names view is restartable")
+        awaitRefusals(2)
+        settle()
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value, "the narrowing was spent")
+    }
+
+    @Test
+    fun `an admin connect whose list landed before the tail stays disarmed when a later list is refused`() = runBlocking<Unit> {
+        newViewModel(contextNs = "team-a", gated = true)
+
+        viewModel.connectToCluster(context)
+        awaitThat("the namespaces to list, with the connect tail held back") { viewModel.namespaces.value == listOf("default", "monitoring") }
+        settle()
+        lookupGate.countDown()
+        awaitConnectSettled()
+        settle()
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value)
+
+        denyNamespaces()
+        assertTrue(restartListFlow(reactiveClient.namespaceNames), "the names view is restartable")
+        awaitThat("the refusal") { viewModel.namespacesForbidden.value }
+        settle()
+
+        assertEquals(NamespaceScope.All, viewModel.namespaceScope.value, "a list refused after an admin connect")
+    }
+
+    @Test
+    fun `an admin connect right after a refused one is never narrowed by the refusal still in flight`() = runBlocking<Unit> {
+        val (refusing, refusingConfig) = startServer()
+        denyNamespaces(refusing, delayMs = 150)
+        newViewModel(contextNs = "team-a")
+        val narrowedRounds = mutableListOf<Int>()
+
+        repeat(10) { round ->
+            configLoader = { refusingConfig }
+            viewModel.connectToCluster(context)
+            awaitConnectSettled()
+            // The refusal of the connect above is still in flight (150 ms). The admin connect's slow config load
+            // lets it land first, and the connect then publishes while that refusal is the list's last answer.
+            configLoader = {
+                Thread.sleep(300)
+                config
+            }
+            viewModel.connectToCluster(context)
+            awaitConnectSettled()
+            awaitThat("the admin cluster's list") { reactiveClient.namespaceNames.value is ResourceState.Success && !viewModel.namespacesForbidden.value }
+            settle()
+            if (viewModel.namespaceScope.value != NamespaceScope.All) narrowedRounds += round
+        }
+
+        assertEquals(emptyList(), narrowedRounds, "rounds in which the previous cluster's refusal narrowed the admin cluster's tab")
     }
 
     @Test

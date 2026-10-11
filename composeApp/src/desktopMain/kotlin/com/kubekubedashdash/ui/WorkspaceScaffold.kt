@@ -37,13 +37,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.model.ClusterSession
-import com.kubekubedashdash.models.NamespaceScope
 import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.DetailHost
 import com.kubekubedashdash.ui.components.LocalNamespaceAccessHint
 import com.kubekubedashdash.ui.components.NamespaceAccessHint
 import com.kubekubedashdash.ui.components.ReconnectOverlay
+import com.kubekubedashdash.ui.components.namespaceAccessHintApplies
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
@@ -126,9 +126,9 @@ internal fun SessionPaneContent(
     }
 
     // A cluster-wide 403 is fixable by picking a namespace only where the list follows the
-    // selector and the scope is All; elsewhere the message stays a plain refusal.
+    // selector and watches every namespace; elsewhere the message stays a plain refusal.
     val namespaceAccessHint = remember(currentScreen, namespaceScope, sessionVm) {
-        if (currentScreen.showsNamespaceSelector() && namespaceScope == NamespaceScope.All) {
+        if (namespaceAccessHintApplies(currentScreen, namespaceScope)) {
             NamespaceAccessHint(onChooseNamespace = sessionVm::requestNamespacePicker)
         } else {
             null

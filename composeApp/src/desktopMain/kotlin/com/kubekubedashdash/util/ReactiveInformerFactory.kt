@@ -306,7 +306,7 @@ internal class ReactiveInformerFactory(
                         // selection that moves away and back unseen restarts nothing,
                         // and skipping this first send would leave the list on Loading.
                         val items = snapshot()
-                        // Debug: namespace names stay out of the exported log.
+                        // Debug: routine; the file log still receives it (logback.xml routes com.kubekubedashdash at DEBUG to FILE).
                         log.debug("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
                         send(ResourceState.Success(items))
                         reportSuccess()

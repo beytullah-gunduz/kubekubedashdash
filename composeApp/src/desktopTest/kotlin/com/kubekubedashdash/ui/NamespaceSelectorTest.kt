@@ -294,6 +294,53 @@ class NamespaceSelectorTest {
     }
 
     @Test
+    fun `a refused list lets a box select only its own namespace and keeps the menu open`() = runComposeUiTest {
+        val refused = Refused(accept = true).also { it.scope = NamespaceScope.single("team-a") }
+        openRefused(refused, namespaces = listOf("team-a", "team-b"))
+
+        onNodeWithTag(NamespaceSelectorTags.check("team-b")).performClick()
+        waitForIdle()
+
+        assertEquals(NamespaceScope.single("team-b"), refused.scope)
+        onNodeWithTag(NamespaceSelectorTags.row("team-a")).assertExists()
+    }
+
+    @Test
+    fun `a refused list narrows a multi-selection to the ticked row`() = runComposeUiTest {
+        val refused = Refused(accept = true).also { it.scope = NamespaceScope.of(listOf("team-a", "team-b")) }
+        openRefused(refused, namespaces = listOf("team-a", "team-b"))
+
+        onNodeWithTag(NamespaceSelectorTags.check("team-b")).performClick()
+        waitForIdle()
+
+        assertEquals(NamespaceScope.single("team-b"), refused.scope)
+    }
+
+    @Test
+    fun `a refused list keeps the only selected namespace when its box is clicked`() = runComposeUiTest {
+        val refused = Refused(accept = true).also { it.scope = NamespaceScope.single("team-a") }
+        openRefused(refused, namespaces = listOf("team-a"))
+
+        onNodeWithTag(NamespaceSelectorTags.check("team-a")).performClick()
+        waitForIdle()
+
+        assertEquals(NamespaceScope.single("team-a"), refused.scope)
+    }
+
+    @Test
+    fun `a readable list keeps multi-select`() = runComposeUiTest {
+        val host = Host(NamespaceScope.single("ns-a"))
+        openSelector(host)
+
+        onNodeWithTag(NamespaceSelectorTags.check("ns-b")).performClick()
+        waitForIdle()
+        onNodeWithTag(NamespaceSelectorTags.check("ns-c")).performClick()
+        waitForIdle()
+
+        assertEquals(NamespaceScope.of(listOf("ns-a", "ns-b", "ns-c")), host.scope)
+    }
+
+    @Test
     fun `Retro shows the refused menu's note and field`() = runComposeUiTest {
         ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
         openRefused(Refused(accept = true))

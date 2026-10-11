@@ -214,6 +214,11 @@ class SessionViewModel(
     // both read and write it.
     private var autoNarrowArmed = false
 
+    // The connection version a refusal / a readable list was read under, -1 for none. Guarded by the monitor too.
+    // They tie a namespace answer to its connection: one read under another connection must not decide this one.
+    private var forbiddenAtVersion = -1L
+    private var listedAtVersion = -1L
+
     /** The names the picker lists: the cluster's namespaces, or, when it refuses the list, the names this tab knows. */
     val namespaces: StateFlow<List<String>> = combine(_namespaces, _namespacesForbidden, typedNamespaces, fallbackNamespaces, reactiveClient.namespaceScope) { listed, forbidden, typed, fallbacks, selection ->
         if (!forbidden) listed else (fallbacks + typed + ((selection as? NamespaceScope.Only)?.namespaces.orEmpty())).distinct().sorted()
@@ -324,13 +329,15 @@ class SessionViewModel(
                         // A readable list disarms the auto-narrow: an admin connect never
                         // narrows, not even on a later reconnect after an RBAC change.
                         synchronized(this@SessionViewModel) {
+                            listedAtVersion = reactiveClient.connectionVersion.value
                             _namespacesForbidden.value = false
                             autoNarrowArmed = false
                         }
                     }
 
-                    // A restart's first emission must not keep a stale refusal.
-                    is ResourceState.Loading -> _namespacesForbidden.value = false
+                    // No marker: the list's StateFlow is conflated, so a restart's Loading can be skipped.
+                    // Only a Success or the next fresh connect clears a refusal.
+                    is ResourceState.Loading -> Unit
 
                     is ResourceState.Error -> if (isForbidden(state.message)) onNamespacesForbidden()
                 }
@@ -338,28 +345,32 @@ class SessionViewModel(
         }
     }
 
-    // A fresh connect's tail arms the auto-narrow once the scope and the fallbacks are in place.
+    // A fresh connect's tail arms the auto-narrow once the scope and the fallbacks are in place. A connection
+    // that already listed its namespaces is an admin's and stays disarmed, whichever of the list and the tail came first.
     @Synchronized
     private fun armAutoNarrow() {
+        if (listedAtVersion == reactiveClient.connectionVersion.value) return
         autoNarrowArmed = true
         maybeAutoNarrowLocked()
     }
 
-    // Residual race: a late 403 from the previous cluster's informer can land just after the
-    // prologue's reset. At worst it narrows the tab to a fallback name of the context being
-    // connected, never of the one left: the fallbacks are recomputed per connect.
+    // A refusal is tied to the connection it was read under, so one that arrived before this connection was
+    // published carries the previous version and never narrows it. Residual window: a stale Error read just after
+    // the version bump, before the replacing informer's Loading supersedes it (ReactiveInformerFactory.clusterScopedList).
+    // It lasts microseconds and at worst narrows to a fallback of the context being connected, never of the one left.
     @Synchronized
     private fun onNamespacesForbidden() {
+        forbiddenAtVersion = reactiveClient.connectionVersion.value
         _namespacesForbidden.value = true
         maybeAutoNarrowLocked()
     }
 
-    // Caller holds the monitor. Narrows only a refused list, once per fresh connect: the first
-    // refusal after arming settles it, narrowed or not, so a user who then picks All Namespaces
-    // on purpose is not overridden by a later refusal (a Retry, a reconnect). The flag drops
-    // even without a fallback, so the tab stays on All and the UI guides the user.
+    // Caller holds the monitor. Narrows only on a refusal read under the current connection, once per fresh
+    // connect: the first such refusal after arming settles it, narrowed or not, so a user who then picks All
+    // Namespaces on purpose is not overridden by a later refusal (a Retry, a reconnect). The flag drops even
+    // without a fallback, so the tab stays on All and the UI guides the user.
     private fun maybeAutoNarrowLocked() {
-        if (!_namespacesForbidden.value || !autoNarrowArmed) return
+        if (!autoNarrowArmed || !_namespacesForbidden.value || forbiddenAtVersion != reactiveClient.connectionVersion.value) return
         autoNarrowArmed = false
         if (reactiveClient.namespaceScope.value != NamespaceScope.All) return
         val target = fallbackNamespaces.value.firstOrNull() ?: return
@@ -700,6 +711,8 @@ class SessionViewModel(
             typedNamespaces.value = emptySet()
             fallbackNamespaces.value = emptyList()
             autoNarrowArmed = false
+            forbiddenAtVersion = -1L
+            listedAtVersion = -1L
         }
         emitConnEvent(ConnEvent.ConnectStarted(isReconnect))
         connectJob = scope.launch(Dispatchers.IO) {

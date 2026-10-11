@@ -399,7 +399,8 @@ internal object NamespaceSelectorTags {
 /**
  * The header's namespace menu. While [cannotListNamespaces] (the cluster refused the namespace list),
  * [namespaces] holds only the names the tab knows, so the All row carries no count and the menu ends in
- * a field that takes a namespace name: [onTypeNamespace] returns whether the name was accepted.
+ * a field that takes a namespace name: [onTypeNamespace] returns whether the name was accepted. In that mode a
+ * row's box selects only its namespace, never a second one.
  * [openRequests] opens the menu each time it rises. [onScopeChange] is last so a call can end in a lambda.
  */
 @Composable
@@ -424,6 +425,11 @@ internal fun CompactNamespaceSelector(
     // still gets a row, so it can be unticked.
     val rows = remember(namespaces, scope) {
         (namespaces + (scope as? NamespaceScope.Only)?.namespaces.orEmpty()).distinct().sorted()
+    }
+    // Two selected names are watched cluster-wide, which a refused list means a 403 for this user,
+    // so a box then picks just its namespace.
+    val toggledSelection: (String) -> NamespaceScope = { ns ->
+        if (cannotListNamespaces) NamespaceScope.single(ns) else scope.toggled(ns)
     }
 
     Box {
@@ -492,10 +498,10 @@ internal fun CompactNamespaceSelector(
                                 NamespaceCheckRow(
                                     namespace = ns,
                                     checked = scope is NamespaceScope.Only && ns in scope.namespaces,
-                                    onToggle = { onScopeChange(scope.toggled(ns)) },
+                                    onToggle = { onScopeChange(toggledSelection(ns)) },
                                     onName = { toggle ->
                                         if (toggle) {
-                                            onScopeChange(scope.toggled(ns))
+                                            onScopeChange(toggledSelection(ns))
                                         } else {
                                             onScopeChange(NamespaceScope.single(ns))
                                             expanded = false
