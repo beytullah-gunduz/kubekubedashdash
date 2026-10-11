@@ -187,7 +187,7 @@ private fun SettingsNavRail(
 // that sum, starving the widest label. This wrapper uses fillMaxWidth() instead so each
 // button gets 1/N of the actual container width — always enough on a desktop settings pane.
 @Composable
-private fun FullWidthSingleChoiceSegmentedButtonRow(
+internal fun FullWidthSingleChoiceSegmentedButtonRow(
     modifier: Modifier = Modifier,
     content: @Composable SingleChoiceSegmentedButtonRowScope.() -> Unit,
 ) {
@@ -1088,6 +1088,21 @@ fun SettingsScreen(
 
                             Spacer(Modifier.height(16.dp))
 
+                            val metricsSources by viewModel.metricsSourceByContext.collectAsState()
+
+                            SettingsSection(
+                                title = "Metrics history",
+                                onLayoutTop = { y -> sectionOffsets["Metrics history"] = y },
+                            ) {
+                                MetricsHistorySettings(
+                                    contexts = knownContexts,
+                                    settings = metricsSources,
+                                    onSet = { ctx, setting -> viewModel.setMetricsSource(ctx, setting) },
+                                )
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
                             SettingsSection(
                                 title = "Keyboard shortcuts",
                                 onLayoutTop = { y -> sectionOffsets["Keyboard shortcuts"] = y },
@@ -1654,7 +1669,7 @@ private fun DefaultNamespaceSection(
 // focus loss and on Enter.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsTextField(
+internal fun SettingsTextField(
     value: String,
     onValueChange: (String) -> Unit,
     onCommit: () -> Unit,
