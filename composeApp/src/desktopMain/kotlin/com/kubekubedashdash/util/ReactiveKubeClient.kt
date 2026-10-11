@@ -31,6 +31,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 import io.fabric8.kubernetes.api.model.DeletionPropagation
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.Node
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.Secret
@@ -97,6 +98,8 @@ class ReactiveKubeClient(
     private val connectionManager: KubeConnectionManager,
     /** Test seam: liveness-probe cadence. Production keeps the 4 s default; tests shorten it. */
     private val probeIntervalMs: Long = 4_000L,
+    /** Test seam: metrics-server poll cadence (resourceUsage, nodeUsages). Production keeps 10 s. */
+    private val metricsPollIntervalMs: Long = 10_000L,
 ) : Closeable {
 
     private val log = LoggerFactory.getLogger(ReactiveKubeClient::class.java)
@@ -1345,8 +1348,56 @@ class ReactiveKubeClient(
 
     // ── Resource Usage (polling — metrics server has no watch API) ───────────────
 
+    private val metricsUnavailable = ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
+
+    // Last outcome per metrics read ("ok", "unavailable (HTTP 404)", …), so a
+    // cluster without metrics-server logs one line rather than one per poll.
+    private val metricsReadOutcomes = ConcurrentHashMap<String, String>()
+
+    private fun noteMetricsRead(read: String, outcome: String, warn: Boolean = false) {
+        val previous = metricsReadOutcomes.put(read, outcome)
+        if (previous == outcome || (previous == null && outcome == "ok")) return
+        if (warn) log.warn("Metrics read '{}' {}", read, outcome) else log.debug("Metrics read '{}' {}", read, outcome)
+    }
+
+    /**
+     * Answers a failed metrics read, or skips the poll. Metrics that are not
+     * to be had here ([unavailable]) return, and the caller shows its empty or
+     * "Metrics server unavailable" state; any other failure throws
+     * [SkippedPoll], so the Nodes usage columns, the "Pressure only" filter,
+     * the health banner and the KPI strip keep the last sample through a blip
+     * instead of dropping out for a poll.
+     */
+    private fun answerOrSkip(read: String, e: Exception, unavailable: (Throwable) -> Boolean = ::isMetricsUnavailable) {
+        // A namespace or connection change cancelled the poll mid-request.
+        if (isInterruption(e)) throw SkippedPoll(e)
+        if (unavailable(e)) {
+            noteMetricsRead(read, "unavailable (${describeFailureShape(e)})")
+        } else {
+            noteMetricsRead(read, "failed (${describeFailureShape(e)}), poll skipped", warn = true)
+            throw SkippedPoll(e)
+        }
+    }
+
+    /**
+     * Allocatable capacity for the usage polls. A refusal (a namespace-limited
+     * account) leaves capacity unknown; any other failure skips the poll, as
+     * zero capacity would blank the KPI strip and clear every node's pressure.
+     */
+    private fun listNodesForCapacity(): List<Node> {
+        val nodes = try {
+            k8s.nodes().list().items ?: emptyList()
+        } catch (e: Exception) {
+            answerOrSkip("node list", e, unavailable = ::isForbidden)
+            return emptyList()
+        }
+        noteMetricsRead("node list", "ok")
+        return nodes
+    }
+
     val resourceUsage: StateFlow<ResourceState<ResourceUsageSummary>> = informers.namespacedPolling(
-        intervalMs = 10_000,
+        intervalMs = metricsPollIntervalMs,
+        skippedFallback = metricsUnavailable,
         fetch = { selection ->
             val ns = selection.serverNamespace
             val podMetricItems = try {
@@ -1355,9 +1406,11 @@ class ReactiveKubeClient(
                 } else {
                     k8s.top().pods().metrics().items ?: emptyList()
                 }
-            } catch (_: Exception) {
-                return@namespacedPolling ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
+            } catch (e: Exception) {
+                answerOrSkip("top pods", e)
+                return@namespacedPolling metricsUnavailable
             }
+            noteMetricsRead("top pods", "ok")
             var cpuUsed = 0L
             var memUsed = 0L
             val podUsages = mutableMapOf<String, PodUsage>()
@@ -1382,11 +1435,7 @@ class ReactiveKubeClient(
                     podUsages[podUsageKey(podNamespace, podName)] = PodUsage(podCpu, podMem, containers)
                 }
             }
-            val nodeItems = try {
-                k8s.nodes().list().items ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
+            val nodeItems = listNodesForCapacity()
             var cpuCap = 0L
             var memCap = 0L
             for (node in nodeItems) {
@@ -1401,19 +1450,17 @@ class ReactiveKubeClient(
     // ── Per-node resource usage (polling) ────────────────────────────────────────
 
     val nodeUsages: StateFlow<Map<String, NodeResourceUsage>> = informers.directPolling(
-        intervalMs = 10_000,
+        intervalMs = metricsPollIntervalMs,
         initial = emptyMap(),
         fetch = {
             val nodeMetrics = try {
                 k8s.top().nodes().metrics().items ?: emptyList()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                answerOrSkip("top nodes", e)
                 return@directPolling emptyMap()
             }
-            val nodeItems = try {
-                k8s.nodes().list().items ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
+            noteMetricsRead("top nodes", "ok")
+            val nodeItems = listNodesForCapacity()
             val capacityByName: Map<String, Pair<Long, Long>> = nodeItems
                 .associate { node ->
                     val alloc = node.status?.allocatable
