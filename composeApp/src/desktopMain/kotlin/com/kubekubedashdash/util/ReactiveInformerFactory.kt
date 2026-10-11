@@ -306,7 +306,8 @@ internal class ReactiveInformerFactory(
                         // selection that moves away and back unseen restarts nothing,
                         // and skipping this first send would leave the list on Loading.
                         val items = snapshot()
-                        log.info("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
+                        // Debug: namespace names stay out of the exported log.
+                        log.debug("Namespaced informer synced with {} items for namespace={}", items.size, nsLabel)
                         send(ResourceState.Success(items))
                         reportSuccess()
                         awaitCancellation()

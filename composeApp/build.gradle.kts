@@ -345,8 +345,9 @@ tasks.register<Test>("uiSmoke") {
 // run it; the client it talks to is built from the cluster's own kubeconfig, never from yours.
 //   ./gradlew :composeApp:k3sIntegrationTest   the assertions, then the cluster is removed
 //   ./gradlew :composeApp:k3sDevCluster        the same cluster, left up until build/k3s/stop exists
-//                                              (kubeconfig-admin.yaml and kubeconfig-viewer.yaml are
-//                                              written next to it; point -PhotRunKubeconfig at one)
+//                                              (kubeconfig-admin.yaml, kubeconfig-viewer.yaml and
+//                                              kubeconfig-viewer-ns.yaml are written next to it;
+//                                              point -PhotRunKubeconfig at one)
 // Docker settings (Colima: DOCKER_HOST, TESTCONTAINERS_*) are read from the environment of the call.
 val k3sDevMethod = "devCluster"
 val k3sOutputDir = layout.buildDirectory.dir("k3s").get().asFile
@@ -377,7 +378,7 @@ tasks.register<Test>("k3sIntegrationTest") {
 }
 tasks.register<Test>("k3sDevCluster") {
     configureK3sTask()
-    description = "Starts the K3s cluster of k3sIntegrationTest, writes build/k3s/kubeconfig-admin.yaml and kubeconfig-viewer.yaml, prints K3S READY, and keeps it up until build/k3s/stop exists (60 minutes at most)."
+    description = "Starts the K3s cluster of k3sIntegrationTest, writes build/k3s/kubeconfig-admin.yaml, kubeconfig-viewer.yaml and kubeconfig-viewer-ns.yaml, prints K3S READY, and keeps it up until build/k3s/stop exists (60 minutes at most)."
     filter { includeTestsMatching("$k3sTestClass.$k3sDevMethod") }
     systemProperty("kkdd.k3s.dev", "true")
     timeout.set(Duration.ofMinutes(70))

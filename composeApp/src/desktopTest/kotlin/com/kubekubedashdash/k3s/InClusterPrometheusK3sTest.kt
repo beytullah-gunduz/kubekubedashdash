@@ -110,9 +110,10 @@ class InClusterPrometheusK3sTest {
     }
 
     /**
-     * Starts the cluster, writes `kubeconfig-admin.yaml` and `kubeconfig-viewer.yaml` into the `k3s`
-     * directory of the module's build directory, prints `K3S READY`, and keeps the cluster up until
-     * `stop` exists next to them (or 60 minutes after the start of this method).
+     * Starts the cluster, writes `kubeconfig-admin.yaml`, `kubeconfig-viewer.yaml` and
+     * `kubeconfig-viewer-ns.yaml` into the `k3s` directory of the module's build directory, prints
+     * `K3S READY`, and keeps the cluster up until `stop` exists next to them (or 60 minutes after
+     * the start of this method).
      */
     @Test
     fun devCluster() {

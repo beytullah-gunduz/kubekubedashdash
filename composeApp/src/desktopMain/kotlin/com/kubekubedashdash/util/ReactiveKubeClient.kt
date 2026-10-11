@@ -138,7 +138,8 @@ class ReactiveKubeClient(
     val namespaceScope: StateFlow<NamespaceScope> = _namespaceScope.asStateFlow()
 
     fun setNamespaceScope(selection: NamespaceScope) {
-        log.info("Namespace selection changed to: {}", selection)
+        // Debug: the selection names namespaces, which a typed or kubeconfig value must not leak into the exported log.
+        log.debug("Namespace selection changed to: {}", selection)
         _namespaceScope.value = selection
     }
 
