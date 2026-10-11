@@ -7,6 +7,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -66,6 +67,32 @@ class GcloudAccessTokenTest {
         clock.addAndGet(GcloudAccessToken.TTL_MS + 1)
         assertEquals("fake-token-2", token.get().getOrThrow())
         assertEquals(2, fetches.get())
+    }
+
+    @Test
+    fun `a token that is not header-safe is refused without echoing it`() = runBlocking<Unit> {
+        // Two lines would make the HTTP client throw with the whole header, token included, in its message.
+        val token = tokens { Result.success("fake-token-1\nfake-token-2\n") }
+
+        val failure = assertNotNull(token.get().exceptionOrNull())
+        assertTrue("fake-token" !in failure.message.orEmpty(), "the refused value must not reach the message")
+        assertEquals(HistoryFailure.NotSignedIn, GcloudAccessToken.failureOf(failure))
+    }
+
+    @Test
+    fun `a caller cancelled mid-fetch still leaves the token for the next one`() = runBlocking<Unit> {
+        val token = tokens { n ->
+            delay(200)
+            Result.success("fake-token-$n")
+        }
+
+        val first = launch(Dispatchers.Default) { token.get() }
+        delay(50)
+        first.cancel()
+        first.join()
+
+        assertEquals("fake-token-1", token.get().getOrThrow())
+        assertEquals(1, fetches.get(), "the cancelled caller's gcloud must finish and its token be kept")
     }
 
     @Test

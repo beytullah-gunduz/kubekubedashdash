@@ -709,9 +709,9 @@ private fun CenteredNote(title: String, body: String) {
 }
 
 @Composable
-internal fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>, note: String? = null) {
+internal fun PodMetricsSection(metricsHistory: List<PodMetricsSnapshot>, note: String? = null, showTitle: Boolean = true) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        SectionLabel("Resource Usage")
+        if (showTitle) SectionLabel("Resource Usage")
         // Why these are the live charts rather than history (see PodMetricsHistorySection).
         if (note != null) {
             Text(note, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)

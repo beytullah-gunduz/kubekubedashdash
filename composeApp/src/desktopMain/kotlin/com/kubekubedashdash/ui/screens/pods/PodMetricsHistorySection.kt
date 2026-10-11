@@ -29,6 +29,7 @@ import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
 import com.kubekubedashdash.services.metricshistory.HistoryRange
 import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
+import com.kubekubedashdash.services.metricshistory.MetricsHistorySource
 import com.kubekubedashdash.services.metricshistory.NoSourceReason
 import com.kubekubedashdash.services.metricshistory.PodRef
 import com.kubekubedashdash.services.metricshistory.PodSeriesKind
@@ -44,6 +45,7 @@ import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
 import com.kubekubedashdash.ui.components.podSetHue
 import com.kubekubedashdash.util.formatMemorySize
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -213,7 +215,7 @@ internal fun PodMetricsHistorySection(
                     loaded = LoadedHistory(
                         window,
                         coroutineScope {
-                            kinds.map { k -> k to async { source.podSeries(k, podRef, window) } }
+                            kinds.map { k -> k to async { podSeriesOrFailed(source, k, podRef, window) } }
                                 .associate { (k, deferred) -> k to deferred.await() }
                         },
                     )
@@ -223,20 +225,10 @@ internal fun PodMetricsHistorySection(
         }
     }
 
-    // The live charts carry their own "Resource Usage" title, so a fallback puts its reason under
-    // that title instead of stacking a second header above it.
     when (val view = historyView(choice, loaded)) {
+        // The live charts carry their own "Resource Usage" title, so the hint goes under it.
         is HistoryView.LiveOnly -> if (liveHistory.isNotEmpty()) {
             PodMetricsSection(liveHistory, note = view.hint.ifBlank { null })
-        }
-
-        is HistoryView.SourceFailed -> if (liveHistory.isNotEmpty()) {
-            PodMetricsSection(liveHistory, note = view.message)
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                SectionLabel("Resource Usage")
-                Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-            }
         }
 
         else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -256,12 +248,29 @@ internal fun PodMetricsHistorySection(
                     BusyIndicator(Modifier.size(20.dp))
                 }
 
+                // The header stays, so a range that keeps failing can still be changed; the live
+                // charts follow without their own title.
+                is HistoryView.SourceFailed -> {
+                    Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                    if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
+                }
+
                 is HistoryView.Charts -> HistoryCharts(pod, kinds, view.loaded)
 
-                is HistoryView.LiveOnly, is HistoryView.SourceFailed -> Unit
+                is HistoryView.LiveOnly -> Unit
             }
         }
     }
+}
+
+// Whatever a source throws becomes a failed chart: an exception would end the refresh loop and
+// reach the window's handler, and its message is never shown or logged.
+private suspend fun podSeriesOrFailed(source: MetricsHistorySource, kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = try {
+    source.podSeries(kind, pod, window)
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    SeriesResult.Failed(HistoryFailure.Unavailable, "error")
 }
 
 @Composable

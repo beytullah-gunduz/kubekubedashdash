@@ -317,6 +317,27 @@ class GmpMetricsSourceTest {
     }
 
     @Test
+    fun `a gcloud timeout says so instead of blaming Managed Prometheus`() = runBlocking<Unit> {
+        val token = fakeToken { Result.failure(CliInvocationFailure(-1, "", "Timed out after 20s: gcloud auth print-access-token")) }
+
+        assertEquals(
+            SeriesResult.Failed(HistoryFailure.Unavailable, "gcloud timed out"),
+            source(token = token).podSeries(PodSeriesKind.Cpu, pod, window),
+        )
+        assertEquals(0, seen.size)
+    }
+
+    @Test
+    fun `a request the HTTP client rejects becomes a failure, never a throw`() = runBlocking<Unit> {
+        // A space makes URI.create throw IllegalArgumentException, the same type a bad header throws
+        // with the header value (the token) in its message.
+        val result = source(base = "$baseUrl/not a url").podSeries(PodSeriesKind.Cpu, pod, window)
+
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "bad request"), result)
+        assertEquals(0, seen.size)
+    }
+
+    @Test
     fun `a closed port is a network error`() = runBlocking<Unit> {
         val closed = HttpServer.create(InetSocketAddress(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), 0), 0)
         val closedBase = "http://127.0.0.1:${closed.address.port}"

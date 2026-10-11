@@ -2,8 +2,10 @@ package com.kubekubedashdash.services.metricshistory
 
 import com.kubekubedashdash.util.CliInvocationFailure
 import com.kubekubedashdash.util.CliRunner
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** The bearer token for Managed Prometheus, from gcloud's signed-in account. Never logged, stored or shown. */
 class GcloudAccessToken internal constructor(
@@ -37,11 +39,15 @@ class GcloudAccessToken internal constructor(
 
     private suspend fun fetchLocked(): Result<String> {
         lastFailure?.let { if (nowMs() - failedAtMs < FAILURE_TTL_MS) return Result.failure(it) }
-        val fetched = fetch().map { it.trim() }
+        // The token serves every panel of every cluster tab: a panel closed mid-fetch must not
+        // kill the gcloud the next caller is waiting on. CliRunner's timeout still bounds it.
+        val fetched = withContext(NonCancellable) { fetch() }.map { it.trim() }
         val token = fetched.getOrNull()
-        if (token.isNullOrEmpty()) {
+        if (token.isNullOrEmpty() || !TOKEN_RX.matches(token)) {
             cached = null
-            val failure = fetched.exceptionOrNull() ?: CliInvocationFailure(0, "", "gcloud printed no access token")
+            // Never echoes what gcloud printed: an unexpected shape could still be a credential.
+            val failure = fetched.exceptionOrNull()
+                ?: CliInvocationFailure(0, "", if (token.isNullOrEmpty()) "gcloud printed no access token" else "gcloud printed an unexpected access token")
             lastFailure = failure
             failedAtMs = nowMs()
             return Result.failure(failure)
@@ -58,6 +64,10 @@ class GcloudAccessToken internal constructor(
 
         // Shorter than the 30 s chart refresh, so a sign-in is picked up on the next one.
         const val FAILURE_TTL_MS = 10_000L
+
+        // OAuth access tokens are header-safe characters only; anything else (a second line,
+        // a space) would make the HTTP client throw with the token in its message.
+        private val TOKEN_RX = Regex("[A-Za-z0-9._~+/=-]+")
 
         val shared: GcloudAccessToken by lazy {
             GcloudAccessToken(fetch = {

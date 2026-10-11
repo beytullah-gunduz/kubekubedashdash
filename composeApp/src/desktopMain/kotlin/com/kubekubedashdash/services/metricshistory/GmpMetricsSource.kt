@@ -62,8 +62,14 @@ class GmpMetricsSource internal constructor(
         return SeriesResult.Failed(failure, detail)
     }
 
+    // A gcloud timeout is not Managed Prometheus failing to answer; the detail says which it was.
+    private fun tokenFailed(error: Throwable): SeriesResult.Failed {
+        val failure = GcloudAccessToken.failureOf(error)
+        return failed(failure, if (failure == HistoryFailure.Unavailable) "gcloud timed out" else "")
+    }
+
     private suspend fun post(url: String, form: List<Pair<String, String>>): PostResult {
-        var bearer = token.get().getOrElse { return PostResult.Failed(failed(GcloudAccessToken.failureOf(it))) }
+        var bearer = token.get().getOrElse { return PostResult.Failed(tokenFailed(it)) }
         var retried = false
         while (true) {
             val response = try {
@@ -74,6 +80,10 @@ class GmpMetricsSource internal constructor(
                 return PostResult.Failed(failed(HistoryFailure.Unavailable, "timeout"))
             } catch (_: IOException) {
                 return PostResult.Failed(failed(HistoryFailure.Unavailable, "network error"))
+            } catch (_: IllegalArgumentException) {
+                // HttpRequest rejects a malformed URL or header with the offending value in the
+                // message, which can be the bearer token: the message is dropped, never logged.
+                return PostResult.Failed(failed(HistoryFailure.Unavailable, "bad request"))
             }
             val status = response.status
             when (status) {
@@ -82,7 +92,7 @@ class GmpMetricsSource internal constructor(
                 401 -> {
                     if (retried) return PostResult.Failed(failed(HistoryFailure.NotSignedIn, "HTTP 401"))
                     retried = true
-                    bearer = token.refresh(stale = bearer).getOrElse { return PostResult.Failed(failed(GcloudAccessToken.failureOf(it))) }
+                    bearer = token.refresh(stale = bearer).getOrElse { return PostResult.Failed(tokenFailed(it)) }
                 }
 
                 403, 404 -> return PostResult.Failed(failed(HistoryFailure.Forbidden, "HTTP $status"))

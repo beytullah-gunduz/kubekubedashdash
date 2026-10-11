@@ -252,9 +252,34 @@ class PodMetricsHistorySectionUiTest {
         onNodeWithText("Managed Prometheus didn't answer (HTTP 503)", substring = true).assertExists()
         onNodeWithText("CPU throttling").assertDoesNotExist()
         onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
-        // The reason sits under the live charts' own title, not under a second header.
+        // One title: the live charts follow the header without their own.
         onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
-        onNodeWithText("Fake source").assertDoesNotExist()
+        // The header stays, so a range that keeps failing can still be changed.
+        onNodeWithText("Fake source").assertExists()
+        onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `a source that throws fails its chart without ending the section or showing the message`() = runComposeUiTest {
+        val source = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
+                if (kind == PodSeriesKind.Cpu) throw IllegalArgumentException("invalid header value: \"Bearer fake-token-1\"")
+                return SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, 2.0)))))
+            }
+        }
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText("Not answering (error)").assertExists()
+        onNodeWithText("Memory").assertExists()
+        onAllNodesWithText("fake-token", substring = true).assertCountEquals(0)
     }
 
     @Test
