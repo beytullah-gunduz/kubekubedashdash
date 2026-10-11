@@ -129,7 +129,7 @@ class MetricsHistorySettingsTest {
     }
 
     @Test
-    fun `Off, Managed Prometheus and the demo ignore what the search found`() {
+    fun `Off and Managed Prometheus ignore what the search found`() {
         val found = detected(DetectionState.Found(FOUND))
         assertEquals(
             "Off: pod charts show live metrics-server data only.",
@@ -139,7 +139,6 @@ class MetricsHistorySettingsTest {
             "Google Managed Prometheus · example-project · us-central1 · example-cluster",
             metricsSourceStatus(RENAMED_CONTEXT, mapOf(RENAMED_CONTEXT to GKE_SETTING), found),
         )
-        assertEquals("Demo data", metricsSourceStatus("demo-cluster (mock)", emptyMap(), mapOf("demo-cluster (mock)" to DetectionState.Found(FOUND))))
     }
 
     @Test
@@ -209,17 +208,34 @@ class MetricsHistorySettingsTest {
     }
 
     @Test
-    fun `the demo context is Demo data`() {
-        assertEquals("Demo data", metricsSourceStatus("demo-cluster (mock)", emptyMap(), noDetection))
+    fun `the demo context is an ordinary Auto row that follows the search`() {
+        val demo = "demo-cluster (mock)"
+        val operated = FOUND.copy(service = "prometheus-operated", port = "web")
+        assertEquals(
+            "Auto → looks for a Prometheus service when a pod's charts open.",
+            metricsSourceStatus(demo, emptyMap(), noDetection),
+        )
+        assertEquals(
+            "Auto → searching this cluster for a Prometheus service…",
+            metricsSourceStatus(demo, emptyMap(), mapOf(demo to DetectionState.Searching)),
+        )
+        assertEquals(
+            "Auto → in-cluster Prometheus · monitoring/prometheus-operated:web",
+            metricsSourceStatus(demo, emptyMap(), mapOf(demo to DetectionState.Found(operated))),
+        )
     }
 
     @Test
     fun `Off wins on the demo context too, and a minted demo instance reads its shared row`() {
-        val settings = mapOf("demo-cluster (mock)" to MetricsSourceSetting(mode = MetricsSourceMode.OFF))
+        val demo = "demo-cluster (mock)"
+        val settings = mapOf(demo to MetricsSourceSetting(mode = MetricsSourceMode.OFF))
         val off = "Off: pod charts show live metrics-server data only."
-        assertEquals(off, metricsSourceStatus("demo-cluster (mock)", settings, noDetection))
-        assertEquals(off, metricsSourceStatus("demo-cluster (mock) #2", settings, noDetection))
-        assertEquals("Demo data", metricsSourceStatus("demo-cluster (mock) #2", emptyMap(), noDetection))
+        assertEquals(off, metricsSourceStatus(demo, settings, noDetection))
+        assertEquals(off, metricsSourceStatus("$demo #2", settings, noDetection))
+        assertEquals(
+            "Auto → in-cluster Prometheus · monitoring/prometheus-server:80",
+            metricsSourceStatus("$demo #2", emptyMap(), mapOf(demo to DetectionState.Found(FOUND))),
+        )
     }
 }
 
@@ -646,10 +662,18 @@ class MetricsHistorySettingsUiTest {
             "gmp-context" to GKE_SETTING,
             "in-cluster-context" to inClusterSetting,
         )
-        render(Harness(settings), GKE_CONTEXT, "demo-cluster (mock)", "off-context", "gmp-context", "in-cluster-context")
+        render(Harness(settings), GKE_CONTEXT, "off-context", "gmp-context", "in-cluster-context")
 
         onNodeWithText("Search again").assertDoesNotExist()
-        onNodeWithText("Demo data").assertExists()
+    }
+
+    @Test
+    fun `Search again is offered on the demo row, which Auto searches like any context`() = runComposeUiTest {
+        val demo = DemoContext.MOCK_CONTEXT_NAME
+        render(Harness(), demo)
+
+        onNodeWithText("Search again").assertExists()
+        onNodeWithText("Auto → looks for a Prometheus service when a pod's charts open.").assertExists()
     }
 
     @Test

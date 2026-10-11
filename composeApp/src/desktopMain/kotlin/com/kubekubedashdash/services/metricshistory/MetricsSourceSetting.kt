@@ -53,8 +53,6 @@ sealed interface DetectionState {
 }
 
 sealed interface SourceChoice {
-    data object Demo : SourceChoice
-
     data class Gmp(val target: GmpTarget, val auto: Boolean) : SourceChoice
 
     data class InCluster(val target: InClusterTarget, val auto: Boolean) : SourceChoice
@@ -68,22 +66,21 @@ sealed interface SourceChoice {
 enum class NoSourceReason { NotConnected, Disabled, IncompleteSetting, NothingFound, CannotSearch, SearchFailed }
 
 /**
- * Which source answers for [context]. Off wins over everything, the demo cluster included.
+ * Which source answers for [context]. Off wins over everything.
  * Auto is GMP for gcloud's gke_<project>_<location>_<cluster> context names and otherwise
  * follows [detection], which is what InClusterDetection holds for this cluster (null: nothing
- * yet). Every manual field is validated, like the GKE import's, so a free-text setting cannot
+ * yet); the demo cluster is such a context, its Prometheus a fake behind the mock server.
+ * Every manual field is validated, like the GKE import's, so a free-text setting cannot
  * reach a URL or a PromQL string unchecked.
  */
 fun resolveMetricsSource(
     context: String?,
-    isDemo: Boolean,
     settings: Map<String, MetricsSourceSetting>,
     detection: DetectionState?,
 ): SourceChoice {
     if (context == null) return SourceChoice.None(NoSourceReason.NotConnected)
     val setting = settings[DemoContext.preferenceKey(context)] ?: MetricsSourceSetting()
     if (setting.mode == MetricsSourceMode.OFF) return SourceChoice.None(NoSourceReason.Disabled)
-    if (isDemo || DemoContext.isMockContext(context)) return SourceChoice.Demo
     return when (setting.mode) {
         MetricsSourceMode.GMP ->
             validTarget(setting.project.trim(), setting.location.trim(), setting.cluster.trim())

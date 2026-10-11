@@ -170,10 +170,8 @@ class PodMetricsHistorySectionUiTest {
         clientFor: suspend (String) -> KubernetesClient? = { dummyClient() },
     ) = MetricsHistoryService(
         currentContext = { CONTEXT },
-        isDemo = { false },
         settingsFlow = { settings },
         gmpSourceFor = { source },
-        demoSource = source,
         detection = detection,
         clientFor = clientFor,
         nowMs = clock::get,

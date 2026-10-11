@@ -2,7 +2,7 @@ package com.kubekubedashdash.services.metricshistory
 
 import com.kubekubedashdash.models.ContainerResources
 
-/** The pod a history query is about; [containers] feeds the demo source and the reference lines. */
+/** The pod a history query is about; [containers] feeds the demo cluster's generated series and the reference lines. */
 data class PodRef(val namespace: String, val name: String, val containers: List<ContainerResources> = emptyList())
 
 enum class PodSeriesKind { Cpu, Memory, NetworkRx, NetworkTx, Throttling }

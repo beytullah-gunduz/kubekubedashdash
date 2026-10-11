@@ -7,7 +7,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Which source answers for a context: Off beats everything, the demo is never GMP, and every field is validated. */
+/** Which source answers for a context: Off beats everything, the demo resolves like any other context, and every field is validated. */
 class ResolveMetricsSourceTest {
 
     private var previousCloudClis: String? = null
@@ -34,10 +34,9 @@ class ResolveMetricsSourceTest {
 
     private fun resolve(
         context: String?,
-        isDemo: Boolean = false,
         settings: Map<String, MetricsSourceSetting> = emptyMap(),
         detection: DetectionState? = null,
-    ) = resolveMetricsSource(context, isDemo, settings, detection)
+    ) = resolveMetricsSource(context, settings, detection)
 
     private fun gmp(project: String = "example-project", location: String = "us-central1", cluster: String = "example-cluster") = MetricsSourceSetting(MetricsSourceMode.GMP, project, location, cluster)
 
@@ -182,32 +181,32 @@ class ResolveMetricsSourceTest {
     }
 
     @Test
-    fun `a demo context is the demo source`() {
-        assertEquals(SourceChoice.Demo, resolve("demo-cluster (mock) #2"))
-        assertEquals(SourceChoice.Demo, resolve(DemoContext.MOCK_CONTEXT_NAME))
+    fun `a demo context waits for the detection and follows it like any context that is not a gke name`() {
+        for (context in listOf(DemoContext.MOCK_CONTEXT_NAME, "demo-cluster (mock) #2")) {
+            assertEquals(SourceChoice.Detecting, resolve(context), context)
+            assertEquals(SourceChoice.InCluster(found, auto = true), resolve(context, detection = DetectionState.Found(found)), context)
+            assertEquals(SourceChoice.None(NoSourceReason.NothingFound), resolve(context, detection = DetectionState.NothingFound(atMs = 42)), context)
+        }
     }
 
     @Test
-    fun `a connection that is the demo is the demo source whatever the context is called`() {
-        assertEquals(SourceChoice.Demo, resolve("example-context", isDemo = true))
-        assertEquals(SourceChoice.Demo, resolve("example-context", isDemo = true, detection = DetectionState.Found(found)))
-    }
-
-    @Test
-    fun `a manual target does not turn the demo into Managed Prometheus or an in-cluster source`() {
-        val settings = mapOf(DemoContext.MOCK_CONTEXT_NAME to gmp())
+    fun `a manual target stored under the demo row applies to every minted demo label`() {
+        val gmpSettings = mapOf(DemoContext.MOCK_CONTEXT_NAME to gmp())
         val inClusterSettings = mapOf(DemoContext.MOCK_CONTEXT_NAME to inCluster())
+        val typed = InClusterTarget("monitoring", "prometheus-server", "80", https = false, pathPrefix = "")
 
-        assertEquals(SourceChoice.Demo, resolve("demo-cluster (mock) #2", isDemo = true, settings = settings))
-        assertEquals(SourceChoice.Demo, resolve("demo-cluster (mock) #2", isDemo = true, settings = inClusterSettings))
+        for (context in listOf(DemoContext.MOCK_CONTEXT_NAME, "demo-cluster (mock) #2")) {
+            assertEquals(SourceChoice.Gmp(triple, auto = false), resolve(context, settings = gmpSettings), context)
+            assertEquals(SourceChoice.InCluster(typed, auto = false), resolve(context, settings = inClusterSettings), context)
+        }
     }
 
     @Test
     fun `off stored under the demo row applies to every minted demo label`() {
         val settings = mapOf(DemoContext.MOCK_CONTEXT_NAME to MetricsSourceSetting(MetricsSourceMode.OFF))
 
-        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve("demo-cluster (mock) #2", isDemo = true, settings = settings))
-        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve(DemoContext.MOCK_CONTEXT_NAME, isDemo = true, settings = settings))
+        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve("demo-cluster (mock) #2", settings = settings))
+        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve(DemoContext.MOCK_CONTEXT_NAME, settings = settings, detection = DetectionState.Found(found)))
     }
 
     @Test

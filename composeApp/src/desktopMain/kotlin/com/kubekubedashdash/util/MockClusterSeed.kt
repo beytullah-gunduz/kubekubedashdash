@@ -225,6 +225,29 @@ internal fun seedResources(client: KubernetesClient) {
             .build(),
     ).create()
 
+    // The Prometheus Operator's governing Services. The first answers queries through DemoPrometheusDispatcher
+    // (headless, as the operator creates it); the second is an agent's, which refuses them, so detection has a decoy to skip.
+    listOf("prometheus-operated", "prometheus-agent-operated").forEach { name ->
+        client.services().inNamespace("monitoring").resource(
+            ServiceBuilder()
+                .withNewMetadata()
+                .withName(name)
+                .withNamespace("monitoring")
+                .withCreationTimestamp(MockClusterProvider.minutesAgo(1440))
+                .addToLabels("operated-prometheus", "true")
+                .endMetadata()
+                .withSpec(
+                    ServiceSpecBuilder()
+                        .withType("ClusterIP")
+                        .withClusterIP("None")
+                        .addToSelector("app.kubernetes.io/name", "prometheus")
+                        .withPorts(ServicePortBuilder().withName("web").withPort(9090).withNewTargetPort(9090).withProtocol("TCP").build())
+                        .build(),
+                )
+                .build(),
+        ).create()
+    }
+
     // ── ConfigMap ───────────────────────────────────────────────────────────
     client.configMaps().inNamespace("default").resource(
         ConfigMapBuilder()

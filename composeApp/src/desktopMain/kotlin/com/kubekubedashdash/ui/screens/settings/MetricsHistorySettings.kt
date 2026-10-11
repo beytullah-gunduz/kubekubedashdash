@@ -54,9 +54,7 @@ internal fun metricsSourceStatus(
     detection: Map<String, DetectionState>,
 ): String {
     val state = detection[DemoContext.preferenceKey(context)]
-    return when (val choice = resolveMetricsSource(context, DemoContext.isMockContext(context), settings, state)) {
-        SourceChoice.Demo -> "Demo data"
-
+    return when (val choice = resolveMetricsSource(context, settings, state)) {
         is SourceChoice.Gmp ->
             (if (choice.auto) "Auto → " else "") +
                 "Google Managed Prometheus · ${choice.target.project} · ${choice.target.location} · ${choice.target.cluster}"
@@ -234,9 +232,9 @@ private fun MetricsHistoryContextRow(
     val stored = settings[key] ?: MetricsSourceSetting()
     val parsed = GkeClusterDiscoverer.parseGkeContext(ctx)
     val found = (detection[key] as? DetectionState.Found)?.target
-    // Auto searches only where it has nothing better: a gke_ context goes to Managed Prometheus, the demo to its own data.
+    // Auto searches only where it has nothing better: a gke_ context goes to Managed Prometheus.
     val autoSearches = stored.mode == MetricsSourceMode.AUTO &&
-        resolveMetricsSource(ctx, DemoContext.isMockContext(ctx), settings, detection[key]).let { it !is SourceChoice.Gmp && it != SourceChoice.Demo }
+        resolveMetricsSource(ctx, settings, detection[key]) !is SourceChoice.Gmp
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Text(

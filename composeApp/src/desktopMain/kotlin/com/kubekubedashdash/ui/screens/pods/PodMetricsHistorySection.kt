@@ -249,8 +249,8 @@ internal fun usageReferences(pod: PodInfo, series: List<ChartSeries>, kind: PodS
 }
 
 /**
- * Pod resource usage over time from the cluster's metrics-history source (Managed Prometheus, a
- * Prometheus behind a Service, or the demo's simulator), refreshed every [refreshMs]. Without a
+ * Pod resource usage over time from the cluster's metrics-history source (Managed Prometheus or a
+ * Prometheus behind a Service, the demo cluster's included), refreshed every [refreshMs]. Without a
  * source, while Auto searches or the first fetch is out, or when CPU and memory have nothing to
  * draw, the metrics-server charts of the last few minutes stand in, under a line that says why
  * (none for a cluster where Auto found no Prometheus).

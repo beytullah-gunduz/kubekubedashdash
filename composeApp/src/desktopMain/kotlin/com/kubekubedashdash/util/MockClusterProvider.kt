@@ -165,12 +165,15 @@ object MockClusterProvider {
         // every 4 s, so it must land on KubernetesMockServer.onStart()'s
         // expectation instead — and report a version that matches the
         // kubelets buildNode() seeds.
+        //
+        // The service-proxy paths belong to the demo's fake Prometheus: the CRUD
+        // dispatcher would answer them with the whole store.
         val responses = HashMap<ServerRequest, Queue<ServerResponse>>()
         val server = KubernetesMockServer(
             Context(),
             MockWebServer(),
             responses,
-            KubernetesMixedDispatcher(responses),
+            DemoPrometheusDispatcher(KubernetesMixedDispatcher(responses)),
             false,
             VersionInfo.Builder().withMajor("1").withMinor("30").withGitVersion("v1.30.2").build(),
         )

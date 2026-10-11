@@ -23,7 +23,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * The service re-resolves the source from the live context, demo flag, settings and detection state
+ * The service re-resolves the source from the live context, settings and detection state
  * on every call, hands out one in-cluster source per cluster and target, and shares the access review.
  */
 class MetricsHistoryServiceTest {
@@ -61,12 +61,10 @@ class MetricsHistoryServiceTest {
     private val monitoring = InClusterTarget("monitoring", "prometheus-operated", "web", https = false, pathPrefix = "")
     private val clock = AtomicLong(1_000_000)
     private var context: String? = "example-context"
-    private var demo = false
     private val settings = MutableStateFlow<Map<String, MetricsSourceSetting>>(emptyMap())
     private var settingsReads = 0
     private val requestedTargets = mutableListOf<GmpTarget>()
     private val fakeGmp = FakeSource("fake gmp")
-    private val fakeDemo = FakeSource("fake demo")
     private val clientRequests = CopyOnWriteArrayList<String>()
     private val searches = AtomicInteger()
     private var searchResult: () -> DetectionState = { DetectionState.NothingFound(clock.get()) }
@@ -79,7 +77,6 @@ class MetricsHistoryServiceTest {
 
     private val service = MetricsHistoryService(
         currentContext = { context },
-        isDemo = { demo },
         settingsFlow = {
             settingsReads++
             settings
@@ -88,7 +85,6 @@ class MetricsHistoryServiceTest {
             requestedTargets.add(target)
             fakeGmp
         },
-        demoSource = fakeDemo,
         detection = detection,
         clientFor = { name ->
             clientRequests += name
@@ -122,13 +118,19 @@ class MetricsHistoryServiceTest {
     }
 
     @Test
-    fun `the choice follows the demo flag`() {
-        demo = true
-        assertEquals(SourceChoice.Demo, service.choice())
+    fun `a demo context resolves through detection under the shared demo key, and the search gets its own label`() = runBlocking<Unit> {
+        context = "demo-cluster (mock) #2"
+        searchResult = { DetectionState.Found(monitoring) }
+        assertEquals(SourceChoice.Detecting, service.choice())
 
-        demo = false
+        service.ensureDetected()
+
+        assertEquals(SourceChoice.InCluster(monitoring, auto = true), service.choice())
+        assertEquals(mapOf(DemoContext.MOCK_CONTEXT_NAME to DetectionState.Found(monitoring)), service.detectionState.value)
+        assertEquals(listOf("demo-cluster (mock) #2"), clientRequests.toList())
+
         context = DemoContext.MOCK_CONTEXT_NAME
-        assertEquals(SourceChoice.Demo, service.choice())
+        assertEquals(SourceChoice.InCluster(monitoring, auto = true), service.choice(), "another demo instance shares the answer")
     }
 
     @Test
@@ -194,14 +196,6 @@ class MetricsHistoryServiceTest {
         service.ensureDetected()
 
         context = "example-context"
-        demo = true
-        service.ensureDetected()
-        demo = false
-
-        context = DemoContext.MOCK_CONTEXT_NAME
-        service.ensureDetected()
-
-        context = "example-context"
         settings.value = mapOf(key to MetricsSourceSetting(MetricsSourceMode.OFF))
         service.ensureDetected()
         settings.value = mapOf(key to MetricsSourceSetting(MetricsSourceMode.GMP, "example-project", "us-central1", "example-cluster"))
@@ -234,10 +228,8 @@ class MetricsHistoryServiceTest {
         }
         val own = MetricsHistoryService(
             currentContext = { context },
-            isDemo = { demo },
             settingsFlow = { settings },
             gmpSourceFor = { fakeGmp },
-            demoSource = fakeDemo,
             detection = capturing,
             clientFor = { name ->
                 clientRequests += name
@@ -254,9 +246,7 @@ class MetricsHistoryServiceTest {
     // ── sources ─────────────────────────────────────────────────────────────────
 
     @Test
-    fun `a source is picked for the demo, for a gmp target and not at all for none or detecting`() {
-        assertSame(fakeDemo, service.sourceFor(SourceChoice.Demo))
-
+    fun `a source is picked for a gmp target and not at all for none or detecting`() {
         val target = GmpTarget("example-project", "us-central1", "example-cluster")
         assertSame(fakeGmp, service.sourceFor(SourceChoice.Gmp(target, auto = true)))
         assertEquals(listOf(target), requestedTargets)

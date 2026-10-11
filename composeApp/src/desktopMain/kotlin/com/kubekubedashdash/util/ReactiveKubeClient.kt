@@ -186,7 +186,6 @@ class ReactiveKubeClient(
     // in-place cluster switch never queries the previous cluster.
     val metricsHistory: MetricsHistoryService = MetricsHistoryService(
         currentContext = { connectionManager.connectedContextOrNull() },
-        isDemo = { connectionManager.isDemo },
         detection = InClusterDetection.shared,
         // clientIfConnectedTo takes the connect lock, which a connect in flight holds.
         clientFor = { context -> withContext(Dispatchers.IO) { connectionManager.clientIfConnectedTo(context) } },

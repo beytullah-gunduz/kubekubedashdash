@@ -101,7 +101,7 @@ class PodMetricsHistoryViewTest {
     @Test
     fun `a source with nothing fetched yet is loading`() {
         assertEquals(HistoryView.Loading, historyView(gmp, null))
-        assertEquals(HistoryView.Loading, historyView(SourceChoice.Demo, null))
+        assertEquals(HistoryView.Loading, historyView(detected, null))
     }
 
     @Test
@@ -289,10 +289,10 @@ class PodMetricsHistoryViewTest {
     }
 
     @Test
-    fun `a failure without a Google target gets the generic text`() {
+    fun `a failure without a target gets the generic text`() {
         assertEquals(
             "Metrics history unavailable (Unavailable).",
-            failureMessage(SourceChoice.Demo, SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503")),
+            failureMessage(SourceChoice.Detecting, SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503")),
         )
     }
 

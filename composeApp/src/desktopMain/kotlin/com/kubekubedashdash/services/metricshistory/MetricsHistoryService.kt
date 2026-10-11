@@ -14,25 +14,20 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class MetricsHistoryService internal constructor(
     private val currentContext: () -> String?,
-    private val isDemo: () -> Boolean,
     settingsFlow: () -> StateFlow<Map<String, MetricsSourceSetting>>,
     private val gmpSourceFor: (GmpTarget) -> MetricsHistorySource,
-    private val demoSource: MetricsHistorySource,
     private val detection: InClusterDetection,
     private val clientFor: suspend (String) -> KubernetesClient?,
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
     constructor(
         currentContext: () -> String?,
-        isDemo: () -> Boolean,
         detection: InClusterDetection,
         clientFor: suspend (String) -> KubernetesClient?,
     ) : this(
         currentContext = currentContext,
-        isDemo = isDemo,
         settingsFlow = { PreferenceRepository.metricsSourceByContext },
         gmpSourceFor = { GmpMetricsSource.forTarget(it) },
-        demoSource = DemoMetricsSource,
         detection = detection,
         clientFor = clientFor,
     )
@@ -55,7 +50,6 @@ class MetricsHistoryService internal constructor(
 
     private fun choiceFor(context: String?): SourceChoice = resolveMetricsSource(
         context = context,
-        isDemo = isDemo(),
         settings = settings.value,
         detection = context?.let { detection.current(DemoContext.preferenceKey(it)) },
     )
@@ -73,7 +67,6 @@ class MetricsHistoryService internal constructor(
     }
 
     fun sourceFor(choice: SourceChoice): MetricsHistorySource? = when (choice) {
-        SourceChoice.Demo -> demoSource
         is SourceChoice.Gmp -> gmpSourceFor(choice.target)
         is SourceChoice.InCluster -> inClusterSourceFor(choice)
         SourceChoice.Detecting, is SourceChoice.None -> null
