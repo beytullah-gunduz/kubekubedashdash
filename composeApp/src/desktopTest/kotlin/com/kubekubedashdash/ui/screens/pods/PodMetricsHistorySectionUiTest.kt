@@ -22,6 +22,7 @@ import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
+import com.kubekubedashdash.services.metricshistory.InClusterDetection
 import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
 import com.kubekubedashdash.services.metricshistory.MetricsHistorySource
 import com.kubekubedashdash.services.metricshistory.MetricsSourceMode
@@ -122,6 +123,8 @@ class PodMetricsHistorySectionUiTest {
         settingsFlow = { settings },
         gmpSourceFor = { source },
         demoSource = source,
+        detection = InClusterDetection(),
+        clientFor = { null },
     )
 
     private fun podNamed(

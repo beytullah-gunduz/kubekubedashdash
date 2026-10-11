@@ -1,13 +1,18 @@
 package com.kubekubedashdash.services.metricshistory
 
-/** The PromQL strings the Managed Prometheus source sends. */
+/** The PromQL strings the history sources send: Managed Prometheus (gmp*) and a Prometheus behind a Service (inCluster*). */
 internal object PromQl {
     const val MIN_RATE_WINDOW_SEC = 120L
+
+    // The prometheus chart scrapes every 60 s by default and rate() needs two samples in its window.
+    const val MIN_IN_CLUSTER_RATE_WINDOW_SEC = 240L
 
     /** PromQL string-literal escaping. Kubernetes names never need it; free-text settings might. */
     fun escape(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
 
     fun rateWindowSec(stepSec: Long): Long = maxOf(stepSec, MIN_RATE_WINDOW_SEC)
+
+    fun inClusterRateWindowSec(stepSec: Long): Long = maxOf(stepSec, MIN_IN_CLUSTER_RATE_WINDOW_SEC)
 
     // location as well as cluster: one metrics scope can hold two clusters of the same name.
     fun gmpPodSelector(target: GmpTarget, pod: PodRef): String = "cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\"," +
@@ -37,4 +42,29 @@ internal object PromQl {
     }
 
     fun gmpProbeQuery(target: GmpTarget): String = "count(container_cpu_usage_seconds_total{cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\"})"
+
+    fun inClusterPodSelector(pod: PodRef): String = "namespace=\"${escape(pod.namespace)}\",pod=\"${escape(pod.name)}\""
+
+    // Same shapes as the GMP queries without the cluster and location matchers, over a longer rate window.
+    fun inClusterPodQuery(kind: PodSeriesKind, pod: PodRef, stepSec: Long): String {
+        val s = inClusterPodSelector(pod)
+        val c = "$s,container!=\"\",container!=\"POD\""
+        val w = "${inClusterRateWindowSec(stepSec)}s"
+        return when (kind) {
+            PodSeriesKind.Cpu -> "sum by (container) (rate(container_cpu_usage_seconds_total{$c}[$w]))"
+
+            PodSeriesKind.Memory -> "max by (container) (container_memory_working_set_bytes{$c})"
+
+            // The network counters sit on the sandbox series, which carry an empty or POD container label: no container filter.
+            PodSeriesKind.NetworkRx -> "sum(max by (interface) (rate(container_network_receive_bytes_total{$s}[$w])))"
+
+            PodSeriesKind.NetworkTx -> "sum(max by (interface) (rate(container_network_transmit_bytes_total{$s}[$w])))"
+
+            PodSeriesKind.Throttling ->
+                "sum by (container) (rate(container_cpu_cfs_throttled_periods_total{$c}[$w])) / " +
+                    "sum by (container) (rate(container_cpu_cfs_periods_total{$c}[$w]))"
+        }
+    }
+
+    fun inClusterProbeQuery(): String = "count(container_cpu_usage_seconds_total)"
 }

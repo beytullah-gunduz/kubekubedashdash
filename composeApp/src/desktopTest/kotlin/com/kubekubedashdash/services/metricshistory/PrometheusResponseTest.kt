@@ -6,7 +6,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Reading the Prometheus HTTP API's JSON: what is kept, what is dropped and what counts as unreadable. */
 class PrometheusResponseTest {
@@ -156,5 +158,32 @@ class PrometheusResponseTest {
         assertNull(PrometheusResponse.errorTypeOf("not json"))
         assertNull(PrometheusResponse.errorTypeOf("[]"))
         assertNull(PrometheusResponse.errorTypeOf(""))
+    }
+
+    @Test
+    fun `a success with a scalar or a vector is a queryable probe answer`() {
+        assertTrue(PrometheusResponse.isQueryableProbe("""{"status":"success","data":{"resultType":"scalar","result":[1700000000,"1"]}}"""))
+        assertTrue(PrometheusResponse.isQueryableProbe(vector("""{"metric":{},"value":[1700000000,"1"]}""")))
+        assertTrue(PrometheusResponse.isQueryableProbe(vector()))
+    }
+
+    @Test
+    fun `anything else is not a queryable probe answer`() {
+        for (body in listOf(
+            matrix(),
+            """{"status":"success","data":{"resultType":"string","result":[1,"x"]}}""",
+            """{"status":"error","errorType":"execution","error":"unavailable with Prometheus Agent"}""",
+            """{"status":"success"}""",
+            """{"status":"success","data":[]}""",
+            """{"status":"success","data":{"resultType":7}}""",
+            """{"status":"success","data":{"resultType":null}}""",
+            """{"status":"fail","data":{"resultType":"scalar"}}""",
+            """{"kind":"Status","status":"Failure","code":503}""",
+            "<html>login</html>",
+            "[]",
+            "",
+        )) {
+            assertFalse(PrometheusResponse.isQueryableProbe(body), body)
+        }
     }
 }

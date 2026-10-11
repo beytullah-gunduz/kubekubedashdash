@@ -27,6 +27,7 @@ import com.kubekubedashdash.services.LogStreamOptions
 import com.kubekubedashdash.services.logcapture.CapturePodMapper
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
 import com.kubekubedashdash.services.logcapture.LogQuery
+import com.kubekubedashdash.services.metricshistory.InClusterDetection
 import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
 import io.fabric8.kubernetes.api.model.ConfigMap
 import io.fabric8.kubernetes.api.model.DeletionPropagation
@@ -87,6 +88,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.io.Closeable
@@ -185,6 +187,9 @@ class ReactiveKubeClient(
     val metricsHistory: MetricsHistoryService = MetricsHistoryService(
         currentContext = { connectionManager.connectedContextOrNull() },
         isDemo = { connectionManager.isDemo },
+        detection = InClusterDetection.shared,
+        // clientIfConnectedTo takes the connect lock, which a connect in flight holds.
+        clientFor = { context -> withContext(Dispatchers.IO) { connectionManager.clientIfConnectedTo(context) } },
     )
 
     // ── Mapping: Pods ───────────────────────────────────────────────────────────

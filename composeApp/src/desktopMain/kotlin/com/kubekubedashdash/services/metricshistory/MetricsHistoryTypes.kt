@@ -40,7 +40,23 @@ private fun ceilDiv(a: Long, b: Long): Long = (a + b - 1) / b
 
 private fun ceilToMultiple(value: Long, multiple: Long): Long = ceilDiv(value, multiple) * multiple
 
-enum class HistoryFailure { GcloudUnavailable, NotSignedIn, Forbidden, NoContainerMetrics, BadQuery, Unavailable }
+enum class HistoryFailure {
+    GcloudUnavailable,
+    NotSignedIn,
+    Forbidden,
+    NoContainerMetrics,
+    BadQuery,
+    Unavailable,
+
+    /** The role cannot GET services/proxy in the Prometheus namespace. */
+    NoProxyAccess,
+
+    /** The API server does not know the Service. */
+    ServiceGone,
+
+    /** The Service exists but the Prometheus API is not at the configured path. */
+    WrongPath,
+}
 
 sealed interface SeriesResult {
     data class Ok(val series: List<Series>) : SeriesResult

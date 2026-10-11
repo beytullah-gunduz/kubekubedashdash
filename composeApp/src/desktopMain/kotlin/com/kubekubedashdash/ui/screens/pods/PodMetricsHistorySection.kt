@@ -150,6 +150,13 @@ internal fun failureMessage(choice: SourceChoice, failed: SeriesResult.Failed): 
 
         HistoryFailure.Unavailable ->
             "Managed Prometheus didn't answer (${failed.detail}). Retrying every 30 s; showing live metrics-server data."
+
+        HistoryFailure.NoProxyAccess ->
+            "Your Kubernetes role can't reach Prometheus through the API server. Showing live metrics-server data."
+
+        HistoryFailure.ServiceGone -> "The Prometheus service no longer exists. Showing live metrics-server data."
+
+        HistoryFailure.WrongPath -> "Prometheus answered 404 at the API path. Showing live metrics-server data."
     }
 }
 
@@ -161,6 +168,9 @@ internal fun shortFailure(failed: SeriesResult.Failed): String = when (failed.fa
     HistoryFailure.NoContainerMetrics -> "No data"
     HistoryFailure.BadQuery -> "Query rejected (${failed.detail})"
     HistoryFailure.Unavailable -> "Not answering (${failed.detail})"
+    HistoryFailure.NoProxyAccess -> "No services/proxy access"
+    HistoryFailure.ServiceGone -> "Service gone"
+    HistoryFailure.WrongPath -> "Wrong path"
 }
 
 /** Sorted, distinct names to 0, 1, 2…: a container keeps its colour in every chart and across refreshes. */
