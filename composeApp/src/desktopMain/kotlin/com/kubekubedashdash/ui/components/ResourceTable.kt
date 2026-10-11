@@ -79,6 +79,7 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -94,6 +95,7 @@ import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.LayoutDensity
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.data.repository.PreferenceRepository
@@ -107,6 +109,7 @@ import com.kubekubedashdash.resources.check_filled
 import com.kubekubedashdash.resources.star_filled
 import com.kubekubedashdash.resources.star_outline
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.util.isForbidden
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -906,19 +909,67 @@ private fun SkeletonRowsLayout(rowCount: Int, rowAlpha: (Int) -> Float) {
     }
 }
 
+/** Test tags for [ResourceErrorMessage]. */
+internal object ResourceErrorTags {
+    const val TITLE = "resource-error-title"
+    const val CHOOSE_NAMESPACE = "resource-error-choose-namespace"
+}
+
+// The API server's wording for a refusal of a cluster-wide list, as opposed to one inside a namespace.
+private const val CLUSTER_SCOPE_REFUSAL = "at the cluster scope"
+
+/**
+ * A failed list. An RBAC refusal (403) gets a readable "No access" with the raw text underneath; when
+ * the refusal is cluster-wide and [LocalNamespaceAccessHint] is set, it also offers to pick a namespace.
+ */
 @Composable
 fun ResourceErrorMessage(message: String, onRetry: (() -> Unit)? = null) {
     val copyToClipboard = rememberCopyToClipboard()
+    val forbidden = isForbidden(message)
+    val chooseNamespace = LocalNamespaceAccessHint.current?.takeIf { forbidden && CLUSTER_SCOPE_REFUSAL in message }?.onChooseNamespace
     Box(
         modifier = Modifier.fillMaxSize().padding(32.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Error", style = MaterialTheme.typography.titleMedium, color = KdError)
-            Spacer(Modifier.height(8.dp))
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = KdTextSecondary)
+            if (forbidden) {
+                Text(
+                    "No access",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = KdWarning,
+                    modifier = Modifier.testTag(ResourceErrorTags.TITLE),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Your Kubernetes account isn't allowed to list these.", style = MaterialTheme.typography.bodyMedium, color = KdTextPrimary)
+                if (chooseNamespace != null) {
+                    Text("Your access may be limited to some namespaces.", style = MaterialTheme.typography.bodyMedium, color = KdTextPrimary)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = KdTextSecondary,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Text("Error", style = MaterialTheme.typography.titleMedium, color = KdError)
+                Spacer(Modifier.height(8.dp))
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = KdTextSecondary)
+            }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (chooseNamespace != null) {
+                    OutlinedButton(
+                        onClick = chooseNamespace,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KdTextPrimary),
+                        border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = SolidColor(KdBorder)),
+                        shape = kdRoundShape,
+                        modifier = Modifier.testTag(ResourceErrorTags.CHOOSE_NAMESPACE),
+                    ) {
+                        Text("Choose a namespace", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
                 if (onRetry != null) {
                     OutlinedButton(
                         onClick = onRetry,
