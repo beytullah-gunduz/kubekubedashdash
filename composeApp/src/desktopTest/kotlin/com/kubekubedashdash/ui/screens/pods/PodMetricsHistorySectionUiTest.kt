@@ -487,6 +487,34 @@ class PodMetricsHistorySectionUiTest {
     }
 
     @Test
+    fun `a search abandoned while the panel shows, as Search again does, is started again`() = runComposeUiTest {
+        val searches = AtomicInteger()
+        val gate = CompletableDeferred<DetectionState>()
+        val detection = detectionOf {
+            searches.incrementAndGet()
+            gate.await()
+        }
+        val service = serviceOver(MutableStateFlow(emptyMap()), FakeSource(), detection)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        assertEquals(1, searches.get())
+
+        detection.invalidate(DemoContext.preferenceKey(CONTEXT))
+        waitUntil(timeoutMillis = 5_000) { searches.get() == 2 }
+
+        assertEquals(DetectionState.Searching, detection.current(DemoContext.preferenceKey(CONTEXT)), "the panel must not be left without a search")
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        gate.complete(DetectionState.NothingFound(clock.get()))
+        waitForIdle()
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        assertEquals(2, searches.get())
+    }
+
+    @Test
     fun `Auto that finds nothing draws exactly the section from before metrics history`() = runComposeUiTest {
         val source = FakeSource()
         val searches = AtomicInteger()

@@ -108,9 +108,9 @@ class MetricsHistorySettingsTest {
     }
 
     @Test
-    fun `a failed search says it retries within a minute`() {
+    fun `a failed search says a pod's charts search again after a minute`() {
         assertEquals(
-            "Auto → the search for a Prometheus service failed; it retries within a minute.",
+            "Auto → the search for a Prometheus service failed; a pod's charts search again after a minute.",
             metricsSourceStatus(RENAMED_CONTEXT, emptyMap(), detected(DetectionState.SearchFailed(1))),
         )
     }

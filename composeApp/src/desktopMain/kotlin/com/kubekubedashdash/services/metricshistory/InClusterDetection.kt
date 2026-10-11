@@ -20,7 +20,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.cancellation.CancellationException
 
-/** A Service that might be a Prometheus; [rank] is its finder's place in the plan's table (1 is tried first). */
+/** A Service that might be a Prometheus; [rank] is its finder's place in the search order (1 is tried first). */
 internal data class PrometheusCandidate(val rank: Int, val target: InClusterTarget)
 
 /**

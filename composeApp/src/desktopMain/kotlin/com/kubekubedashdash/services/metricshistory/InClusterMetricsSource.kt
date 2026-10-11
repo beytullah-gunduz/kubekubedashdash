@@ -46,6 +46,10 @@ class InClusterMetricsSource internal constructor(
     private val boundLock = Any()
     private var bound: Bound? = null // guarded by boundLock
 
+    // When this source last sent the cluster's search back to the start; see send's 404.
+    @Volatile
+    private var invalidatedAtMs: Long? = null
+
     private val probeMutex = Mutex()
     private var probeNoData: Boolean? = null
     private var probedAtMs = 0L
@@ -132,7 +136,7 @@ class InClusterMetricsSource internal constructor(
 
             404 -> if (isKubernetesStatus(response.body)) {
                 // The API server itself does not know the Service. A detected target is stale then.
-                if (auto) detection.invalidate(key)
+                if (auto) invalidateDetection()
                 failedSent(HistoryFailure.ServiceGone)
             } else {
                 failedSent(HistoryFailure.WrongPath)
@@ -142,6 +146,16 @@ class InClusterMetricsSource internal constructor(
 
             else -> failedSent(HistoryFailure.Unavailable, "HTTP $status")
         }
+    }
+
+    // At most once per FAILED_TTL_MS: a front end that answers this 404 to range queries only would
+    // otherwise send the panel from a fresh search straight back to this answer in a tight loop.
+    private fun invalidateDetection() {
+        val now = nowMs()
+        val last = invalidatedAtMs
+        if (last != null && now - last < InClusterDetection.FAILED_TTL_MS) return
+        invalidatedAtMs = now
+        detection.invalidate(key)
     }
 
     private suspend fun proxyForbidden(): Sent.Failed {

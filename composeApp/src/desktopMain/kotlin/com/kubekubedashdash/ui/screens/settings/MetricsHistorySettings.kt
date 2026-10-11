@@ -79,7 +79,7 @@ internal fun metricsSourceStatus(
             NoSourceReason.CannotSearch ->
                 "Auto → none: no permission to list services across namespaces. Pick In-cluster to enter one."
 
-            NoSourceReason.SearchFailed -> "Auto → the search for a Prometheus service failed; it retries within a minute."
+            NoSourceReason.SearchFailed -> "Auto → the search for a Prometheus service failed; a pod's charts search again after a minute."
 
             NoSourceReason.Disabled -> "Off: pod charts show live metrics-server data only."
 

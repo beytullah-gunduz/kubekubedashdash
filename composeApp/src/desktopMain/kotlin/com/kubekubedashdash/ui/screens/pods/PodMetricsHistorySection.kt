@@ -269,9 +269,11 @@ internal fun PodMetricsHistorySection(
     // the settings, the detection or the pod change.
     val choice = remember(settings, detection, pod.namespace, pod.name) { service.choice() }
     val source = remember(choice) { service.sourceFor(choice) }
-    // Keyed on the choice alone: it runs once per Detecting episode. The search lives in the
-    // detection's own scope, so leaving the panel never cancels it, and its answer flips [choice].
-    LaunchedEffect(choice) {
+    // The search lives in the detection's own scope, so leaving the panel never cancels it, and its
+    // answer flips [choice]. Keyed on the detection states too: "Search again" during a search
+    // abandons it and leaves Detecting equal to itself, so the choice alone would never start the
+    // next one. ensureDetected joins a search under way and does nothing once there is an answer.
+    LaunchedEffect(choice, detection) {
         if (choice is SourceChoice.Detecting) service.ensureDetected()
     }
     var range by remember { mutableStateOf(HistoryRange.H1) }

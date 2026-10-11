@@ -297,6 +297,27 @@ class InClusterMetricsSourceTest {
     }
 
     @Test
+    fun `a detected target sends the search back to the start at most once a minute`() = runBlocking<Unit> {
+        val gone = source(auto = true)
+        seedFound()
+        answer(404, K8S_NOT_FOUND)
+        cpu(gone)
+        assertNull(detection.current(key))
+
+        // The search finds the same Service again (its probe answers), and the range query still gets a 404 Status.
+        answer(200, SCALAR_OK)
+        detection.ensure(key) { live }
+        assertEquals(DetectionState.Found(target), detection.current(key))
+        answer(404, K8S_NOT_FOUND)
+        assertEquals(SeriesResult.Failed(HistoryFailure.ServiceGone), cpu(gone))
+        assertEquals(DetectionState.Found(target), detection.current(key), "invalidated again within the minute")
+
+        clock.addAndGet(InClusterDetection.FAILED_TTL_MS)
+        cpu(gone)
+        assertNull(detection.current(key), "a minute later the stale target is dropped again")
+    }
+
+    @Test
     fun `404 with a Kubernetes Status body leaves the search alone for a target the user typed`() = runBlocking<Unit> {
         seedFound()
         answer(404, K8S_NOT_FOUND)

@@ -1,5 +1,8 @@
 package com.kubekubedashdash.services.metricshistory
 
+import com.kubekubedashdash.util.ShellEnvironment
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -8,6 +11,24 @@ import kotlin.test.assertTrue
 
 /** Nothing a user types for an in-cluster target may reach the proxy URL unless it passes these checks. */
 class InClusterTargetValidationTest {
+
+    private var previousCloudClis: String? = null
+
+    @BeforeTest
+    fun disableCloudClis() {
+        previousCloudClis = System.getProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY)
+        System.setProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY, "true")
+    }
+
+    @AfterTest
+    fun restoreCloudClis() {
+        val previous = previousCloudClis
+        if (previous == null) {
+            System.clearProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY)
+        } else {
+            System.setProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY, previous)
+        }
+    }
 
     private val v = InClusterTargetValidation
 
