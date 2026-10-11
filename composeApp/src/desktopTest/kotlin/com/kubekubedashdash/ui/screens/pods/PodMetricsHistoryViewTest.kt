@@ -15,6 +15,7 @@ import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.ui.components.ChartSeries
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -43,6 +44,8 @@ class PodMetricsHistoryViewTest {
     private val window = QueryWindow(0, 3_600, 30)
     private val ok = SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(0, 1.0)))))
     private val failed = SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503")
+    private val empty = SeriesResult.Ok(emptyList())
+    private val pointless = SeriesResult.Ok(listOf(Series("app", emptyList())))
 
     private fun loaded(vararg results: Pair<PodSeriesKind, SeriesResult>) = LoadedHistory(window, mapOf(*results))
 
@@ -72,7 +75,8 @@ class PodMetricsHistoryViewTest {
 
         assertEquals("", hint(NoSourceReason.NotConnected))
         assertTrue(hint(NoSourceReason.Disabled).contains("metrics history is off"))
-        assertTrue(hint(NoSourceReason.NotGkeContext).contains("set this cluster up in Settings"))
+        // Settings cannot give a non-GKE cluster history yet: no line, the section looks as it did before.
+        assertEquals("", hint(NoSourceReason.NotGkeContext))
         assertTrue(hint(NoSourceReason.IncompleteSetting).contains("settings are incomplete"))
     }
 
@@ -91,7 +95,42 @@ class PodMetricsHistoryViewTest {
     @Test
     fun `CPU and memory both failing is a source failure`() {
         val view = historyView(gmp, loaded(PodSeriesKind.Cpu to failed, PodSeriesKind.Memory to failed, PodSeriesKind.NetworkRx to ok))
-        assertEquals(HistoryView.SourceFailed("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."), view)
+        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."), view)
+    }
+
+    @Test
+    fun `CPU and memory answering without a point fall back to the live charts`() {
+        assertEquals(
+            HistoryView.LiveFallback(NO_HISTORY_NOTE),
+            historyView(gmp, loaded(PodSeriesKind.Cpu to empty, PodSeriesKind.Memory to pointless, PodSeriesKind.NetworkRx to ok)),
+        )
+    }
+
+    @Test
+    fun `with no point to draw a failure explains instead of the no-history line`() {
+        assertEquals(
+            HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."),
+            historyView(gmp, loaded(PodSeriesKind.Cpu to empty, PodSeriesKind.Memory to failed)),
+        )
+    }
+
+    @Test
+    fun `one point in CPU or memory is enough for the charts`() {
+        val memoryOnly = loaded(PodSeriesKind.Cpu to empty, PodSeriesKind.Memory to ok)
+        assertEquals(HistoryView.Charts(memoryOnly), historyView(gmp, memoryOnly))
+        val cpuOnly = loaded(PodSeriesKind.Cpu to ok, PodSeriesKind.Memory to failed)
+        assertEquals(HistoryView.Charts(cpuOnly), historyView(gmp, cpuOnly))
+    }
+
+    @Test
+    fun `the loop asks again for a new window, a failure or nothing to draw, and only then`() {
+        val answered = loaded(PodSeriesKind.Cpu to ok, PodSeriesKind.Memory to ok, PodSeriesKind.NetworkRx to empty)
+        assertFalse(needsFetch(answered, window), "same window, all answered, CPU and memory have points")
+        assertTrue(needsFetch(null, window))
+        assertTrue(needsFetch(answered, window.copy(endEpochSec = window.endEpochSec + 30)))
+        assertTrue(needsFetch(loaded(PodSeriesKind.Cpu to ok, PodSeriesKind.Memory to failed), window))
+        // A new pod has no point yet; a 24 h window would not move for 720 s, so emptiness alone asks again.
+        assertTrue(needsFetch(loaded(PodSeriesKind.Cpu to empty, PodSeriesKind.Memory to pointless), window))
     }
 
     @Test

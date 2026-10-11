@@ -1,12 +1,10 @@
 package com.kubekubedashdash.ui.screens.pods
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +54,8 @@ internal const val HISTORY_REFRESH_MS = 30_000L
 internal const val HOST_NETWORK_NOTE = "Host network — these counters are the node's, not the pod's."
 internal const val NO_CPU_LIMIT_NOTE = "No CPU limit set — CFS throttling does not apply."
 internal const val NO_THROTTLING_DATA_NOTE = "No throttling data in this range."
+internal const val LOADING_HISTORY_NOTE = "Loading history…"
+internal const val NO_HISTORY_NOTE = "No history for this pod in this range. Retrying every 30 s; showing live metrics-server data."
 
 /** What the section asks the source for: network is the node's on a host-network pod, throttling needs a CPU limit. */
 internal fun historyKinds(pod: PodInfo): List<PodSeriesKind> = buildList {
@@ -69,17 +69,34 @@ internal fun historyKinds(pod: PodInfo): List<PodSeriesKind> = buildList {
 }
 
 /** One completed fetch: the window it asked for and what each kind answered. */
-internal data class LoadedHistory(val window: QueryWindow, val results: Map<PodSeriesKind, SeriesResult>)
+internal data class LoadedHistory(val window: QueryWindow, val results: Map<PodSeriesKind, SeriesResult>) {
+    /** Whether CPU or memory has a point to draw; without one the live charts stand in. */
+    val hasCpuOrMemoryPoints: Boolean
+        get() = listOf(PodSeriesKind.Cpu, PodSeriesKind.Memory).any { kind ->
+            (results[kind] as? SeriesResult.Ok)?.series.orEmpty().any { it.points.isNotEmpty() }
+        }
+}
+
+/**
+ * Whether the refresh loop asks again: a new window, or one not fully answered. An empty answer
+ * counts as not answered too, so a new pod's history shows up within a refresh even on a 24 h
+ * range, whose window only moves every 720 s.
+ */
+internal fun needsFetch(current: LoadedHistory?, window: QueryWindow): Boolean = current == null ||
+    current.window != window ||
+    current.results.values.any { it !is SeriesResult.Ok } ||
+    !current.hasCpuOrMemoryPoints
 
 /** What the section shows for a source choice and the fetch so far. */
 internal sealed interface HistoryView {
     /** No history source: the metrics-server charts, under [hint] when it is not blank. */
     data class LiveOnly(val hint: String) : HistoryView
 
+    /** The first fetch for this pod and range is still out: the metrics-server charts stand in meanwhile. */
     data object Loading : HistoryView
 
-    /** Both CPU and memory failed: [message] explains, the metrics-server charts follow. */
-    data class SourceFailed(val message: String) : HistoryView
+    /** Neither CPU nor memory has a point to draw (both failed, or nothing recorded): [message] explains, the metrics-server charts follow. */
+    data class LiveFallback(val message: String) : HistoryView
 
     data class Charts(val loaded: LoadedHistory) : HistoryView
 }
@@ -92,7 +109,9 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
 
                 NoSourceReason.Disabled -> "Live data only — metrics history is off for this cluster (Settings → Metrics history)."
 
-                NoSourceReason.NotGkeContext -> "Live data only — to see history, set this cluster up in Settings → Metrics history."
+                // Nothing in Settings can give a non-GKE cluster history yet, so no line: the
+                // section looks exactly as it did before metrics history existed.
+                NoSourceReason.NotGkeContext -> ""
 
                 NoSourceReason.IncompleteSetting ->
                     "Live data only — this cluster's Managed Prometheus settings are incomplete (Settings → Metrics history)."
@@ -100,12 +119,11 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
         )
     }
     if (loaded == null) return HistoryView.Loading
-    val cpu = loaded.results[PodSeriesKind.Cpu]
-    val memory = loaded.results[PodSeriesKind.Memory]
-    if (cpu is SeriesResult.Failed && memory is SeriesResult.Failed) {
-        return HistoryView.SourceFailed(failureMessage(choice, cpu))
-    }
-    return HistoryView.Charts(loaded)
+    if (loaded.hasCpuOrMemoryPoints) return HistoryView.Charts(loaded)
+    // A failure explains better than "no history": it is what kept the points away.
+    val failed = loaded.results[PodSeriesKind.Cpu] as? SeriesResult.Failed
+        ?: loaded.results[PodSeriesKind.Memory] as? SeriesResult.Failed
+    return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE)
 }
 
 /** The sentence shown above the live charts when the history source itself failed; never a raw response. */
@@ -183,8 +201,9 @@ internal fun usageReferences(pod: PodInfo, series: List<ChartSeries>, kind: PodS
 
 /**
  * Pod resource usage over time from the cluster's metrics-history source (Managed Prometheus, or the
- * demo's simulator), refreshed every [refreshMs]. Without a source, or when it cannot answer, the
- * metrics-server charts of the last few minutes stand in under a line that says why.
+ * demo's simulator), refreshed every [refreshMs]. Without a source, while the first fetch is out, or
+ * when CPU and memory have nothing to draw, the metrics-server charts of the last few minutes stand
+ * in, under a line that says why (none for a cluster Auto cannot give history to).
  */
 @Composable
 internal fun PodMetricsHistorySection(
@@ -211,7 +230,7 @@ internal fun PodMetricsHistorySection(
                 val window = range.window(nowEpochSec())
                 val current = loaded
                 // A 24 h window moves only every 720 s: refetching an identical, fully answered one wastes quota.
-                if (current == null || current.window != window || current.results.values.any { it !is SeriesResult.Ok }) {
+                if (needsFetch(current, window)) {
                     loaded = LoadedHistory(
                         window,
                         coroutineScope {
@@ -244,13 +263,18 @@ internal fun PodMetricsHistorySection(
                 )
             }
             when (view) {
-                HistoryView.Loading -> Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
-                    BusyIndicator(Modifier.size(20.dp))
+                // A slow or hanging source (gcloud, the network) must not hide the live charts.
+                HistoryView.Loading -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        BusyIndicator(modifier = Modifier.size(12.dp), color = KdTextSecondary, strokeWidth = 1.5.dp)
+                        Text(LOADING_HISTORY_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                    }
+                    if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                 }
 
                 // The header stays, so a range that keeps failing can still be changed; the live
                 // charts follow without their own title.
-                is HistoryView.SourceFailed -> {
+                is HistoryView.LiveFallback -> {
                     Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                     if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                 }
