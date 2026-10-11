@@ -113,8 +113,8 @@ private fun MetricsHistoryContextRow(
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(4.dp))
-        // Three equal segments give "Managed Prometheus" about a third of the row, and its label
-        // needs ~150 dp, so the row sits under the name instead of beside it.
+        // Three equal segments give "Managed Prometheus" about a third of the row, so the row sits
+        // under the name; at its cap the label holds one line in both styles, and below it wraps.
         FullWidthSingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 540.dp)) {
             MetricsSourceModes.forEachIndexed { index, (mode, label) ->
                 SegmentedButton(
@@ -141,7 +141,7 @@ private fun MetricsHistoryContextRow(
                         baseShape = kdRoundShape,
                     ),
                 ) {
-                    Text(label, maxLines = 1, softWrap = false)
+                    Text(label, maxLines = 2)
                 }
             }
         }

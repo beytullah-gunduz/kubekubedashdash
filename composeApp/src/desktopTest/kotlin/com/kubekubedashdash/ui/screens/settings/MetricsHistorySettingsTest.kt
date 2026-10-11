@@ -10,7 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -25,7 +27,6 @@ import com.kubekubedashdash.services.metricshistory.MetricsSourceMode
 import com.kubekubedashdash.services.metricshistory.MetricsSourceSetting
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
-import kotlin.math.ceil
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -159,15 +160,6 @@ class MetricsHistorySettingsUiTest {
         waitForIdle()
     }
 
-    // TextLayoutResult.hasVisualOverflow is always true for softWrap = false, so compare the
-    // text's natural width with the width the layout actually gave it.
-    private fun SemanticsNodeInteraction.isClipped(): Boolean {
-        val results = mutableListOf<TextLayoutResult>()
-        fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-        val layout = results.first()
-        return layout.size.width < ceil(layout.multiParagraph.maxIntrinsicWidth).toInt()
-    }
-
     @Test
     fun `choosing Managed Prometheus on a gke context stores the mode with the triple prefilled`() = runComposeUiTest {
         val harness = Harness()
@@ -275,24 +267,43 @@ class MetricsHistorySettingsUiTest {
         onNodeWithText("Managed Prometheus").assertDoesNotExist()
     }
 
-    // Managed Prometheus is selected so the check mark shares the segment with the label.
-    private fun assertWidestLabelFits(style: ThemeStyle, paneWidth: Int) = runComposeUiTest {
+    // Managed Prometheus is selected, so the check mark shares the segment with the label. M3 places
+    // the label after the icon slot, so a label can have its full natural width and still run past
+    // the button: the check is on bounds, not on the text's own width.
+    private fun assertWidestLabelInsideItsButton(style: ThemeStyle, paneWidth: Int, oneLine: Boolean) = runComposeUiTest {
         ThemeManager.syncStyleFromPreferences(style)
         render(Harness(mapOf(GKE_CONTEXT to GKE_SETTING)), GKE_CONTEXT, paneWidth = paneWidth)
 
-        assertFalse(
-            onNodeWithText("Managed Prometheus", useUnmergedTree = true).isClipped(),
-            "the label is clipped in the $style style at a $paneWidth dp pane",
+        val label = onNodeWithText("Managed Prometheus", useUnmergedTree = true)
+        val results = mutableListOf<TextLayoutResult>()
+        label.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        val layout = results.first()
+        // didOverflowWidth can be set even when every glyph fits, so check the lines themselves.
+        assertFalse(layout.didOverflowHeight, "the label needs a third line in the $style style at a $paneWidth dp pane")
+        val widestLine = (0 until layout.lineCount).maxOf { layout.getLineRight(it) }
+        assertTrue(widestLine <= layout.size.width + 0.5f, "a line of the label is cut in the $style style at a $paneWidth dp pane")
+        if (oneLine) assertEquals(1, layout.lineCount, "the label wraps in the $style style at a $paneWidth dp pane")
+
+        val text = label.getBoundsInRoot()
+        val button = onNode(hasText("Managed Prometheus") and hasClickAction()).getBoundsInRoot()
+        assertTrue(
+            text.left >= button.left && text.right <= button.right,
+            "the label (${text.left}..${text.right}) runs past its button (${button.left}..${button.right}) in the $style style at a $paneWidth dp pane",
         )
     }
 
     // 485 dp is the content width of the smallest Settings dialog: 750 dp wide, less the 160 dp
     // rail, its divider, the 32 dp pane padding and the 20 dp section padding on both sides.
     @Test
-    fun `the widest mode label fits its segment in the Default style at the smallest dialog`() = assertWidestLabelFits(ThemeStyle.DEFAULT, paneWidth = 485)
+    fun `the widest mode label stays inside its button in the Default style at the smallest dialog`() = assertWidestLabelInsideItsButton(ThemeStyle.DEFAULT, paneWidth = 485, oneLine = false)
 
-    // The Retro font is wider; at 485 dp its label is a few dp short, so it is checked where the
-    // row reaches its 540 dp cap.
     @Test
-    fun `the widest mode label fits its segment in the Retro style at the row's full width`() = assertWidestLabelFits(ThemeStyle.RETRO, paneWidth = 560)
+    fun `the widest mode label stays inside its button in the Retro style at the smallest dialog`() = assertWidestLabelInsideItsButton(ThemeStyle.RETRO, paneWidth = 485, oneLine = false)
+
+    // Wide enough for the row's cap: one line in both styles.
+    @Test
+    fun `the widest mode label is one line in the Default style at full width`() = assertWidestLabelInsideItsButton(ThemeStyle.DEFAULT, paneWidth = 700, oneLine = true)
+
+    @Test
+    fun `the widest mode label is one line in the Retro style at full width`() = assertWidestLabelInsideItsButton(ThemeStyle.RETRO, paneWidth = 700, oneLine = true)
 }
