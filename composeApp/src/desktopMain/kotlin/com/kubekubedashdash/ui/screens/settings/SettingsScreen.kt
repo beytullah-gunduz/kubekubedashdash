@@ -120,6 +120,7 @@ import com.kubekubedashdash.resources.content_copy_filled
 import com.kubekubedashdash.resources.description_filled
 import com.kubekubedashdash.resources.info_filled
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.services.metricshistory.InClusterDetection
 import com.kubekubedashdash.theme.kdInkOn
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.NativeWindowDrag
@@ -134,6 +135,7 @@ import com.kubekubedashdash.ui.crt.CrtRefreshBarReplay
 import com.kubekubedashdash.ui.crt.crtCardReveal
 import com.kubekubedashdash.ui.screens.settings.viewmodel.SettingsScreenViewModel
 import com.kubekubedashdash.ui.screens.viewmodel.AppViewModel
+import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.EksClusterDiscoverer
 import com.kubekubedashdash.util.GkeClusterDiscoverer
 import kotlinx.coroutines.flow.drop
@@ -1089,6 +1091,11 @@ fun SettingsScreen(
                             Spacer(Modifier.height(16.dp))
 
                             val metricsSources by viewModel.metricsSourceByContext.collectAsState()
+                            // The raw map still holds expired answers; current() applies the clock, as the pod panel does.
+                            val detectionStates by InClusterDetection.shared.state.collectAsState()
+                            val metricsDetection = detectionStates.keys.mapNotNull { key ->
+                                InClusterDetection.shared.current(key)?.let { key to it }
+                            }.toMap()
 
                             SettingsSection(
                                 title = "Metrics history",
@@ -1098,6 +1105,8 @@ fun SettingsScreen(
                                     contexts = knownContexts,
                                     settings = metricsSources,
                                     onSet = { ctx, setting -> viewModel.setMetricsSource(ctx, setting) },
+                                    detection = metricsDetection,
+                                    onSearchAgain = { ctx -> InClusterDetection.shared.invalidate(DemoContext.preferenceKey(ctx)) },
                                 )
                             }
 

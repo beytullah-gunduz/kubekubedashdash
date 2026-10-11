@@ -51,7 +51,7 @@ val SettingsEntries: List<SettingsEntry> = listOf(
     SettingsEntry("Tab behavior", "When closing the active tab, focus:", listOf("close", "tab")),
     SettingsEntry("Tab behavior", "Restore last session", listOf("launch", "startup", "open")),
     SettingsEntry("Live data", "Topology auto-refresh", listOf("refresh", "interval", "poll", "update", "topology")),
-    SettingsEntry("Metrics history", "Metrics history", listOf("prometheus", "managed prometheus", "gmp", "monitoring", "history", "charts", "metrics", "gcloud")),
+    SettingsEntry("Metrics history", "Metrics history", listOf("prometheus", "managed prometheus", "in-cluster", "gmp", "monitoring", "history", "charts", "metrics", "gcloud")),
     SettingsEntry("Keyboard shortcuts", "Keyboard shortcuts", listOf("hotkey", "cheat sheet", "cmd")),
     SettingsEntry("Privacy", "Secret values", listOf("mask", "reveal", "hide", "helm")),
     SettingsEntry("Integrations", "MCP Server", listOf("port", "token", "integration")),

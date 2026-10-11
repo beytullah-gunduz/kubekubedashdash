@@ -5,6 +5,7 @@ import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.services.metricshistory.GmpTarget
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
+import com.kubekubedashdash.services.metricshistory.InClusterTarget
 import com.kubekubedashdash.services.metricshistory.NoSourceReason
 import com.kubekubedashdash.services.metricshistory.PodSeriesKind
 import com.kubekubedashdash.services.metricshistory.QueryWindow
@@ -41,6 +42,8 @@ class PodMetricsHistoryViewTest {
 
     private val target = GmpTarget("example-project", "us-central1", "example-cluster")
     private val gmp = SourceChoice.Gmp(target, auto = true)
+    private val detected = SourceChoice.InCluster(InClusterTarget("monitoring", "prometheus-server", "80", https = false, pathPrefix = ""), auto = true)
+    private val typed = detected.copy(auto = false)
     private val window = QueryWindow(0, 3_600, 30)
     private val ok = SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(0, 1.0)))))
     private val failed = SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503")
@@ -83,6 +86,13 @@ class PodMetricsHistoryViewTest {
     }
 
     @Test
+    fun `an incomplete setting names no mode, since it cannot tell which one is incomplete`() {
+        val hint = assertIs<HistoryView.LiveOnly>(historyView(SourceChoice.None(NoSourceReason.IncompleteSetting), null)).hint
+        assertEquals("Live data only — this cluster's metrics history settings are incomplete (Settings → Metrics history).", hint)
+        assertFalse(hint.contains("Managed Prometheus"), hint)
+    }
+
+    @Test
     fun `no source stays live-only even with a fetch result`() {
         val view = historyView(SourceChoice.None(NoSourceReason.Disabled), loaded(PodSeriesKind.Cpu to ok))
         assertIs<HistoryView.LiveOnly>(view)
@@ -97,6 +107,17 @@ class PodMetricsHistoryViewTest {
     @Test
     fun `a search that is still under way is loading, so the live charts stay under the loading line`() {
         assertEquals(HistoryView.Loading, historyView(SourceChoice.Detecting, null))
+        // Whatever was fetched before the search began does not belong to it.
+        assertEquals(HistoryView.Loading, historyView(SourceChoice.Detecting, loaded(PodSeriesKind.Cpu to ok)))
+    }
+
+    @Test
+    fun `a detected or typed in-cluster source is loading until its first fetch, then draws like any other`() {
+        listOf(detected, typed).forEach { choice ->
+            assertEquals(HistoryView.Loading, historyView(choice, null))
+            val results = loaded(PodSeriesKind.Cpu to ok, PodSeriesKind.Memory to ok)
+            assertEquals(HistoryView.Charts(results), historyView(choice, results))
+        }
     }
 
     @Test
@@ -178,6 +199,96 @@ class PodMetricsHistoryViewTest {
     }
 
     @Test
+    fun `a role that cannot use services proxy is told which verb and namespace it needs, and that view does not have it`() {
+        val message = failureMessage(detected, SeriesResult.Failed(HistoryFailure.NoProxyAccess))
+        assertEquals(
+            "Your Kubernetes role can't reach Prometheus through the API server: it needs get on services/proxy " +
+                "in namespace monitoring (granted by edit or admin, not view). Showing live metrics-server data.",
+            message,
+        )
+    }
+
+    @Test
+    fun `a Prometheus that refuses names itself and the safe detail, and hints at an authenticating proxy`() {
+        assertEquals(
+            "Prometheus at monitoring/prometheus-server refused the request (HTTP 401) — it may sit behind an authenticating proxy.",
+            failureMessage(detected, SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 401")),
+        )
+    }
+
+    @Test
+    fun `a vanished Service says it will search again only when the target was detected`() {
+        val gone = SeriesResult.Failed(HistoryFailure.ServiceGone)
+        assertEquals(
+            "Service monitoring/prometheus-server no longer exists. Searching again; showing live metrics-server data.",
+            failureMessage(detected, gone),
+        )
+        assertEquals(
+            "Service monitoring/prometheus-server no longer exists. Check Settings → Metrics history.",
+            failureMessage(typed, gone),
+        )
+    }
+
+    @Test
+    fun `a wrong path points at the path prefix setting`() {
+        assertEquals(
+            "monitoring/prometheus-server answered 404 at the Prometheus API path — check the path prefix in Settings → Metrics history.",
+            failureMessage(typed, SeriesResult.Failed(HistoryFailure.WrongPath)),
+        )
+    }
+
+    @Test
+    fun `a Prometheus without cAdvisor metrics says what its scrape config needs`() {
+        assertEquals(
+            "This Prometheus has no cAdvisor container metrics (container_cpu_usage_seconds_total): " +
+                "its scrape config must include the kubelet's /metrics/cadvisor.",
+            failureMessage(detected, SeriesResult.Failed(HistoryFailure.NoContainerMetrics)),
+        )
+    }
+
+    @Test
+    fun `an in-cluster source that does not answer or rejects a query says Prometheus, not Managed Prometheus`() {
+        assertEquals(
+            "Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data.",
+            failureMessage(detected, SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503")),
+        )
+        assertEquals(
+            "Prometheus rejected the query (bad_data).",
+            failureMessage(detected, SeriesResult.Failed(HistoryFailure.BadQuery, "bad_data")),
+        )
+    }
+
+    @Test
+    fun `an in-cluster choice shows its detail where the plan shows it, names only the validated target, and never the gcloud texts`() {
+        val shown = setOf(HistoryFailure.Forbidden, HistoryFailure.BadQuery, HistoryFailure.Unavailable)
+        listOf(detected, typed).forEach { choice ->
+            HistoryFailure.entries.forEach { failure ->
+                val message = failureMessage(choice, SeriesResult.Failed(failure, "detail-42"))
+                assertTrue(message.isNotBlank(), "$failure")
+                assertEquals(failure in shown, message.contains("detail-42"), "$failure: $message")
+                assertFalse(message.contains("gcloud"), "$failure: $message")
+                assertFalse(message.contains("Managed Prometheus"), "$failure: $message")
+            }
+        }
+        // GcloudUnavailable and NotSignedIn cannot come from a proxy source: they get the text that names nothing.
+        assertEquals(
+            "Metrics history unavailable (GcloudUnavailable).",
+            failureMessage(detected, SeriesResult.Failed(HistoryFailure.GcloudUnavailable)),
+        )
+        assertEquals(
+            "Metrics history unavailable (NotSignedIn).",
+            failureMessage(typed, SeriesResult.Failed(HistoryFailure.NotSignedIn)),
+        )
+    }
+
+    @Test
+    fun `the proxy failures cannot come from Managed Prometheus and get the text that names nothing`() {
+        listOf(HistoryFailure.NoProxyAccess, HistoryFailure.ServiceGone, HistoryFailure.WrongPath).forEach { failure ->
+            assertEquals("Metrics history unavailable ($failure).", failureMessage(gmp, SeriesResult.Failed(failure, "detail-42")))
+        }
+    }
+
+    @Test
     fun `a failure without a Google target gets the generic text`() {
         assertEquals(
             "Metrics history unavailable (Unavailable).",
@@ -193,6 +304,13 @@ class PodMetricsHistoryViewTest {
         assertEquals("No data", shortFailure(SeriesResult.Failed(HistoryFailure.NoContainerMetrics)))
         assertEquals("Query rejected (bad_data)", shortFailure(SeriesResult.Failed(HistoryFailure.BadQuery, "bad_data")))
         assertEquals("Not answering (timeout)", shortFailure(SeriesResult.Failed(HistoryFailure.Unavailable, "timeout")))
+    }
+
+    @Test
+    fun `the proxy failures are one short phrase each, with no detail`() {
+        assertEquals("No services/proxy access", shortFailure(SeriesResult.Failed(HistoryFailure.NoProxyAccess, "detail-42")))
+        assertEquals("Service gone", shortFailure(SeriesResult.Failed(HistoryFailure.ServiceGone, "detail-42")))
+        assertEquals("Wrong path", shortFailure(SeriesResult.Failed(HistoryFailure.WrongPath, "detail-42")))
     }
 
     @Test
