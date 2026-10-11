@@ -71,6 +71,21 @@ internal object PrometheusResponse {
         null
     }
 
+    /**
+     * True for the answer to `query=1` of a Prometheus-compatible API: status "success" with a
+     * scalar (Prometheus, Thanos) or a vector (VictoriaMetrics answers a vector). An agent-mode
+     * Prometheus answers an error envelope, so it is not accepted.
+     */
+    fun isQueryableProbe(body: String): Boolean = try {
+        val root = Json.parseToJsonElement(body).jsonObject
+        root["status"]?.jsonPrimitive?.contentOrNull == "success" &&
+            root["data"]?.jsonObject?.get("resultType")?.jsonPrimitive?.contentOrNull.let { it == "scalar" || it == "vector" }
+    } catch (_: SerializationException) {
+        false
+    } catch (_: IllegalArgumentException) {
+        false
+    }
+
     // jsonObject / jsonPrimitive / jsonArray throw IllegalArgumentException on the wrong shape.
     private inline fun parse(block: () -> Parsed): Parsed = try {
         block()

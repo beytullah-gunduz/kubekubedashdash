@@ -5,16 +5,13 @@ import com.kubekubedashdash.util.DEMO_MEMORY_PRESSURE_TARGETS
 import kotlin.math.PI
 import kotlin.math.sin
 
-/** Pod history for the built-in demo cluster: smooth, deterministic waves derived from the pod's own requests and limits. */
-object DemoMetricsSource : MetricsHistorySource {
-    override val label = "Demo data"
-
-    override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = SeriesResult.Ok(demoSeries(kind, pod, window))
-}
-
 private const val DEMO_FALLBACK_MEMORY_BYTES = 256L * 1024 * 1024
 
-/** Same input, same output: the charts hold still between refreshes, and tests can pin them. */
+/**
+ * Pod history for the demo cluster's fake Prometheus (DemoPrometheusDispatcher): smooth waves
+ * derived from the pod's own requests and limits. Same input, same output: the charts hold still
+ * between refreshes, and tests can pin them.
+ */
 internal fun demoSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): List<Series> {
     val times = window.startEpochSec..window.endEpochSec step window.stepSec
     val containers = pod.containers.ifEmpty { listOf(ContainerResources("app")) }

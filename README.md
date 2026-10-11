@@ -348,6 +348,38 @@ a desktop session and leave the mouse alone; it never reads your kubeconfig, pre
 accounts. What it covers and how it stays isolated: the KDoc of
 `composeApp/src/desktopTest/kotlin/com/kubekubedashdash/uismoke/UiSmoke.kt`.
 
+### Integration tests (K3s)
+
+`./gradlew :composeApp:k3sIntegrationTest` starts a throwaway [K3s](https://k3s.io) cluster with
+[Testcontainers](https://testcontainers.com), runs a plain Prometheus in it and checks the pod history
+charts' in-cluster source against it, as an admin and as a user that holds only the built-in `view`
+role. It needs a reachable Docker and a few minutes (the first run also pulls three images). It is not
+part of `desktopTest` or CI, and it builds its clients from the cluster's own credentials, so your
+kubeconfig is never read. With Docker unreachable it fails at once; it never skips.
+
+`./gradlew :composeApp:k3sDevCluster` starts the same cluster, writes `composeApp/build/k3s/kubeconfig-admin.yaml`
+and `kubeconfig-viewer.yaml` (throwaway credentials, owner-readable), prints `K3S READY`, and keeps it up
+until `composeApp/build/k3s/stop` exists (`touch composeApp/build/k3s/stop`) or for 60 minutes. Point a
+hot run at one of them with `-PhotRunKubeconfig=build/k3s/kubeconfig-admin.yaml` (a relative path is
+taken from `composeApp/`).
+
+With [Colima](https://github.com/abiosoft/colima), point Testcontainers at Colima's socket (replace
+`default` with your profile name):
+
+```bash
+export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+```
+
+If the cluster starts but its API port cannot be reached on `localhost`, start Colima with
+`colima start --network-address` and also
+`export TESTCONTAINERS_HOST_OVERRIDE="$(colima ls -j | jq -r '.address')"`. Gradle's configuration cache
+keeps the environment of the run that stored it, so after changing these variables run the task once with
+`--no-configuration-cache`.
+
+Docker Desktop and a native Linux Docker usually need none of these. The K3s module does not work with
+rootless Docker or Docker-in-Docker.
+
 ## Building distributable packages
 
 ```bash

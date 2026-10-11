@@ -24,6 +24,7 @@ import com.kubekubedashdash.KdSeriesMemory
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
+import com.kubekubedashdash.services.metricshistory.GmpTarget
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
 import com.kubekubedashdash.services.metricshistory.HistoryRange
 import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
@@ -102,6 +103,8 @@ internal sealed interface HistoryView {
 }
 
 internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryView {
+    // Auto is still searching: the live charts stand in under the loading line.
+    if (choice is SourceChoice.Detecting) return HistoryView.Loading
     if (choice is SourceChoice.None) {
         return HistoryView.LiveOnly(
             when (choice.reason) {
@@ -109,12 +112,12 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
 
                 NoSourceReason.Disabled -> "Live data only — metrics history is off for this cluster (Settings → Metrics history)."
 
-                // Nothing in Settings can give a non-GKE cluster history yet, so no line: the
-                // section looks exactly as it did before metrics history existed.
-                NoSourceReason.NotGkeContext -> ""
+                // Auto found no Prometheus to read from, so no line: the section looks exactly as it
+                // did before metrics history existed. Settings says why.
+                NoSourceReason.NothingFound, NoSourceReason.CannotSearch, NoSourceReason.SearchFailed -> ""
 
                 NoSourceReason.IncompleteSetting ->
-                    "Live data only — this cluster's Managed Prometheus settings are incomplete (Settings → Metrics history)."
+                    "Live data only — this cluster's metrics history settings are incomplete (Settings → Metrics history)."
             },
         )
     }
@@ -126,30 +129,73 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
     return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE)
 }
 
-/** The sentence shown above the live charts when the history source itself failed; never a raw response. */
-internal fun failureMessage(choice: SourceChoice, failed: SeriesResult.Failed): String {
-    val t = (choice as? SourceChoice.Gmp)?.target ?: return "Metrics history unavailable (${failed.failure})."
-    return when (failed.failure) {
-        HistoryFailure.GcloudUnavailable ->
-            "Metrics history needs the gcloud CLI, which isn't installed or isn't on the PATH. Showing live metrics-server data."
+/**
+ * The sentence shown above the live charts when the history source itself failed; never a raw
+ * response. It names only what the validated target holds (project, cluster, namespace, service).
+ */
+internal fun failureMessage(choice: SourceChoice, failed: SeriesResult.Failed): String = when (choice) {
+    is SourceChoice.Gmp -> gmpFailureMessage(choice.target, failed)
+    is SourceChoice.InCluster -> inClusterFailureMessage(choice, failed)
+    else -> genericFailureMessage(failed)
+}
 
-        HistoryFailure.NotSignedIn ->
-            "gcloud couldn't provide an access token — run `gcloud auth login`. Retrying every 30 s; showing live metrics-server data."
+private fun genericFailureMessage(failed: SeriesResult.Failed) = "Metrics history unavailable (${failed.failure})."
+
+private fun gmpFailureMessage(t: GmpTarget, failed: SeriesResult.Failed): String = when (failed.failure) {
+    HistoryFailure.GcloudUnavailable ->
+        "Metrics history needs the gcloud CLI, which isn't installed or isn't on the PATH. Showing live metrics-server data."
+
+    HistoryFailure.NotSignedIn ->
+        "gcloud couldn't provide an access token — run `gcloud auth login`. Retrying every 30 s; showing live metrics-server data."
+
+    HistoryFailure.Forbidden ->
+        "No access to Managed Prometheus data in project ${t.project}: it needs roles/monitoring.viewer there. " +
+            "If this cluster's metrics live in a separate monitoring project, set it in Settings → Metrics history. (${failed.detail})"
+
+    HistoryFailure.NoContainerMetrics ->
+        "Project ${t.project} has no container metrics for cluster ${t.cluster} (${t.location}). " +
+            "Turn them on with `gcloud container clusters update ${t.cluster} --location=${t.location} --monitoring=SYSTEM,CADVISOR,KUBELET` " +
+            "— that flag replaces the current list, so add any other packages you use. " +
+            "If the metrics live in a separate monitoring project, set it in Settings → Metrics history."
+
+    HistoryFailure.BadQuery -> "Managed Prometheus rejected the query (${failed.detail})."
+
+    HistoryFailure.Unavailable ->
+        "Managed Prometheus didn't answer (${failed.detail}). Retrying every 30 s; showing live metrics-server data."
+
+    // The proxy transport produces these; a Managed Prometheus source never does.
+    HistoryFailure.NoProxyAccess, HistoryFailure.ServiceGone, HistoryFailure.WrongPath -> genericFailureMessage(failed)
+}
+
+private fun inClusterFailureMessage(choice: SourceChoice.InCluster, failed: SeriesResult.Failed): String {
+    val t = choice.target
+    val where = "${t.namespace}/${t.service}"
+    return when (failed.failure) {
+        HistoryFailure.NoProxyAccess ->
+            "Your Kubernetes role can't reach Prometheus through the API server: it needs get on services/proxy " +
+                "in namespace ${t.namespace} (granted by edit or admin, not view). Showing live metrics-server data."
 
         HistoryFailure.Forbidden ->
-            "No access to Managed Prometheus data in project ${t.project}: it needs roles/monitoring.viewer there. " +
-                "If this cluster's metrics live in a separate monitoring project, set it in Settings → Metrics history. (${failed.detail})"
+            "Prometheus at $where refused the request (${failed.detail}) — it may sit behind an authenticating proxy."
+
+        HistoryFailure.ServiceGone ->
+            "Service $where no longer exists. " +
+                if (choice.auto) "Searching again; showing live metrics-server data." else "Check Settings → Metrics history."
+
+        HistoryFailure.WrongPath ->
+            "$where answered 404 at the Prometheus API path — check the path prefix in Settings → Metrics history."
 
         HistoryFailure.NoContainerMetrics ->
-            "Project ${t.project} has no container metrics for cluster ${t.cluster} (${t.location}). " +
-                "Turn them on with `gcloud container clusters update ${t.cluster} --location=${t.location} --monitoring=SYSTEM,CADVISOR,KUBELET` " +
-                "— that flag replaces the current list, so add any other packages you use. " +
-                "If the metrics live in a separate monitoring project, set it in Settings → Metrics history."
+            "This Prometheus has no cAdvisor container metrics (container_cpu_usage_seconds_total): " +
+                "its scrape config must include the kubelet's /metrics/cadvisor."
 
-        HistoryFailure.BadQuery -> "Managed Prometheus rejected the query (${failed.detail})."
+        HistoryFailure.BadQuery -> "Prometheus rejected the query (${failed.detail})."
 
         HistoryFailure.Unavailable ->
-            "Managed Prometheus didn't answer (${failed.detail}). Retrying every 30 s; showing live metrics-server data."
+            "Prometheus didn't answer (${failed.detail}). Retrying every 30 s; showing live metrics-server data."
+
+        // gcloud is a Managed Prometheus matter; an in-cluster source never reports it.
+        HistoryFailure.GcloudUnavailable, HistoryFailure.NotSignedIn -> genericFailureMessage(failed)
     }
 }
 
@@ -161,6 +207,9 @@ internal fun shortFailure(failed: SeriesResult.Failed): String = when (failed.fa
     HistoryFailure.NoContainerMetrics -> "No data"
     HistoryFailure.BadQuery -> "Query rejected (${failed.detail})"
     HistoryFailure.Unavailable -> "Not answering (${failed.detail})"
+    HistoryFailure.NoProxyAccess -> "No services/proxy access"
+    HistoryFailure.ServiceGone -> "Service gone"
+    HistoryFailure.WrongPath -> "Wrong path"
 }
 
 /** Sorted, distinct names to 0, 1, 2…: a container keeps its colour in every chart and across refreshes. */
@@ -200,10 +249,11 @@ internal fun usageReferences(pod: PodInfo, series: List<ChartSeries>, kind: PodS
 }
 
 /**
- * Pod resource usage over time from the cluster's metrics-history source (Managed Prometheus, or the
- * demo's simulator), refreshed every [refreshMs]. Without a source, while the first fetch is out, or
- * when CPU and memory have nothing to draw, the metrics-server charts of the last few minutes stand
- * in, under a line that says why (none for a cluster Auto cannot give history to).
+ * Pod resource usage over time from the cluster's metrics-history source (Managed Prometheus or a
+ * Prometheus behind a Service, the demo cluster's included), refreshed every [refreshMs]. Without a
+ * source, while Auto searches or the first fetch is out, or when CPU and memory have nothing to
+ * draw, the metrics-server charts of the last few minutes stand in, under a line that says why
+ * (none for a cluster where Auto found no Prometheus).
  */
 @Composable
 internal fun PodMetricsHistorySection(
@@ -214,10 +264,18 @@ internal fun PodMetricsHistorySection(
     refreshMs: Long = HISTORY_REFRESH_MS,
 ) {
     val settings by service.settings.collectAsState()
+    val detection by service.detectionState.collectAsState()
     // Not keyed on the live context: a panel first composed while disconnected stays live-only until
-    // the settings or the pod change.
-    val choice = remember(settings, pod.namespace, pod.name) { service.choice() }
+    // the settings, the detection or the pod change.
+    val choice = remember(settings, detection, pod.namespace, pod.name) { service.choice() }
     val source = remember(choice) { service.sourceFor(choice) }
+    // The search lives in the detection's own scope, so leaving the panel never cancels it, and its
+    // answer flips [choice]. Keyed on the detection states too: "Search again" during a search
+    // abandons it and leaves Detecting equal to itself, so the choice alone would never start the
+    // next one. ensureDetected joins a search under way and does nothing once there is an answer.
+    LaunchedEffect(choice, detection) {
+        if (choice is SourceChoice.Detecting) service.ensureDetected()
+    }
     var range by remember { mutableStateOf(HistoryRange.H1) }
     val podRef = remember(pod.namespace, pod.name, pod.resources) { PodRef(pod.namespace, pod.name, pod.resources) }
     val kinds = remember(pod.hostNetwork, pod.resources) { historyKinds(pod) }

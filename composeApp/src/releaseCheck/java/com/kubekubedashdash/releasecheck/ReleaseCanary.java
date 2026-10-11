@@ -9,6 +9,7 @@ import com.kubekubedashdash.mcp.McpServerManager;
 import com.kubekubedashdash.services.metricshistory.GmpMetricsSource;
 import com.kubekubedashdash.services.metricshistory.GmpTarget;
 import com.kubekubedashdash.services.metricshistory.PrometheusHttp;
+import com.kubekubedashdash.services.metricshistory.ReleaseCheckSupport;
 import com.kubekubedashdash.ui.yamledit.KkddYamlTokenMaker;
 import com.kubekubedashdash.util.CrdJsonPath;
 import com.kubekubedashdash.util.MockClusterHandle;
@@ -52,7 +53,7 @@ import org.slf4j.LoggerFactory;
  * while every unit test (which runs unshrunk) stays green: logging configuration loaded
  * by class name, reflective JSONPath and enum lookups, the YAML editor's dump/parse
  * engine and its RSyntaxTextArea highlighter, the demo cluster's mock server
- * (signed BouncyCastle jars), and the MCP server's Ktor/SSE stack (where a dropped
+ * (signed BouncyCastle jars) with its fake Prometheus, and the MCP server's Ktor/SSE stack (where a dropped
  * direct interface made the first coroutine Job fail verification).
  *
  * <p>Prints PASS/FAIL per check and exits with the number of failures. Never prints log
@@ -199,6 +200,10 @@ public final class ReleaseCanary {
                 // The raw path the YAML editor reads and writes through.
                 String configMap = handle.getClient().raw("/api/v1/namespaces/default/configmaps/app-config");
                 require(configMap != null && configMap.contains("app-config"), "a raw GET of a demo ConfigMap returned " + configMap);
+                // The demo's fake Prometheus, through detection and one CPU query: the derived HTTP client, the
+                // mock server's Dispatcher subclass and the coroutine bridge all have to survive the shrinker.
+                int points = ReleaseCheckSupport.demoCpuHistoryPoints(handle.getClient());
+                require(points > 0, "the demo Prometheus answered " + points + " CPU points");
             } finally {
                 handle.close();
             }

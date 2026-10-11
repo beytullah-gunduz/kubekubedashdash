@@ -7,7 +7,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Which source answers for a context: Off beats everything, the demo is never GMP, and every field is validated. */
+/** Which source answers for a context: Off beats everything, the demo resolves like any other context, and every field is validated. */
 class ResolveMetricsSourceTest {
 
     private var previousCloudClis: String? = null
@@ -30,37 +30,63 @@ class ResolveMetricsSourceTest {
 
     private val gkeContext = "gke_example-project_us-central1_example-cluster"
     private val triple = GmpTarget("example-project", "us-central1", "example-cluster")
+    private val found = InClusterTarget("monitoring", "prometheus-operated", "web", https = false, pathPrefix = "")
+
+    private fun resolve(
+        context: String?,
+        settings: Map<String, MetricsSourceSetting> = emptyMap(),
+        detection: DetectionState? = null,
+    ) = resolveMetricsSource(context, settings, detection)
 
     private fun gmp(project: String = "example-project", location: String = "us-central1", cluster: String = "example-cluster") = MetricsSourceSetting(MetricsSourceMode.GMP, project, location, cluster)
 
+    private fun inCluster(
+        namespace: String = "monitoring",
+        service: String = "prometheus-server",
+        port: String = "80",
+        pathPrefix: String = "",
+        https: Boolean = false,
+    ) = MetricsSourceSetting(MetricsSourceMode.IN_CLUSTER, namespace = namespace, service = service, port = port, pathPrefix = pathPrefix, https = https)
+
     @Test
     fun `no live context is not connected`() {
-        assertEquals(SourceChoice.None(NoSourceReason.NotConnected), resolveMetricsSource(null, isDemo = false, settings = emptyMap()))
+        assertEquals(SourceChoice.None(NoSourceReason.NotConnected), resolve(null))
+        assertEquals(SourceChoice.None(NoSourceReason.NotConnected), resolve(null, detection = DetectionState.Found(found)))
     }
 
     @Test
     fun `auto reads the project, location and cluster from a gke context name`() {
-        assertEquals(SourceChoice.Gmp(triple, auto = true), resolveMetricsSource(gkeContext, isDemo = false, settings = emptyMap()))
+        assertEquals(SourceChoice.Gmp(triple, auto = true), resolve(gkeContext))
     }
 
     @Test
-    fun `auto does not guess for a context that is not a gke name`() {
-        assertEquals(SourceChoice.None(NoSourceReason.NotGkeContext), resolveMetricsSource("example-context", isDemo = false, settings = emptyMap()))
-        assertEquals(
-            SourceChoice.None(NoSourceReason.NotGkeContext),
-            resolveMetricsSource("gke_example-project_us-central1", isDemo = false, settings = emptyMap()),
-        )
+    fun `auto keeps Managed Prometheus on a gke context even when an in-cluster Prometheus was found`() {
+        assertEquals(SourceChoice.Gmp(triple, auto = true), resolve(gkeContext, detection = DetectionState.Found(found)))
+        assertEquals(SourceChoice.Gmp(triple, auto = true), resolve(gkeContext, detection = DetectionState.NothingFound(atMs = 42)))
     }
 
     @Test
-    fun `auto rejects a gke context whose parts fail the import validators`() {
+    fun `auto on a context that is not a gke name waits for the detection`() {
+        assertEquals(SourceChoice.Detecting, resolve("example-context"))
+        assertEquals(SourceChoice.Detecting, resolve("example-context", detection = DetectionState.Searching))
+        assertEquals(SourceChoice.Detecting, resolve("gke_example-project_us-central1"))
+    }
+
+    @Test
+    fun `auto on a context that is not a gke name follows the detection result`() {
+        assertEquals(SourceChoice.InCluster(found, auto = true), resolve("example-context", detection = DetectionState.Found(found)))
+        assertEquals(SourceChoice.None(NoSourceReason.NothingFound), resolve("example-context", detection = DetectionState.NothingFound(atMs = 42)))
+        assertEquals(SourceChoice.None(NoSourceReason.CannotSearch), resolve("example-context", detection = DetectionState.CannotSearch(atMs = 42)))
+        assertEquals(SourceChoice.None(NoSourceReason.SearchFailed), resolve("example-context", detection = DetectionState.SearchFailed(atMs = 42)))
+    }
+
+    @Test
+    fun `auto treats a gke context whose parts fail the import validators like any other context`() {
+        assertEquals(SourceChoice.Detecting, resolve("gke_example-project_us-central1_Bad"))
+        assertEquals(SourceChoice.Detecting, resolve("gke_Bad Project_us-central1_example-cluster"))
         assertEquals(
-            SourceChoice.None(NoSourceReason.NotGkeContext),
-            resolveMetricsSource("gke_example-project_us-central1_Bad", isDemo = false, settings = emptyMap()),
-        )
-        assertEquals(
-            SourceChoice.None(NoSourceReason.NotGkeContext),
-            resolveMetricsSource("gke_Bad Project_us-central1_example-cluster", isDemo = false, settings = emptyMap()),
+            SourceChoice.InCluster(found, auto = true),
+            resolve("gke_example-project_us-central1_Bad", detection = DetectionState.Found(found)),
         )
     }
 
@@ -68,7 +94,7 @@ class ResolveMetricsSourceTest {
     fun `a manual target on any context is used as typed, trimmed`() {
         val settings = mapOf("example-context" to gmp(project = " example-project ", location = "us-central1\n", cluster = " example-cluster"))
 
-        assertEquals(SourceChoice.Gmp(triple, auto = false), resolveMetricsSource("example-context", isDemo = false, settings = settings))
+        assertEquals(SourceChoice.Gmp(triple, auto = false), resolve("example-context", settings = settings))
     }
 
     @Test
@@ -77,7 +103,7 @@ class ResolveMetricsSourceTest {
 
         assertEquals(
             SourceChoice.Gmp(GmpTarget("other-project", "us-central1", "example-cluster"), auto = false),
-            resolveMetricsSource(gkeContext, isDemo = false, settings = settings),
+            resolve(gkeContext, settings = settings),
         )
     }
 
@@ -86,49 +112,108 @@ class ResolveMetricsSourceTest {
         for (setting in listOf(gmp(project = "Bad Project"), gmp(location = ""), gmp(cluster = "a\"b"), gmp(project = "example-project\" or 1"))) {
             assertEquals(
                 SourceChoice.None(NoSourceReason.IncompleteSetting),
-                resolveMetricsSource("example-context", isDemo = false, settings = mapOf("example-context" to setting)),
+                resolve("example-context", settings = mapOf("example-context" to setting)),
                 "$setting",
             )
         }
     }
 
     @Test
-    fun `off disables a gke context`() {
-        val settings = mapOf(gkeContext to MetricsSourceSetting(MetricsSourceMode.OFF))
+    fun `an in-cluster setting is used as typed, trimmed, whatever the detection says`() {
+        val settings = mapOf("example-context" to inCluster(namespace = " monitoring ", service = "prometheus-server\n", port = " 80", pathPrefix = " /prom/ ", https = true))
+        val expected = InClusterTarget("monitoring", "prometheus-server", "80", https = true, pathPrefix = "/prom")
 
-        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolveMetricsSource(gkeContext, isDemo = false, settings = settings))
+        assertEquals(SourceChoice.InCluster(expected, auto = false), resolve("example-context", settings = settings))
+        assertEquals(SourceChoice.InCluster(expected, auto = false), resolve("example-context", settings = settings, detection = DetectionState.NothingFound(atMs = 42)))
+        assertEquals(SourceChoice.InCluster(expected, auto = false), resolve("example-context", settings = settings, detection = DetectionState.Found(found)))
     }
 
     @Test
-    fun `a demo context is the demo source`() {
-        assertEquals(SourceChoice.Demo, resolveMetricsSource("demo-cluster (mock) #2", isDemo = false, settings = emptyMap()))
-        assertEquals(SourceChoice.Demo, resolveMetricsSource(DemoContext.MOCK_CONTEXT_NAME, isDemo = false, settings = emptyMap()))
+    fun `an in-cluster setting wins over the gke context name`() {
+        val settings = mapOf(gkeContext to inCluster(port = "web"))
+
+        assertEquals(
+            SourceChoice.InCluster(InClusterTarget("monitoring", "prometheus-server", "web", https = false, pathPrefix = ""), auto = false),
+            resolve(gkeContext, settings = settings),
+        )
     }
 
     @Test
-    fun `a connection that is the demo is the demo source whatever the context is called`() {
-        assertEquals(SourceChoice.Demo, resolveMetricsSource("example-context", isDemo = true, settings = emptyMap()))
+    fun `an in-cluster setting with an invalid field is incomplete`() {
+        val bad = listOf(
+            inCluster(namespace = ""),
+            inCluster(namespace = "Monitoring"),
+            inCluster(namespace = "monitoring/../kube-system"),
+            inCluster(service = ""),
+            inCluster(service = "prometheus-server:80"),
+            inCluster(port = ""),
+            inCluster(port = "0"),
+            inCluster(port = "65536"),
+            inCluster(port = "8080/proxy"),
+            inCluster(pathPrefix = "prom"),
+            inCluster(pathPrefix = "/prom?x=1"),
+            inCluster(pathPrefix = "/../kube-system"),
+            inCluster(pathPrefix = "/prom//"),
+        )
+        for (setting in bad) {
+            assertEquals(
+                SourceChoice.None(NoSourceReason.IncompleteSetting),
+                resolve("example-context", settings = mapOf("example-context" to setting), detection = DetectionState.Found(found)),
+                "$setting",
+            )
+        }
     }
 
     @Test
-    fun `a manual target does not turn the demo into Managed Prometheus`() {
-        val settings = mapOf(DemoContext.MOCK_CONTEXT_NAME to gmp())
+    fun `an Auto setting that keeps in-cluster fields still follows the detection`() {
+        val settings = mapOf("example-context" to inCluster().copy(mode = MetricsSourceMode.AUTO))
 
-        assertEquals(SourceChoice.Demo, resolveMetricsSource("demo-cluster (mock) #2", isDemo = true, settings = settings))
+        assertEquals(SourceChoice.Detecting, resolve("example-context", settings = settings))
+        assertEquals(SourceChoice.InCluster(found, auto = true), resolve("example-context", settings = settings, detection = DetectionState.Found(found)))
+    }
+
+    @Test
+    fun `off disables a gke context and a detected one`() {
+        val settings = mapOf(gkeContext to MetricsSourceSetting(MetricsSourceMode.OFF), "example-context" to MetricsSourceSetting(MetricsSourceMode.OFF))
+
+        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve(gkeContext, settings = settings))
+        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve("example-context", settings = settings, detection = DetectionState.Found(found)))
+    }
+
+    @Test
+    fun `a demo context waits for the detection and follows it like any context that is not a gke name`() {
+        for (context in listOf(DemoContext.MOCK_CONTEXT_NAME, "demo-cluster (mock) #2")) {
+            assertEquals(SourceChoice.Detecting, resolve(context), context)
+            assertEquals(SourceChoice.InCluster(found, auto = true), resolve(context, detection = DetectionState.Found(found)), context)
+            assertEquals(SourceChoice.None(NoSourceReason.NothingFound), resolve(context, detection = DetectionState.NothingFound(atMs = 42)), context)
+        }
+    }
+
+    @Test
+    fun `a manual target stored under the demo row applies to every minted demo label`() {
+        val gmpSettings = mapOf(DemoContext.MOCK_CONTEXT_NAME to gmp())
+        val inClusterSettings = mapOf(DemoContext.MOCK_CONTEXT_NAME to inCluster())
+        val typed = InClusterTarget("monitoring", "prometheus-server", "80", https = false, pathPrefix = "")
+
+        for (context in listOf(DemoContext.MOCK_CONTEXT_NAME, "demo-cluster (mock) #2")) {
+            assertEquals(SourceChoice.Gmp(triple, auto = false), resolve(context, settings = gmpSettings), context)
+            assertEquals(SourceChoice.InCluster(typed, auto = false), resolve(context, settings = inClusterSettings), context)
+        }
     }
 
     @Test
     fun `off stored under the demo row applies to every minted demo label`() {
         val settings = mapOf(DemoContext.MOCK_CONTEXT_NAME to MetricsSourceSetting(MetricsSourceMode.OFF))
 
-        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolveMetricsSource("demo-cluster (mock) #2", isDemo = true, settings = settings))
-        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolveMetricsSource(DemoContext.MOCK_CONTEXT_NAME, isDemo = true, settings = settings))
+        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve("demo-cluster (mock) #2", settings = settings))
+        assertEquals(SourceChoice.None(NoSourceReason.Disabled), resolve(DemoContext.MOCK_CONTEXT_NAME, settings = settings, detection = DetectionState.Found(found)))
     }
 
     @Test
     fun `a setting stored for another cluster does not apply`() {
         val settings = mapOf("example-context" to MetricsSourceSetting(MetricsSourceMode.OFF))
 
-        assertEquals(SourceChoice.Gmp(triple, auto = true), resolveMetricsSource(gkeContext, isDemo = false, settings = settings))
+        assertEquals(SourceChoice.Gmp(triple, auto = true), resolve(gkeContext, settings = settings))
+        assertEquals(SourceChoice.Detecting, resolve("example-context-2", settings = settings))
     }
 }

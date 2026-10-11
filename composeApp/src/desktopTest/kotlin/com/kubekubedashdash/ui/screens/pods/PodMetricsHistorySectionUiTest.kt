@@ -27,7 +27,12 @@ import com.kubekubedashdash.kdTypography
 import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
+import com.kubekubedashdash.services.metricshistory.ClusterStub
+import com.kubekubedashdash.services.metricshistory.DetectionState
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
+import com.kubekubedashdash.services.metricshistory.InClusterDetection
+import com.kubekubedashdash.services.metricshistory.InClusterTarget
+import com.kubekubedashdash.services.metricshistory.K8S_FORBIDDEN
 import com.kubekubedashdash.services.metricshistory.MetricsHistoryService
 import com.kubekubedashdash.services.metricshistory.MetricsHistorySource
 import com.kubekubedashdash.services.metricshistory.MetricsSourceMode
@@ -38,11 +43,22 @@ import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.Series
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
+import com.kubekubedashdash.services.metricshistory.dummyClient
+import com.kubekubedashdash.services.metricshistory.jsonResponse
+import com.kubekubedashdash.services.metricshistory.matrixBody
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.shutdownCleanly
+import io.fabric8.kubernetes.client.KubernetesClient
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -54,6 +70,10 @@ private const val CONTEXT = "example-context"
 private const val NOW = 86_400L * 100
 
 private val GmpSetting = MetricsSourceSetting(MetricsSourceMode.GMP, "example-project", "us-central1", "example-cluster")
+
+private val InClusterSetting = MetricsSourceSetting(MetricsSourceMode.IN_CLUSTER, namespace = "monitoring", service = "prometheus-server", port = "80")
+
+private val DetectedTarget = InClusterTarget("monitoring", "prometheus-server", "80", https = false, pathPrefix = "")
 
 /** Every text in [this] node's subtree, in tree order. */
 private fun SemanticsNode.allTexts(): List<String> = config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allTexts() }
@@ -102,6 +122,16 @@ class PodMetricsHistorySectionUiTest {
     private lateinit var originalMode: ThemeMode
     private var originalDark = true
 
+    // Unconfined: a search whose lambda does not suspend finishes inside the call that starts it, so
+    // the tests need no sleeping to see its answer.
+    private val detectionScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    private val clock = AtomicLong(1_000_000)
+
+    // Only the tests that go through the real in-cluster source need the loopback API server.
+    private val stubDelegate = lazy { ClusterStub() }
+    private val stub by stubDelegate
+    private val stubClient: KubernetesClient by lazy { stub.client() }
+
     @BeforeTest
     fun setUp() {
         assertTrue(
@@ -116,21 +146,35 @@ class PodMetricsHistorySectionUiTest {
 
     @AfterTest
     fun restore() {
-        ThemeManager.syncStyleFromPreferences(originalStyle)
-        // syncFromPreferences(SYSTEM) leaves the dark flag where the last explicit
-        // mode put it, so restore the flag first through the matching explicit mode.
-        ThemeManager.syncFromPreferences(if (originalDark) ThemeMode.DARK else ThemeMode.LIGHT)
-        ThemeManager.syncFromPreferences(originalMode)
+        try {
+            shutdownCleanly(detectionScope, label = "PodMetricsHistorySectionUiTest")
+            if (stubDelegate.isInitialized()) stub.close("PodMetricsHistorySectionUiTest")
+        } finally {
+            ThemeManager.syncStyleFromPreferences(originalStyle)
+            // syncFromPreferences(SYSTEM) leaves the dark flag where the last explicit
+            // mode put it, so restore the flag first through the matching explicit mode.
+            ThemeManager.syncFromPreferences(if (originalDark) ThemeMode.DARK else ThemeMode.LIGHT)
+            ThemeManager.syncFromPreferences(originalMode)
+        }
     }
 
     private fun settingsOf(setting: MetricsSourceSetting) = MutableStateFlow(mapOf(DemoContext.preferenceKey(CONTEXT) to setting))
 
-    private fun serviceOver(settings: MutableStateFlow<Map<String, MetricsSourceSetting>>, source: MetricsHistorySource) = MetricsHistoryService(
+    /** A detection whose search is [detect]; it runs in the test-owned scope and reads the test clock. */
+    private fun detectionOf(detect: suspend (KubernetesClient) -> DetectionState = { DetectionState.NothingFound(clock.get()) }) = InClusterDetection(scope = detectionScope, nowMs = clock::get, detect = detect)
+
+    private fun serviceOver(
+        settings: MutableStateFlow<Map<String, MetricsSourceSetting>>,
+        source: MetricsHistorySource,
+        detection: InClusterDetection = detectionOf(),
+        clientFor: suspend (String) -> KubernetesClient? = { dummyClient() },
+    ) = MetricsHistoryService(
         currentContext = { CONTEXT },
-        isDemo = { false },
         settingsFlow = { settings },
         gmpSourceFor = { source },
-        demoSource = source,
+        detection = detection,
+        clientFor = clientFor,
+        nowMs = clock::get,
     )
 
     private fun podNamed(
@@ -408,25 +452,200 @@ class PodMetricsHistorySectionUiTest {
     }
 
     @Test
-    fun `Auto on a context it cannot use draws exactly the section from before metrics history`() = runComposeUiTest {
-        // CONTEXT is not a gke_ name and nothing is stored: Auto finds no source.
+    fun `Auto on a context that is not a gke name shows the live charts under the loading line, searches once and asks no source`() = runComposeUiTest {
+        // CONTEXT is not a gke_ name and nothing is stored: Auto is still looking for a Prometheus.
         val source = FakeSource()
-        val service = serviceOver(MutableStateFlow(emptyMap()), source)
+        val searches = AtomicInteger()
+        val gate = CompletableDeferred<DetectionState>()
+        val service = serviceOver(
+            MutableStateFlow(emptyMap()),
+            source,
+            detectionOf {
+                searches.incrementAndGet()
+                gate.await()
+            },
+        )
+        var live by mutableStateOf(liveSnapshots)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, live, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+        onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
+        assertEquals(1, searches.get(), "the panel starts the search when it shows")
+
+        // More recompositions while the search is out do not start another.
+        live = liveSnapshots + PodMetricsSnapshot(3_000, 300, 3_145_728)
+        waitForIdle()
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        assertEquals(1, searches.get(), "a recomposition must not search again")
+        assertTrue(source.calls.isEmpty(), "no history source may be asked: ${source.calls}")
+    }
+
+    @Test
+    fun `a search abandoned while the panel shows, as Search again does, is started again`() = runComposeUiTest {
+        val searches = AtomicInteger()
+        val gate = CompletableDeferred<DetectionState>()
+        val detection = detectionOf {
+            searches.incrementAndGet()
+            gate.await()
+        }
+        val service = serviceOver(MutableStateFlow(emptyMap()), FakeSource(), detection)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        assertEquals(1, searches.get())
+
+        detection.invalidate(DemoContext.preferenceKey(CONTEXT))
+        waitUntil(timeoutMillis = 5_000) { searches.get() == 2 }
+
+        assertEquals(DetectionState.Searching, detection.current(DemoContext.preferenceKey(CONTEXT)), "the panel must not be left without a search")
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        gate.complete(DetectionState.NothingFound(clock.get()))
+        waitForIdle()
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        assertEquals(2, searches.get())
+    }
+
+    @Test
+    fun `Auto that finds nothing draws exactly the section from before metrics history`() = runComposeUiTest {
+        val source = FakeSource()
+        val searches = AtomicInteger()
+        val service = serviceOver(
+            MutableStateFlow(emptyMap()),
+            source,
+            detectionOf {
+                searches.incrementAndGet()
+                DetectionState.NothingFound(clock.get())
+            },
+        )
+        var live by mutableStateOf(liveSnapshots)
         setContent {
             MaterialTheme(typography = kdTypography()) {
                 Column(Modifier.width(640.dp)) {
-                    Box(Modifier.testTag("now")) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
-                    Box(Modifier.testTag("before")) { PodMetricsSection(liveSnapshots) }
+                    Box(Modifier.testTag("now")) { PodMetricsHistorySection(podNamed(), service, live, { NOW }, Long.MAX_VALUE) }
+                    Box(Modifier.testTag("before")) { PodMetricsSection(live) }
                 }
             }
         }
         waitForIdle()
 
-        val now = onNodeWithTag("now", useUnmergedTree = true).fetchSemanticsNode().allTexts()
-        val before = onNodeWithTag("before", useUnmergedTree = true).fetchSemanticsNode().allTexts()
-        assertTrue(now.isNotEmpty(), "the live charts must render")
-        assertEquals(before, now)
+        fun texts(tag: String) = onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().allTexts()
+        assertTrue(texts("now").isNotEmpty(), "the live charts must render")
+        assertEquals(texts("before"), texts("now"))
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        assertEquals(1, searches.get())
+
+        // The answer is kept: new live data and a later frame do not search again.
+        live = liveSnapshots + PodMetricsSnapshot(3_000, 300, 3_145_728)
+        waitForIdle()
+        assertEquals(texts("before"), texts("now"))
+        assertEquals(1, searches.get(), "a recomposition must not search again")
         assertTrue(source.calls.isEmpty(), "no history source may be asked: ${source.calls}")
+    }
+
+    @Test
+    fun `a search that cannot list or failed also leaves the section as it was before metrics history`() = runComposeUiTest {
+        listOf(DetectionState.CannotSearch(clock.get()), DetectionState.SearchFailed(clock.get())).forEach { outcome ->
+            val service = serviceOver(MutableStateFlow(emptyMap()), FakeSource(), detectionOf { outcome })
+            setContent {
+                MaterialTheme(typography = kdTypography()) {
+                    Column(Modifier.width(640.dp)) {
+                        Box(Modifier.testTag("now")) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+                        Box(Modifier.testTag("before")) { PodMetricsSection(liveSnapshots) }
+                    }
+                }
+            }
+            waitForIdle()
+
+            val now = onNodeWithTag("now", useUnmergedTree = true).fetchSemanticsNode().allTexts()
+            assertTrue(now.isNotEmpty(), "the live charts must render after $outcome")
+            assertEquals(onNodeWithTag("before", useUnmergedTree = true).fetchSemanticsNode().allTexts(), now, "$outcome")
+        }
+    }
+
+    @Test
+    fun `a failed search is tried again only once its minute is over and the pod shows again`() = runComposeUiTest {
+        val searches = AtomicInteger()
+        val service = serviceOver(
+            MutableStateFlow(emptyMap()),
+            FakeSource(),
+            detectionOf {
+                searches.incrementAndGet()
+                DetectionState.SearchFailed(clock.get())
+            },
+        )
+        var pod by mutableStateOf(podNamed("web-0"))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(pod, service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        assertEquals(1, searches.get())
+
+        // Within the minute another pod finds the failure still standing.
+        clock.addAndGet(InClusterDetection.FAILED_TTL_MS)
+        pod = podNamed("web-1")
+        waitForIdle()
+        assertEquals(1, searches.get(), "the failure had not yet expired")
+
+        clock.addAndGet(1)
+        pod = podNamed("web-2")
+        waitForIdle()
+        assertEquals(2, searches.get(), "the expired failure is searched again")
+    }
+
+    @Test
+    fun `a Prometheus found by the search flips the panel to its history`() = runComposeUiTest {
+        val gate = CompletableDeferred<DetectionState>()
+        stub.proxy = { jsonResponse(200, matrixBody("app" to listOf(NOW - 60 to "1", NOW to "2"))) }
+        val service = serviceOver(MutableStateFlow(emptyMap()), FakeSource(), detectionOf { gate.await() }, clientFor = { stubClient })
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        assertTrue(stub.proxyRequests.isEmpty(), "nothing is asked of a Prometheus before one is found")
+
+        gate.complete(DetectionState.Found(DetectedTarget))
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("CPU throttling").fetchSemanticsNodes().isNotEmpty() }
+
+        onNodeWithText("Prometheus · monitoring/prometheus-server").assertExists()
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        val request = stub.proxyRequests.first()
+        assertEquals("/api/v1/namespaces/monitoring/services/prometheus-server:80/proxy/api/v1/query_range", request.path.substringBefore('?'))
+    }
+
+    @Test
+    fun `a role without services proxy access sees the reason above the live charts`() = runComposeUiTest {
+        stub.proxy = { jsonResponse(403, K8S_FORBIDDEN) }
+        stub.review = { ClusterStub.reviewResponse(allowed = false) }
+        val service = serviceOver(settingsOf(InClusterSetting), FakeSource(), clientFor = { stubClient })
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitUntil(timeoutMillis = 10_000) {
+            onAllNodesWithText("it needs get on services/proxy in namespace monitoring", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        onNodeWithText("(granted by edit or admin, not view). Showing live metrics-server data.", substring = true).assertExists()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+        onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
+        onNodeWithText("CPU throttling").assertDoesNotExist()
+        onNodeWithText("Prometheus · monitoring/prometheus-server").assertExists()
+        onNodeWithText("1h ▾").assertExists()
     }
 
     @Test

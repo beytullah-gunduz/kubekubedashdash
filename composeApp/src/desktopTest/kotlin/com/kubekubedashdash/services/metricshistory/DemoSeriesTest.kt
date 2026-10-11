@@ -2,16 +2,14 @@ package com.kubekubedashdash.services.metricshistory
 
 import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.util.ShellEnvironment
-import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** The demo cluster's history: deterministic, shaped by the pod's own limits, and holding the pinned pods near their limit. */
-class DemoMetricsSourceTest {
+/** The demo cluster's generated series: deterministic, shaped by the pod's own limits, and holding the pinned pods near their limit. */
+class DemoSeriesTest {
 
     private var previousCloudClis: String? = null
 
@@ -53,15 +51,6 @@ class DemoMetricsSourceTest {
             assertEquals(window.endEpochSec, series.points.last().epochSec)
             assertEquals(setOf(window.stepSec), series.points.zipWithNext { a, b -> b.epochSec - a.epochSec }.toSet())
         }
-    }
-
-    @Test
-    fun `the source answers Ok with its own label`() = runBlocking<Unit> {
-        val result = DemoMetricsSource.podSeries(PodSeriesKind.Memory, pod, window)
-
-        assertIs<SeriesResult.Ok>(result)
-        assertEquals(demoSeries(PodSeriesKind.Memory, pod, window), result.series)
-        assertEquals("Demo data", DemoMetricsSource.label)
     }
 
     @Test

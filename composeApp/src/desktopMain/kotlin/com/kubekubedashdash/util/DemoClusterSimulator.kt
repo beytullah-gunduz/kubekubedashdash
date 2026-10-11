@@ -41,6 +41,16 @@ internal val DEMO_MEMORY_PRESSURE_TARGETS: Map<String, Double> = mapOf(
     "default/frontend-7b9d5c8f4-def34" to 0.85,
 )
 
+// Seeded pods the churn never removes ("namespace/name"), so the demo's topology and alerts stay coherent
+// and the release canary can query a pod that is certain to exist.
+internal val DEMO_PROTECTED_PODS: Set<String> = setOf(
+    "default/frontend-7b9d5c8f4-abc12",
+    "default/frontend-7b9d5c8f4-def34",
+    "default/backend-api-6c4f8d9b2-xyz99",
+    "default/backend-api-6c4f8d9b2-uvw88",
+    "default/data-migration-job-lm4n8",
+)
+
 class DemoClusterSimulator(
     private val client: KubernetesClient,
     initialTargets: Targets = Targets(),
@@ -122,13 +132,7 @@ class DemoClusterSimulator(
     private val eventSeries = ConcurrentHashMap<String, DemoEventSeries>()
 
     private val protectedNodes = setOf("mock-node-1")
-    private val protectedPods = setOf(
-        "default/frontend-7b9d5c8f4-abc12",
-        "default/frontend-7b9d5c8f4-def34",
-        "default/backend-api-6c4f8d9b2-xyz99",
-        "default/backend-api-6c4f8d9b2-uvw88",
-        "default/data-migration-job-lm4n8",
-    )
+    private val protectedPods = DEMO_PROTECTED_PODS
 
     private val memoryPressureTargets = DEMO_MEMORY_PRESSURE_TARGETS
 
