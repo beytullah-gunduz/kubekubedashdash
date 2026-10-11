@@ -1,0 +1,55 @@
+# One pod with two containers, and a service account that holds only the built-in `view` role
+# in its namespace. `app` has a CPU limit and bursts past it (so CFS throttling happens);
+# `sidecar` has none.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: viewer
+  namespace: team-a
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: viewer-view
+  namespace: team-a
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: viewer
+    namespace: team-a
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-0
+  namespace: team-a
+  labels:
+    app: web
+spec:
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command: ["sh", "-c"]
+      args:
+        - |
+          while true; do
+            i=0
+            while [ $i -lt 500000 ]; do i=$((i + 1)); done
+            sleep 2
+          done
+      resources:
+        requests:
+          cpu: 100m
+        limits:
+          cpu: 500m
+    - name: sidecar
+      image: busybox:1.37.0
+      command: ["sh", "-c", "while true; do sleep 5; done"]

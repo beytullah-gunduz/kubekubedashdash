@@ -3,6 +3,7 @@ import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
 import org.jetbrains.compose.desktop.application.tasks.AbstractProguardTask
 import java.nio.file.FileSystems
 import java.nio.file.Files
+import java.time.Duration
 import java.util.zip.ZipFile
 
 plugins {
@@ -45,6 +46,8 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
                 // runComposeUiTest: drawer-pane state retention (widescreen log panel plan).
                 implementation(libs.compose.ui.test)
+                // k3sIntegrationTest / k3sDevCluster only (a Docker-backed K3s); desktopTest never starts it.
+                implementation(libs.testcontainers.k3s)
             }
         }
 
@@ -284,8 +287,11 @@ tasks.matching { it.name.startsWith("hotRun") }.configureEach {
         // The async launcher may not forward the task environment; the `kubeconfig` system
         // property wins over $KUBECONFIG in KubeconfigLocator and fabric8 alike, and rides the argfile.
         // -PhotRunKubeconfig=<file> swaps in a hand-made fake kubeconfig (e.g. one unreachable
-        // context, to exercise the connection-error screen); never point it at a real one.
-        systemProperty("kubeconfig", providers.gradleProperty("hotRunKubeconfig").getOrElse(emptyKubeconfig.get().asFile.absolutePath))
+        // context, to exercise the connection-error screen, or the throwaway K3s cluster's
+        // build/k3s/kubeconfig-*.yaml from k3sDevCluster); never point it at a real one. A relative
+        // path is taken from this module's directory, since the hot-run JVM's own working directory
+        // is not defined.
+        systemProperty("kubeconfig", providers.gradleProperty("hotRunKubeconfig").map { file(it).absolutePath }.getOrElse(emptyKubeconfig.get().asFile.absolutePath))
         systemProperty("kkdd.dataDir", hotRunDataDir.absolutePath)
         // Hidden test hooks for the UI smoke (tab drags between windows, the history
         // shortcuts); hot runs only, never a release build.
@@ -305,8 +311,12 @@ tasks.matching { it.name.startsWith("hotRun") }.configureEach {
 //   ./gradlew :composeApp:uiSmoke --tests '*s3-tear-out-all-clusters' one scenario
 //   ./gradlew :composeApp:uiSmoke -PuiSmokeKeepApp=true              leave a failing scenario's app running
 val uiSmokeTestClass = "com.kubekubedashdash.uismoke.UiSmoke"
+val k3sTestClass = "com.kubekubedashdash.k3s.InClusterPrometheusK3sTest"
 tasks.named<Test>("desktopTest") {
-    filter { excludeTestsMatching(uiSmokeTestClass) }
+    filter {
+        excludeTestsMatching(uiSmokeTestClass)
+        excludeTestsMatching(k3sTestClass)
+    }
 }
 tasks.register<Test>("uiSmoke") {
     group = "verification"
@@ -326,6 +336,51 @@ tasks.register<Test>("uiSmoke") {
         events("passed", "failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
+}
+
+// K3s integration test (opt-in; needs a reachable Docker): k3s.InClusterPrometheusK3sTest starts a
+// throwaway K3s with Testcontainers, runs a plain Prometheus that scrapes the node's cAdvisor and
+// checks the in-cluster history source against it, as an admin and as a viewer that holds only the
+// built-in `view` role. Like the UI smoke it is compiled with the other tests but only these tasks
+// run it; the client it talks to is built from the cluster's own kubeconfig, never from yours.
+//   ./gradlew :composeApp:k3sIntegrationTest   the assertions, then the cluster is removed
+//   ./gradlew :composeApp:k3sDevCluster        the same cluster, left up until build/k3s/stop exists
+//                                              (kubeconfig-admin.yaml and kubeconfig-viewer.yaml are
+//                                              written next to it; point -PhotRunKubeconfig at one)
+// Docker settings (Colima: DOCKER_HOST, TESTCONTAINERS_*) are read from the environment of the call.
+val k3sDevMethod = "devCluster"
+val k3sOutputDir = layout.buildDirectory.dir("k3s").get().asFile
+val configureK3sTask: Test.() -> Unit = {
+    group = "verification"
+    val testCompilation = kotlin.targets.getByName("desktop").compilations.getByName("test")
+    testClassesDirs = testCompilation.output.classesDirs
+    classpath = files(testCompilation.output.allOutputs, testCompilation.runtimeDependencyFiles)
+    useJUnit()
+    systemProperty("kkdd.k3s.dir", k3sOutputDir.absolutePath)
+    // It checks a live cluster, not its inputs: never up to date.
+    outputs.upToDateWhen { false }
+    testLogging {
+        showStandardStreams = true
+        events("passed", "failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+tasks.register<Test>("k3sIntegrationTest") {
+    configureK3sTask()
+    description = "Runs the in-cluster Prometheus history source against a throwaway K3s cluster started with Testcontainers (needs Docker)."
+    filter {
+        includeTestsMatching(k3sTestClass)
+        excludeTestsMatching("$k3sTestClass.$k3sDevMethod")
+    }
+    systemProperty("kkdd.k3s", "true")
+    timeout.set(Duration.ofMinutes(15))
+}
+tasks.register<Test>("k3sDevCluster") {
+    configureK3sTask()
+    description = "Starts the K3s cluster of k3sIntegrationTest, writes build/k3s/kubeconfig-admin.yaml and kubeconfig-viewer.yaml, prints K3S READY, and keeps it up until build/k3s/stop exists (60 minutes at most)."
+    filter { includeTestsMatching("$k3sTestClass.$k3sDevMethod") }
+    systemProperty("kkdd.k3s.dev", "true")
+    timeout.set(Duration.ofMinutes(70))
 }
 
 // Release-build verification. Nothing else ever runs the ProGuard-shrunk jars before a
