@@ -55,11 +55,31 @@ class MetricsHistorySettingsTest {
     }
 
     @Test
-    fun `a renamed context says Auto found nothing and how to fix it`() {
-        assertEquals(
-            "Auto → none: not a gke_… context. Pick Managed Prometheus to set it up.",
-            metricsSourceStatus(RENAMED_CONTEXT, emptyMap()),
+    fun `a renamed context says Auto is looking for a Prometheus service`() {
+        assertEquals("Auto → looking for a Prometheus service…", metricsSourceStatus(RENAMED_CONTEXT, emptyMap()))
+    }
+
+    @Test
+    fun `an in-cluster setting names its target and drops the Auto prefix`() {
+        val setting = MetricsSourceSetting(
+            mode = MetricsSourceMode.IN_CLUSTER,
+            namespace = "monitoring",
+            service = "prometheus-server",
+            port = "80",
+            pathPrefix = "/prom/",
         )
+        assertEquals(
+            "In-cluster Prometheus · monitoring/prometheus-server:80/prom",
+            metricsSourceStatus(RENAMED_CONTEXT, mapOf(RENAMED_CONTEXT to setting)),
+        )
+    }
+
+    @Test
+    fun `an incomplete in-cluster setting says what is missing and never echoes a bad value`() {
+        val bad = MetricsSourceSetting(mode = MetricsSourceMode.IN_CLUSTER, namespace = "x/../y\"}", service = "prometheus-server", port = "80")
+        val status = metricsSourceStatus(RENAMED_CONTEXT, mapOf(RENAMED_CONTEXT to bad))
+        assertEquals("Incomplete: enter a valid namespace, service and port.", status)
+        assertFalse(status.contains("x/../y"), status)
     }
 
     @Test
@@ -254,7 +274,7 @@ class MetricsHistorySettingsUiTest {
         onNodeWithText(GKE_CONTEXT).assertExists()
         onNodeWithText(RENAMED_CONTEXT).assertExists()
         onNodeWithText("Auto → Google Managed Prometheus · example-project · us-central1 · example-cluster").assertExists()
-        onNodeWithText("Auto → none: not a gke_… context. Pick Managed Prometheus to set it up.").assertExists()
+        onNodeWithText("Auto → looking for a Prometheus service…").assertExists()
         onNodeWithText("project").assertDoesNotExist()
     }
 

@@ -23,11 +23,11 @@ class MetricsHistoryService internal constructor(
     val settings: StateFlow<Map<String, MetricsSourceSetting>> by lazy(settingsFlow)
 
     /** Which source answers for the live context on this call. */
-    fun choice(): SourceChoice = resolveMetricsSource(currentContext(), isDemo(), settings.value)
+    fun choice(): SourceChoice = resolveMetricsSource(currentContext(), isDemo(), settings.value, detection = null)
 
     fun sourceFor(choice: SourceChoice): MetricsHistorySource? = when (choice) {
         SourceChoice.Demo -> demoSource
         is SourceChoice.Gmp -> gmpSourceFor(choice.target)
-        is SourceChoice.None -> null
+        is SourceChoice.InCluster, SourceChoice.Detecting, is SourceChoice.None -> null
     }
 }

@@ -340,7 +340,7 @@ object PreferenceRepository {
                     _clusterColorOverrides.value = StringMapCodec.decode(p[CLUSTER_COLOR_OVERRIDES])
                     _favouriteClusters.value = StringListCodec.decode(p[FAVOURITE_CLUSTERS])
                     _defaultNamespaceByContext.value = StringMapCodec.decode(p[DEFAULT_NAMESPACE_BY_CONTEXT])
-                    _metricsSourceByContext.value = decodeMetricsSources(p[METRICS_SOURCE_BY_CONTEXT])
+                    _metricsSourceByContext.value = MetricsSourceCodec.decode(p[METRICS_SOURCE_BY_CONTEXT])
                     _topologyPacketAnimationEnabled.value = p[TOPOLOGY_PACKET_ANIMATION_ENABLED] ?: true
                     _topologyRefreshIntervalSec.value = p[TOPOLOGY_REFRESH_INTERVAL_SEC] ?: 60
                     _logDrawerHeightDp.value = (p[LOG_DRAWER_HEIGHT_DP] ?: DEFAULT_LOG_DRAWER_HEIGHT_DP)
@@ -676,19 +676,20 @@ object PreferenceRepository {
     }
 
     // Keyed by DemoContext.preferenceKey(context), like setClusterColor. The default
-    // setting (Auto, no fields) removes the key rather than storing it.
+    // setting (Auto, no fields) removes the key rather than storing it. Edits the raw
+    // entries (see MetricsSourceCodec), so another cluster's entry that this version
+    // cannot decode is written back as it was.
     suspend fun setMetricsSource(context: String, setting: MetricsSourceSetting) = persistFirst.withLock {
         val key = DemoContext.preferenceKey(context)
         val committed = dataStore.edit { prefs ->
-            val current = decodeMetricsSources(prefs[METRICS_SOURCE_BY_CONTEXT]).toMutableMap()
-            if (setting == MetricsSourceSetting()) current.remove(key) else current[key] = setting
+            val current = MetricsSourceCodec.withSetting(MetricsSourceCodec.parseRaw(prefs[METRICS_SOURCE_BY_CONTEXT]), key, setting)
             if (current.isEmpty()) {
                 prefs.remove(METRICS_SOURCE_BY_CONTEXT)
             } else {
-                prefs[METRICS_SOURCE_BY_CONTEXT] = json.encodeToString<Map<String, MetricsSourceSetting>>(current)
+                prefs[METRICS_SOURCE_BY_CONTEXT] = MetricsSourceCodec.encodeRaw(current)
             }
         }
-        _metricsSourceByContext.value = decodeMetricsSources(committed[METRICS_SOURCE_BY_CONTEXT])
+        _metricsSourceByContext.value = MetricsSourceCodec.decode(committed[METRICS_SOURCE_BY_CONTEXT])
     }
 
     // ── Decoders ──────────────────────────────────────────────────────────────
@@ -704,17 +705,6 @@ object PreferenceRepository {
             emptyList()
         } catch (_: IllegalArgumentException) {
             emptyList()
-        }
-    }
-
-    private fun decodeMetricsSources(raw: String?): Map<String, MetricsSourceSetting> {
-        if (raw.isNullOrBlank()) return emptyMap()
-        return try {
-            json.decodeFromString<Map<String, MetricsSourceSetting>>(raw)
-        } catch (_: SerializationException) {
-            emptyMap()
-        } catch (_: IllegalArgumentException) {
-            emptyMap()
         }
     }
 

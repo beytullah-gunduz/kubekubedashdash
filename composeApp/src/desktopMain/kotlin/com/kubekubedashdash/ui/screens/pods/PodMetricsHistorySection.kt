@@ -109,9 +109,9 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
 
                 NoSourceReason.Disabled -> "Live data only — metrics history is off for this cluster (Settings → Metrics history)."
 
-                // Nothing in Settings can give a non-GKE cluster history yet, so no line: the
-                // section looks exactly as it did before metrics history existed.
-                NoSourceReason.NotGkeContext -> ""
+                // Auto found no Prometheus to read from, so no line: the section looks exactly as it
+                // did before metrics history existed. Settings says why.
+                NoSourceReason.NothingFound, NoSourceReason.CannotSearch, NoSourceReason.SearchFailed -> ""
 
                 NoSourceReason.IncompleteSetting ->
                     "Live data only — this cluster's Managed Prometheus settings are incomplete (Settings → Metrics history)."

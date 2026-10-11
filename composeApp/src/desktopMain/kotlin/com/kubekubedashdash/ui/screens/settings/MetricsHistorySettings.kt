@@ -32,17 +32,35 @@ import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.GkeClusterDiscoverer
 
 /** The second line of a context's row: what pod charts will use (D15). */
-internal fun metricsSourceStatus(context: String, settings: Map<String, MetricsSourceSetting>): String = when (val choice = resolveMetricsSource(context, DemoContext.isMockContext(context), settings)) {
+internal fun metricsSourceStatus(context: String, settings: Map<String, MetricsSourceSetting>): String = when (val choice = resolveMetricsSource(context, DemoContext.isMockContext(context), settings, detection = null)) {
     SourceChoice.Demo -> "Demo data"
 
     is SourceChoice.Gmp ->
         (if (choice.auto) "Auto → " else "") +
             "Google Managed Prometheus · ${choice.target.project} · ${choice.target.location} · ${choice.target.cluster}"
 
+    is SourceChoice.InCluster ->
+        (if (choice.auto) "Auto → " else "") +
+            "In-cluster Prometheus · ${choice.target.namespace}/${choice.target.service}:${choice.target.port}${choice.target.pathPrefix}"
+
+    SourceChoice.Detecting -> "Auto → looking for a Prometheus service…"
+
     is SourceChoice.None -> when (choice.reason) {
-        NoSourceReason.NotGkeContext -> "Auto → none: not a gke_… context. Pick Managed Prometheus to set it up."
+        NoSourceReason.NothingFound -> "Auto → none: no Prometheus service found."
+
+        NoSourceReason.CannotSearch -> "Auto → none: not allowed to list services."
+
+        NoSourceReason.SearchFailed -> "Auto → none: the search failed."
+
         NoSourceReason.Disabled -> "Off: pod charts show live metrics-server data only."
-        NoSourceReason.IncompleteSetting -> "Incomplete: enter a valid project, location and cluster."
+
+        NoSourceReason.IncompleteSetting ->
+            if (settings[DemoContext.preferenceKey(context)]?.mode == MetricsSourceMode.IN_CLUSTER) {
+                "Incomplete: enter a valid namespace, service and port."
+            } else {
+                "Incomplete: enter a valid project, location and cluster."
+            }
+
         NoSourceReason.NotConnected -> ""
     }
 }

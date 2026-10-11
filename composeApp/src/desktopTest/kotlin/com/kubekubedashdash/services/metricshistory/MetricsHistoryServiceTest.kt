@@ -73,7 +73,7 @@ class MetricsHistoryServiceTest {
         assertEquals(SourceChoice.None(NoSourceReason.NotConnected), service.choice())
 
         context = "example-context"
-        assertEquals(SourceChoice.None(NoSourceReason.NotGkeContext), service.choice())
+        assertEquals(SourceChoice.Detecting, service.choice())
 
         context = "gke_example-project_us-central1_example-cluster"
         assertEquals(SourceChoice.Gmp(GmpTarget("example-project", "us-central1", "example-cluster"), auto = true), service.choice())
@@ -100,7 +100,7 @@ class MetricsHistoryServiceTest {
     }
 
     @Test
-    fun `a source is picked for the demo, for a gmp target and not at all for none`() {
+    fun `a source is picked for the demo, for a gmp target and not at all for none, detecting or in-cluster`() {
         assertSame(fakeDemo, service.sourceFor(SourceChoice.Demo))
 
         val target = GmpTarget("example-project", "us-central1", "example-cluster")
@@ -110,6 +110,10 @@ class MetricsHistoryServiceTest {
         for (reason in NoSourceReason.entries) {
             assertNull(service.sourceFor(SourceChoice.None(reason)), "$reason")
         }
+        // Nothing builds an in-cluster source yet, and a search still under way has none to give.
+        assertNull(service.sourceFor(SourceChoice.Detecting))
+        val found = InClusterTarget("monitoring", "prometheus-operated", "web", https = false, pathPrefix = "")
+        assertNull(service.sourceFor(SourceChoice.InCluster(found, auto = true)))
         assertEquals(1, requestedTargets.size)
     }
 }

@@ -75,8 +75,10 @@ class PodMetricsHistoryViewTest {
 
         assertEquals("", hint(NoSourceReason.NotConnected))
         assertTrue(hint(NoSourceReason.Disabled).contains("metrics history is off"))
-        // Settings cannot give a non-GKE cluster history yet: no line, the section looks as it did before.
-        assertEquals("", hint(NoSourceReason.NotGkeContext))
+        // Auto found no Prometheus: no line, the section looks as it did before metrics history existed.
+        assertEquals("", hint(NoSourceReason.NothingFound))
+        assertEquals("", hint(NoSourceReason.CannotSearch))
+        assertEquals("", hint(NoSourceReason.SearchFailed))
         assertTrue(hint(NoSourceReason.IncompleteSetting).contains("settings are incomplete"))
     }
 
@@ -90,6 +92,11 @@ class PodMetricsHistoryViewTest {
     fun `a source with nothing fetched yet is loading`() {
         assertEquals(HistoryView.Loading, historyView(gmp, null))
         assertEquals(HistoryView.Loading, historyView(SourceChoice.Demo, null))
+    }
+
+    @Test
+    fun `a search that is still under way is loading, so the live charts stay under the loading line`() {
+        assertEquals(HistoryView.Loading, historyView(SourceChoice.Detecting, null))
     }
 
     @Test
