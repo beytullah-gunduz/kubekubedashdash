@@ -69,6 +69,16 @@ class KubeconfigReader(
         }
     }
 
+    /**
+     * The `namespace:` of the kubeconfig context [context], or null when it has none, is not a
+     * valid namespace name, or the context is unknown. A plain YAML read like the rest of this
+     * class: no exec plugin runs. The context resolves with the same first-file-wins rule as
+     * [contextBindings]. Never throws.
+     */
+    fun contextNamespace(context: String): String? = guarded(null) {
+        mergedContexts(rawConfigs())[context]?.context?.namespace?.trim()?.takeIf { KubernetesNames.isDnsLabel(it) }
+    }
+
     /** Named contexts from every file: first-seen order, first file wins, nameless or bodiless entries dropped. */
     private fun mergedContexts(configs: List<io.fabric8.kubernetes.api.model.Config>): LinkedHashMap<String, NamedContext> {
         val contexts = LinkedHashMap<String, NamedContext>()

@@ -138,7 +138,8 @@ class ReactiveKubeClient(
     val namespaceScope: StateFlow<NamespaceScope> = _namespaceScope.asStateFlow()
 
     fun setNamespaceScope(selection: NamespaceScope) {
-        log.info("Namespace selection changed to: {}", selection)
+        // Debug: routine, and it names namespaces; the file log keeps INFO and above (logback.xml), so only the drawer shows it.
+        log.debug("Namespace selection changed to: {}", selection)
         _namespaceScope.value = selection
     }
 
@@ -148,6 +149,9 @@ class ReactiveKubeClient(
     fun reportError(message: String) = connectionManager.reportError(message)
 
     private val _connectionVersion: StateFlow<Long> = connectionManager.connectionVersion
+
+    /** Bumps on every connection transition, so a list's answer can be tied to the connection it was read under. */
+    val connectionVersion: StateFlow<Long> get() = _connectionVersion
 
     /**
      * Connection-gated trigger for the reactive flows below. The underlying

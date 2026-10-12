@@ -2,6 +2,7 @@ package com.kubekubedashdash.services.metricshistory
 
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.GkeClusterDiscoverer
+import com.kubekubedashdash.util.KubernetesNames
 import kotlinx.serialization.Serializable
 
 /**
@@ -123,18 +124,15 @@ private fun validTarget(project: String, location: String, cluster: String): Gmp
  * and trims nothing.
  */
 object InClusterTargetValidation {
-    // A Kubernetes DNS-1123 label: namespace and service names.
-    private val DNS_LABEL = Regex("[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?")
-
     // An IANA service name (a Service port's name): at most 15 characters.
     private val PORT_NAME = Regex("[a-z0-9]([-a-z0-9]{0,13}[a-z0-9])?")
     private val PORT_NUMBER = Regex("[1-9][0-9]{0,4}")
     private val PATH_PREFIX = Regex("(/[A-Za-z0-9._~-]+)+")
     private const val MAX_PORT = 65535
 
-    fun isValidNamespace(value: String): Boolean = DNS_LABEL.matches(value)
+    fun isValidNamespace(value: String): Boolean = KubernetesNames.isDnsLabel(value)
 
-    fun isValidService(value: String): Boolean = DNS_LABEL.matches(value)
+    fun isValidService(value: String): Boolean = KubernetesNames.isDnsLabel(value)
 
     /** A port number from 1 to 65535 in plain decimal, or a port name that has at least one letter. */
     fun isValidPort(value: String): Boolean = if (PORT_NUMBER.matches(value)) {

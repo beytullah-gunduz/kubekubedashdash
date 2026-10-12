@@ -26,6 +26,12 @@
             <maxHistory>3</maxHistory>
             <totalSizeCap>50MB</totalSizeCap>
         </rollingPolicy>
+        <!-- The file keeps INFO and above. com.kubekubedashdash logs at DEBUG for the in-app drawer,
+             and those lines name namespaces and objects; the file outlives the session and may be
+             attached to a bug report, so DEBUG stays in the drawer only. -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %-36.36logger{36} - %fold(%msg%n%throwable)</pattern>
         </encoder>

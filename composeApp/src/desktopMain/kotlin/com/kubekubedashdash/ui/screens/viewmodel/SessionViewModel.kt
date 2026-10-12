@@ -8,7 +8,10 @@ import com.kubekubedashdash.ui.paneContentKey
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.ClusterHealthSummary
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.clusterHealthFlow
 import com.kubekubedashdash.util.DemoContext
+import com.kubekubedashdash.util.KubeconfigReader
+import com.kubekubedashdash.util.KubernetesNames
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.isForbidden
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,12 +21,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -87,7 +92,13 @@ internal interface NavigationHistoryHost {
 class SessionViewModel(
     val reactiveClient: ReactiveKubeClient,
     private val scope: CoroutineScope,
+    /** Test seam: a kubeconfig context's `namespace:`. Production reads the kubeconfig files. */
+    private val contextNamespace: (String) -> String? = { KubeconfigReader.Default.contextNamespace(it) },
+    /** Test seam: Settings → Default namespace for a context. Production reads the preference. */
+    private val defaultNamespace: (String) -> String? = { PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(it)] },
 ) {
+    private val log = LoggerFactory.getLogger(SessionViewModel::class.java)
+
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Main.Connecting)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
@@ -182,7 +193,36 @@ class SessionViewModel(
     val selectedContext: StateFlow<String> = _selectedContext.asStateFlow()
 
     private val _namespaces = MutableStateFlow<List<String>>(emptyList())
-    val namespaces: StateFlow<List<String>> = _namespaces.asStateFlow()
+
+    private val _namespacesForbidden = MutableStateFlow(false)
+
+    /** The cluster refused the namespace list (403): the user's access is limited to some namespaces. */
+    val namespacesForbidden: StateFlow<Boolean> = _namespacesForbidden.asStateFlow()
+
+    private val typedNamespaces = MutableStateFlow<Set<String>>(emptySet())
+
+    // The fresh connect's fallback names (Settings default, kubeconfig context namespace), validated; computed once per connect.
+    private val fallbackNamespaces = MutableStateFlow<List<String>>(emptyList())
+
+    private val _namespacePickerRequests = MutableStateFlow(0)
+
+    /** Counts requests to open the namespace picker (the 403 message's button); the header opens it on each increment. */
+    val namespacePickerRequests: StateFlow<Int> = _namespacePickerRequests.asStateFlow()
+
+    // Whether the next namespace-list refusal may narrow this tab (once per fresh connect). Guarded by this
+    // instance's monitor: the namespace collector (Dispatchers.Default) and the connect tail (Dispatchers.IO)
+    // both read and write it.
+    private var autoNarrowArmed = false
+
+    // The connection version a refusal / a readable list was read under, -1 for none. Guarded by the monitor too.
+    // They tie a namespace answer to its connection: one read under another connection must not decide this one.
+    private var forbiddenAtVersion = -1L
+    private var listedAtVersion = -1L
+
+    /** The names the picker lists: the cluster's namespaces, or, when it refuses the list, the names this tab knows. */
+    val namespaces: StateFlow<List<String>> = combine(_namespaces, _namespacesForbidden, typedNamespaces, fallbackNamespaces, reactiveClient.namespaceScope) { listed, forbidden, typed, fallbacks, selection ->
+        if (!forbidden) listed else (fallbacks + typed + ((selection as? NamespaceScope.Only)?.namespaces.orEmpty())).distinct().sorted()
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private val _connectionError = MutableStateFlow<String?>(null)
     val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
@@ -281,14 +321,64 @@ class SessionViewModel(
     private fun observeNamespaces() {
         scope.launch {
             reactiveClient.namespaceNames.collect { state ->
-                if (state is ResourceState.Success) {
-                    // The informer store yields hash-map order; the selector
-                    // popup shows this list verbatim, so sort it here.
-                    _namespaces.value = state.data.sorted()
+                when (state) {
+                    is ResourceState.Success -> {
+                        // The informer store yields hash-map order; the selector
+                        // popup shows this list verbatim, so sort it here.
+                        _namespaces.value = state.data.sorted()
+                        // A readable list disarms the auto-narrow: an admin connect never
+                        // narrows, not even on a later reconnect after an RBAC change.
+                        synchronized(this@SessionViewModel) {
+                            listedAtVersion = reactiveClient.connectionVersion.value
+                            _namespacesForbidden.value = false
+                            autoNarrowArmed = false
+                        }
+                    }
+
+                    // No marker: the list's StateFlow is conflated, so a restart's Loading can be skipped.
+                    // Only a Success or the next fresh connect clears a refusal.
+                    is ResourceState.Loading -> Unit
+
+                    is ResourceState.Error -> if (isForbidden(state.message)) onNamespacesForbidden()
                 }
             }
         }
     }
+
+    // A fresh connect's tail arms the auto-narrow once the scope and the fallbacks are in place. A connection
+    // that already listed its namespaces is an admin's and stays disarmed, whichever of the list and the tail came first.
+    @Synchronized
+    private fun armAutoNarrow() {
+        if (listedAtVersion == reactiveClient.connectionVersion.value) return
+        autoNarrowArmed = true
+        maybeAutoNarrowLocked()
+    }
+
+    // A refusal is tied to the connection it was read under, so one that arrived before this connection was
+    // published carries the previous version and never narrows it. Residual window: a stale Error read just after
+    // the version bump, before the replacing informer's Loading supersedes it (ReactiveInformerFactory.clusterScopedList).
+    // It lasts microseconds and at worst narrows to a fallback of the context being connected, never of the one left.
+    @Synchronized
+    private fun onNamespacesForbidden() {
+        forbiddenAtVersion = reactiveClient.connectionVersion.value
+        _namespacesForbidden.value = true
+        maybeAutoNarrowLocked()
+    }
+
+    // Caller holds the monitor. Narrows only on a refusal read under the current connection, once per fresh
+    // connect: the first such refusal after arming settles it, narrowed or not, so a user who then picks All
+    // Namespaces on purpose is not overridden by a later refusal (a Retry, a reconnect). The flag drops even
+    // without a fallback, so the tab stays on All and the UI guides the user.
+    private fun maybeAutoNarrowLocked() {
+        if (!autoNarrowArmed || !_namespacesForbidden.value || forbiddenAtVersion != reactiveClient.connectionVersion.value) return
+        autoNarrowArmed = false
+        if (reactiveClient.namespaceScope.value != NamespaceScope.All) return
+        val target = fallbackNamespaces.value.firstOrNull() ?: return
+        log.info("Namespace list refused; narrowing to the fallback namespace")
+        reactiveClient.setNamespaceScope(NamespaceScope.single(target))
+    }
+
+    private fun validNamespace(value: String?): String? = value?.trim()?.takeIf { KubernetesNames.isDnsLabel(it) }
 
     // ── Connection-state reducer (audit A6) ─────────────────────────────────
     //
@@ -486,8 +576,9 @@ class SessionViewModel(
 
     fun navigate(screen: Screen) {
         // A jump to a pod may land outside the selection (a node's pod list is
-        // cluster-wide), so widen to All Namespaces.
-        if (screen is Screen.Main.Pods && screen.selectPodUid != null) {
+        // cluster-wide), so widen to All Namespaces. Not when the cluster refuses
+        // the namespace list: that user would be thrown into 403s.
+        if (screen is Screen.Main.Pods && screen.selectPodUid != null && !_namespacesForbidden.value) {
             setNamespaceScope(NamespaceScope.All)
         }
         // A Detail opens as a pane next to the current main screen; anything
@@ -613,6 +704,16 @@ class SessionViewModel(
         freshConnectInFlight = !isReconnect
         _selectedContext.value = ctx
         _isConnecting.value = true
+        if (!isReconnect) {
+            // Reset here, under the monitor and before the attempt starts, not in the success
+            // branch: a refusal that arrives while the connect is still running must be kept.
+            _namespacesForbidden.value = false
+            typedNamespaces.value = emptySet()
+            fallbackNamespaces.value = emptyList()
+            autoNarrowArmed = false
+            forbiddenAtVersion = -1L
+            listedAtVersion = -1L
+        }
         emitConnEvent(ConnEvent.ConnectStarted(isReconnect))
         connectJob = scope.launch(Dispatchers.IO) {
             val isMock = DemoContext.isMockContext(ctx)
@@ -653,12 +754,19 @@ class SessionViewModel(
                             // namespace selection and pane stay as they are, and its restore target
                             // (if any) was consumed by the first connect.
                             val restore = pendingRestore
-                            reactiveClient.setNamespaceScope(
-                                initialNamespaceScope(
-                                    restore?.namespaceScope,
-                                    PreferenceRepository.defaultNamespaceByContext.value[DemoContext.preferenceKey(reactiveClient.getCurrentContext())],
-                                ),
-                            )
+                            val ctxNow = reactiveClient.getCurrentContext()
+                            val defaultNs = defaultNamespace(ctxNow)
+                            // Order matters: the scope first, then the fallbacks, then the arm, whose
+                            // check reads both (and a refusal that already arrived).
+                            reactiveClient.setNamespaceScope(initialNamespaceScope(restore?.namespaceScope, defaultNs))
+                            // The Settings default outranks the kubeconfig's namespace. The demo
+                            // is an admin cluster with no kubeconfig context to read.
+                            fallbackNamespaces.value = if (DemoContext.isMockContext(ctxNow)) {
+                                emptyList()
+                            } else {
+                                listOfNotNull(validNamespace(defaultNs), validNamespace(contextNamespace(ctxNow))).distinct()
+                            }
+                            armAutoNarrow()
                             restore?.paneWidthDp?.let { setExtraPaneWidth(it) }
                         }
                         emitConnEvent(ConnEvent.ConnectSucceeded(isReconnect))
@@ -682,6 +790,23 @@ class SessionViewModel(
     }
 
     fun setNamespaceScope(selection: NamespaceScope) = reactiveClient.setNamespaceScope(selection)
+
+    /**
+     * Selects a namespace the user typed because the cluster won't list them. Returns false, and
+     * changes nothing, unless [name] (trimmed) is a valid namespace name. The name stays in the
+     * picker for this tab's lifetime.
+     */
+    fun selectTypedNamespace(name: String): Boolean {
+        val typed = name.trim()
+        if (!KubernetesNames.isDnsLabel(typed)) return false
+        typedNamespaces.update { it + typed }
+        setNamespaceScope(NamespaceScope.single(typed))
+        return true
+    }
+
+    fun requestNamespacePicker() {
+        _namespacePickerRequests.update { it + 1 }
+    }
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query

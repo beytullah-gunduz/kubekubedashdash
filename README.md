@@ -357,8 +357,9 @@ role. It needs a reachable Docker and a few minutes (the first run also pulls th
 part of `desktopTest` or CI, and it builds its clients from the cluster's own credentials, so your
 kubeconfig is never read. With Docker unreachable it fails at once; it never skips.
 
-`./gradlew :composeApp:k3sDevCluster` starts the same cluster, writes `composeApp/build/k3s/kubeconfig-admin.yaml`
-and `kubeconfig-viewer.yaml` (throwaway credentials, owner-readable), prints `K3S READY`, and keeps it up
+`./gradlew :composeApp:k3sDevCluster` starts the same cluster, writes `composeApp/build/k3s/kubeconfig-admin.yaml`,
+`kubeconfig-viewer.yaml` and `kubeconfig-viewer-ns.yaml` (the viewer's file with the workload namespace as its
+context's `namespace:`; throwaway credentials, owner-readable), prints `K3S READY`, and keeps it up
 until `composeApp/build/k3s/stop` exists (`touch composeApp/build/k3s/stop`) or for 60 minutes. Point a
 hot run at one of them with `-PhotRunKubeconfig=build/k3s/kubeconfig-admin.yaml` (a relative path is
 taken from `composeApp/`).

@@ -40,7 +40,10 @@ import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.services.logtail.TailPodRef
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.ui.components.DetailHost
+import com.kubekubedashdash.ui.components.LocalNamespaceAccessHint
+import com.kubekubedashdash.ui.components.NamespaceAccessHint
 import com.kubekubedashdash.ui.components.ReconnectOverlay
+import com.kubekubedashdash.ui.components.namespaceAccessHintApplies
 import com.kubekubedashdash.ui.components.toggleSelectorEntry
 import com.kubekubedashdash.ui.crt.retroLatched
 import com.kubekubedashdash.ui.portforward.LocalPortForwardLauncher
@@ -78,6 +81,8 @@ internal fun SessionPaneContent(
     val searchQuery by sessionVm.searchQuery.collectAsState()
     val namespaceScope by sessionVm.namespaceScope.collectAsState()
     val namespaceList by sessionVm.namespaces.collectAsState()
+    val namespacesForbidden by sessionVm.namespacesForbidden.collectAsState()
+    val namespacePickerRequests by sessionVm.namespacePickerRequests.collectAsState()
     val searchFocusRequests by sessionVm.searchFocusRequests.collectAsState()
     val labelMap by sessionVm.labelQueries.collectAsState()
     val annotationMap by sessionVm.annotationQueries.collectAsState()
@@ -120,6 +125,16 @@ internal fun SessionPaneContent(
         onPortForward?.let { cb -> PortForwardLauncher { req -> cb(session, req) } }
     }
 
+    // A cluster-wide 403 is fixable by picking a namespace only where the list follows the
+    // selector and watches every namespace; elsewhere the message stays a plain refusal.
+    val namespaceAccessHint = remember(currentScreen, namespaceScope, sessionVm) {
+        if (namespaceAccessHintApplies(currentScreen, namespaceScope)) {
+            NamespaceAccessHint(onChooseNamespace = sessionVm::requestNamespacePicker)
+        } else {
+            null
+        }
+    }
+
     CompositionLocalProvider(
         LocalViewModelStoreOwner provides session,
         LocalReactiveKubeClient provides session.reactiveClient,
@@ -158,6 +173,9 @@ internal fun SessionPaneContent(
                             onNamespaceScopeChange = { sessionVm.setNamespaceScope(it) },
                             searchQuery = searchQuery,
                             onSearchChange = { sessionVm.setSearchQuery(it) },
+                            cannotListNamespaces = namespacesForbidden,
+                            onTypeNamespace = sessionVm::selectTypedNamespace,
+                            namespacePickerRequests = namespacePickerRequests,
                         )
                         // One host for list + detail: the sidebar keeps its width and
                         // the two share the content area (split, overlay below
@@ -173,26 +191,28 @@ internal fun SessionPaneContent(
                             onClose = sessionVm::closeExtraPane,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             list = {
-                                ContentRouter(
-                                    screen = currentScreen,
-                                    searchQuery = searchQuery,
-                                    labelQuery = labelQuery,
-                                    onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
-                                    annotationQuery = annotationQuery,
-                                    onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
-                                    pulseLabelsOnEntry = pulseLabelsOnEntry,
-                                    pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
-                                    onNavigate = sessionVm::navigate,
-                                    clusterHealth = clusterHealth,
-                                    paneSelectionUid = extraPaneScreen.paneSelectionUid(),
-                                    onSelectCluster = onSelectCluster,
-                                    onRetryNow = sessionVm::retryNow,
-                                    onOpenLogs = onOpenLogs,
-                                    onOpenTerminal = onOpenTerminal,
-                                    onCaptureLogs = onCaptureLogs,
-                                    onTailLogs = onTailLogs,
-                                    onTailPods = onTailPods,
-                                )
+                                CompositionLocalProvider(LocalNamespaceAccessHint provides namespaceAccessHint) {
+                                    ContentRouter(
+                                        screen = currentScreen,
+                                        searchQuery = searchQuery,
+                                        labelQuery = labelQuery,
+                                        onLabelQueryChange = { sessionVm.setLabelQuery(screenKey, it) },
+                                        annotationQuery = annotationQuery,
+                                        onAnnotationQueryChange = { sessionVm.setAnnotationQuery(screenKey, it) },
+                                        pulseLabelsOnEntry = pulseLabelsOnEntry,
+                                        pulseAnnotationsOnEntry = pulseAnnotationsOnEntry,
+                                        onNavigate = sessionVm::navigate,
+                                        clusterHealth = clusterHealth,
+                                        paneSelectionUid = extraPaneScreen.paneSelectionUid(),
+                                        onSelectCluster = onSelectCluster,
+                                        onRetryNow = sessionVm::retryNow,
+                                        onOpenLogs = onOpenLogs,
+                                        onOpenTerminal = onOpenTerminal,
+                                        onCaptureLogs = onCaptureLogs,
+                                        onTailLogs = onTailLogs,
+                                        onTailPods = onTailPods,
+                                    )
+                                }
                             },
                             detail = {
                                 ExtraPaneRouter(

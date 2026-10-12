@@ -53,7 +53,7 @@ internal inline fun <T> k3sStep(name: String, block: () -> T): T {
  *
  * Every client is built from the cluster's own credentials with auto-configuration off, so no
  * kubeconfig of the developer is ever read. The credentials stay inside this object, which has no
- * `toString`, and in the two files [writeKubeconfigs] writes (owner-only, throwaway cluster).
+ * `toString`, and in the three files [writeKubeconfigs] writes (owner-only, throwaway cluster).
  */
 internal class K3sCluster private constructor(
     private val container: K3sContainer,
@@ -70,9 +70,10 @@ internal class K3sCluster private constructor(
     )
 
     /**
-     * Writes `kubeconfig-admin.yaml` and `kubeconfig-viewer.yaml` into [dir], readable by the owner
-     * only, and returns them in that order. Each one is read back and used once, so a file that
-     * does not work fails here and not in the app.
+     * Writes `kubeconfig-admin.yaml`, `kubeconfig-viewer.yaml` and `kubeconfig-viewer-ns.yaml` into
+     * [dir], readable by the owner only, and returns them in that order. The last is the viewer's
+     * file with the workload namespace as its context's `namespace:`. Each one is read back and
+     * used once, so a file that does not work fails here and not in the app.
      */
     fun writeKubeconfigs(dir: File): List<File> {
         dir.mkdirs()
@@ -87,15 +88,20 @@ internal class K3sCluster private constructor(
             File(dir, "kubeconfig-viewer.yaml"),
             kubeconfigYaml("k3s-viewer", listOf("token: \"${credentials.viewerToken}\"")),
         )
-        for (file in listOf(adminFile, viewerFile)) {
+        val viewerNamespaceFile = writeOwnerOnly(
+            File(dir, "kubeconfig-viewer-ns.yaml"),
+            kubeconfigYaml("k3s-viewer-ns", listOf("token: \"${credentials.viewerToken}\""), namespace = WORKLOAD_NAMESPACE),
+        )
+        val files = listOf(adminFile, viewerFile, viewerNamespaceFile)
+        for (file in files) {
             clientFromFile(file).use { client ->
                 check(client.pods().inNamespace(WORKLOAD_NAMESPACE).withName(WORKLOAD_POD).get() != null) { "${file.name} cannot read the workload pod" }
             }
         }
-        return listOf(adminFile, viewerFile)
+        return files
     }
 
-    private fun kubeconfigYaml(name: String, userLines: List<String>): String = buildString {
+    private fun kubeconfigYaml(name: String, userLines: List<String>, namespace: String? = null): String = buildString {
         appendLine("apiVersion: v1")
         appendLine("kind: Config")
         appendLine("clusters:")
@@ -112,6 +118,7 @@ internal class K3sCluster private constructor(
         appendLine("    context:")
         appendLine("      cluster: $name")
         appendLine("      user: $name")
+        if (namespace != null) appendLine("      namespace: $namespace")
         appendLine("current-context: $name")
     }
 

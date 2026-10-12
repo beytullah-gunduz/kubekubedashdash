@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -37,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,6 +63,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -70,6 +74,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.kubekubedashdash.KdAccent
 import com.kubekubedashdash.KdBorder
+import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdSurfaceVariant
@@ -138,6 +143,9 @@ internal fun SessionContentHeader(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     searchFocusRequests: Int,
+    cannotListNamespaces: Boolean = false,
+    onTypeNamespace: (String) -> Boolean = { false },
+    namespacePickerRequests: Int = 0,
 ) {
     if (!screen.showsContentHeader()) return
 
@@ -174,7 +182,14 @@ internal fun SessionContentHeader(
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
-                CompactNamespaceSelector(namespaceScope, namespaces, onNamespaceScopeChange)
+                CompactNamespaceSelector(
+                    scope = namespaceScope,
+                    namespaces = namespaces,
+                    cannotListNamespaces = cannotListNamespaces,
+                    onTypeNamespace = onTypeNamespace,
+                    openRequests = namespacePickerRequests,
+                    onScopeChange = onNamespaceScopeChange,
+                )
             }
 
             // The search slot is always reserved (Overview/Topology leave it
@@ -373,25 +388,48 @@ internal fun namespaceSelectorLabel(scope: NamespaceScope): String = when (scope
 internal object NamespaceSelectorTags {
     const val BUTTON = "namespace-selector"
     const val ALL = "namespace-selector-all"
+    const val NOTE = "namespace-selector-note"
+    const val TYPE_FIELD = "namespace-selector-type"
 
     fun row(namespace: String) = "namespace-selector-row-$namespace"
 
     fun check(namespace: String) = "namespace-selector-check-$namespace"
 }
 
+/**
+ * The header's namespace menu. While [cannotListNamespaces] (the cluster refused the namespace list),
+ * [namespaces] holds only the names the tab knows, so the All row carries no count and the menu ends in
+ * a field that takes a namespace name: [onTypeNamespace] returns whether the name was accepted. In that mode a
+ * row's box selects only its namespace, never a second one.
+ * [openRequests] opens the menu each time it rises. [onScopeChange] is last so a call can end in a lambda.
+ */
 @Composable
 internal fun CompactNamespaceSelector(
     scope: NamespaceScope,
     namespaces: List<String>,
+    cannotListNamespaces: Boolean = false,
+    onTypeNamespace: (String) -> Boolean = { false },
+    openRequests: Int = 0,
     onScopeChange: (NamespaceScope) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // Baseline captured when the selector enters composition: only a request that
+    // arrives WHILE it exists opens the menu, as with the search field's focus requests.
+    val openBaseline = remember { openRequests }
+    LaunchedEffect(openRequests) {
+        if (openRequests > openBaseline) expanded = true
+    }
     val density = LocalDensity.current
     val buttonHeight = ContentHeaderControlHeight
     // A selected namespace the list lacks (not loaded yet, or deleted since)
     // still gets a row, so it can be unticked.
     val rows = remember(namespaces, scope) {
         (namespaces + (scope as? NamespaceScope.Only)?.namespaces.orEmpty()).distinct().sorted()
+    }
+    // Two selected names are watched cluster-wide, which a refused list means a 403 for this user,
+    // so a box then picks just its namespace.
+    val toggledSelection: (String) -> NamespaceScope = { ns ->
+        if (cannotListNamespaces) NamespaceScope.single(ns) else scope.toggled(ns)
     }
 
     Box {
@@ -434,53 +472,127 @@ internal fun CompactNamespaceSelector(
                 properties = PopupProperties(focusable = true),
             ) {
                 val scrollState = rememberScrollState()
-                Row(
-                    modifier = Modifier
-                        .widthIn(min = 220.dp, max = 320.dp)
-                        .height(menuHeight)
-                        .background(KdSurface, 4.dp.kdCorner)
-                        .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(scrollState)
-                            .padding(vertical = 4.dp),
-                    ) {
-                        NamespaceMenuRow(
-                            label = "All Namespaces (${namespaces.size})",
-                            selected = scope == NamespaceScope.All,
-                            onClick = {
-                                onScopeChange(NamespaceScope.All)
-                                expanded = false
-                            },
-                            modifier = Modifier.testTag(NamespaceSelectorTags.ALL),
-                        )
-                        HorizontalDivider(color = KdBorder)
-                        rows.forEach { ns ->
-                            NamespaceCheckRow(
-                                namespace = ns,
-                                checked = scope is NamespaceScope.Only && ns in scope.namespaces,
-                                onToggle = { onScopeChange(scope.toggled(ns)) },
-                                onName = { toggle ->
-                                    if (toggle) {
-                                        onScopeChange(scope.toggled(ns))
-                                    } else {
-                                        onScopeChange(NamespaceScope.single(ns))
-                                        expanded = false
-                                    }
+                val menuWidth = Modifier.widthIn(min = 220.dp, max = 320.dp)
+                val menuFrame = Modifier
+                    .background(KdSurface, 4.dp.kdCorner)
+                    .border(kdOutlineWidth, KdBorder, 4.dp.kdCorner)
+                val rowsAndScrollbar: @Composable (Modifier) -> Unit = { modifier ->
+                    Row(modifier = modifier) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .verticalScroll(scrollState)
+                                .padding(vertical = 4.dp),
+                        ) {
+                            NamespaceMenuRow(
+                                label = if (cannotListNamespaces) "All Namespaces" else "All Namespaces (${namespaces.size})",
+                                selected = scope == NamespaceScope.All,
+                                onClick = {
+                                    onScopeChange(NamespaceScope.All)
+                                    expanded = false
                                 },
+                                modifier = Modifier.testTag(NamespaceSelectorTags.ALL),
                             )
+                            HorizontalDivider(color = KdBorder)
+                            rows.forEach { ns ->
+                                NamespaceCheckRow(
+                                    namespace = ns,
+                                    checked = scope is NamespaceScope.Only && ns in scope.namespaces,
+                                    onToggle = { onScopeChange(toggledSelection(ns)) },
+                                    onName = { toggle ->
+                                        if (toggle) {
+                                            onScopeChange(toggledSelection(ns))
+                                        } else {
+                                            onScopeChange(NamespaceScope.single(ns))
+                                            expanded = false
+                                        }
+                                    },
+                                )
+                            }
                         }
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(scrollState),
+                            modifier = Modifier.fillMaxHeight(),
+                        )
                     }
-                    VerticalScrollbar(
-                        adapter = rememberScrollbarAdapter(scrollState),
-                        modifier = Modifier.fillMaxHeight(),
-                    )
+                }
+                if (cannotListNamespaces) {
+                    // The rows scroll inside their fixed height; the note and the field sit below
+                    // them, so the field neither scrolls away nor is clipped by the cap.
+                    Column(modifier = menuWidth.then(menuFrame)) {
+                        rowsAndScrollbar(Modifier.fillMaxWidth().height(menuHeight))
+                        NamespaceTypeEntry(onTypeNamespace = onTypeNamespace, onSelected = { expanded = false })
+                    }
+                } else {
+                    rowsAndScrollbar(menuWidth.height(menuHeight).then(menuFrame))
                 }
             }
         }
     }
+}
+
+/** What the menu offers when the namespace list is refused: a note and a field for a namespace name. */
+@Composable
+private fun NamespaceTypeEntry(
+    onTypeNamespace: (String) -> Boolean,
+    onSelected: () -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var invalid by remember { mutableStateOf(false) }
+    Text(
+        "Your account can't list namespaces. Type one below.",
+        style = MaterialTheme.typography.labelSmall,
+        color = KdTextSecondary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .testTag(NamespaceSelectorTags.NOTE),
+    )
+    OutlinedTextField(
+        value = text,
+        onValueChange = {
+            text = it
+            invalid = false
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
+            .testTag(NamespaceSelectorTags.TYPE_FIELD),
+        singleLine = true,
+        isError = invalid,
+        placeholder = { Text("Namespace name", style = MaterialTheme.typography.bodySmall) },
+        // Always composed, empty when the name is fine, so the error appearing never changes the field's height.
+        supportingText = {
+            Text(
+                if (invalid) "Not a valid namespace name" else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = KdError,
+            )
+        },
+        textStyle = MaterialTheme.typography.bodySmall,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(
+            onDone = {
+                if (onTypeNamespace(text.trim())) {
+                    text = ""
+                    onSelected()
+                } else {
+                    invalid = true
+                }
+            },
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = KdPrimary,
+            unfocusedBorderColor = KdBorder,
+            errorBorderColor = KdError,
+            focusedTextColor = KdTextPrimary,
+            unfocusedTextColor = KdTextPrimary,
+            errorTextColor = KdTextPrimary,
+            cursorColor = KdPrimary,
+            focusedPlaceholderColor = KdTextPlaceholder,
+            unfocusedPlaceholderColor = KdTextPlaceholder,
+        ),
+    )
 }
 
 @Composable
