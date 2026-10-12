@@ -55,4 +55,23 @@ class UsageSerializationTest {
         assertEquals(json.encodeToString(summary.copy(podUsages = emptyMap())), encoded)
         assertFalse(encoded.contains("\"podUsages\""), encoded)
     }
+
+    @Test
+    fun `GenericResourceInfo creationTimestamp stays out of the MCP JSON`() {
+        val replicaSet = GenericResourceInfo(
+            uid = "uid-rs-1",
+            name = "redis-cache-5f7a3b1d0",
+            namespace = "default",
+            status = "1/1",
+            age = "1m",
+            labels = emptyMap(),
+            annotations = emptyMap(),
+            creationTimestamp = "2026-10-12T08:00:00Z",
+        )
+
+        val encoded = json.encodeToString(replicaSet)
+
+        assertEquals(json.encodeToString(replicaSet.copy(creationTimestamp = "")), encoded)
+        assertFalse(encoded.contains("creationTimestamp"), encoded)
+    }
 }

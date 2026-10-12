@@ -1,0 +1,58 @@
+package com.kubekubedashdash.services.metricshistory
+
+import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.util.KubernetesNames
+import java.time.DateTimeException
+import java.time.Instant
+
+/** A ReplicaSet created at [createdEpochSec]: a revision of the Deployment started rolling out. */
+data class Rollout(val revision: Long, val replicaSet: String, val createdEpochSec: Long)
+
+/**
+ * The pods a Deployment has had: [ref] names its ReplicaSets, current and old (Kubernetes keeps up to
+ * `revisionHistoryLimit` of them), [currentReplicaSet] is the newest revision and [rollouts] are the
+ * ReplicaSets' creation instants in time order.
+ */
+data class DeploymentPodSet(val ref: PodSetRef, val currentReplicaSet: String?, val rollouts: List<Rollout>)
+
+private const val REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
+
+private class Candidate(val name: String, val revision: Long, val createdEpochSec: Long?)
+
+/**
+ * The ReplicaSets of the Deployment [deploymentUid] in [namespace], found by owner uid as
+ * `RelatedResolver` does; null when it has none. A ReplicaSet whose creation time is missing or
+ * unreadable keeps its pods in [DeploymentPodSet.ref] but marks no rollout, and counts as the oldest
+ * when two share a revision. Pods of a ReplicaSet that was deleted are not selected.
+ *
+ * Staleness differs by backend. Managed Prometheus writes no staleness markers, so a deleted pod's
+ * memory line lingers up to 5 minutes and its CPU line up to the rate window (5 minutes at least):
+ * lines can run past the marker of the rollout that replaced them, and a total double-counts there.
+ * An in-cluster Prometheus marks a vanished series stale, so its lines end with the pod.
+ */
+fun deploymentPodSet(deploymentUid: String, namespace: String, replicaSets: List<GenericResourceInfo>): DeploymentPodSet? {
+    if (deploymentUid.isBlank()) return null
+    val owned = replicaSets
+        .filter { rs -> rs.namespace == namespace && rs.owners.any { it.uid == deploymentUid } && KubernetesNames.isDnsSubdomain(rs.name) }
+        .distinctBy { it.name }
+        .map { rs -> Candidate(rs.name, revisionOf(rs), createdOf(rs)) }
+    if (owned.isEmpty()) return null
+    // The name is the last tie-break so the answer does not depend on the order of the informer's list.
+    val current = owned.maxWithOrNull(compareBy<Candidate>({ it.revision }, { it.createdEpochSec ?: Long.MIN_VALUE }, { it.name }))
+    val rollouts = owned
+        .mapNotNull { c -> c.createdEpochSec?.let { Rollout(c.revision, c.name, it) } }
+        .sortedWith(compareBy<Rollout>({ it.createdEpochSec }, { it.revision }, { it.replicaSet }))
+    return DeploymentPodSet(PodSetRef(namespace, owned.map { it.name }.sorted()), current?.name, rollouts)
+}
+
+private fun revisionOf(rs: GenericResourceInfo): Long = rs.annotations[REVISION_ANNOTATION]?.trim()?.toLongOrNull() ?: 0L
+
+private fun createdOf(rs: GenericResourceInfo): Long? = if (rs.creationTimestamp.isBlank()) {
+    null
+} else {
+    try {
+        Instant.parse(rs.creationTimestamp).epochSecond
+    } catch (_: DateTimeException) {
+        null
+    }
+}

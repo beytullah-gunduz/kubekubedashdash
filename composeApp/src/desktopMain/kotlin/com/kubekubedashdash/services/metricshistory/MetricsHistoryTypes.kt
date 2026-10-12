@@ -5,12 +5,23 @@ import com.kubekubedashdash.models.ContainerResources
 /** The pod a history query is about; [containers] feeds the demo cluster's generated series and the reference lines. */
 data class PodRef(val namespace: String, val name: String, val containers: List<ContainerResources> = emptyList())
 
+/** Pods selected by name pattern in one namespace: the pods of the given ReplicaSets, current and old. */
+data class PodSetRef(val namespace: String, val replicaSets: List<String>)
+
 enum class PodSeriesKind { Cpu, Memory, NetworkRx, NetworkTx, Throttling }
+
+/** [PerPod] gives one series per pod; [Total] sums the whole set into one. */
+enum class PodSetMode { PerPod, Total }
+
+/** A namespace scope for cluster-level sums; empty = every namespace. */
+data class ScopeRef(val namespaces: Set<String>)
+
+enum class ScopeKind { CpuCores, MemoryBytes }
 
 /** One sample: unix seconds and the value (cores, bytes, bytes per second, or a 0..1 fraction). */
 data class SeriesPoint(val epochSec: Long, val value: Double)
 
-/** [name] is the container for per-container kinds and "" for pod-level ones (network). */
+/** [name] is the container for per-container kinds, the pod for a per-pod set, and "" for pod-level ones (network) and sums. */
 data class Series(val name: String, val points: List<SeriesPoint>)
 
 /** A query window; [stepSec] is also the gap threshold the chart uses. */
@@ -70,4 +81,10 @@ interface MetricsHistorySource {
     val label: String
 
     suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult
+
+    /** [Series.name] is the pod for [PodSetMode.PerPod] and "" for [PodSetMode.Total]. */
+    suspend fun podSetSeries(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
+
+    /** One series named "": the sum over every pod of [scope]. */
+    suspend fun scopeSeries(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
 }

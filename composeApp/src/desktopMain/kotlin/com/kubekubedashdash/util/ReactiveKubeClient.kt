@@ -529,6 +529,7 @@ class ReactiveKubeClient(
                 annotations = rs.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Ready" to "$r/$d"),
                 owners = ResourceMappers.mapOwnerRefs(rs.metadata.ownerReferences),
+                creationTimestamp = rs.metadata.creationTimestamp ?: "",
             )
         },
     )
