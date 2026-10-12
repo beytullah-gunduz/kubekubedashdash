@@ -95,6 +95,7 @@ object PreferenceRepository {
     // Holds LayoutDensity since density went app-wide (D6); the key name is kept so saved choices carry over.
     private val TABLE_DENSITY by lazy { stringPreferencesKey("table_density") }
     private val TABLE_COLUMNS_HIDDEN by lazy { stringPreferencesKey("table_columns_hidden") }
+    private val TABLE_SORT by lazy { stringPreferencesKey("table_sort") }
     private val UI_SCALE_PERCENT by lazy { intPreferencesKey("ui_scale_percent") }
 
     // ── Hot-cached StateFlows ─────────────────────────────────────────────────
@@ -264,6 +265,12 @@ object PreferenceRepository {
     private val _hiddenTableColumns = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val hiddenTableColumns: StateFlow<Map<String, Boolean>> = _hiddenTableColumns.asStateFlow()
 
+    // Per-table sort, keyed by tableKey; value from ui.components.encodeTableSort
+    // ("asc:<header>" / "desc:<header>"). Absent key = the table's default, which
+    // is never stored so a default changed in a later release still applies.
+    private val _tableSorts = MutableStateFlow<Map<String, String>>(emptyMap())
+    val tableSorts: StateFlow<Map<String, String>> = _tableSorts.asStateFlow()
+
     // UI zoom, as a percentage of 100 — see UiScaleSteps for the reachable
     // set. Read once at the theme root and scaled into LocalDensity.
     private val _uiScalePercent = MutableStateFlow(100)
@@ -360,6 +367,7 @@ object PreferenceRepository {
                         BoolMapCodec.decode(p[STATS_PANELS_EXPANDED]) + _statsPanelsExpanded.value
                     _hiddenTableColumns.value =
                         BoolMapCodec.decode(p[TABLE_COLUMNS_HIDDEN]) + _hiddenTableColumns.value
+                    _tableSorts.value = StringMapCodec.decode(p[TABLE_SORT]) + _tableSorts.value
                     _detailPaneWidths.value =
                         FloatMapCodec.decode(p[DETAIL_PANE_WIDTHS]) + _detailPaneWidths.value
                     val decoded = StringListCodec.decode(p[PALETTE_RECENTS])
@@ -565,6 +573,18 @@ object PreferenceRepository {
                 val current = BoolMapCodec.decode(prefs[TABLE_COLUMNS_HIDDEN])
                 val next = if (hidden) current + (entryKey to true) else current - entryKey
                 prefs[TABLE_COLUMNS_HIDDEN] = BoolMapCodec.encode(next)
+            }
+        }
+    }
+
+    /** Stores [encoded] (from `encodeTableSort`) for [tableKey]; null drops the entry, i.e. back to the table's default. */
+    fun setTableSort(tableKey: String, encoded: String?) {
+        _tableSorts.value = if (encoded != null) _tableSorts.value + (tableKey to encoded) else _tableSorts.value - tableKey
+        ioScope.launch {
+            dataStore.edit { prefs ->
+                val current = StringMapCodec.decode(prefs[TABLE_SORT])
+                val next = if (encoded != null) current + (tableKey to encoded) else current - tableKey
+                prefs[TABLE_SORT] = StringMapCodec.encode(next)
             }
         }
     }

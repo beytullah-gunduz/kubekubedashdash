@@ -180,12 +180,14 @@ fun ResourceTable(
      * Initial sort column by NAME. Prefer this over [defaultSortColumn] for a
      * table whose columns are width-filtered: an index computed over the
      * filtered list is -1 on a narrow window, which silently means "unsorted".
+     * It is also what a third header click returns to; a stored sort (the
+     * per-table `table_sort` preference) overrides it.
      */
     defaultSortHeader: String? = null,
     defaultSortAscending: Boolean = true,
     identityHeader: String? = null,
     /**
-     * Identifies this table for the per-table column-visibility preference and
+     * Identifies this table for the per-table column-visibility and sort preferences and
      * enables the trailing options menu (column picker + density). Null (the
      * default) is today's behaviour: no menu, no hiding (D4).
      */
@@ -201,10 +203,16 @@ fun ResourceTable(
     /** Notified whenever the checked-row set changes. Only fires when [selectable] is true. */
     onSelectionChange: ((Set<String>) -> Unit)? = null,
 ) {
-    // Resolved once, on first composition, per D5 — a positional index would
-    // silently re-target when the responsive `columns` subset changes width.
-    var sortHeader by remember { mutableStateOf(defaultSortHeader ?: columns.getOrNull(defaultSortColumn)?.header) }
-    var sortAscending by remember { mutableStateOf(defaultSortAscending) }
+    // The default is resolved by header once per default — a positional index
+    // would silently re-target when the responsive `columns` subset changes width.
+    // A stored sort (the `table_sort` preference, per tableKey) overrides it.
+    val defaultSort = remember(defaultSortHeader, defaultSortAscending, defaultSortColumn) {
+        (defaultSortHeader ?: columns.getOrNull(defaultSortColumn)?.header)?.let { TableSort(it, defaultSortAscending) }
+    }
+    val storedSorts by PreferenceRepository.tableSorts.collectAsState()
+    // Only a table without a tableKey uses this; every other one stores its sort.
+    var localSort by remember { mutableStateOf<TableSort?>(null) }
+    val storedSort = if (tableKey != null) decodeTableSort(storedSorts[tableKey]) else localSort
     val copyToClipboard = rememberCopyToClipboard()
 
     // Density and hidden columns are read once here, not inside TableRowItem,
@@ -220,15 +228,16 @@ fun ResourceTable(
         visibleColumnIndices(columns, tableKey, identityHeader, hiddenColumns)
     }
 
-    // A column you have hidden must not keep sorting the table from behind the
-    // menu — that is the "invisible key" the header-based sort exists to avoid.
-    val effectiveSortHeader = sortHeader?.takeIf { header -> visibleIndices.any { columns[it].header == header } }
-    val sortedRows = remember(rows, columns, effectiveSortHeader, sortAscending, identityHeader, pinnedIds) {
+    // A column you have hidden (or the window has dropped) must not keep sorting
+    // the table from behind the menu — that is the "invisible key" the
+    // header-based sort exists to avoid. The default takes over meanwhile.
+    val shownSort = displayedTableSort(storedSort, defaultSort, visibleIndices.map { columns[it].header })
+    val sortedRows = remember(rows, columns, shownSort, identityHeader, pinnedIds) {
         sortTableRows(
             rows = rows,
             columns = columns,
-            sortHeader = effectiveSortHeader,
-            ascending = sortAscending,
+            sortHeader = shownSort?.header,
+            ascending = shownSort?.ascending ?: true,
             identityHeader = identityHeader,
             pinnedIds = pinnedIds,
         )
@@ -308,11 +317,11 @@ fun ResourceTable(
                     modifier = Modifier
                         .then(if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f))
                         .clickable {
-                            if (sortHeader == col.header) {
-                                sortAscending = !sortAscending
+                            val next = nextTableSort(shownSort, defaultSort, col.header)
+                            if (tableKey != null) {
+                                PreferenceRepository.setTableSort(tableKey, next?.let(::encodeTableSort))
                             } else {
-                                sortHeader = col.header
-                                sortAscending = true
+                                localSort = next
                             }
                         },
                     verticalAlignment = Alignment.CenterVertically,
@@ -325,10 +334,11 @@ fun ResourceTable(
                         color = KdTextSecondary,
                         maxLines = 1,
                     )
-                    if (sortHeader == col.header) {
+                    val sortedHere = shownSort?.takeIf { it.header == col.header }
+                    if (sortedHere != null) {
                         Icon(
-                            painterResource(if (sortAscending) Res.drawable.arrow_upward_filled else Res.drawable.arrow_downward_filled),
-                            contentDescription = if (sortAscending) "Sorted ascending" else "Sorted descending",
+                            painterResource(if (sortedHere.ascending) Res.drawable.arrow_upward_filled else Res.drawable.arrow_downward_filled),
+                            contentDescription = if (sortedHere.ascending) "Sorted ascending" else "Sorted descending",
                             modifier = Modifier.size(12.dp).padding(start = 2.dp),
                             tint = KdPrimary,
                         )
