@@ -167,9 +167,10 @@ class ExtraTab(
 )
 
 /**
- * A kind-specific section appended to the Overview tab, after Annotations —
- * the same shape the Node panel uses for its inline pod list. [key] exists so
- * wiring is assertable in tests; the section renders its own header.
+ * A kind-specific section of the Overview tab: trailing (after Annotations) when passed as
+ * `overviewSections`, leading (before Details) when passed as `leadingSections` — the same shape
+ * the Node panel uses for its inline pod list. [key] exists so wiring is assertable in tests; the
+ * section renders its own header.
  */
 class OverviewSection(
     val key: String,
@@ -189,6 +190,7 @@ fun ResourceDetailPanel(
     modifier: Modifier = Modifier,
     extraTabs: List<ExtraTab> = emptyList(),
     overviewSections: List<OverviewSection> = emptyList(),
+    leadingSections: List<OverviewSection> = emptyList(),
     labelQuery: String = "",
     onToggleLabel: (String, String) -> Unit = { _, _ -> },
     annotationQuery: String = "",
@@ -340,6 +342,7 @@ fun ResourceDetailPanel(
                         annotationQuery = annotationQuery,
                         onToggleAnnotation = onToggleAnnotation,
                         sections = overviewSections,
+                        leadingSections = leadingSections,
                     )
 
                     page == yamlIndex -> GenericYamlTab(kind, name, namespace, apiGroup, apiVersion, plural)
@@ -396,6 +399,7 @@ private fun GenericOverviewTab(
     annotationQuery: String,
     onToggleAnnotation: (String, String) -> Unit,
     sections: List<OverviewSection> = emptyList(),
+    leadingSections: List<OverviewSection> = emptyList(),
 ) {
     val activeLabels = remember(labelQuery) { parseMapSelector(labelQuery) }
     val activeAnnotations = remember(annotationQuery) { parseMapSelector(annotationQuery) }
@@ -406,6 +410,8 @@ private fun GenericOverviewTab(
             .padding(horizontal = 14.dp, vertical = 14.dp.orCompact(10.dp)),
         verticalArrangement = Arrangement.spacedBy(14.dp.orCompact(10.dp)),
     ) {
+        leadingSections.forEach { it.content() }
+
         if (fields.isNotEmpty()) {
             Text("Details".retroCaps(), style = MaterialTheme.typography.labelLarge.retroChrome(8.sp), color = KdTextPrimary, fontWeight = FontWeight.SemiBold)
             DetailFieldsCard(fields = fields)
