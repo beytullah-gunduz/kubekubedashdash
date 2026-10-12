@@ -155,7 +155,7 @@ class DemoPrometheusEndToEndTest {
     fun `the demo's redis-cache Deployment has two rollouts, a grey earlier pod and a current one`() = runBlocking<Unit> {
         val deployment = assertNotNull(handle.client.apps().deployments().inNamespace("production").withName("redis-cache").get())
         val podSet = assertNotNull(deploymentPodSet(deployment.metadata.uid, "production", replicaSetRows()))
-        assertEquals(listOf("redis-cache-4c8d2e6b9", "redis-cache-5f7a3b1d0"), podSet.ref.replicaSets)
+        assertEquals(listOf("redis-cache-4c8d2e6b9", "redis-cache-5f7a3b1d0"), podSet.replicaSets)
         assertEquals("redis-cache-5f7a3b1d0", podSet.currentReplicaSet)
         assertEquals(listOf(1L, 2L), podSet.rollouts.map { it.revision })
         assertEquals(listOf("redis-cache-4c8d2e6b9", "redis-cache-5f7a3b1d0"), podSet.rollouts.map { it.replicaSet })

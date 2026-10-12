@@ -364,7 +364,7 @@ class GmpMetricsSourceTest {
 
     // ── pod sets and scopes ─────────────────────────────────────────────────────
 
-    private val podSet = PodSetRef("team-a", listOf("redis-cache-6d9f8c7b5", "redis-cache-5f7a3b1d0"))
+    private val podSet = PromQl.ofReplicaSets("team-a", listOf("redis-cache-6d9f8c7b5", "redis-cache-5f7a3b1d0"))!!
     private val scope = ScopeRef(setOf("team-a", "team-b"))
 
     private val podMatrix = """{"status":"success","data":{"resultType":"matrix","result":[""" +
@@ -472,11 +472,10 @@ class GmpMetricsSourceTest {
         val gmp = source()
 
         for (bad in listOf(
-            PodSetRef("team-a", emptyList()),
-            PodSetRef("team-a", listOf("Web\"x")),
-            PodSetRef("team-a", listOf("redis-cache-5f7a3b1d0", "a|b")),
-            PodSetRef("Team_A", listOf("redis-cache-5f7a3b1d0")),
-            PodSetRef("", listOf("redis-cache-5f7a3b1d0")),
+            PodSetRef("team-a", ""),
+            PodSetRef("team-a", "web\"x"),
+            PodSetRef("Team-A", "(web-)[a-z0-9]{5}"),
+            PodSetRef("", "(web-)[a-z0-9]{5}"),
         )) {
             assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "invalid pod set"), gmp.podSetSeries(PodSeriesKind.Cpu, bad, PodSetMode.PerPod, window), "$bad")
         }

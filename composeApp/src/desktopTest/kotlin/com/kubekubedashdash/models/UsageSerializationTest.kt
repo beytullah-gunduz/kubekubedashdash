@@ -74,4 +74,26 @@ class UsageSerializationTest {
         assertEquals(json.encodeToString(replicaSet.copy(creationTimestamp = "")), encoded)
         assertFalse(encoded.contains("creationTimestamp"), encoded)
     }
+
+    @Test
+    fun `GenericResourceInfo run and spark data stay out of the MCP JSON`() {
+        val job = GenericResourceInfo(
+            uid = "uid-job-1",
+            name = "nightly-backup-29123456",
+            namespace = "default",
+            status = "Complete",
+            age = "1m",
+            labels = emptyMap(),
+            annotations = emptyMap(),
+            run = WorkloadRun(startTime = "2026-10-12T08:00:00Z", endTime = "2026-10-12T08:05:30Z", indexed = true),
+            spark = SparkRun("spark-etl-nightly-driver", listOf("spark-etl-nightly-1a2b3c4d5e6f7890-exec-1"), "2026-10-12T08:00:00Z", "", "RUNNING"),
+        )
+
+        val encoded = json.encodeToString(job)
+
+        assertEquals(json.encodeToString(job.copy(run = null, spark = null)), encoded)
+        assertFalse(encoded.contains("run"), encoded)
+        assertFalse(encoded.contains("spark"), encoded)
+        assertFalse(encoded.contains("indexed"), encoded)
+    }
 }

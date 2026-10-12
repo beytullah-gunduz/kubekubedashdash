@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The exact PromQL the Managed Prometheus source sends; a changed matcher changes the numbers, so the strings are pinned. */
@@ -198,7 +199,7 @@ class PromQlTest {
     private val longReplicaSet = "redis-cache-" + "0123456789abcdef".repeat(3)
 
     // Unsorted on purpose: the pattern lists the names in order.
-    private val podSet = PodSetRef("team-a", listOf(newReplicaSet, oldReplicaSet))
+    private val podSet = PromQl.ofReplicaSets("team-a", listOf(newReplicaSet, oldReplicaSet))!!
     private val podPattern = """pod=~"($oldReplicaSet-|$newReplicaSet-)[a-z0-9]{5}""""
 
     @Test
@@ -278,19 +279,18 @@ class PromQlTest {
     }
 
     @Test
-    fun `a pod set is valid with a namespace label and DNS ReplicaSet names`() {
+    fun `a pod set is valid with a namespace label and a lower-case pattern`() {
         assertTrue(PromQl.isValidPodSet(podSet))
-        assertTrue(PromQl.isValidPodSet(PodSetRef("team-a", listOf(dottedReplicaSet, longReplicaSet))))
-        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", emptyList())))
-        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", listOf("Web"))))
-        assertFalse(PromQl.isValidPodSet(PodSetRef("Team_A", listOf(oldReplicaSet))))
-        assertFalse(PromQl.isValidPodSet(PodSetRef("", listOf(oldReplicaSet))))
-        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a\"b", listOf(oldReplicaSet))))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "")))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "(Web-)[a-z0-9]{5}")))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("Team_A", podSet.pattern)))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("", podSet.pattern)))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a\"b", podSet.pattern)))
     }
 
     @Test
     fun `the pod set selectors carry the pattern as a regex matcher`() {
-        val regex = PromQl.podSetRegex(podSet.replicaSets)
+        val regex = podSet.pattern
         assertEquals(
             """cluster="example-cluster",location="us-central1",namespace="team-a",$podPattern""",
             PromQl.gmpPodSetSelector(target, "team-a", regex),
@@ -381,12 +381,301 @@ class PromQlTest {
 
     @Test
     fun `a pod set query for an invalid set is refused`() {
-        assertFailsWith<IllegalArgumentException> {
-            PromQl.gmpPodSetQuery(PodSeriesKind.Cpu, target, PodSetRef("team-a", emptyList()), PodSetMode.Total, 30)
+        assertNull(PromQl.ofReplicaSets("team-a", emptyList()))
+        assertNull(PromQl.ofReplicaSets("team-a", listOf("Web")))
+    }
+
+    // ── pod set factories ───────────────────────────────────────────────────────
+
+    @Test
+    fun `ofReplicaSets writes what podSetRegex writes, so a Deployment's queries do not change`() {
+        for (names in listOf(
+            listOf(newReplicaSet, oldReplicaSet),
+            listOf(oldReplicaSet, oldReplicaSet),
+            listOf(dottedReplicaSet),
+            listOf(longReplicaSet),
+            listOf(dottedReplicaSet, longReplicaSet, oldReplicaSet),
+        )) {
+            assertEquals(PodSetRef("team-a", PromQl.podSetRegex(names)), PromQl.ofReplicaSets("team-a", names), "$names")
         }
-        assertFailsWith<IllegalArgumentException> {
-            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("team-a", listOf("Web")), PodSetMode.PerPod, 30)
+        assertEquals("($oldReplicaSet-|$newReplicaSet-)[a-z0-9]{5}", PromQl.ofReplicaSets("team-a", listOf(newReplicaSet, oldReplicaSet))?.pattern)
+        assertEquals("""(redis-cache\.v2-5f7a3b1d0-)[a-z0-9]{5}""", PromQl.ofReplicaSets("team-a", listOf(dottedReplicaSet))?.pattern)
+    }
+
+    @Test
+    fun `every factory refuses a namespace that is not a label, a name that is not a DNS name and an empty list`() {
+        for (namespace in listOf("", "Team-A", "team_a", "team-a\"b", "team a")) {
+            assertNull(PromQl.ofReplicaSets(namespace, listOf(oldReplicaSet)), namespace)
+            assertNull(PromQl.ofJob(namespace, "nightly-backup", indexed = false), namespace)
+            assertNull(PromQl.ofCronJob(namespace, "nightly-backup", listOf("nightly-backup-29123456")), namespace)
+            assertNull(PromQl.ofExactPods(namespace, listOf("web-0")), namespace)
+            assertNull(PromQl.ofSparkPods(namespace, listOf("spark-pi-success-driver"), emptyList()), namespace)
         }
+        for (bad in listOf("Nightly-Backup", "nightly_backup", "nightly|backup", "nightly\"backup", "", "-nightly", "nightly-")) {
+            assertNull(PromQl.ofReplicaSets("team-a", listOf(oldReplicaSet, bad)), bad)
+            assertNull(PromQl.ofJob("team-a", bad, indexed = false), bad)
+            assertNull(PromQl.ofJob("team-a", bad, indexed = true), bad)
+            assertNull(PromQl.ofCronJob("team-a", bad, listOf("nightly-backup-29123456")), bad)
+            assertNull(PromQl.ofExactPods("team-a", listOf("web-0", bad)), bad)
+            assertNull(PromQl.ofSparkPods("team-a", listOf(bad), listOf("spark-pi-success-exec-1")), bad)
+            assertNull(PromQl.ofSparkPods("team-a", listOf("spark-pi-success-driver"), listOf(bad)), bad)
+        }
+        assertNull(PromQl.ofExactPods("team-a", emptyList()))
+        assertNull(PromQl.ofSparkPods("team-a", emptyList(), emptyList()))
+    }
+
+    @Test
+    fun `a Job's pods are its name, a hyphen and five characters, cut to 58 like any generated name`() {
+        assertEquals("(nightly-backup-29123456-)[a-z0-9]{5}", PromQl.ofJob("team-a", "nightly-backup-29123456", indexed = false)?.pattern)
+        assertEquals("""(log-rotation\.v2-)[a-z0-9]{5}""", PromQl.ofJob("team-a", "log-rotation.v2", indexed = false)?.pattern)
+
+        val long = "nightly-backup-" + "abcdefghij".repeat(5)
+        assertEquals(65, long.length)
+        assertEquals("(${long.take(58)})[a-z0-9]{5}", PromQl.ofJob("team-a", long, indexed = false)?.pattern)
+
+        val matcher = Regex(PromQl.ofJob("team-a", "nightly-backup-29123456", indexed = false)!!.pattern)
+        assertTrue(matcher.matches("nightly-backup-29123456-x7k2p"))
+        assertFalse(matcher.matches("nightly-backup-29123456-3-x7k2p"), "an index belongs to an Indexed Job")
+        assertFalse(matcher.matches("nightly-backup-29123456-x7k2p-extra"))
+        assertFalse(matcher.matches("nightly-backup-2912345-x7k2p"))
+    }
+
+    @Test
+    fun `an Indexed Job with a short name matches any index`() {
+        assertEquals("(db-vacuum-[0-9]+-)[a-z0-9]{5}", PromQl.ofJob("team-a", "db-vacuum", indexed = true)?.pattern)
+
+        val matcher = Regex(PromQl.ofJob("team-a", "db-vacuum", indexed = true)!!.pattern)
+        assertTrue(matcher.matches("db-vacuum-0-x7k2p"))
+        assertTrue(matcher.matches("db-vacuum-123456-x7k2p"))
+        assertFalse(matcher.matches("db-vacuum-x7k2p"), "a pod of a Job that is not Indexed has no index")
+        assertFalse(matcher.matches("db-vacuum-12-x7k2p-1"))
+        assertFalse(matcher.matches("db-vacuum-a-x7k2p"))
+    }
+
+    // The name Kubernetes gives an Indexed Job's pod (podGenerateNameWithIndex, then SimpleNameGenerator's cut to 58).
+    private fun indexedPodName(job: String, index: Int, random: String = "x7k2p"): String {
+        val appendIndex = "-$index-"
+        val prefix = (job + appendIndex).let { if (it.length > 58) job.take(58 - appendIndex.length) + appendIndex else it }
+        return prefix.take(58) + random
+    }
+
+    @Test
+    fun `an Indexed Job name of 50 characters is never cut, one of 51 or more is cut at every index width`() {
+        val fifty = "nightly-backup-" + "abcdefghij".repeat(4).take(35)
+        assertEquals(50, fifty.length)
+        assertEquals("($fifty-[0-9]+-)[a-z0-9]{5}", PromQl.ofJob("team-a", fifty, indexed = true)?.pattern)
+        assertEquals("$fifty-123456-x7k2p", indexedPodName(fifty, 123456))
+
+        val fiftyOne = fifty + "k"
+        val cut = PromQl.ofJob("team-a", fiftyOne, indexed = true)!!.pattern
+        assertEquals(
+            "(" +
+                "$fiftyOne-[0-9]{1}-|" +
+                "$fiftyOne-[0-9]{2}-|" +
+                "$fiftyOne-[0-9]{3}-|" +
+                "$fiftyOne-[0-9]{4}-|" +
+                "$fiftyOne-[0-9]{5}-|" +
+                "$fifty-[0-9]{6}-" +
+                ")[a-z0-9]{5}",
+            cut,
+        )
+    }
+
+    @Test
+    fun `an Indexed Job name of 55 characters is matched at index 0, 7, 42 and 123456, and its neighbours are not`() {
+        val job = "nightly-backup-" + "abcdefghij".repeat(4)
+        assertEquals(55, job.length)
+        val pattern = PromQl.ofJob("team-a", job, indexed = true)!!.pattern
+        assertEquals(
+            "(" +
+                "$job-[0-9]{1}-|" +
+                "${job.take(54)}-[0-9]{2}-|" +
+                "${job.take(53)}-[0-9]{3}-|" +
+                "${job.take(52)}-[0-9]{4}-|" +
+                "${job.take(51)}-[0-9]{5}-|" +
+                "${job.take(50)}-[0-9]{6}-" +
+                ")[a-z0-9]{5}",
+            pattern,
+        )
+        val matcher = Regex(pattern)
+
+        for (index in listOf(0, 7, 42, 123456)) {
+            val name = indexedPodName(job, index)
+            assertTrue(matcher.matches(name), "$name should match")
+            assertEquals(63, name.length, name)
+
+            // One more character before the index, one fewer, a different first character and a missing index.
+            val digits = index.toString()
+            val base = name.removeSuffix("-$digits-x7k2p")
+            assertFalse(matcher.matches("${base}x-$digits-x7k2p"), "one more character before the index")
+            assertFalse(matcher.matches("${base.dropLast(1)}-$digits-x7k2p"), "one fewer character before the index")
+            assertFalse(matcher.matches("z" + name.drop(1)), "another name")
+            assertFalse(matcher.matches("$base-x7k2p"), "no index")
+            assertFalse(matcher.matches(name + "z"), "a sixth random character")
+        }
+        assertFalse(matcher.matches(indexedPodName(job, 1234567)), "a seven-digit index is not matched")
+        assertFalse(matcher.matches(job + "-x7k2p"), "a pod of the same Job without an index")
+    }
+
+    @Test
+    fun `an Indexed Job pattern matches the name Kubernetes generates for every name length and index width`() {
+        for (length in 1..80) {
+            val job = ("a" + "bcdefghijk".repeat(8)).take(length)
+            val pattern = PromQl.ofJob("team-a", job, indexed = true)!!.pattern
+            val matcher = Regex(pattern)
+            for (index in listOf(0, 9, 10, 99, 100, 999, 1000, 9999, 10000, 99999, 100000, 999999)) {
+                assertTrue(matcher.matches(indexedPodName(job, index)), "$job at index $index")
+            }
+        }
+    }
+
+    @Test
+    fun `a CronJob's pods are its name, eight digits, an optional index and five characters`() {
+        val pattern = PromQl.ofCronJob("team-a", "nightly-backup", emptyList())!!.pattern
+        assertEquals("(nightly-backup-[0-9]{8}-([0-9]+-)?)[a-z0-9]{5}", pattern)
+
+        val matcher = Regex(pattern)
+        assertTrue(matcher.matches("nightly-backup-29123456-x7k2p"))
+        assertTrue(matcher.matches("nightly-backup-29123456-3-x7k2p"), "an Indexed job template")
+        assertFalse(matcher.matches("nightly-backup-2912345-x7k2p"))
+        assertFalse(matcher.matches("nightly-backup-291234567-x7k2p"))
+        assertFalse(matcher.matches("nightly-backup-extra-29123456-x7k2p"), "another CronJob that starts with this name")
+        assertFalse(matcher.matches("nightly-backup-29123456-x7k2p-1"))
+        assertFalse(matcher.matches("nightly-backup-29123456-3-4-x7k2p"))
+        assertEquals("""(log-rotation\.v2-[0-9]{8}-([0-9]+-)?)[a-z0-9]{5}""", PromQl.ofCronJob("team-a", "log-rotation.v2", emptyList())?.pattern)
+    }
+
+    @Test
+    fun `a CronJob name of 48 characters keeps its Jobs' names whole in their pods, one of 49 is read from its listed Jobs`() {
+        val fortyEight = "nightly-backup-" + "abcdefghij".repeat(4).take(33)
+        assertEquals(48, fortyEight.length)
+        assertEquals("($fortyEight-[0-9]{8}-([0-9]+-)?)[a-z0-9]{5}", PromQl.ofCronJob("team-a", fortyEight, emptyList())?.pattern)
+        val jobPod = "$fortyEight-29123456-x7k2p"
+        assertEquals(63, jobPod.length)
+        assertTrue(Regex(PromQl.ofCronJob("team-a", fortyEight, emptyList())!!.pattern).matches(jobPod))
+
+        val fortyNine = fortyEight + "k"
+        val jobs = listOf("$fortyNine-29123457", "$fortyNine-29123456")
+        assertEquals(PromQl.ofReplicaSets("team-a", jobs), PromQl.ofCronJob("team-a", fortyNine, jobs))
+        // 49 + 9 = 58 characters: the Job's whole name fills the generated base and its pods carry no hyphen after it.
+        assertEquals("(${jobs[1]}|${jobs[0]})[a-z0-9]{5}", PromQl.ofCronJob("team-a", fortyNine, jobs)?.pattern)
+        assertNull(PromQl.ofCronJob("team-a", fortyNine, emptyList()), "no Job is listed, so no prefix is known")
+    }
+
+    @Test
+    fun `exact pods are listed sorted, once, with their dots escaped`() {
+        assertEquals("(frontend-1|web-0)", PromQl.ofExactPods("team-a", listOf("web-0", "frontend-1", "web-0"))?.pattern)
+        assertEquals("""(redis-cache\.v2-0)""", PromQl.ofExactPods("team-a", listOf("redis-cache.v2-0"))?.pattern)
+
+        val matcher = Regex(PromQl.ofExactPods("team-a", listOf("web-0", "frontend-1"))!!.pattern)
+        assertTrue(matcher.matches("web-0"))
+        assertFalse(matcher.matches("web-01"))
+        assertFalse(matcher.matches("xweb-0"))
+    }
+
+    private val sparkDriver = "spark-etl-nightly-driver"
+    private val sparkStem = "spark-etl-nightly-1a2b3c4d5e6f7890"
+
+    private fun sparkExecutors(count: Int, stem: String = sparkStem) = (1..count).map { "$stem-exec-$it" }
+
+    @Test
+    fun `a Spark app with up to 60 pods is selected by exact name`() {
+        val executors = sparkExecutors(59)
+        val ref = PromQl.ofSparkPods("team-a", listOf(sparkDriver), executors)!!
+        assertEquals(PromQl.ofExactPods("team-a", listOf(sparkDriver) + executors), ref)
+        assertTrue(ref.pattern.contains("$sparkStem-exec-59"))
+        assertFalse(ref.pattern.contains("[0-9]+"))
+
+        assertEquals("(spark-pi-success-driver)", PromQl.ofSparkPods("team-a", listOf("spark-pi-success-driver"), emptyList())?.pattern)
+    }
+
+    @Test
+    fun `a Spark app with more than 60 pods selects its executors by stem`() {
+        val executors = sparkExecutors(60)
+        val pattern = PromQl.ofSparkPods("team-a", listOf(sparkDriver), executors)!!.pattern
+        assertEquals("($sparkDriver|$sparkStem-exec-[0-9]+)", pattern)
+
+        val matcher = Regex(pattern)
+        assertTrue(matcher.matches(sparkDriver))
+        assertTrue(matcher.matches("$sparkStem-exec-1"))
+        assertTrue(matcher.matches("$sparkStem-exec-1000"), "an executor the status does not list yet")
+        assertFalse(matcher.matches("$sparkStem-exec-"))
+        assertFalse(matcher.matches("$sparkStem-exec-x"))
+        assertFalse(matcher.matches("$sparkStem-exec-1-extra"))
+        assertFalse(matcher.matches("spark-etl-hourly-1a2b3c4d5e6f7890-exec-1"))
+    }
+
+    @Test
+    fun `executors are grouped by the stem before the last -exec-, and one named otherwise keeps its exact name`() {
+        val otherStem = "spark-etl-nightly-2b3c4d5e6f708901"
+        val odd = "spark-etl-nightly-sidecar"
+        val tricky = "x-exec-1-exec-2"
+        val dotted = "spark.etl-exec-3"
+        val executors = sparkExecutors(40) + sparkExecutors(40, otherStem) + listOf(odd, tricky, dotted)
+        val pattern = PromQl.ofSparkPods("team-a", listOf(sparkDriver, "spark-etl-hourly-driver", sparkDriver), executors)?.pattern
+
+        // Drivers first, sorted; then the executor alternatives, sorted as strings.
+        assertEquals(
+            "(spark-etl-hourly-driver|$sparkDriver|" +
+                "$sparkStem-exec-[0-9]+|$otherStem-exec-[0-9]+|$odd|" +
+                """spark\.etl-exec-[0-9]+|x-exec-1-exec-[0-9]+)""",
+            pattern,
+        )
+        assertNull(PromQl.ofSparkPods("team-a", listOf(sparkDriver), sparkExecutors(70) + "$sparkStem-exec-"), "a trailing hyphen is no DNS name")
+    }
+
+    // ── pod set validity ────────────────────────────────────────────────────────
+
+    @Test
+    fun `every factory's pattern is a valid pod set`() {
+        val refs = listOf(
+            PromQl.ofReplicaSets("team-a", listOf(dottedReplicaSet, longReplicaSet, oldReplicaSet)),
+            PromQl.ofJob("team-a", "nightly-backup-29123456", indexed = false),
+            PromQl.ofJob("team-a", "log-rotation.v2", indexed = true),
+            PromQl.ofJob("team-a", "nightly-backup-" + "abcdefghij".repeat(4), indexed = true),
+            PromQl.ofCronJob("team-a", "nightly-backup", emptyList()),
+            PromQl.ofExactPods("team-a", listOf("web-0", "redis-cache.v2-0")),
+            PromQl.ofSparkPods("team-a", listOf(sparkDriver), sparkExecutors(80)),
+        )
+        for (ref in refs) {
+            assertTrue(PromQl.isValidPodSet(ref!!), ref.pattern)
+        }
+    }
+
+    @Test
+    fun `a pattern with a quote, an upper-case letter or any other character is refused`() {
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "web\"x")))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "(Web-)[a-z0-9]{5}")))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "")))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "   ")))
+        for (ch in listOf('^', '$', ',', ' ', '=', '~', '_', '/', '\n', '\'', 'A', 'é')) {
+            assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "(web-${ch}x)")), "'$ch' is not a pattern character")
+        }
+        for (ch in "abcxyz0189.-\\()|[]{}+?*") {
+            assertTrue(PromQl.isValidPodSet(PodSetRef("team-a", "web${ch}x")), "'$ch' is a pattern character")
+        }
+    }
+
+    @Test
+    fun `a pattern of 4000 characters is valid and one of 4001 is not`() {
+        assertTrue(PromQl.isValidPodSet(PodSetRef("team-a", "a".repeat(4_000))))
+        assertFalse(PromQl.isValidPodSet(PodSetRef("team-a", "a".repeat(4_001))))
+    }
+
+    @Test
+    fun `the query carries a Job's pattern once through the string-literal escaping`() {
+        val ref = PromQl.ofJob("team-a", "log-rotation.v2", indexed = false)!!
+
+        val selector = """namespace="team-a",pod=~"(log-rotation\\.v2-)[a-z0-9]{5}""""
+        assertEquals(selector, PromQl.inClusterPodSetSelector(ref.namespace, ref.pattern))
+        assertEquals(
+            """sum(rate(container_cpu_usage_seconds_total{$selector,container!="",container!="POD"}[240s]))""",
+            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, ref, PodSetMode.Total, 30),
+        )
+        assertEquals(
+            """sum(rate(container_cpu_usage_seconds_total{cluster="example-cluster",location="us-central1",$selector,container!="",container!="POD"}[300s]))""",
+            PromQl.gmpPodSetQuery(PodSeriesKind.Cpu, target, ref, PodSetMode.Total, 30),
+        )
     }
 
     // ── scopes ──────────────────────────────────────────────────────────────────

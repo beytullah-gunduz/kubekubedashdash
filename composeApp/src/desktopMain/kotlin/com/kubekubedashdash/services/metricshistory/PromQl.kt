@@ -86,10 +86,33 @@ internal object PromQl {
     /** What a ReplicaSet's pod names start with. */
     fun podPrefix(replicaSet: String): String = (replicaSet + "-").take(GENERATED_NAME_BASE_MAX)
 
-    /** True when a query can be built: the names end up in a pattern, so a stray character would change what it matches. */
-    fun isValidPodSet(pods: PodSetRef): Boolean = pods.replicaSets.isNotEmpty() &&
-        KubernetesNames.isDnsLabel(pods.namespace) &&
-        pods.replicaSets.all(KubernetesNames::isDnsSubdomain)
+    // Longest pattern a query may carry; a Spark app's grouped executor names stay far below it.
+    private const val POD_PATTERN_MAX_LENGTH = 4_000
+
+    // What the factories write: lower-case name characters and the RE2 operators they use. A quote or an
+    // upper-case letter never appears, so the pattern cannot leave its string literal or match another name.
+    private val POD_PATTERN_CHARACTERS = Regex("""[a-z0-9.\-\\()|\[\]{}+?*]+""")
+
+    // A Spark app past this many pods is selected by executor stem instead of by exact name.
+    private const val SPARK_EXACT_NAMES_MAX = 60
+
+    // The operator names executors `<app>-<hash>-exec-<n>`.
+    private const val EXECUTOR_MARKER = "-exec-"
+
+    // Indexes of up to this many digits are matched in an Indexed Job's pod names.
+    private const val INDEX_DIGITS_MAX = 6
+
+    // A Job name up to this long is never cut inside an Indexed Job's pod names: 58 - ("-" + 6 digits + "-").
+    const val INDEXED_JOB_UNCUT_MAX = GENERATED_NAME_BASE_MAX - (INDEX_DIGITS_MAX + 2)
+
+    // A CronJob name up to this long keeps its Jobs' names whole in their pods: Job = cronjob + "-" + 8 digits, pod prefix = Job + "-".
+    const val CRONJOB_UNCUT_MAX = GENERATED_NAME_BASE_MAX - 10
+
+    /** True when a query can be built: the pattern ends up in a string literal, so a stray character would change what it matches. */
+    fun isValidPodSet(pods: PodSetRef): Boolean = KubernetesNames.isDnsLabel(pods.namespace) &&
+        pods.pattern.isNotBlank() &&
+        pods.pattern.length <= POD_PATTERN_MAX_LENGTH &&
+        POD_PATTERN_CHARACTERS.matches(pods.pattern)
 
     fun isValidScope(scope: ScopeRef): Boolean = scope.namespaces.all(KubernetesNames::isDnsLabel)
 
@@ -108,14 +131,81 @@ internal object PromQl {
         return replicaSets.distinct().sorted().joinToString("|", prefix = "(", postfix = ")$POD_SUFFIX") { regexEscape(podPrefix(it)) }
     }
 
+    // ── pod set factories ───────────────────────────────────────────────────────
+    // Each returns null when the namespace is not a DNS label, a name is not a DNS subdomain or no name is given.
+
+    /** The pods of [replicaSets], current and old. */
+    fun ofReplicaSets(namespace: String, replicaSets: List<String>): PodSetRef? {
+        if (!KubernetesNames.isDnsLabel(namespace) || replicaSets.isEmpty() || !replicaSets.all(KubernetesNames::isDnsSubdomain)) return null
+        return PodSetRef(namespace, podSetRegex(replicaSets))
+    }
+
+    /**
+     * The pods of the Job [job]: `<job>-xxxxx`, or `<job>-<index>-xxxxx` when [indexed]. Kubernetes cuts a
+     * generated name's base to 58 characters; an Indexed Job's pod names keep the index and cut the Job's
+     * name instead (`podGenerateNameWithIndex`), so a long Indexed name is matched at every index width.
+     */
+    fun ofJob(namespace: String, job: String, indexed: Boolean): PodSetRef? {
+        if (!KubernetesNames.isDnsLabel(namespace) || !KubernetesNames.isDnsSubdomain(job)) return null
+        val pattern = when {
+            !indexed -> "(" + regexEscape(podPrefix(job)) + ")" + POD_SUFFIX
+
+            job.length <= INDEXED_JOB_UNCUT_MAX -> "(" + regexEscape(job) + "-[0-9]+-)" + POD_SUFFIX
+
+            else -> (1..INDEX_DIGITS_MAX).map { width ->
+                val base = job.take(GENERATED_NAME_BASE_MAX - (width + 2))
+                regexEscape(base) + "-[0-9]{" + width + "}-"
+            }.distinct().joinToString("|", prefix = "(", postfix = ")$POD_SUFFIX")
+        }
+        return PodSetRef(namespace, pattern)
+    }
+
+    /**
+     * The pods of the CronJob [cronJob]'s Jobs, whose names are `<cronjob>-<8 digits>` (the scheduled time in
+     * minutes since the epoch): the pattern also matches runs whose Job object is gone. A Job named that way
+     * which the CronJob did not create is charted with it, because a name pattern cannot tell. A CronJob of 47
+     * or 48 characters with an Indexed job template has its pods' names cut, which this pattern does not cover.
+     * Past 48 characters the Jobs' names are cut inside their pods' names, so [jobs] (the listed Jobs) give the
+     * prefixes instead; null when none is listed.
+     */
+    fun ofCronJob(namespace: String, cronJob: String, jobs: List<String>): PodSetRef? {
+        if (!KubernetesNames.isDnsLabel(namespace) || !KubernetesNames.isDnsSubdomain(cronJob)) return null
+        if (cronJob.length > CRONJOB_UNCUT_MAX) return ofReplicaSets(namespace, jobs)
+        return PodSetRef(namespace, "(" + regexEscape(cronJob) + "-[0-9]{8}-([0-9]+-)?)" + POD_SUFFIX)
+    }
+
+    /** Exactly the pods named in [pods]. */
+    fun ofExactPods(namespace: String, pods: List<String>): PodSetRef? {
+        if (!KubernetesNames.isDnsLabel(namespace) || pods.isEmpty() || !pods.all(KubernetesNames::isDnsSubdomain)) return null
+        return PodSetRef(namespace, pods.distinct().sorted().joinToString("|", prefix = "(", postfix = ")") { regexEscape(it) })
+    }
+
+    /**
+     * The driver and executor pods of Spark applications. The operator keeps vanished executors in
+     * `executorState` and tracks up to 1 000 per app; 60 exact names stay far under any GET length limit,
+     * so the threshold only keeps queries short. Past it, executors named `<stem>-exec-<n>` are selected by
+     * stem, and one named otherwise keeps its exact form.
+     */
+    fun ofSparkPods(namespace: String, driverPods: List<String>, executorPods: List<String>): PodSetRef? {
+        if (driverPods.size + executorPods.size <= SPARK_EXACT_NAMES_MAX) return ofExactPods(namespace, driverPods + executorPods)
+        if (!KubernetesNames.isDnsLabel(namespace) || !(driverPods + executorPods).all(KubernetesNames::isDnsSubdomain)) return null
+        val executors = executorPods.map { name ->
+            val stem = name.substringBeforeLast(EXECUTOR_MARKER, missingDelimiterValue = "")
+            val index = name.substringAfterLast(EXECUTOR_MARKER, missingDelimiterValue = "")
+            if (stem.isNotEmpty() && index.isNotEmpty() && index.all { it in '0'..'9' }) "${regexEscape(stem)}${EXECUTOR_MARKER}[0-9]+" else regexEscape(name)
+        }.distinct().sorted()
+        val drivers = driverPods.distinct().sorted().map { regexEscape(it) }
+        return PodSetRef(namespace, (drivers + executors).joinToString("|", prefix = "(", postfix = ")"))
+    }
+
     fun gmpPodSetSelector(target: GmpTarget, namespace: String, regex: String): String = "cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\"," +
         inClusterPodSetSelector(namespace, regex)
 
     fun inClusterPodSetSelector(namespace: String, regex: String): String = "namespace=\"${escape(namespace)}\",pod=~\"${escape(regex)}\""
 
-    fun gmpPodSetQuery(kind: PodSeriesKind, target: GmpTarget, pods: PodSetRef, mode: PodSetMode, stepSec: Long): String = podSetQuery(kind, gmpPodSetSelector(target, pods.namespace, podSetRegex(pods.replicaSets)), mode, rateWindowSec(stepSec))
+    fun gmpPodSetQuery(kind: PodSeriesKind, target: GmpTarget, pods: PodSetRef, mode: PodSetMode, stepSec: Long): String = podSetQuery(kind, gmpPodSetSelector(target, pods.namespace, pods.pattern), mode, rateWindowSec(stepSec))
 
-    fun inClusterPodSetQuery(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, stepSec: Long): String = podSetQuery(kind, inClusterPodSetSelector(pods.namespace, podSetRegex(pods.replicaSets)), mode, inClusterRateWindowSec(stepSec))
+    fun inClusterPodSetQuery(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, stepSec: Long): String = podSetQuery(kind, inClusterPodSetSelector(pods.namespace, pods.pattern), mode, inClusterRateWindowSec(stepSec))
 
     // The shapes of the per-pod queries, grouped by pod instead of by container. Memory keeps the max per
     // (pod, container) so a restarted container's lingering series is not counted twice.

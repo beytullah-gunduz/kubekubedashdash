@@ -4,7 +4,6 @@ import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.services.metricshistory.PodRef
 import com.kubekubedashdash.services.metricshistory.PodSeriesKind
 import com.kubekubedashdash.services.metricshistory.PodSetMode
-import com.kubekubedashdash.services.metricshistory.PodSetRef
 import com.kubekubedashdash.services.metricshistory.PromQl
 import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.ScopeKind
@@ -222,7 +221,7 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
             }
             name?.takeIf(KubernetesNames::isDnsSubdomain) ?: return badData("unsupported query")
         }
-        val ref = PodSetRef(namespace, names)
+        val ref = PromQl.ofReplicaSets(namespace, names) ?: return badData("unsupported query")
         val (kind, mode) = PodSeriesKind.entries.flatMap { k -> PodSetMode.entries.map { k to it } }
             .firstOrNull { (k, m) -> PromQl.inClusterPodSetQuery(k, ref, m, window.stepSec) == query }
             ?: return badData("unsupported query")

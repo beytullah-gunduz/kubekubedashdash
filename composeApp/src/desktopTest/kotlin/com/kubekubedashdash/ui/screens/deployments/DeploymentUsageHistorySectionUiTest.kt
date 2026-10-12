@@ -45,6 +45,7 @@ import com.kubekubedashdash.services.metricshistory.PodRef
 import com.kubekubedashdash.services.metricshistory.PodSeriesKind
 import com.kubekubedashdash.services.metricshistory.PodSetMode
 import com.kubekubedashdash.services.metricshistory.PodSetRef
+import com.kubekubedashdash.services.metricshistory.PromQl
 import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.Series
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
@@ -382,7 +383,7 @@ class DeploymentUsageHistorySectionUiTest {
             ),
             source.calls.map { it.pair }.toSet(),
         )
-        assertEquals(setOf(PodSetRef(NAMESPACE, listOf(OLDEST, PREVIOUS, CURRENT).sorted())), source.calls.map { it.pods }.toSet())
+        assertEquals(setOf(PromQl.ofReplicaSets(NAMESPACE, listOf(OLDEST, PREVIOUS, CURRENT))!!), source.calls.map { it.pods }.toSet())
         assertEquals(setOf(21_600L to 180L), source.calls.map { it.window.endEpochSec - it.window.startEpochSec to it.window.stepSec }.toSet())
     }
 

@@ -363,7 +363,7 @@ class DemoPrometheusDispatcherTest {
         "step" to w.stepSec.toString(),
     )
 
-    private fun podSetPath(kind: PodSeriesKind, replicaSets: List<String>, mode: PodSetMode, namespace: String = "team-a") = rangeQueryPath(PromQl.inClusterPodSetQuery(kind, PodSetRef(namespace, replicaSets), mode, window.stepSec))
+    private fun podSetPath(kind: PodSeriesKind, replicaSets: List<String>, mode: PodSetMode, namespace: String = "team-a") = rangeQueryPath(PromQl.inClusterPodSetQuery(kind, PromQl.ofReplicaSets(namespace, replicaSets)!!, mode, window.stepSec))
 
     private fun seriesOf(response: MockResponse, nameLabel: String?): List<Series> {
         assertEquals(200, response.code(), response.text())
@@ -479,7 +479,7 @@ class DemoPrometheusDispatcherTest {
             .filter { (a, _) -> a.epochSec >= FIRST_POD_CREATED }
             .map { (a, b) -> SeriesPoint(a.epochSec, (a.value + b.value) / 2) }
         assertTrue(mean.any { it.value > 0 }, "the fixture must throttle somewhere for the mean to mean anything")
-        val query = PromQl.inClusterPodSetQuery(PodSeriesKind.Throttling, PodSetRef("team-a", listOf(previous, current)), PodSetMode.PerPod, wide.stepSec)
+        val query = PromQl.inClusterPodSetQuery(PodSeriesKind.Throttling, PromQl.ofReplicaSets("team-a", listOf(previous, current))!!, PodSetMode.PerPod, wide.stepSec)
 
         val pod = seriesOf(get(rangeQueryPath(query, wide)), "pod").single { it.name == "$current-abc12" }
 
@@ -491,7 +491,7 @@ class DemoPrometheusDispatcherTest {
         val dotted = "frontend.v2-7c8d9e0f1"
         delegate.replicaSets = listOf(replicaSet(dotted, NEW_CREATED))
         delegate.pods = listOf(livePod("$dotted-abc12", FIRST_POD_CREATED))
-        val query = PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("team-a", listOf(dotted)), PodSetMode.PerPod, window.stepSec)
+        val query = PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PromQl.ofReplicaSets("team-a", listOf(dotted))!!, PodSetMode.PerPod, window.stepSec)
         assertTrue("""frontend\\.v2-7c8d9e0f1-""" in query, query)
 
         val series = seriesOf(get(rangeQueryPath(query)), "pod")
@@ -565,7 +565,7 @@ class DemoPrometheusDispatcherTest {
 
     @Test
     fun `a pod set query that is not the exact form the client writes is bad_data and asks the delegate nothing`() {
-        val ref = PodSetRef("team-a", listOf(previous, current))
+        val ref = PromQl.ofReplicaSets("team-a", listOf(previous, current))!!
         val good = PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, ref, PodSetMode.PerPod, window.stepSec)
         val alternation = "($previous-|$current-)"
         assertTrue(alternation in good, good)
@@ -577,8 +577,8 @@ class DemoPrometheusDispatcherTest {
             good.replace("sum by (pod)", "max by (pod)"),
             good.replace("[a-z0-9]{5}", "[a-z0-9]{4}"),
             // A namespace and prefixes that are not Kubernetes names.
-            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("Team-A", ref.replicaSets), PodSetMode.PerPod, window.stepSec),
-            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("team-a/x", ref.replicaSets), PodSetMode.PerPod, window.stepSec),
+            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("Team-A", ref.pattern), PodSetMode.PerPod, window.stepSec),
+            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("team-a/x", ref.pattern), PodSetMode.PerPod, window.stepSec),
             good.replace("$previous-|", "Frontend-6d9f8c7b5-|"),
             good.replace("$previous-|", "$previous/-|"),
             good.replace("$previous-|", """frontend\\x-|"""),

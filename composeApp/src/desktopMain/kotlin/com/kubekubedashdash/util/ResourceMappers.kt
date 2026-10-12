@@ -12,6 +12,8 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.ServicePortInfo
+import com.kubekubedashdash.models.SparkRun
+import com.kubekubedashdash.models.WorkloadRun
 import io.fabric8.kubernetes.api.model.Event
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.OwnerReference
@@ -20,6 +22,7 @@ import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.ServicePort
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
+import io.fabric8.kubernetes.api.model.batch.v1.Job
 import java.time.Instant
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
@@ -299,6 +302,7 @@ object ResourceMappers {
         for (col in crd.columns) {
             extras[col.name] = CrdJsonPath.evaluate(gkr, col.jsonPath, col.type)
         }
+        val sparkApplication = crd.group == SPARK_OPERATOR_GROUP && crd.kind == SPARK_APPLICATION_KIND
         return GenericResourceInfo(
             uid = gkr.metadata?.uid ?: "",
             name = gkr.metadata?.name ?: "",
@@ -309,6 +313,56 @@ object ResourceMappers {
             annotations = gkr.metadata?.annotations ?: emptyMap(),
             extraColumns = extras,
             owners = mapOwnerRefs(gkr.metadata?.ownerReferences),
+            // A SparkApplication that was never submitted has no submission time; its creation time stands in as its start.
+            creationTimestamp = if (sparkApplication) gkr.metadata?.creationTimestamp.orEmpty() else "",
+            spark = if (sparkApplication) mapSparkRun(gkr) else null,
+        )
+    }
+
+    private const val SPARK_OPERATOR_GROUP = "sparkoperator.k8s.io"
+    private const val SPARK_APPLICATION_KIND = "SparkApplication"
+
+    /**
+     * What the Spark operator's status says about a SparkApplication's pods and submission: the driver pod
+     * (`status.driverInfo.podName`, else `spec.driver.podName`, else `<name>-driver`), the executor pods
+     * (the keys of `status.executorState`), the last submission and termination times and the state.
+     * Missing values read as "". Null when a field on the way has another type than the CRD gives it.
+     */
+    fun mapSparkRun(gkr: GenericKubernetesResource): SparkRun? = try {
+        val root = gkr.additionalProperties
+        val status = objectAt(root, "status")
+        val spec = objectAt(root, "spec")
+        val driverPod = textAt(objectAt(status, "driverInfo"), "podName")
+            .ifBlank { textAt(objectAt(spec, "driver"), "podName") }
+            .ifBlank { "${gkr.metadata?.name.orEmpty()}-driver" }
+        SparkRun(
+            driverPod = driverPod,
+            executorPods = objectAt(status, "executorState").keys.filter { it.isNotBlank() }.sorted(),
+            submittedAt = textAt(status, "lastSubmissionAttemptTime"),
+            terminatedAt = textAt(status, "terminationTime"),
+            state = textAt(objectAt(status, "applicationState"), "state"),
+        )
+    } catch (_: ClassCastException) {
+        null
+    }
+
+    // A missing field reads as an empty object or text; a field of another type throws ClassCastException.
+    @Suppress("UNCHECKED_CAST")
+    private fun objectAt(parent: Map<String, Any?>, key: String): Map<String, Any?> = parent[key] as Map<String, Any?>? ?: emptyMap()
+
+    private fun textAt(parent: Map<String, Any?>, key: String): String = parent[key] as String? ?: ""
+
+    private val JOB_FINAL_CONDITIONS = setOf("Complete", "Failed")
+
+    /** A Job's start and end times and whether it is Indexed; the end is its completion time, else when it turned Complete or Failed, else "". */
+    fun mapJobRun(job: Job): WorkloadRun {
+        val status = job.status
+        val endedAt = status?.completionTime
+            ?: status?.conditions.orEmpty().firstOrNull { it.type in JOB_FINAL_CONDITIONS && it.status == "True" }?.lastTransitionTime
+        return WorkloadRun(
+            startTime = status?.startTime.orEmpty(),
+            endTime = endedAt.orEmpty(),
+            indexed = job.spec?.completionMode == "Indexed",
         )
     }
 }
