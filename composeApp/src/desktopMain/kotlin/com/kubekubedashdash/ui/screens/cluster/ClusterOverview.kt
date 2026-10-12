@@ -88,6 +88,7 @@ fun ClusterOverviewScreen(
 
     val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
     val statsExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_CLUSTER] ?: true
+    val usageHistoryExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_USAGE_HISTORY] ?: true
 
     // Connection error gets a centered error screen — same as before.
     // Loading no longer hides the scaffold; per-card flows render
@@ -231,6 +232,14 @@ fun ClusterOverviewScreen(
             onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_CLUSTER, !statsExpanded) },
             onNodeClick = { name -> onNavigate(Screen.Main.Nodes(selectNodeName = name)) },
             scope = (namespaceScope as? NamespaceScope.Only)?.let { UsageScope.of(it) },
+        )
+
+        // Brings its own top spacing, so a cluster without a history source adds none.
+        ClusterUsageHistoryCard(
+            service = reactiveClient.metricsHistory,
+            namespaceScope = namespaceScope,
+            expanded = usageHistoryExpanded,
+            onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_USAGE_HISTORY, !usageHistoryExpanded) },
         )
 
         Spacer(Modifier.height(24.dp))
