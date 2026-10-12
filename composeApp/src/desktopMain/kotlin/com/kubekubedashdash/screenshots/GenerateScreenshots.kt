@@ -209,9 +209,11 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         val rc = sessionVm.reactiveClient
         sessionVm.navigate(Screen.Main.ClusterOverview)
 
-        // 3. Warm-up for the hero: the CPU/Memory sparklines poll every 10 s and keep 20 samples
-        // (ClusterOverviewViewModel, ReactiveKubeClient), so they fill after ~200 s. The first samples
-        // catch the demo's startup burst (a full-height red bar); 240 s pushes them out of the window.
+        // 3. Warm-up for the hero: the CPU/Memory sparklines come from the session's UsageSampler (one
+        // reading per 30 s, averaged into epoch-aligned 3-minute bars over the last hour), so a few
+        // readings give one or two bars. The sampler keeps the whole hour, so the demo's first readings
+        // (a full-height red bar while it ramps up) are not pushed out of the window: they stay in the
+        // oldest bar, averaged with whatever else that bar holds. 240 s gives that bar several later readings.
         log.info("Warming up the hero (sparklines fill in ~240 s)")
         delay(240_000)
 

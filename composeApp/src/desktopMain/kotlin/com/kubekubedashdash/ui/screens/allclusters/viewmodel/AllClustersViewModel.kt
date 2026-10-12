@@ -24,6 +24,8 @@ import com.kubekubedashdash.ui.screens.allclusters.ViewMode
 import com.kubekubedashdash.ui.screens.allclusters.buildBuiltIns
 import com.kubekubedashdash.ui.screens.allclusters.rankTopNodes
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.UsageSample
+import com.kubekubedashdash.util.sumBuckets
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,7 +43,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -433,16 +434,32 @@ class AllClustersViewModel internal constructor(
 
     // ── Aggregated stats card data ────────────────────────────────────────────────
 
-    private val _cpuHistory = MutableStateFlow<List<Float>>(emptyList())
-    val cpuHistory: StateFlow<List<Float>> = _cpuHistory.asStateFlow()
+    /**
+     * Each open tab's session samples (see UsageSampler), in tab order. A tab's
+     * sampler starts over on its own namespace or context change, so the
+     * fleet series needs no reset rule of its own.
+     */
+    private val tabUsageSamples: Flow<List<List<UsageSample>>> = clusterTabs
+        .flatMapLatest { tabs ->
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(emptyList())
+            combine(tabs.map { tab -> tab.session.reactiveClient.usageSamples }) { perTab -> perTab.toList() }
+        }
 
-    private val _memHistory = MutableStateFlow<List<Float>>(emptyList())
-    val memHistory: StateFlow<List<Float>> = _memHistory.asStateFlow()
+    /**
+     * CPU use across the open tabs over the last hour, as 3-minute bars: the
+     * sum of the tabs' used CPU over the sum of their capacity, for each bar
+     * every tab with samples holds.
+     */
+    val cpuHistory: StateFlow<List<Float>> = tabUsageSamples
+        .map { perTab -> sumBuckets(perTab, used = { it.cpuUsedMillis }, capacity = { it.cpuCapacityMillis }) }
+        .flowOn(computeDispatcher)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // The (tab, namespace) set the CPU/memory histories were sampled over.
-    // Touched only from aggregatedUsage's upstream, which has one collector
-    // (on computeDispatcher, one coroutine at a time).
-    private var usageHistoryScope: Set<TabNamespace>? = null
+    /** Memory use across the open tabs over the last hour; see [cpuHistory]. */
+    val memHistory: StateFlow<List<Float>> = tabUsageSamples
+        .map { perTab -> sumBuckets(perTab, used = { it.memUsedBytes }, capacity = { it.memCapacityBytes }) }
+        .flowOn(computeDispatcher)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Summed cluster-level counts across all open sessions. */
     val aggregatedClusterInfo: StateFlow<ClusterInfo?> = clusterTabs
@@ -473,50 +490,25 @@ class AllClustersViewModel internal constructor(
         .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /**
-     * Summed CPU and memory totals across all open sessions. Updates CPU/mem history as a side-effect.
-     *
-     * Used figures follow each tab's namespace selection while capacity is
-     * whole-cluster, so the sum covers a (tab, namespace) set; when that set
-     * changes — a namespace selection change, a tab reloading or opening or closing —
-     * the histories start over rather than join two sums into one trend.
-     */
+    /** Summed CPU and memory totals across all open sessions. */
     val aggregatedUsage: StateFlow<ResourceUsageSummary?> = clusterTabs
         .flatMapLatest { tabs ->
-            if (tabs.isEmpty()) return@flatMapLatest flowOf(ScopedSum(emptySet(), null))
+            if (tabs.isEmpty()) return@flatMapLatest flowOf(null)
             loadedReadings(tabs) { it.resourceUsage }.map { readings ->
                 val summaries = readings.map { it.second }
-                ScopedSum(
-                    scope = readings.map { it.first }.toSet(),
-                    value = if (summaries.isEmpty()) {
-                        null
-                    } else {
-                        ResourceUsageSummary(
-                            cpuUsedMillis = summaries.sumOf { it.cpuUsedMillis },
-                            cpuCapacityMillis = summaries.sumOf { it.cpuCapacityMillis },
-                            memoryUsedBytes = summaries.sumOf { it.memoryUsedBytes },
-                            memoryCapacityBytes = summaries.sumOf { it.memoryCapacityBytes },
-                            metricsAvailable = summaries.any { it.metricsAvailable },
-                        )
-                    },
-                )
+                if (summaries.isEmpty()) {
+                    null
+                } else {
+                    ResourceUsageSummary(
+                        cpuUsedMillis = summaries.sumOf { it.cpuUsedMillis },
+                        cpuCapacityMillis = summaries.sumOf { it.cpuCapacityMillis },
+                        memoryUsedBytes = summaries.sumOf { it.memoryUsedBytes },
+                        memoryCapacityBytes = summaries.sumOf { it.memoryCapacityBytes },
+                        metricsAvailable = summaries.any { it.metricsAvailable },
+                    )
+                }
             }
         }
-        .onEach { sum ->
-            if (sum.scope != usageHistoryScope) {
-                usageHistoryScope = sum.scope
-                _cpuHistory.value = emptyList()
-                _memHistory.value = emptyList()
-            }
-            val usage = sum.value
-            if (usage != null && usage.metricsAvailable) {
-                val cpuF = if (usage.cpuCapacityMillis > 0) usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis else 0f
-                val memF = if (usage.memoryCapacityBytes > 0) usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes else 0f
-                _cpuHistory.update { (it + cpuF).takeLast(20) }
-                _memHistory.update { (it + memF).takeLast(20) }
-            }
-        }
-        .map { it.value }
         .flowOn(computeDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -537,10 +529,9 @@ class AllClustersViewModel internal constructor(
      * cluster-info and node informers idle when the All-Clusters UI isn't
      * observed — audit C4.
      *
-     * Pod counts follow each tab's namespace, so like the CPU/memory histories
-     * this starts over whenever the (tab, namespace) set changes. Each tab's
-     * count and capacity are read together, so a tab joins the sum with both
-     * or neither.
+     * Pod counts follow each tab's namespace, so this starts over whenever the
+     * (tab, namespace) set changes. Each tab's count and capacity are read
+     * together, so a tab joins the sum with both or neither.
      */
     val podsHistory: StateFlow<List<Float>> = clusterTabs
         .flatMapLatest { tabs ->

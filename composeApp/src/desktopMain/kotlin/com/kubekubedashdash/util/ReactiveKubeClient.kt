@@ -103,6 +103,10 @@ class ReactiveKubeClient(
     private val probeIntervalMs: Long = 4_000L,
     /** Test seam: metrics-server poll cadence (resourceUsage, nodeUsages). Production keeps 10 s. */
     private val metricsPollIntervalMs: Long = 10_000L,
+    /** Test seam: usage-sampler cadence ([UsageSampler]). Production keeps 30 s; 0 turns the sampler off, for tests that count the requests a client sends. */
+    private val usageSampleIntervalMs: Long = 30_000L,
+    /** Test seam: the clock that stamps usage samples. */
+    private val nowEpochSec: () -> Long = { System.currentTimeMillis() / 1000 },
 ) : Closeable {
 
     private val log = LoggerFactory.getLogger(ReactiveKubeClient::class.java)
@@ -1412,57 +1416,82 @@ class ReactiveKubeClient(
         return nodes
     }
 
+    /**
+     * One read of the pod and node metrics for [selection]: the blocking body of
+     * the [resourceUsage] poll and of the [UsageSampler]. Throws [SkippedPoll]
+     * when a read fails in a way that should keep the last answer, and returns
+     * the unavailable summary when the cluster has no metrics to give.
+     */
+    internal fun fetchUsageSummary(selection: NamespaceScope): ResourceUsageSummary {
+        val ns = selection.serverNamespace
+        val podMetricItems = try {
+            if (ns != null) {
+                k8s.top().pods().inNamespace(ns).metrics().items ?: emptyList()
+            } else {
+                k8s.top().pods().metrics().items ?: emptyList()
+            }
+        } catch (e: Exception) {
+            answerOrSkip("top pods", e)
+            return metricsUnavailable
+        }
+        noteMetricsRead("top pods", "ok")
+        var cpuUsed = 0L
+        var memUsed = 0L
+        val podUsages = mutableMapOf<String, PodUsage>()
+        for (pm in podMetricItems) {
+            val podNamespace = pm.metadata?.namespace ?: ns
+            // Two or more selected namespaces sample every namespace (see
+            // NamespaceScope.serverNamespace); keep only the selected ones.
+            if (!selection.contains(podNamespace)) continue
+            val containers = (pm.containers ?: emptyList()).map { c ->
+                ContainerUsage(
+                    name = c.name.orEmpty(),
+                    cpuMillis = parseCpuToMillis(c.usage?.get("cpu")?.toString() ?: "0"),
+                    memoryBytes = parseMemoryToBytes(c.usage?.get("memory")?.toString() ?: "0"),
+                )
+            }
+            val podCpu = containers.sumOf { it.cpuMillis }
+            val podMem = containers.sumOf { it.memoryBytes }
+            cpuUsed += podCpu
+            memUsed += podMem
+            val podName = pm.metadata?.name
+            if (podName != null && podNamespace != null) {
+                podUsages[podUsageKey(podNamespace, podName)] = PodUsage(podCpu, podMem, containers)
+            }
+        }
+        val nodeItems = listNodesForCapacity()
+        var cpuCap = 0L
+        var memCap = 0L
+        for (node in nodeItems) {
+            val alloc = node.status?.allocatable ?: continue
+            cpuCap += parseCpuToMillis(alloc["cpu"]?.toString() ?: "0")
+            memCap += parseMemoryToBytes(alloc["memory"]?.toString() ?: "0")
+        }
+        return ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true, podUsages = podUsages)
+    }
+
     val resourceUsage: StateFlow<ResourceState<ResourceUsageSummary>> = informers.namespacedPolling(
         intervalMs = metricsPollIntervalMs,
         skippedFallback = metricsUnavailable,
-        fetch = { selection ->
-            val ns = selection.serverNamespace
-            val podMetricItems = try {
-                if (ns != null) {
-                    k8s.top().pods().inNamespace(ns).metrics().items ?: emptyList()
-                } else {
-                    k8s.top().pods().metrics().items ?: emptyList()
-                }
-            } catch (e: Exception) {
-                answerOrSkip("top pods", e)
-                return@namespacedPolling metricsUnavailable
-            }
-            noteMetricsRead("top pods", "ok")
-            var cpuUsed = 0L
-            var memUsed = 0L
-            val podUsages = mutableMapOf<String, PodUsage>()
-            for (pm in podMetricItems) {
-                val podNamespace = pm.metadata?.namespace ?: ns
-                // Two or more selected namespaces sample every namespace (see
-                // NamespaceScope.serverNamespace); keep only the selected ones.
-                if (!selection.contains(podNamespace)) continue
-                val containers = (pm.containers ?: emptyList()).map { c ->
-                    ContainerUsage(
-                        name = c.name.orEmpty(),
-                        cpuMillis = parseCpuToMillis(c.usage?.get("cpu")?.toString() ?: "0"),
-                        memoryBytes = parseMemoryToBytes(c.usage?.get("memory")?.toString() ?: "0"),
-                    )
-                }
-                val podCpu = containers.sumOf { it.cpuMillis }
-                val podMem = containers.sumOf { it.memoryBytes }
-                cpuUsed += podCpu
-                memUsed += podMem
-                val podName = pm.metadata?.name
-                if (podName != null && podNamespace != null) {
-                    podUsages[podUsageKey(podNamespace, podName)] = PodUsage(podCpu, podMem, containers)
-                }
-            }
-            val nodeItems = listNodesForCapacity()
-            var cpuCap = 0L
-            var memCap = 0L
-            for (node in nodeItems) {
-                val alloc = node.status?.allocatable ?: continue
-                cpuCap += parseCpuToMillis(alloc["cpu"]?.toString() ?: "0")
-                memCap += parseMemoryToBytes(alloc["memory"]?.toString() ?: "0")
-            }
-            ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true, podUsages = podUsages)
-        },
+        fetch = ::fetchUsageSummary,
     )
+
+    private val usageSampler = UsageSampler(
+        scope = scope,
+        trigger = connectedTrigger,
+        park = informers::parkUnlessConnected,
+        namespaceScope = namespaceScope,
+        connectedContext = connectionManager::connectedContextOrNull,
+        fetch = ::fetchUsageSummary,
+        intervalMs = usageSampleIntervalMs,
+        nowEpochSec = nowEpochSec,
+    )
+
+    /**
+     * The last hour of CPU and memory readings, sampled for as long as the session
+     * lives (see [UsageSampler]); the sparklines read this, not [resourceUsage].
+     */
+    val usageSamples: StateFlow<List<UsageSample>> get() = usageSampler.samples
 
     // ── Per-node resource usage (polling) ────────────────────────────────────────
 
