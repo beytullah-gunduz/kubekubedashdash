@@ -14,8 +14,10 @@ import com.kubekubedashdash.services.metricshistory.demoSeries
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.PodList
+import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetList
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsList
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
 import io.fabric8.kubernetes.client.server.mock.CustomResourceAware
 import io.fabric8.kubernetes.client.server.mock.Resetable
@@ -51,7 +53,7 @@ import kotlin.math.sin
  * 200 and its whole contents. Services and ports the demo does not have answer as the API server
  * does (404 and 503 Status objects). The only calls into [delegate] on a proxy path are synthetic
  * GETs that read what [demoSeries] needs: a pod's containers, or for a pod-set query the
- * namespace's ReplicaSets and pods. A scope query is answered without any.
+ * namespace's ReplicaSets and pods. A scope query reads the PodMetrics the Overview gauges add up.
  *
  * Nothing here logs; a path, query or name stays inside the reply to the in-process client.
  */
@@ -325,20 +327,59 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         return kind to scope
     }
 
-    // One smooth line for the whole scope: each namespace is a baseline and a slow wave, both fixed by its name.
+    // One line for the whole scope that ends on the scope's usage right now, the sum the Overview gauges
+    // show, so the card and the gauges agree at the right edge. Earlier points wander around it. No
+    // PodMetrics in the scope reads as no series, as Prometheus answers for namespaces without containers.
     private fun scopeMatrix(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): MockResponse {
-        val namespaces = scope.namespaces.ifEmpty { DEMO_NAMESPACES }.sorted()
-        val points = (window.startEpochSec..window.endEpochSec step window.stepSec).map { t -> SeriesPoint(t, namespaces.sumOf { scopeValue(kind, it, t) }) }
+        val now = scopeUsage(kind, scope)?.takeIf { it > 0 } ?: return matrix(emptyList())
+        val seed = scope.namespaces.sorted().joinToString(",")
+        val atEnd = scopeShape(kind, seed, window.endEpochSec, jitter = false)
+        val points = (window.startEpochSec..window.endEpochSec step window.stepSec).map { t ->
+            SeriesPoint(t, now * scopeShape(kind, seed, t, jitter = t != window.endEpochSec) / atEnd)
+        }
         return matrix(listOf(null to points))
     }
 
-    private fun scopeValue(kind: ScopeKind, namespace: String, t: Long): Double {
-        val unit = (namespace.hashCode() and 0xFFFF) / 65_535.0
-        val (baseline, period) = when (kind) {
-            ScopeKind.CpuCores -> (0.6 + 0.6 * unit) to 7_200.0
-            ScopeKind.MemoryBytes -> (0.8 + 0.8 * unit) * GIB to 10_800.0
+    // The scope's CPU (cores) or memory (bytes) summed over the PodMetrics of its namespaces, or of every
+    // namespace for an empty scope; null when none could be read.
+    private fun scopeUsage(kind: ScopeKind, scope: ScopeRef): Double? {
+        val paths = if (scope.namespaces.isEmpty()) {
+            listOf("/apis/metrics.k8s.io/v1beta1/pods")
+        } else {
+            scope.namespaces.sorted().map { "/apis/metrics.k8s.io/v1beta1/namespaces/$it/pods" }
         }
-        return baseline * (1 + 0.25 * sin(2 * PI * t / period + 2 * PI * unit))
+        val items = paths.flatMap { listFrom(it, PodMetricsList::class.java)?.items.orEmpty() }
+        if (items.isEmpty()) return null
+        val resource = if (kind == ScopeKind.CpuCores) "cpu" else "memory"
+        return items.sumOf { pm ->
+            pm.containers.orEmpty().sumOf { c -> c.usage?.get(resource)?.let(::quantityAmount) ?: 0.0 }
+        }
+    }
+
+    private fun quantityAmount(quantity: Quantity): Double = try {
+        Quantity.getAmountInBytes(quantity).toDouble()
+    } catch (_: RuntimeException) {
+        0.0
+    }
+
+    // A slow drift, a faster ripple and, away from the right edge, a little jitter per minute; fixed by the
+    // scope and the time, so a refresh redraws the same line. Memory moves half as much as CPU.
+    private fun scopeShape(kind: ScopeKind, seed: String, t: Long, jitter: Boolean): Double {
+        val amplitude = if (kind == ScopeKind.CpuCores) 1.0 else 0.5
+        val phase = 2 * PI * ((seed.hashCode() + 7_919 * kind.ordinal) and 0xFFFF) / 65_536.0
+        val drift = 0.12 * sin(2 * PI * t / 5_400.0 + phase)
+        val ripple = 0.05 * sin(2 * PI * t / 1_380.0 + 2 * phase)
+        val noise = if (jitter) 0.04 * signedNoise(seed.hashCode().toLong() * 31 + kind.ordinal, Math.floorDiv(t, 60L)) else 0.0
+        return 1 + amplitude * (drift + ripple + noise)
+    }
+
+    // A value in [-1, 1) from a seed and a slot: the SplitMix64 finaliser.
+    private fun signedNoise(seed: Long, slot: Long): Double {
+        var z = seed * -0x61c8864680b583ebL + slot
+        z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
+        z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
+        z = z xor (z ushr 31)
+        return (z ushr 11).toDouble() / (1L shl 53).toDouble() * 2 - 1
     }
 
     // One entry per series; a null name is the entry without a pod label.
@@ -497,10 +538,6 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
 
         // The pod that stands for a ReplicaSet whose pods are gone; it fits the [a-z0-9]{5} of the pattern.
         private const val VIRTUAL_POD_SUFFIX = "old01"
-
-        // What an empty scope covers: every namespace of the demo.
-        private val DEMO_NAMESPACES = setOf("default", "production", "monitoring")
-        private const val GIB = 1024.0 * 1024 * 1024
 
         /**
          * True when a path segment is `proxy`: the subresource of a Service, Pod or Node, whatever

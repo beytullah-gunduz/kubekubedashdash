@@ -183,18 +183,29 @@ class DemoPrometheusEndToEndTest {
     }
 
     @Test
-    fun `the demo answers a scope's CPU and memory over the namespaces as one line`() = runBlocking<Unit> {
+    fun `a scope's line ends on the usage the Overview gauges add up from PodMetrics`() = runBlocking<Unit> {
+        // team-a is not a demo namespace, so the simulator never writes PodMetrics there.
+        val mib = 1024L * 1024
+        handle.client.resource(MockClusterProvider.buildPodMetrics("web-0", "team-a", listOf(Triple("app", 250L, 300 * mib), Triple("sidecar", 50L, 20 * mib)))).create()
+        handle.client.resource(MockClusterProvider.buildPodMetrics("web-1", "team-a", listOf(Triple("app", 100L, 200 * mib)))).create()
+        val gauges = handle.client.top().pods().inNamespace("team-a").metrics().items.flatMap { it.containers }
+        val expected = mapOf(
+            ScopeKind.CpuCores to gauges.sumOf { it.usage.getValue("cpu").numericalAmount.toDouble() },
+            ScopeKind.MemoryBytes to gauges.sumOf { it.usage.getValue("memory").numericalAmount.toDouble() },
+        )
+        assertEquals(0.4, expected.getValue(ScopeKind.CpuCores), 1e-9)
         val window = HistoryRange.H6.window(System.currentTimeMillis() / 1000)
         val source = source()
 
         for (kind in ScopeKind.entries) {
-            val result = source.scopeSeries(kind, ScopeRef(emptySet()), window)
+            val result = source.scopeSeries(kind, ScopeRef(setOf("team-a")), window)
 
             assertIs<SeriesResult.Ok>(result, "$kind: $result")
             val line = result.series.single()
             assertEquals("", line.name, "$kind")
             assertEquals((window.endEpochSec - window.startEpochSec) / window.stepSec + 1, line.points.size.toLong(), "$kind")
             assertTrue(line.points.all { it.value > 0 }, "$kind")
+            assertEquals(expected.getValue(kind), line.points.last().value, 1e-6 * expected.getValue(kind), "$kind: the right edge is the gauges' sum")
         }
     }
 

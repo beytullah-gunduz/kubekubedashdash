@@ -31,6 +31,8 @@ import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetListBuilder
 import io.fabric8.kubernetes.api.model.authorization.v1.SelfSubjectAccessReviewBuilder
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
+import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsListBuilder
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.ConfigBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -76,7 +78,7 @@ class DemoPrometheusDispatcherTest {
 
     /**
      * Records every request it gets; answers the one known pod, 404 for other pods and a marker for the rest.
-     * Once [replicaSets] or [pods] is set it also answers that namespace list, the way the CRUD store does.
+     * Once [replicaSets], [pods] or [podMetrics] is set it also answers those lists, the way the CRUD store does.
      */
     private class RecordingDelegate :
         Dispatcher(),
@@ -88,13 +90,21 @@ class DemoPrometheusDispatcherTest {
         val expectedContexts = CopyOnWriteArrayList<CustomResourceDefinitionContext>()
         var replicaSets: List<ReplicaSet>? = null
         var pods: List<Pod>? = null
+        var podMetrics: List<PodMetrics>? = null
 
         override fun dispatch(request: RecordedRequest): MockResponse {
             val path = request.path.orEmpty()
             seen += "${request.method} $path"
             val replicaSetsNamespace = REPLICASETS_PATH.matchEntire(path)?.groupValues?.get(1)
             val podsNamespace = PODS_PATH.matchEntire(path)?.groupValues?.get(1)
+            val metricsNamespace = POD_METRICS_PATH.matchEntire(path)?.groupValues?.get(1)
             return when {
+                request.method == "GET" && path == ALL_POD_METRICS_PATH && podMetrics != null ->
+                    MockResponse().setResponseCode(200).setBody(Serialization.asJson(PodMetricsListBuilder().withItems(podMetrics.orEmpty()).build()))
+
+                request.method == "GET" && metricsNamespace != null && podMetrics != null ->
+                    MockResponse().setResponseCode(200).setBody(Serialization.asJson(PodMetricsListBuilder().withItems(podMetrics.orEmpty().filter { it.metadata.namespace == metricsNamespace }).build()))
+
                 request.method == "GET" && path == POD_PATH -> MockResponse().setResponseCode(200).setBody(Serialization.asJson(knownPod()))
 
                 request.method == "GET" && replicaSetsNamespace != null && replicaSets != null ->
@@ -592,11 +602,31 @@ class DemoPrometheusDispatcherTest {
 
     private fun scopeLine(kind: ScopeKind, namespaces: Set<String>): List<SeriesPoint> = seriesOf(get(scopePath(kind, namespaces)), null).single().points
 
+    private val mib = 1024.0 * 1024
+
+    // CPU 0.4 cores and memory 520 MiB in team-a, 1.5 cores and 1 GiB in team-b.
+    private fun seedPodMetrics() {
+        val m = 1024L * 1024
+        delegate.podMetrics = listOf(
+            MockClusterProvider.buildPodMetrics("web-0", "team-a", listOf(Triple("app", 250L, 300 * m), Triple("sidecar", 50L, 20 * m))),
+            MockClusterProvider.buildPodMetrics("web-1", "team-a", listOf(Triple("app", 100L, 200 * m))),
+            MockClusterProvider.buildPodMetrics("web-0", "team-b", listOf(Triple("app", 1_500L, 1_024 * m))),
+        )
+    }
+
+    private fun expectedNow(kind: ScopeKind, namespaces: Set<String>): Double {
+        val cpu = mapOf("team-a" to 0.4, "team-b" to 1.5)
+        val memory = mapOf("team-a" to 520 * mib, "team-b" to 1_024 * mib)
+        val byNamespace = if (kind == ScopeKind.CpuCores) cpu else memory
+        return namespaces.ifEmpty { byNamespace.keys }.sumOf { byNamespace.getValue(it) }
+    }
+
     @Test
-    fun `a scope answers one line without labels for zero, one or two namespaces, the same every time and without the delegate`() {
+    fun `a scope answers one line without labels that ends on its PodMetrics sum, the same every time`() {
+        seedPodMetrics()
         val pointCount = (window.endEpochSec - window.startEpochSec) / window.stepSec + 1
         for (kind in ScopeKind.entries) {
-            for (namespaces in listOf(emptySet(), setOf("team-a"), setOf("team-a", "team-b"))) {
+            for (namespaces in listOf(emptySet(), setOf("team-a"), setOf("team-b"), setOf("team-a", "team-b"))) {
                 val response = get(scopePath(kind, namespaces))
 
                 val entry = resultOf(response).single().jsonObject
@@ -606,28 +636,51 @@ class DemoPrometheusDispatcherTest {
                 assertEquals(window.startEpochSec, points.first().epochSec, "$kind $namespaces")
                 assertEquals(window.endEpochSec, points.last().epochSec, "$kind $namespaces")
                 assertTrue(points.all { it.value > 0 }, "$kind $namespaces")
+                val now = expectedNow(kind, namespaces)
+                assertEquals(now, points.last().value, 1e-9 * now, "$kind $namespaces: the right edge is what the gauges add up")
                 assertEquals(response.text(), get(scopePath(kind, namespaces)).text(), "$kind $namespaces: the same request must give the same body")
             }
         }
-        assertEquals(emptyList(), delegate.seen.toList())
+        assertEquals(
+            setOf(
+                "GET /apis/metrics.k8s.io/v1beta1/pods",
+                "GET /apis/metrics.k8s.io/v1beta1/namespaces/team-a/pods",
+                "GET /apis/metrics.k8s.io/v1beta1/namespaces/team-b/pods",
+            ),
+            delegate.seen.toSet(),
+            "a scope reads PodMetrics and nothing else",
+        )
     }
 
     @Test
-    fun `a scope reads a few cores or a few gibibytes, and sums its namespaces`() {
-        val everything = setOf("default", "production", "monitoring")
-        val gib = 1024.0 * 1024 * 1024
-
-        assertTrue(scopeLine(ScopeKind.CpuCores, emptySet()).all { it.value in 0.5..8.0 })
-        assertTrue(scopeLine(ScopeKind.MemoryBytes, emptySet()).all { it.value in gib..(16 * gib) })
+    fun `earlier points wander around the right edge, more for CPU than memory, not as a plain wave`() {
+        seedPodMetrics()
         for (kind in ScopeKind.entries) {
-            assertEquals(scopeLine(kind, everything), scopeLine(kind, emptySet()), "$kind: an empty scope covers the demo's namespaces")
-            val a = scopeLine(kind, setOf("team-a"))
-            val b = scopeLine(kind, setOf("team-b"))
-            val both = scopeLine(kind, setOf("team-a", "team-b"))
-            assertTrue(a != b, "$kind: two namespaces must not draw the same line")
-            assertEquals(a.size, both.size)
-            for (i in a.indices) {
-                assertEquals(a[i].value + b[i].value, both[i].value, 1e-6 * both[i].value, "$kind $i")
+            val line = scopeLine(kind, emptySet())
+            val now = line.last().value
+            val ratios = line.map { it.value / now }
+
+            assertTrue(ratios.all { it in 0.6..1.5 }, "$kind: $ratios")
+            val spread = ratios.max() - ratios.min()
+            assertTrue(spread > if (kind == ScopeKind.CpuCores) 0.05 else 0.025, "$kind must move: $ratios")
+            // A slow wave over this 15-minute window turns at most twice; the per-minute jitter turns it often.
+            val turns = line.zipWithNext { a, b -> b.value - a.value }.zipWithNext().count { (a, b) -> a * b < 0 }
+            assertTrue(turns >= 4, "$kind turns $turns times: $ratios")
+        }
+        val cpu = scopeLine(ScopeKind.CpuCores, emptySet()).map { it.value }
+        val memory = scopeLine(ScopeKind.MemoryBytes, emptySet()).map { it.value }
+        assertTrue((memory.max() - memory.min()) / memory.last() < (cpu.max() - cpu.min()) / cpu.last(), "memory moves less than CPU")
+    }
+
+    @Test
+    fun `a scope without PodMetrics answers no series`() {
+        for (metrics in listOf(null, emptyList<PodMetrics>())) {
+            delegate.podMetrics = metrics
+            for (kind in ScopeKind.entries) {
+                val response = get(scopePath(kind, setOf("team-a")))
+
+                assertEquals(200, response.code(), "$kind $metrics")
+                assertEquals(0, resultOf(response).size, "$kind $metrics")
             }
         }
     }
@@ -917,6 +970,8 @@ class DemoPrometheusDispatcherTest {
         const val POD_PATH = "/api/v1/namespaces/team-a/pods/web-0"
         val REPLICASETS_PATH = Regex("/apis/apps/v1/namespaces/([^/]+)/replicasets")
         val PODS_PATH = Regex("/api/v1/namespaces/([^/]+)/pods")
+        const val ALL_POD_METRICS_PATH = "/apis/metrics.k8s.io/v1beta1/pods"
+        val POD_METRICS_PATH = Regex("/apis/metrics.k8s.io/v1beta1/namespaces/([^/]+)/pods")
         const val ACCESS_REVIEW_PATH = "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
 
         // Not a code the dispatcher or the CRUD store ever answers: marks "the delegate answered".
