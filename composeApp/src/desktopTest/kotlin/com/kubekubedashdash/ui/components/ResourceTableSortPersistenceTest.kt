@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -159,5 +160,26 @@ class ResourceTableSortPersistenceTest {
         clickName()
         assertSorted("Sorted descending")
         assertNull(PreferenceRepository.tableSorts.value[tableKey])
+    }
+
+    @Test
+    fun `two clicks handled before the next frame still count as two`() = runComposeUiTest {
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                ResourceTable(columns = columns, rows = rows, tableKey = tableKey, identityHeader = "Name")
+            }
+        }
+        waitForIdle()
+
+        val click = checkNotNull(onNodeWithText("Name").fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+        // Both clicks run in one turn of the UI thread, with no recomposition in between.
+        runOnIdle {
+            click()
+            click()
+        }
+        waitForIdle()
+
+        assertEquals("desc:Name", PreferenceRepository.tableSorts.value[tableKey])
+        assertSorted("Sorted descending")
     }
 }

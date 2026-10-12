@@ -231,7 +231,8 @@ fun ResourceTable(
     // A column you have hidden (or the window has dropped) must not keep sorting
     // the table from behind the menu — that is the "invisible key" the
     // header-based sort exists to avoid. The default takes over meanwhile.
-    val shownSort = displayedTableSort(storedSort, defaultSort, visibleIndices.map { columns[it].header })
+    val visibleHeaders = visibleIndices.map { columns[it].header }
+    val shownSort = displayedTableSort(storedSort, defaultSort, visibleHeaders)
     val sortedRows = remember(rows, columns, shownSort, identityHeader, pinnedIds) {
         sortTableRows(
             rows = rows,
@@ -317,7 +318,10 @@ fun ResourceTable(
                     modifier = Modifier
                         .then(if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f))
                         .clickable {
-                            val next = nextTableSort(shownSort, defaultSort, col.header)
+                            // Read the sort at click time, not the composed shownSort: two
+                            // clicks handled before the next frame would both see the old one.
+                            val current = if (tableKey != null) decodeTableSort(PreferenceRepository.tableSorts.value[tableKey]) else localSort
+                            val next = nextTableSort(displayedTableSort(current, defaultSort, visibleHeaders), defaultSort, col.header)
                             if (tableKey != null) {
                                 PreferenceRepository.setTableSort(tableKey, next?.let(::encodeTableSort))
                             } else {
