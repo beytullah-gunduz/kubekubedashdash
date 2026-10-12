@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
@@ -125,8 +126,8 @@ private class FakeSource(
     private val failure: SeriesResult.Failed? = null,
     private val failKinds: Set<PodSeriesKind> = emptySet(),
     private val empty: Boolean = false,
+    override val label: String = "Fake source",
 ) : MetricsHistorySource {
-    override val label = "Fake source"
     val calls = CopyOnWriteArrayList<Call>()
 
     override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
@@ -288,10 +289,11 @@ class DeploymentUsageHistorySectionUiTest {
         replicaSets: List<GenericResourceInfo> = this@DeploymentUsageHistorySectionUiTest.replicaSets,
         pods: List<PodInfo> = this@DeploymentUsageHistorySectionUiTest.pods,
         refreshMs: Long = Long.MAX_VALUE,
+        width: Dp = 640.dp,
     ) {
         setContent {
             MaterialTheme(typography = kdTypography()) {
-                Column(Modifier.width(640.dp)) { DeploymentUsageHistorySection(deployment, service, replicaSets, pods, { NOW }, refreshMs) }
+                Column(Modifier.width(width)) { DeploymentUsageHistorySection(deployment, service, replicaSets, pods, { NOW }, refreshMs) }
             }
         }
         waitForIdle()
@@ -330,6 +332,22 @@ class DeploymentUsageHistorySectionUiTest {
     fun `Per pod draws the same charts in the Retro style`() = runComposeUiTest {
         ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
         assertPerPodCharts()
+    }
+
+    @Test
+    fun `in a narrow Retro panel a long source label gives way, and the toggles and the range menu stay whole`() = runComposeUiTest {
+        ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+        val source = FakeSource(seriesNames, label = "Prometheus · monitoring/prometheus-operated")
+        show(serviceOver(settingsOf(GmpSetting), source), width = 460.dp)
+
+        // Squeezed out, a control is laid out with no width at all and cannot be clicked.
+        for (control in listOf("Per pod", "Total", "6h ▾")) {
+            val bounds = onNodeWithText(control).fetchSemanticsNode().boundsInRoot
+            assertTrue(bounds.width >= 24f, "$control is squeezed to $bounds")
+        }
+        onNodeWithText("Total").performClick()
+        waitForIdle()
+        assertTrue(source.calls.any { it.mode == PodSetMode.Total && it.kind == PodSeriesKind.Cpu }, "the Total toggle is reachable")
     }
 
     @Test
@@ -425,6 +443,8 @@ class DeploymentUsageHistorySectionUiTest {
         onAllNodesWithText("rev 3").assertCountEquals(4)
         onAllNodesWithText("rev 2").assertCountEquals(4)
         onNodeWithText("Received").assertExists()
+        // The markers give CPU, memory and throttling a legend, where the sum is listed by name.
+        onAllNodesWithText(TOTAL_SERIES_NAME).assertCountEquals(3)
     }
 
     @Test
@@ -750,12 +770,12 @@ class DeploymentUsageHistorySectionUiTest {
     }
 
     @Test
-    fun `a total is one unnamed line in the primary colour`() {
+    fun `a total is one line in the primary colour, named for the legend the markers bring`() {
         val result = SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(0, 1.0)))))
 
         val drawn = totalChartSeries(result).single()
 
-        assertEquals("", drawn.name)
+        assertEquals(TOTAL_SERIES_NAME, drawn.name)
         assertEquals(KdPrimary, drawn.color)
         assertEquals(false, drawn.muted)
         assertEquals(emptyList(), totalChartSeries(SeriesResult.Ok(emptyList())))

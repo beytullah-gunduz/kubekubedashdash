@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSeriesMemory
@@ -247,9 +250,17 @@ internal fun DeploymentUsageHistorySection(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SectionLabel("Resource usage")
-            Spacer(Modifier.weight(1f))
-            Text(source?.label.orEmpty(), style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
-            Spacer(Modifier.width(8.dp))
+            // Measured last, so it is the source label that gives way in a narrow panel (or in Retro's
+            // wider type), never the mode toggles or the range menu.
+            Text(
+                source?.label.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = KdTextSecondary,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
             LogToolbarToggle(
                 label = "Per pod",
                 on = mode == PodSetMode.PerPod,
@@ -340,9 +351,14 @@ internal fun perPodChartSeries(result: SeriesResult?, currentPrefix: String?, co
     return coloured + earlier.map { s -> ChartSeries(s.name, MutedLine, s.points, muted = true) }
 }
 
-/** The sum over every pod as one line; none when the answer has no series. */
+internal const val TOTAL_SERIES_NAME = "All pods"
+
+/**
+ * The sum over every pod as one line; none when the answer has no series. Named, because the rollout
+ * markers give the chart a legend, and an unnamed line would show there as a bare swatch.
+ */
 internal fun totalChartSeries(result: SeriesResult?): List<ChartSeries> = listOfNotNull(
-    (result as? SeriesResult.Ok)?.series?.firstOrNull()?.let { ChartSeries("", KdPrimary, it.points) },
+    (result as? SeriesResult.Ok)?.series?.firstOrNull()?.let { ChartSeries(TOTAL_SERIES_NAME, KdPrimary, it.points) },
 )
 
 /** How many current pods exceed the coloured lines a chart draws, counted over CPU and memory. */
