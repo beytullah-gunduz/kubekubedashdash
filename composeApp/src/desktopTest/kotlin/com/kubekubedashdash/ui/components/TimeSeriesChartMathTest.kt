@@ -64,6 +64,13 @@ class TimeSeriesChartMathTest {
     }
 
     @Test
+    fun `a window longer than a day names the day on every label`() {
+        // 7 days from a Thursday midnight: the middle is Sunday noon and the end the next Thursday.
+        assertEquals(listOf("Thu 00:00", "Sun 12:00", "Thu 00:00"), timeAxisLabels(0, 604_800, ZoneOffset.UTC))
+        assertEquals(listOf("Thu 00:00", "Thu 12:00", "Fri 00:00"), timeAxisLabels(0, 86_401, ZoneOffset.UTC))
+    }
+
+    @Test
     fun `axis labels follow the zone`() {
         assertEquals(listOf("02:00", "02:30", "03:00"), timeAxisLabels(0, 3_600, ZoneOffset.ofHours(2)))
     }

@@ -85,6 +85,8 @@ private val ReadoutTime = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT)
 private val AxisTime = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
 private val AxisDayTime = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.ROOT)
 
+private const val DAY_SEC = 86_400L
+
 /**
  * A card with a time-series plot: one line per series on a shared time axis, a hover crosshair
  * with a readout, optional request/limit guide lines, optional vertical [markers] and a legend when
@@ -411,11 +413,13 @@ internal fun nearestTimestampIndex(timestamps: List<Long>, startEpochSec: Long, 
 
 /**
  * Start, middle and end of the window as "HH:mm" in [zone]. Across midnight the start also names
- * its day: a 24 h window would otherwise read the same time at both ends.
+ * its day: a 24 h window would otherwise read the same time at both ends. A window longer than a
+ * day names the day on every label, as the same time of day recurs inside it.
  */
 internal fun timeAxisLabels(startEpochSec: Long, endEpochSec: Long, zone: ZoneId): List<String> {
     val times = listOf(startEpochSec, startEpochSec + (endEpochSec - startEpochSec) / 2, endEpochSec)
         .map { Instant.ofEpochSecond(it).atZone(zone) }
+    if (endEpochSec - startEpochSec > DAY_SEC) return times.map { AxisDayTime.format(it) }
     val startFormat = if (times.first().toLocalDate() != times.last().toLocalDate()) AxisDayTime else AxisTime
     return listOf(startFormat.format(times[0]), AxisTime.format(times[1]), AxisTime.format(times[2]))
 }
