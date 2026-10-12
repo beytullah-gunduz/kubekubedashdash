@@ -162,7 +162,7 @@ private fun lookupOwnersAcross(
 
 /** Unwraps [ResourceState.Success]; anything else (including `Loading`) is an empty list. */
 @Composable
-private fun <T> StateFlow<ResourceState<List<T>>>.successOrEmpty(): List<T> {
+internal fun <T> StateFlow<ResourceState<List<T>>>.successOrEmpty(): List<T> {
     val state by collectAsState()
     return (state as? ResourceState.Success)?.data ?: emptyList()
 }

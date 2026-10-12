@@ -26,10 +26,12 @@ import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.DetailAction
 import com.kubekubedashdash.ui.screens.DetailField
 import com.kubekubedashdash.ui.screens.ExtraTab
+import com.kubekubedashdash.ui.screens.OverviewSection
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 import com.kubekubedashdash.ui.screens.relatedOverviewSection
 import com.kubekubedashdash.ui.screens.relatedScreen
 import com.kubekubedashdash.ui.screens.rememberRelated
+import com.kubekubedashdash.ui.screens.successOrEmpty
 
 @Composable
 fun DeploymentDetailScreen(
@@ -55,6 +57,9 @@ fun DeploymentDetailScreen(
         labels = deployment.labels,
         owners = emptyList(),
     )
+
+    val replicaSets = client.replicaSets.successOrEmpty()
+    val pods = client.pods.successOrEmpty()
 
     var showScaleDialog by remember(deployment.uid) { mutableStateOf(false) }
     val scale = rememberConfirmableAction()
@@ -121,6 +126,11 @@ fun DeploymentDetailScreen(
             },
         ),
         overviewSections = listOf(relatedOverviewSection(related, onNavigate)),
+        leadingSections = listOf(
+            OverviewSection("usage-history") {
+                DeploymentUsageHistorySection(deployment, client.metricsHistory, replicaSets, pods)
+            },
+        ),
         labelQuery = labelQuery,
         onToggleLabel = onToggleLabel,
         annotationQuery = annotationQuery,
