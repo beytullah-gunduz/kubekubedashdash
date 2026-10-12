@@ -34,7 +34,6 @@ import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.VersionInfo
-import io.fabric8.kubernetes.client.server.mock.KubernetesMixedDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.Context
 import io.fabric8.mockwebserver.MockWebServer
@@ -164,16 +163,17 @@ object MockClusterProvider {
         // in-memory db (hundreds of pods). The liveness probe hits /version
         // every 4 s, so it must land on KubernetesMockServer.onStart()'s
         // expectation instead — and report a version that matches the
-        // kubelets buildNode() seeds.
+        // kubelets buildNode() seeds. DemoClusterStore is that mix.
         //
         // The service-proxy paths belong to the demo's fake Prometheus: the CRUD
         // dispatcher would answer them with the whole store.
         val responses = HashMap<ServerRequest, Queue<ServerResponse>>()
+        val store = DemoClusterStore(responses)
         val server = KubernetesMockServer(
             Context(),
             MockWebServer(),
             responses,
-            DemoPrometheusDispatcher(KubernetesMixedDispatcher(responses)),
+            DemoPrometheusDispatcher(store),
             false,
             VersionInfo.Builder().withMajor("1").withMinor("30").withGitVersion("v1.30.2").build(),
         )
@@ -184,7 +184,7 @@ object MockClusterProvider {
             "Mock server must bind to loopback, got: $host"
         }
         try {
-            seedResources(seedClient)
+            seedResources(seedClient, store::backdate)
         } finally {
             seedClient.close()
         }
@@ -404,8 +404,18 @@ object MockClusterProvider {
      * Build a ReplicaSet that the topology graph will resolve back to its
      * parent Deployment. Pass the persisted Deployment (with UID) so the
      * ownerReferences UID matches what the graph builder looks up.
+     *
+     * Carries the revision annotation and pod-template-hash label the Deployment
+     * controller writes (the history charts read the first); [creationTimestamp]
+     * defaults to the Deployment's own.
      */
-    internal fun buildReplicaSet(deployment: Deployment, replicas: Int, suffix: String): ReplicaSet {
+    internal fun buildReplicaSet(
+        deployment: Deployment,
+        replicas: Int,
+        suffix: String,
+        revision: Int = 1,
+        creationTimestamp: String? = null,
+    ): ReplicaSet {
         val ns = deployment.metadata.namespace
         val app = deployment.spec.selector.matchLabels["app"]
             ?: error("buildReplicaSet: deployment ${deployment.metadata.name} has no app selector label")
@@ -414,8 +424,10 @@ object MockClusterProvider {
             .withNewMetadata()
             .withName("${deployment.metadata.name}-$suffix")
             .withNamespace(ns)
-            .withCreationTimestamp(deployment.metadata.creationTimestamp ?: now())
+            .withCreationTimestamp(creationTimestamp ?: deployment.metadata.creationTimestamp ?: now())
             .addToLabels("app", app)
+            .addToLabels("pod-template-hash", suffix)
+            .addToAnnotations("deployment.kubernetes.io/revision", revision.toString())
             .withOwnerReferences(listOf(ownerRefOf(deployment)))
             .endMetadata()
             .withNewSpec()
@@ -424,7 +436,8 @@ object MockClusterProvider {
             .withNewTemplate()
             .withNewMetadata().addToLabels("app", app).endMetadata()
             .withNewSpec()
-            .withContainers(ContainerBuilder().withName(app).withImage(image).build())
+            // The pods' own requests and limits, so a pod gone after a rollout is drawn like the one that replaced it.
+            .withContainers(ContainerBuilder().withName(app).withImage(image).withResources(demoContainerResources()).build())
             .endSpec()
             .endTemplate()
             .endSpec()

@@ -431,6 +431,167 @@ class InClusterMetricsSourceTest {
         assertIs<CancellationException>(result.exceptionOrNull(), "the call returned $result")
     }
 
+    // ── pod sets and scopes ─────────────────────────────────────────────────────
+
+    private val podSet = PodSetRef("team-a", listOf("redis-cache-6d9f8c7b5", "redis-cache-5f7a3b1d0"))
+    private val nsScope = ScopeRef(setOf("team-a", "team-b"))
+
+    private val podMatrix = """{"status":"success","data":{"resultType":"matrix","result":[""" +
+        """{"metric":{"pod":"redis-cache-6d9f8c7b5-x7k2p"},"values":[[1000,"1.5"],[1030,"2"]]},""" +
+        """{"metric":{"pod":"redis-cache-5f7a3b1d0-92f6w"},"values":[[1000,"4"]]}]}}"""
+
+    private val sumMatrix = matrixBody(null to listOf(1_000L to "5.5", 1_030L to "6"))
+
+    private suspend fun perPod(source: InClusterMetricsSource, kind: PodSeriesKind = PodSeriesKind.Cpu) = source.podSetSeries(kind, podSet, PodSetMode.PerPod, window)
+
+    @Test
+    fun `a per pod set query sends the pod pattern on the proxy path and names each series by its pod`() = runBlocking<Unit> {
+        answer(200, podMatrix)
+
+        val result = perPod(source())
+
+        assertEquals(
+            SeriesResult.Ok(
+                listOf(
+                    Series("redis-cache-5f7a3b1d0-92f6w", listOf(SeriesPoint(1_000, 4.0))),
+                    Series("redis-cache-6d9f8c7b5-x7k2p", listOf(SeriesPoint(1_000, 1.5), SeriesPoint(1_030, 2.0))),
+                ),
+            ),
+            result,
+        )
+        val request = stub.proxyRequests.single()
+        assertEquals("GET", request.method)
+        assertEquals(
+            "/api/v1/namespaces/monitoring/services/prometheus-operated:web/proxy/api/v1/query_range",
+            request.path.substringBefore('?'),
+        )
+        assertEquals(PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, 30), request.param("query"))
+        assertTrue(request.param("query").orEmpty().contains("pod=~"), request.param("query"))
+        assertEquals(listOf("1000", "1120", "30"), listOf(request.param("start"), request.param("end"), request.param("step")))
+    }
+
+    @Test
+    fun `a total pod set query is one series without a name`() = runBlocking<Unit> {
+        answer(200, sumMatrix)
+
+        val result = source().podSetSeries(PodSeriesKind.NetworkRx, podSet, PodSetMode.Total, window)
+
+        assertEquals(SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(1_000, 5.5), SeriesPoint(1_030, 6.0))))), result)
+        assertEquals(PromQl.inClusterPodSetQuery(PodSeriesKind.NetworkRx, podSet, PodSetMode.Total, 30), stub.proxyRequests.single().param("query"))
+    }
+
+    @Test
+    fun `a pod set with no pods in the window is an empty chart and is never probed`() = runBlocking<Unit> {
+        answerCpuEmptyAndProbe { jsonResponse(200, countBody("0")) }
+        val source = source()
+
+        for (kind in listOf(PodSeriesKind.Cpu, PodSeriesKind.Memory)) {
+            for (mode in PodSetMode.entries) {
+                assertEquals(SeriesResult.Ok(emptyList()), source.podSetSeries(kind, podSet, mode, window), "$kind $mode")
+            }
+        }
+
+        assertEquals(0, probeRequests().size)
+        assertEquals(4, stub.proxyRequests.size)
+    }
+
+    @Test
+    fun `a pod set failure maps as a pod failure does`() = runBlocking<Unit> {
+        answer(400, """{"status":"error","errorType":"bad_data","error":"x"}""")
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "bad_data"), perPod(source()))
+
+        answer(422, "SECRET-BODY-42")
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "HTTP 422"), perPod(source()))
+
+        answer(200, """{"status":"error","errorType":"<b>SECRET-42</b>","error":"x"}""")
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "unknown"), perPod(source()))
+
+        answer(200, "<html>hi</html>")
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "unreadable response"), perPod(source()))
+
+        answer(401, """{"kind":"Status","code":401}""")
+        assertEquals(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 401"), perPod(source()))
+
+        answer(403, K8S_FORBIDDEN)
+        reviewAnswer = false
+        assertEquals(SeriesResult.Failed(HistoryFailure.NoProxyAccess), perPod(source()))
+        reviewAnswer = true
+        assertEquals(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"), perPod(source()))
+
+        answer(404, "404 page not found")
+        assertEquals(SeriesResult.Failed(HistoryFailure.WrongPath), perPod(source()))
+
+        answer(503, K8S_NO_ENDPOINTS)
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "no ready endpoints"), perPod(source()))
+
+        answer(500, "SECRET-BODY-42")
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 500"), perPod(source()))
+    }
+
+    @Test
+    fun `a pod set query without a client is not connected and sends nothing`() = runBlocking<Unit> {
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "not connected"), perPod(source { null }))
+        assertEquals(0, stub.requests.size)
+    }
+
+    @Test
+    fun `an invalid pod set is a bad query and sends nothing`() = runBlocking<Unit> {
+        val source = source()
+
+        for (bad in listOf(
+            PodSetRef("team-a", emptyList()),
+            PodSetRef("team-a", listOf("Web\"x")),
+            PodSetRef("team-a", listOf("redis-cache-5f7a3b1d0", "a|b")),
+            PodSetRef("Team_A", listOf("redis-cache-5f7a3b1d0")),
+            PodSetRef("", listOf("redis-cache-5f7a3b1d0")),
+        )) {
+            assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "invalid pod set"), source.podSetSeries(PodSeriesKind.Cpu, bad, PodSetMode.PerPod, window), "$bad")
+        }
+        assertEquals(0, stub.requests.size)
+    }
+
+    @Test
+    fun `a scope query sends the namespace sum and returns one series without a name`() = runBlocking<Unit> {
+        answer(200, sumMatrix)
+
+        val result = source().scopeSeries(ScopeKind.MemoryBytes, nsScope, window)
+
+        assertEquals(SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(1_000, 5.5), SeriesPoint(1_030, 6.0))))), result)
+        val request = stub.proxyRequests.single()
+        assertEquals(PromQl.inClusterScopeQuery(ScopeKind.MemoryBytes, nsScope, 30), request.param("query"))
+        assertTrue(request.param("query").orEmpty().contains("namespace=~"), request.param("query"))
+    }
+
+    @Test
+    fun `a scope with no series is an empty chart and is never probed`() = runBlocking<Unit> {
+        answerCpuEmptyAndProbe { jsonResponse(200, countBody("0")) }
+
+        assertEquals(SeriesResult.Ok(emptyList()), source().scopeSeries(ScopeKind.CpuCores, ScopeRef(emptySet()), window))
+
+        assertEquals(0, probeRequests().size)
+    }
+
+    @Test
+    fun `a scope failure maps as a pod failure does`() = runBlocking<Unit> {
+        answer(400, """{"status":"error","errorType":"bad_data","error":"x"}""")
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "bad_data"), source().scopeSeries(ScopeKind.CpuCores, nsScope, window))
+
+        answer(404, K8S_NOT_FOUND)
+        assertEquals(SeriesResult.Failed(HistoryFailure.ServiceGone), source(auto = false).scopeSeries(ScopeKind.CpuCores, nsScope, window))
+
+        answer(500, "SECRET-BODY-42")
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 500"), source().scopeSeries(ScopeKind.MemoryBytes, nsScope, window))
+    }
+
+    @Test
+    fun `an invalid scope is a bad query and sends nothing`() = runBlocking<Unit> {
+        assertEquals(
+            SeriesResult.Failed(HistoryFailure.BadQuery, "invalid scope"),
+            source().scopeSeries(ScopeKind.CpuCores, ScopeRef(setOf("team-a", "Team_B")), window),
+        )
+        assertEquals(0, stub.requests.size)
+    }
+
     // ── what reaches the logs ───────────────────────────────────────────────────
 
     @Test
@@ -454,14 +615,18 @@ class InClusterMetricsSourceTest {
             )) {
                 answer(code, body)
                 cpu(source)
+                source.podSetSeries(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, window)
+                source.scopeSeries(ScopeKind.CpuCores, nsScope, window)
             }
             cpu(source { null })
             cpu(source(target = InClusterTarget("Bad_NS", "prometheus-operated", "web", false, "")))
             cpu(source { stub.client().also { it.close() } })
+            source().podSetSeries(PodSeriesKind.Cpu, PodSetRef("team-a", listOf("Bad_RS")), PodSetMode.Total, window)
+            source().scopeSeries(ScopeKind.CpuCores, ScopeRef(setOf("Bad_NS")), window)
 
             val lines = events.list.filter { it.loggerName.startsWith("com.kubekubedashdash") }.map { it.formattedMessage + it.throwableProxy?.message.orEmpty() }
             assertTrue(lines.isNotEmpty(), "the failures should log at DEBUG")
-            val leaked = lines.filter { line -> listOf("SECRET", "/proxy", "prometheus-operated", "monitoring", "web-0", "team-a", "container_", "/api/v1", "localhost", "127.0.0.1").any { it in line } }
+            val leaked = lines.filter { line -> listOf("SECRET", "/proxy", "prometheus-operated", "monitoring", "web-0", "team-a", "team-b", "redis-cache", "Bad_", "container_", "/api/v1", "localhost", "127.0.0.1").any { it in line } }
             assertFalse(leaked.isNotEmpty(), "logged: $leaked")
         } finally {
             root.detachAppender(events)

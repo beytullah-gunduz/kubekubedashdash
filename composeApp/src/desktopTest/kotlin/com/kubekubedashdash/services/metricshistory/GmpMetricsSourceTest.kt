@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 /**
  * The Managed Prometheus source against a loopback HttpServer: the request it builds, how each
@@ -359,5 +360,171 @@ class GmpMetricsSourceTest {
 
         assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 302"), result)
         assertEquals(1, seen.size)
+    }
+
+    // ── pod sets and scopes ─────────────────────────────────────────────────────
+
+    private val podSet = PodSetRef("team-a", listOf("redis-cache-6d9f8c7b5", "redis-cache-5f7a3b1d0"))
+    private val scope = ScopeRef(setOf("team-a", "team-b"))
+
+    private val podMatrix = """{"status":"success","data":{"resultType":"matrix","result":[""" +
+        """{"metric":{"pod":"redis-cache-6d9f8c7b5-x7k2p"},"values":[[1000,"1.5"],[1030,"2"]]},""" +
+        """{"metric":{"pod":"redis-cache-5f7a3b1d0-92f6w"},"values":[[1000,"4"]]}]}}"""
+
+    private val sumMatrix = """{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1000,"5.5"],[1030,"6"]]}]}}"""
+
+    @Test
+    fun `a per pod set query posts the pod pattern and names each series by its pod`() = runBlocking<Unit> {
+        respond = { Reply(200, podMatrix) }
+
+        val result = source().podSetSeries(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, window)
+
+        assertEquals(
+            SeriesResult.Ok(
+                listOf(
+                    Series("redis-cache-5f7a3b1d0-92f6w", listOf(SeriesPoint(1000, 4.0))),
+                    Series("redis-cache-6d9f8c7b5-x7k2p", listOf(SeriesPoint(1000, 1.5), SeriesPoint(1030, 2.0))),
+                ),
+            ),
+            result,
+        )
+        val request = seen.single()
+        assertEquals("POST", request.method)
+        assertEquals(rangePath, request.path)
+        assertEquals("Bearer fake-token-1", request.authorization)
+        val sent = form(request)
+        assertEquals(PromQl.gmpPodSetQuery(PodSeriesKind.Cpu, target, podSet, PodSetMode.PerPod, window.stepSec), sent["query"])
+        assertTrue(sent.getValue("query").contains("pod=~"), sent["query"])
+        assertEquals(listOf("1000", "1120", "30"), listOf(sent["start"], sent["end"], sent["step"]))
+    }
+
+    @Test
+    fun `a total pod set query is one series without a name`() = runBlocking<Unit> {
+        respond = { Reply(200, sumMatrix) }
+
+        val result = source().podSetSeries(PodSeriesKind.Memory, podSet, PodSetMode.Total, window)
+
+        assertEquals(SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(1000, 5.5), SeriesPoint(1030, 6.0))))), result)
+        assertEquals(PromQl.gmpPodSetQuery(PodSeriesKind.Memory, target, podSet, PodSetMode.Total, window.stepSec), form(seen.single())["query"])
+    }
+
+    @Test
+    fun `a pod set with no pods in the window is an empty chart and is never probed`() = runBlocking<Unit> {
+        respond = { request -> if (request.path == rangePath) Reply(200, noSeries) else Reply(200, probeCount("0")) }
+        val gmp = source()
+
+        for (kind in listOf(PodSeriesKind.Cpu, PodSeriesKind.Memory)) {
+            for (mode in PodSetMode.entries) {
+                assertEquals(SeriesResult.Ok(emptyList()), gmp.podSetSeries(kind, podSet, mode, window), "$kind $mode")
+            }
+        }
+        assertEquals(4, seen.size)
+        assertFalse(seen.any { it.path == probePath })
+    }
+
+    @Test
+    fun `a pod set failure maps as a pod failure does`() = runBlocking<Unit> {
+        suspend fun failure() = source().podSetSeries(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, window)
+
+        respond = { Reply(403, "fake-token-1 may not read example-project") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"), failure())
+
+        respond = { Reply(400, """{"status":"error","errorType":"bad_data","error":"x"}""") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "bad_data"), failure())
+
+        respond = { Reply(422, "<html>nope</html>") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "HTTP 422"), failure())
+
+        respond = { Reply(503, "upstream down") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503"), failure())
+
+        respond = { Reply(200, "not json") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "unreadable response"), failure())
+
+        respond = { Reply(200, """{"status":"error","errorType":"execution","error":"x"}""") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "execution"), failure())
+    }
+
+    @Test
+    fun `a pod set query refreshes the token on a 401 like a pod query`() = runBlocking<Unit> {
+        respond = { request -> if (request.authorization == "Bearer fake-token-1") Reply(401) else Reply(200, podMatrix) }
+
+        assertIs<SeriesResult.Ok>(source().podSetSeries(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, window))
+        assertEquals(listOf("Bearer fake-token-1", "Bearer fake-token-2"), seen.map { it.authorization })
+
+        seen.clear()
+        respond = { Reply(401) }
+        assertEquals(SeriesResult.Failed(HistoryFailure.NotSignedIn, "HTTP 401"), source().podSetSeries(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, window))
+    }
+
+    @Test
+    fun `a pod set query reports a token failure without sending a request`() = runBlocking<Unit> {
+        val token = fakeToken { Result.failure(CliInvocationFailure(-1, "", "gcloud CLI not found on PATH")) }
+
+        val result = source(token = token).podSetSeries(PodSeriesKind.Cpu, podSet, PodSetMode.PerPod, window)
+
+        assertEquals(SeriesResult.Failed(HistoryFailure.GcloudUnavailable), result)
+        assertEquals(0, seen.size)
+    }
+
+    @Test
+    fun `an invalid pod set is a bad query and sends nothing`() = runBlocking<Unit> {
+        val gmp = source()
+
+        for (bad in listOf(
+            PodSetRef("team-a", emptyList()),
+            PodSetRef("team-a", listOf("Web\"x")),
+            PodSetRef("team-a", listOf("redis-cache-5f7a3b1d0", "a|b")),
+            PodSetRef("Team_A", listOf("redis-cache-5f7a3b1d0")),
+            PodSetRef("", listOf("redis-cache-5f7a3b1d0")),
+        )) {
+            assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "invalid pod set"), gmp.podSetSeries(PodSeriesKind.Cpu, bad, PodSetMode.PerPod, window), "$bad")
+        }
+        assertEquals(0, seen.size)
+        assertEquals(0, tokenFetches.get())
+    }
+
+    @Test
+    fun `a scope query posts the namespace sum and returns one series without a name`() = runBlocking<Unit> {
+        respond = { Reply(200, sumMatrix) }
+
+        val result = source().scopeSeries(ScopeKind.CpuCores, scope, window)
+
+        assertEquals(SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(1000, 5.5), SeriesPoint(1030, 6.0))))), result)
+        val request = seen.single()
+        assertEquals("POST", request.method)
+        assertEquals(rangePath, request.path)
+        assertEquals(PromQl.gmpScopeQuery(ScopeKind.CpuCores, target, scope, window.stepSec), form(request)["query"])
+        assertTrue(form(request).getValue("query").contains("namespace=~"), form(request)["query"])
+    }
+
+    @Test
+    fun `a scope with no series is an empty chart and is never probed`() = runBlocking<Unit> {
+        respond = { request -> if (request.path == rangePath) Reply(200, noSeries) else Reply(200, probeCount("0")) }
+
+        assertEquals(SeriesResult.Ok(emptyList()), source().scopeSeries(ScopeKind.MemoryBytes, ScopeRef(emptySet()), window))
+        assertEquals(1, seen.size)
+    }
+
+    @Test
+    fun `a scope failure maps as a pod failure does`() = runBlocking<Unit> {
+        respond = { Reply(404, "no such project") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 404"), source().scopeSeries(ScopeKind.CpuCores, scope, window))
+
+        respond = { Reply(400, """{"status":"error","errorType":"bad_data","error":"x"}""") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.BadQuery, "bad_data"), source().scopeSeries(ScopeKind.CpuCores, scope, window))
+
+        respond = { Reply(500, "boom") }
+        assertEquals(SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 500"), source().scopeSeries(ScopeKind.MemoryBytes, scope, window))
+    }
+
+    @Test
+    fun `an invalid scope is a bad query and sends nothing`() = runBlocking<Unit> {
+        assertEquals(
+            SeriesResult.Failed(HistoryFailure.BadQuery, "invalid scope"),
+            source().scopeSeries(ScopeKind.CpuCores, ScopeRef(setOf("team-a", "Team_B")), window),
+        )
+        assertEquals(0, seen.size)
+        assertEquals(0, tokenFetches.get())
     }
 }

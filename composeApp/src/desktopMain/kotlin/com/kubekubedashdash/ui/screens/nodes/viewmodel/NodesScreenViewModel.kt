@@ -12,6 +12,7 @@ import com.kubekubedashdash.ui.screens.nodes.MAX_HISTORY_SIZE
 import com.kubekubedashdash.util.DEFAULT_STALE_TTL
 import com.kubekubedashdash.util.ReactiveKubeClient
 import com.kubekubedashdash.util.StaleTracker
+import com.kubekubedashdash.util.bucketed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -40,11 +41,14 @@ class NodesScreenViewModel(
     val selection = SelectionFunnel()
     val bulkRunner = BulkActionRunner<NodeInfo>(viewModelScope)
 
-    private val _cpuHistory = MutableStateFlow<List<Float>>(emptyList())
-    val cpuHistory: StateFlow<List<Float>> = _cpuHistory.asStateFlow()
+    // From the session's usage sampler, which samples whether or not this screen is open.
+    val cpuHistory: StateFlow<List<Float>> = reactiveClient.usageSamples
+        .map { samples -> bucketed(samples) { it.cpuFraction } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _memHistory = MutableStateFlow<List<Float>>(emptyList())
-    val memHistory: StateFlow<List<Float>> = _memHistory.asStateFlow()
+    val memHistory: StateFlow<List<Float>> = reactiveClient.usageSamples
+        .map { samples -> bucketed(samples) { it.memFraction } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _podsHistory = MutableStateFlow<List<Float>>(emptyList())
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
@@ -93,23 +97,6 @@ class NodesScreenViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     val resourceUsage: StateFlow<ResourceUsageSummary?> = reactiveClient.resourceUsage
-        .onEach { state ->
-            val usage = if (state is ResourceState.Success) state.data else null
-            if (usage != null && usage.metricsAvailable) {
-                val cpuF = if (usage.cpuCapacityMillis > 0) {
-                    usage.cpuUsedMillis.toFloat() / usage.cpuCapacityMillis.toFloat()
-                } else {
-                    0f
-                }
-                val memF = if (usage.memoryCapacityBytes > 0) {
-                    usage.memoryUsedBytes.toFloat() / usage.memoryCapacityBytes.toFloat()
-                } else {
-                    0f
-                }
-                _cpuHistory.update { (it + cpuF).takeLast(MAX_HISTORY_SIZE) }
-                _memHistory.update { (it + memF).takeLast(MAX_HISTORY_SIZE) }
-            }
-        }
         .map { state -> if (state is ResourceState.Success) state.data else null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

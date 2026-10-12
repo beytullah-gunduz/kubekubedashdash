@@ -36,9 +36,10 @@ object PreferenceRepository {
     const val MIN_LOG_DRAWER_HEIGHT_DP = 140
     const val MAX_LOG_DRAWER_HEIGHT_DP = 800
 
-    /** Keys into [statsPanelsExpanded] — one per screen with a collapsible stats panel. */
+    /** Keys into [statsPanelsExpanded] — one per collapsible stats panel. */
     const val STATS_PANEL_CLUSTER = "cluster"
     const val STATS_PANEL_ALL_CLUSTERS = "all_clusters"
+    const val STATS_PANEL_USAGE_HISTORY = "usage_history"
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
 

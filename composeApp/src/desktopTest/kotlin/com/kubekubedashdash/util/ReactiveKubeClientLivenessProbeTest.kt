@@ -89,7 +89,8 @@ class ReactiveKubeClientLivenessProbeTest {
         val observedErrors = CopyOnWriteArrayList<String?>()
         val errorCollector = scope.launch { manager.connectionError.collect { observedErrors.add(it) } }
 
-        val client = ReactiveKubeClient(scope, manager, probeIntervalMs = 200)
+        // The usage sampler is off: its metrics reads would be requests too, and the probe's are what is counted.
+        val client = ReactiveKubeClient(scope, manager, probeIntervalMs = 200, usageSampleIntervalMs = 0)
         // Ten-plus ticks: well past the ≥3-consecutive-failure threshold.
         delay(2_500)
 

@@ -113,7 +113,8 @@ class ReactiveKubeClientMetricsFailureTest {
         manager.connectWithClient(KubernetesClientBuilder().withConfig(config).build(), "cluster-a").getOrThrow()
         // One liveness probe at connect, then none: its success would reset the
         // failure counter that the connection-failure test watches.
-        client = ReactiveKubeClient(scope, manager, probeIntervalMs = 3_600_000, metricsPollIntervalMs = 100)
+        // The usage sampler is off: it reads the same metrics paths, and these tests count the polls' requests.
+        client = ReactiveKubeClient(scope, manager, probeIntervalMs = 3_600_000, metricsPollIntervalMs = 100, usageSampleIntervalMs = 0)
         client.setNamespaceScope(NamespaceScope.single("ns-a"))
         collectors += scope.launch { manager.connectionError.collect { observedErrors += it } }
     }

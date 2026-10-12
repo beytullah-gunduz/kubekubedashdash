@@ -26,8 +26,30 @@ class GmpMetricsSource internal constructor(
     private var probedAtMs = 0L
 
     override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
+        val nameLabel = if (kind == PodSeriesKind.NetworkRx || kind == PodSeriesKind.NetworkTx) null else "container"
+        return rangeQuery(
+            PromQl.gmpPodQuery(kind, target, pod, window.stepSec),
+            window,
+            nameLabel,
+            probeWhenEmpty = kind == PodSeriesKind.Cpu || kind == PodSeriesKind.Memory,
+        )
+    }
+
+    // No pod in the window is a normal answer for a set (a rollout just finished, a scaled-down Deployment): no probe.
+    override suspend fun podSetSeries(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, window: QueryWindow): SeriesResult {
+        if (!PromQl.isValidPodSet(pods)) return failed(HistoryFailure.BadQuery, "invalid pod set")
+        val nameLabel = if (mode == PodSetMode.PerPod) "pod" else null
+        return rangeQuery(PromQl.gmpPodSetQuery(kind, target, pods, mode, window.stepSec), window, nameLabel, probeWhenEmpty = false)
+    }
+
+    override suspend fun scopeSeries(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): SeriesResult {
+        if (!PromQl.isValidScope(scope)) return failed(HistoryFailure.BadQuery, "invalid scope")
+        return rangeQuery(PromQl.gmpScopeQuery(kind, target, scope, window.stepSec), window, nameLabel = null, probeWhenEmpty = false)
+    }
+
+    private suspend fun rangeQuery(query: String, window: QueryWindow, nameLabel: String?, probeWhenEmpty: Boolean): SeriesResult {
         val form = listOf(
-            "query" to PromQl.gmpPodQuery(kind, target, pod, window.stepSec),
+            "query" to query,
             "start" to window.startEpochSec.toString(),
             "end" to window.endEpochSec.toString(),
             "step" to window.stepSec.toString(),
@@ -36,10 +58,9 @@ class GmpMetricsSource internal constructor(
             is PostResult.Failed -> return sent.result
             is PostResult.Ok -> sent.body
         }
-        val nameLabel = if (kind == PodSeriesKind.NetworkRx || kind == PodSeriesKind.NetworkTx) null else "container"
         return when (val parsed = PrometheusResponse.parseMatrix(body, nameLabel)) {
             is PrometheusResponse.Parsed.Matrix ->
-                if (parsed.series.isEmpty() && (kind == PodSeriesKind.Cpu || kind == PodSeriesKind.Memory) && probeSaysNoData()) {
+                if (parsed.series.isEmpty() && probeWhenEmpty && probeSaysNoData()) {
                     failed(HistoryFailure.NoContainerMetrics)
                 } else {
                     SeriesResult.Ok(parsed.series)

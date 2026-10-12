@@ -46,6 +46,7 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.KdWarning
 import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.drawKdDot
 import com.kubekubedashdash.kdCorner
@@ -58,13 +59,23 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 
-/** One line of a [TimeSeriesChart]; [name] is empty for a pod-level series. */
-data class ChartSeries(val name: String, val color: Color, val points: List<SeriesPoint>)
+/**
+ * One line of a [TimeSeriesChart]; [name] is empty for a pod-level series. A [muted] series is
+ * background context: a thin line in [color] with no fill, no hover dot, no readout entry and no
+ * legend entry of its own.
+ */
+data class ChartSeries(val name: String, val color: Color, val points: List<SeriesPoint>, val muted: Boolean = false)
 
 /** A horizontal guide line (a resource request or limit) drawn across a [TimeSeriesChart]. */
 data class ChartReference(val label: String, val value: Double, val dashed: Boolean)
 
+/** A vertical dashed line at [epochSec] across a [TimeSeriesChart]; [label] names it in the legend. */
+data class ChartMarker(val epochSec: Long, val label: String)
+
 internal const val MAX_CHART_SERIES = 6
+
+/** Cap on [ChartSeries.muted] lines drawn; the ones with the highest peak win. */
+internal const val MAX_MUTED_SERIES = 12
 
 private const val NO_DATA_TEXT = "No data in this range"
 
@@ -76,9 +87,12 @@ private val AxisDayTime = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.ROOT)
 
 /**
  * A card with a time-series plot: one line per series on a shared time axis, a hover crosshair
- * with a readout, optional request/limit guide lines, and a legend when lines need telling apart.
- * [note] replaces the plot with a centred message. At most [MAX_CHART_SERIES] series are drawn;
- * the legend says how many were left out.
+ * with a readout, optional request/limit guide lines, optional vertical [markers] and a legend when
+ * lines need telling apart. [note] replaces the plot with a centred message. At most
+ * [MAX_CHART_SERIES] coloured series are drawn; the legend says how many were left out. Muted
+ * series are drawn beneath them (at most [MAX_MUTED_SERIES], highest peak first) and share one
+ * legend entry that counts every muted series handed in. Markers outside [window] are neither
+ * drawn nor listed.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -90,20 +104,27 @@ fun TimeSeriesChart(
     modifier: Modifier = Modifier,
     references: List<ChartReference> = emptyList(),
     note: String? = null,
+    markers: List<ChartMarker> = emptyList(),
 ) {
-    val drawn = remember(series) { series.take(MAX_CHART_SERIES) }
-    val hidden = series.size - drawn.size
+    val colored = remember(series) { series.filterNot { it.muted } }
+    val muted = remember(series) { series.filter { it.muted } }
+    val drawn = remember(colored) { colored.take(MAX_CHART_SERIES) }
+    val hidden = colored.size - drawn.size
+    val mutedDrawn = remember(muted) { muted.sortedByDescending { it.peak() }.take(MAX_MUTED_SERIES) }
+    val markersShown = markers.filter { it.epochSec in window.startEpochSec..window.endEpochSec }
     val timestamps = remember(drawn) { drawn.flatMap { s -> s.points.map { it.epochSec } }.distinct().sorted() }
     val segments = remember(drawn, window.stepSec) { drawn.map { gapSegments(it.points, window.stepSec) } }
+    val mutedSegments = remember(mutedDrawn, window.stepSec) { mutedDrawn.map { gapSegments(it.points, window.stepSec) } }
     val axisLabels = remember(window.startEpochSec, window.endEpochSec) {
         timeAxisLabels(window.startEpochSec, window.endEpochSec, ZoneId.systemDefault())
     }
-    val seriesMax = drawn.maxOfOrNull { s -> s.points.maxOfOrNull { it.value } ?: 0.0 } ?: 0.0
+    // A grey line must not be clipped at the top, so the axis covers the muted lines too.
+    val seriesMax = (drawn + mutedDrawn).maxOfOrNull { it.peak() } ?: 0.0
     // A limit far above the usage would flatten every line against the floor, so such a guide
     // stays out of the axis and is only listed, marked off scale, in the legend.
     val onScale = references.filter { isOnScale(it.value, seriesMax) }
     val yMax = chartYMax(seriesMax, onScale.maxOfOrNull { it.value } ?: 0.0)
-    val message = note ?: if (drawn.all { it.points.isEmpty() }) NO_DATA_TEXT else null
+    val message = note ?: if (drawn.all { it.points.isEmpty() } && mutedDrawn.all { it.points.isEmpty() }) NO_DATA_TEXT else null
 
     // The pointer's position, not a sample index: a refresh moves the window under a still pointer,
     // and the nearest sample is looked up again against the data on screen.
@@ -122,7 +143,8 @@ fun TimeSeriesChart(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(title, style = MaterialTheme.typography.labelMedium, color = KdTextSecondary)
-                val only = series.singleOrNull()
+                // A muted line counts here: one coloured line among grey ones has no value of its own to show.
+                val only = series.singleOrNull()?.takeUnless { it.muted }
                 val last = only?.points?.lastOrNull()
                 if (only != null && last != null) {
                     Text(
@@ -186,12 +208,41 @@ fun TimeSeriesChart(
                             }
                         }
 
+                        fun linePath(segment: List<SeriesPoint>): Path {
+                            val line = Path()
+                            segment.forEachIndexed { i, p ->
+                                val x = xOf(p.epochSec)
+                                val y = yOf(p.value)
+                                if (i == 0) line.moveTo(x, y) else line.lineTo(x, y)
+                            }
+                            return line
+                        }
+
+                        markersShown.forEach { marker ->
+                            val x = xOf(marker.epochSec)
+                            drawLine(
+                                KdWarning,
+                                Offset(x, 0f),
+                                Offset(x, size.height),
+                                strokeWidth = 1.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+                            )
+                        }
+
+                        val strokeJoin = if (ThemeManager.isRetro) StrokeJoin.Miter else StrokeJoin.Round
+                        val mutedStyle = Stroke(width = 1.dp.toPx(), cap = kdStrokeCap, join = strokeJoin)
+                        mutedDrawn.forEachIndexed { index, s ->
+                            mutedSegments[index].forEach { segment ->
+                                if (segment.size == 1) {
+                                    drawKdDot(s.color, 1.dp.toPx(), Offset(xOf(segment[0].epochSec), yOf(segment[0].value)))
+                                    return@forEach
+                                }
+                                drawPath(linePath(segment), color = s.color, style = mutedStyle)
+                            }
+                        }
+
                         val filled = series.size == 1 && !ThemeManager.isRetro
-                        val lineStyle = Stroke(
-                            width = 2.dp.toPx(),
-                            cap = kdStrokeCap,
-                            join = if (ThemeManager.isRetro) StrokeJoin.Miter else StrokeJoin.Round,
-                        )
+                        val lineStyle = Stroke(width = 2.dp.toPx(), cap = kdStrokeCap, join = strokeJoin)
                         drawn.forEachIndexed { index, s ->
                             segments[index].forEach { segment ->
                                 if (segment.size == 1) {
@@ -199,12 +250,7 @@ fun TimeSeriesChart(
                                     drawKdDot(s.color, 2.dp.toPx(), Offset(xOf(segment[0].epochSec), yOf(segment[0].value)))
                                     return@forEach
                                 }
-                                val line = Path()
-                                segment.forEachIndexed { i, p ->
-                                    val x = xOf(p.epochSec)
-                                    val y = yOf(p.value)
-                                    if (i == 0) line.moveTo(x, y) else line.lineTo(x, y)
-                                }
+                                val line = linePath(segment)
                                 if (filled) {
                                     val fill = Path()
                                     fill.moveTo(xOf(segment.first().epochSec), size.height)
@@ -258,7 +304,7 @@ fun TimeSeriesChart(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            if (drawn.size > 1 || references.isNotEmpty()) {
+            if (drawn.size > 1 || references.isNotEmpty() || markersShown.isNotEmpty() || muted.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -274,6 +320,29 @@ fun TimeSeriesChart(
                     if (hidden > 0) {
                         Text("+$hidden more", style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
                     }
+                    if (muted.isNotEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).background(muted.first().color, 2.dp.kdCorner))
+                            Spacer(Modifier.width(4.dp))
+                            val earlier = if (muted.size == 1) "1 earlier pod" else "${muted.size} earlier pods"
+                            Text(earlier, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                        }
+                    }
+                    markersShown.forEach { marker ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Canvas(Modifier.size(8.dp, 10.dp)) {
+                                drawLine(
+                                    KdWarning,
+                                    Offset(size.width / 2f, 0f),
+                                    Offset(size.width / 2f, size.height),
+                                    strokeWidth = 1.dp.toPx(),
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx())),
+                                )
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            Text(marker.label, style = MaterialTheme.typography.labelSmall, color = KdTextSecondary)
+                        }
+                    }
                     references.forEach { ref ->
                         val sample = if (ref.dashed) "- -" else "──"
                         Text(
@@ -287,6 +356,8 @@ fun TimeSeriesChart(
         }
     }
 }
+
+private fun ChartSeries.peak(): Double = points.maxOfOrNull { it.value } ?: 0.0
 
 // Hovering: the time and each line's value there. At rest: a lone line's min and max.
 private fun readoutText(

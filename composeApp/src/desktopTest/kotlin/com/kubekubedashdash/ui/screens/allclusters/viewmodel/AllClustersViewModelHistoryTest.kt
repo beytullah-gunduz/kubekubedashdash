@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.model.ClusterSession
 import com.kubekubedashdash.model.WorkspaceTab
 import com.kubekubedashdash.models.NamespaceScope
+import com.kubekubedashdash.util.USAGE_BUCKET_SEC
 import com.kubekubedashdash.util.shutdownCleanly
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -18,6 +19,7 @@ import io.fabric8.mockwebserver.MockWebServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -36,6 +38,12 @@ import kotlin.test.assertTrue
  * only meaningful over one set of (tab, namespace) pairs: when a tab switches
  * namespace, or drops out of the sum while it reloads, the series must start
  * over rather than join two different sums into one trend with a cliff.
+ *
+ * The pods series is built here and starts over itself. The CPU and memory
+ * series are the tabs' usage samples added up per 3-minute bar, and each tab's
+ * sampler starts over on its own; a tab with no sample yet is left out.
+ * Bars are aligned to the wall clock, so the tests that put two tabs in one bar
+ * first wait out the end of a bar.
  *
  * Every tab here connects to the same mock cluster: one node with 10 pod
  * slots and 4 CPU cores; 2 pods in ns-a, 5 in ns-b, 3 in ns-c; and 100m of
@@ -92,9 +100,10 @@ class AllClustersViewModelHistoryTest {
 
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         vm = AllClustersViewModel(tabs)
-        // The screen's collectAsState keeps these upstreams alive; the
-        // histories are only sampled while they are collected.
-        scope.launch { vm.aggregatedUsage.collect {} }
+        // The screen's collectAsState keeps these upstreams alive; the pods
+        // history is only sampled while it is collected.
+        scope.launch { vm.cpuHistory.collect {} }
+        scope.launch { vm.memHistory.collect {} }
         scope.launch { vm.podsHistory.collect {} }
     }
 
@@ -125,26 +134,41 @@ class AllClustersViewModelHistoryTest {
         first { it.lastOrNull() == value }
     }
 
+    /** A bar's value from raw sums, rounded the way the series rounds them. */
+    private fun bar(used: Long, capacity: Long): Float = (used.toDouble() / capacity).toFloat()
+
+    /**
+     * Waits out the last [margin] seconds of the current 3-minute bar, so the
+     * samples of a test cannot straddle a bar boundary (two tabs would then
+     * share no bar until the next sample).
+     */
+    private suspend fun awaitRoomInBar(margin: Long = 20) {
+        val intoBar = System.currentTimeMillis() / 1000 % USAGE_BUCKET_SEC
+        if (intoBar > USAGE_BUCKET_SEC - margin) delay((USAGE_BUCKET_SEC - intoBar + 1) * 1000)
+    }
+
     @Test
     fun `a namespace switch starts fresh cpu, memory and pods series`() = runBlocking {
         val tab = openTab("cluster-1", NamespaceScope.single("ns-a"))
         vm.podsHistory.awaitLast(2f / 10)
-        vm.cpuHistory.awaitLast(200f / 4000)
+        vm.cpuHistory.awaitLast(bar(200, 4000))
 
         tab.reactiveClient.setNamespaceScope(NamespaceScope.single("ns-b"))
 
         assertEquals(listOf(5f / 10), vm.podsHistory.awaitLast(5f / 10))
-        assertEquals(listOf(500f / 4000), vm.cpuHistory.awaitLast(500f / 4000))
-        assertEquals(listOf(320f / 4096), vm.memHistory.awaitLast(320f / 4096))
+        // The tab has one reading, so one bar; ns-a's does not outlive the switch.
+        assertEquals(listOf(bar(500, 4000)), vm.cpuHistory.awaitLast(bar(500, 4000)))
+        assertEquals(listOf(bar(320, 4096)), vm.memHistory.awaitLast(bar(320, 4096)))
     }
 
     @Test
     fun `a series never starts on the partial sum taken while a tab reloads`() = runBlocking {
+        awaitRoomInBar()
         val first = openTab("cluster-1", NamespaceScope.single("ns-a"))
         openTab("cluster-2", NamespaceScope.single("ns-b"))
         // Both tabs in: (2 + 5) pods over 20 slots.
         vm.podsHistory.awaitLast(7f / 20)
-        vm.cpuHistory.awaitLast(700f / 8000)
+        vm.cpuHistory.awaitLast(bar(700, 8000))
 
         first.reactiveClient.setNamespaceScope(NamespaceScope.single("ns-c"))
 
@@ -152,7 +176,25 @@ class AllClustersViewModelHistoryTest {
         // 10 slots, 500m of 4 cores). That point must not head the new
         // series: the first reading after the switch is (3 + 5) over both.
         assertEquals(listOf(8f / 20), vm.podsHistory.awaitLast(8f / 20))
-        assertEquals(listOf(800f / 8000), vm.cpuHistory.awaitLast(800f / 8000))
+        // The first tab's old reading went with its sampler's reset, so the one
+        // bar left is both tabs' latest readings: (300 + 500)m and (192 + 320) MiB.
+        assertEquals(listOf(bar(800, 8000)), vm.cpuHistory.awaitLast(bar(800, 8000)))
+        assertEquals(listOf(bar(512, 8192)), vm.memHistory.awaitLast(bar(512, 8192)))
+    }
+
+    @Test
+    fun `a tab that has not sampled yet does not blank the cpu series`() = runBlocking {
+        awaitRoomInBar()
+        openTab("cluster-1", NamespaceScope.single("ns-a"))
+        vm.cpuHistory.awaitLast(bar(200, 4000))
+
+        // A tab that never connects has no sample, however long it is open.
+        val idle = ClusterSession()
+        sessions += idle
+        tabs.value = tabs.value + WorkspaceTab.Cluster(idle)
+        delay(300)
+
+        assertEquals(listOf(bar(200, 4000)), vm.cpuHistory.value)
     }
 
     @Test

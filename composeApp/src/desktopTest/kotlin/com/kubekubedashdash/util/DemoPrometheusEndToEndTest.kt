@@ -1,5 +1,7 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.services.metricshistory.DetectionState
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
 import com.kubekubedashdash.services.metricshistory.HistoryRange
@@ -12,10 +14,14 @@ import com.kubekubedashdash.services.metricshistory.MetricsSourceSetting
 import com.kubekubedashdash.services.metricshistory.NoSourceReason
 import com.kubekubedashdash.services.metricshistory.PodRef
 import com.kubekubedashdash.services.metricshistory.PodSeriesKind
+import com.kubekubedashdash.services.metricshistory.PodSetMode
 import com.kubekubedashdash.services.metricshistory.PrometheusDetector
 import com.kubekubedashdash.services.metricshistory.ReleaseCheckSupport
+import com.kubekubedashdash.services.metricshistory.ScopeKind
+import com.kubekubedashdash.services.metricshistory.ScopeRef
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
+import com.kubekubedashdash.services.metricshistory.deploymentPodSet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -127,6 +133,79 @@ class DemoPrometheusEndToEndTest {
             val expectedNames = if (kind == PodSeriesKind.NetworkRx || kind == PodSeriesKind.NetworkTx) listOf("") else containerNames
             assertEquals(expectedNames, result.series.map { it.name }, "$kind")
             assertEquals((window.endEpochSec - window.startEpochSec) / window.stepSec + 1, result.series.first().points.size.toLong(), "$kind")
+        }
+    }
+
+    // The ReplicaSets of the production namespace as the Deployment panel receives them.
+    private fun replicaSetRows(): List<GenericResourceInfo> = handle.client.apps().replicaSets().inNamespace("production").list().items.map { rs ->
+        GenericResourceInfo(
+            uid = rs.metadata.uid.orEmpty(),
+            name = rs.metadata.name,
+            namespace = rs.metadata.namespace,
+            status = null,
+            age = "",
+            labels = rs.metadata.labels.orEmpty(),
+            annotations = rs.metadata.annotations.orEmpty(),
+            owners = rs.metadata.ownerReferences.orEmpty().map { OwnerRefInfo(kind = it.kind, name = it.name, uid = it.uid, controller = it.controller == true) },
+            creationTimestamp = rs.metadata.creationTimestamp.orEmpty(),
+        )
+    }
+
+    @Test
+    fun `the demo's redis-cache Deployment has two rollouts, a grey earlier pod and a current one`() = runBlocking<Unit> {
+        val deployment = assertNotNull(handle.client.apps().deployments().inNamespace("production").withName("redis-cache").get())
+        val podSet = assertNotNull(deploymentPodSet(deployment.metadata.uid, "production", replicaSetRows()))
+        assertEquals(listOf("redis-cache-4c8d2e6b9", "redis-cache-5f7a3b1d0"), podSet.ref.replicaSets)
+        assertEquals("redis-cache-5f7a3b1d0", podSet.currentReplicaSet)
+        assertEquals(listOf(1L, 2L), podSet.rollouts.map { it.revision })
+        assertEquals(listOf("redis-cache-4c8d2e6b9", "redis-cache-5f7a3b1d0"), podSet.rollouts.map { it.replicaSet })
+        val (first, second) = podSet.rollouts
+        assertTrue(first.createdEpochSec < second.createdEpochSec)
+        val window = HistoryRange.H6.window(System.currentTimeMillis() / 1000)
+        assertTrue(first.createdEpochSec > window.startEpochSec, "the first revision must fall inside the 6 h window")
+        val source = source()
+
+        for (kind in PodSeriesKind.entries) {
+            val result = source.podSetSeries(kind, podSet.ref, PodSetMode.PerPod, window)
+
+            assertIs<SeriesResult.Ok>(result, "$kind: $result")
+            assertEquals(listOf("redis-cache-4c8d2e6b9-old01", "redis-cache-5f7a3b1d0-qrs55"), result.series.map { it.name }, "$kind")
+            val (old, now) = result.series
+            assertTrue(old.points.first().epochSec >= first.createdEpochSec, "$kind: the old revision's line starts before it exists")
+            assertTrue(old.points.last().epochSec <= second.createdEpochSec, "$kind: the old revision's line runs past the next rollout")
+            assertTrue(now.points.first().epochSec >= second.createdEpochSec, "$kind: the current pod's line starts before its ReplicaSet exists")
+            assertEquals(window.endEpochSec, now.points.last().epochSec, "$kind")
+        }
+        val total = source.podSetSeries(PodSeriesKind.Memory, podSet.ref, PodSetMode.Total, window)
+        assertIs<SeriesResult.Ok>(total)
+        assertEquals(listOf(""), total.series.map { it.name })
+        assertTrue(total.series.single().points.isNotEmpty())
+    }
+
+    @Test
+    fun `a scope's line ends on the usage the Overview gauges add up from PodMetrics`() = runBlocking<Unit> {
+        // team-a is not a demo namespace, so the simulator never writes PodMetrics there.
+        val mib = 1024L * 1024
+        handle.client.resource(MockClusterProvider.buildPodMetrics("web-0", "team-a", listOf(Triple("app", 250L, 300 * mib), Triple("sidecar", 50L, 20 * mib)))).create()
+        handle.client.resource(MockClusterProvider.buildPodMetrics("web-1", "team-a", listOf(Triple("app", 100L, 200 * mib)))).create()
+        val gauges = handle.client.top().pods().inNamespace("team-a").metrics().items.flatMap { it.containers }
+        val expected = mapOf(
+            ScopeKind.CpuCores to gauges.sumOf { it.usage.getValue("cpu").numericalAmount.toDouble() },
+            ScopeKind.MemoryBytes to gauges.sumOf { it.usage.getValue("memory").numericalAmount.toDouble() },
+        )
+        assertEquals(0.4, expected.getValue(ScopeKind.CpuCores), 1e-9)
+        val window = HistoryRange.H6.window(System.currentTimeMillis() / 1000)
+        val source = source()
+
+        for (kind in ScopeKind.entries) {
+            val result = source.scopeSeries(kind, ScopeRef(setOf("team-a")), window)
+
+            assertIs<SeriesResult.Ok>(result, "$kind: $result")
+            val line = result.series.single()
+            assertEquals("", line.name, "$kind")
+            assertEquals((window.endEpochSec - window.startEpochSec) / window.stepSec + 1, line.points.size.toLong(), "$kind")
+            assertTrue(line.points.all { it.value > 0 }, "$kind")
+            assertEquals(expected.getValue(kind), line.points.last().value, 1e-6 * expected.getValue(kind), "$kind: the right edge is the gauges' sum")
         }
     }
 

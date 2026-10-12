@@ -13,6 +13,7 @@ import com.kubekubedashdash.models.PodPhaseCounts
 import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.models.ResourceUsageSummary
 import com.kubekubedashdash.util.ReactiveKubeClient
+import com.kubekubedashdash.util.bucketed
 import com.kubekubedashdash.util.formatAge
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +28,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,9 +44,11 @@ class ClusterOverviewViewModel(
     /**
      * Where the flows that walk every pod, node or event (the recent cards, the
      * phase counts, the top nodes) do that work; their stateIn stays on
-     * viewModelScope, the Swing EDT. Every open cluster tab keeps one of these
-     * collecting, on screen or not. The flows that write the usage histories
-     * stay on viewModelScope, ordered with the namespace reset in init.
+     * viewModelScope, the Swing EDT. This view model lives with the session, and
+     * these flows collect only while the Overview is shown. The CPU and memory
+     * histories are the exception: the session's usage sampler fills them
+     * whether or not the Overview is shown. The pods history is written on
+     * viewModelScope, ordered with the namespace reset in init.
      */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
@@ -97,11 +99,15 @@ class ClusterOverviewViewModel(
 
     // ── Usage card data ─────────────────────────────────────────────────────────
 
-    private val _cpuHistory = MutableStateFlow<List<Float>>(emptyList())
-    val cpuHistory: StateFlow<List<Float>> = _cpuHistory.asStateFlow()
+    // The session's sampler starts over on a namespace or context change, so these
+    // need no reset here. Its hour of 30 s samples is shown as 3-minute bars.
+    val cpuHistory: StateFlow<List<Float>> = reactiveClient.usageSamples
+        .map { samples -> bucketed(samples) { it.cpuFraction } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _memHistory = MutableStateFlow<List<Float>>(emptyList())
-    val memHistory: StateFlow<List<Float>> = _memHistory.asStateFlow()
+    val memHistory: StateFlow<List<Float>> = reactiveClient.usageSamples
+        .map { samples -> bucketed(samples) { it.memFraction } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _podsHistory = MutableStateFlow<List<Float>>(emptyList())
     val podsHistory: StateFlow<List<Float>> = _podsHistory.asStateFlow()
@@ -110,29 +116,18 @@ class ClusterOverviewViewModel(
     val namespaceScope: StateFlow<NamespaceScope> = reactiveClient.namespaceScope
 
     init {
-        // Pod counts and usage follow the namespace selection, but this
-        // ViewModel lives as long as the session. Clear the series on a selection
-        // change so the old selection's readings don't run into the new one's as
-        // a cliff. drop(1): the value current at construction is not a change.
+        // Pod counts follow the namespace selection, but this ViewModel lives as
+        // long as the session. Clear the series on a selection change so the old
+        // selection's readings don't run into the new one's as a cliff.
+        // drop(1): the value current at construction is not a change.
         viewModelScope.launch {
             reactiveClient.namespaceScope.drop(1).collect {
-                _cpuHistory.value = emptyList()
-                _memHistory.value = emptyList()
                 _podsHistory.value = emptyList()
             }
         }
     }
 
     val resourceUsage: StateFlow<ResourceUsageSummary?> = reactiveClient.resourceUsage
-        .onEach { s ->
-            val u = if (s is ResourceState.Success) s.data else null
-            if (u != null && u.metricsAvailable) {
-                val cpuF = if (u.cpuCapacityMillis > 0) u.cpuUsedMillis.toFloat() / u.cpuCapacityMillis else 0f
-                val memF = if (u.memoryCapacityBytes > 0) u.memoryUsedBytes.toFloat() / u.memoryCapacityBytes else 0f
-                _cpuHistory.update { appendDistinctSample(it, cpuF, CLUSTER_OVERVIEW_HISTORY_SIZE) }
-                _memHistory.update { appendDistinctSample(it, memF, CLUSTER_OVERVIEW_HISTORY_SIZE) }
-            }
-        }
         .map { s -> if (s is ResourceState.Success) s.data else null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

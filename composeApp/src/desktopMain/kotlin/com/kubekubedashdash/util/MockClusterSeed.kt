@@ -53,7 +53,12 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import java.util.Base64
 
-internal fun seedResources(client: KubernetesClient) {
+/**
+ * [backdate] rewrites the creation time of a stored object, given its API path. The mock store stamps
+ * every object it is handed with the current time and keeps that through updates, so the objects whose
+ * history matters (a Deployment's earlier revision) get their times through this; the default leaves them stamped.
+ */
+internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String, creationTimestamp: String) -> Unit = { _, _ -> }) {
     MockClusterProvider.log.debug("Seeding mock cluster with sample resources")
 
     // ── Namespaces ──────────────────────────────────────────────────────────
@@ -81,6 +86,10 @@ internal fun seedResources(client: KubernetesClient) {
     // ── Deployments + ReplicaSets + Pods ────────────────────────────────────
     // Pod names and IPs are coordinated with the Endpoints subsets seeded
     // below — changing them here means updating the Endpoints block too.
+
+    // A rolled-out Deployment keeps its previous ReplicaSet at zero replicas, as `revisionHistoryLimit` does.
+    data class PreviousRevision(val rsSuffix: String, val createdMinutesAgo: Long)
+
     data class DeployDef(
         val name: String,
         val ns: String,
@@ -88,6 +97,11 @@ internal fun seedResources(client: KubernetesClient) {
         val image: String,
         val rsSuffix: String,
         val podSpecs: List<Pair<String, String>>,
+        val previous: PreviousRevision? = null,
+        // Null: created with the Deployment.
+        val rsCreatedMinutesAgo: Long? = null,
+        // Null: no history to keep, the pods are as old as the store lets them be.
+        val podCreatedMinutesAgo: Long? = null,
     )
 
     val deployDefs = listOf(
@@ -114,6 +128,9 @@ internal fun seedResources(client: KubernetesClient) {
             "redis:7-alpine",
             "5f7a3b1d0",
             listOf("qrs55" to "10.244.0.11"),
+            previous = PreviousRevision("4c8d2e6b9", createdMinutesAgo = 300),
+            rsCreatedMinutesAgo = 100,
+            podCreatedMinutesAgo = 95,
         ),
     )
 
@@ -148,24 +165,44 @@ internal fun seedResources(client: KubernetesClient) {
                 .build(),
         ).create()
 
+        // A Deployment with a history is older than its ReplicaSets, whatever the store stamped it with.
+        if (def.previous != null) backdate("/apis/apps/v1/namespaces/${def.ns}/deployments/${def.name}", MockClusterProvider.minutesAgo(1440))
+        def.previous?.let { previous ->
+            val created = MockClusterProvider.minutesAgo(previous.createdMinutesAgo)
+            val previousRs = client.apps().replicaSets().inNamespace(def.ns).resource(
+                MockClusterProvider.buildReplicaSet(createdDep, replicas = 0, suffix = previous.rsSuffix, revision = 1, creationTimestamp = created),
+            ).create()
+            backdate("/apis/apps/v1/namespaces/${def.ns}/replicasets/${previousRs.metadata.name}", created)
+        }
+        val rsCreated = def.rsCreatedMinutesAgo?.let { MockClusterProvider.minutesAgo(it) }
         val createdRs = client.apps().replicaSets().inNamespace(def.ns).resource(
-            MockClusterProvider.buildReplicaSet(createdDep, replicas, def.rsSuffix),
+            MockClusterProvider.buildReplicaSet(
+                createdDep,
+                replicas,
+                def.rsSuffix,
+                revision = if (def.previous != null) 2 else 1,
+                creationTimestamp = rsCreated,
+            ),
         ).create()
+        if (rsCreated != null) backdate("/apis/apps/v1/namespaces/${def.ns}/replicasets/${createdRs.metadata.name}", rsCreated)
 
         def.podSpecs.forEach { (podSuffix, ip) ->
+            val podName = "${def.name}-${def.rsSuffix}-$podSuffix"
+            val podCreated = MockClusterProvider.minutesAgo(def.podCreatedMinutesAgo ?: 120)
             client.pods().inNamespace(def.ns).resource(
                 MockClusterProvider.buildPod(
-                    name = "${def.name}-${def.rsSuffix}-$podSuffix",
+                    name = podName,
                     ns = def.ns,
                     app = def.app,
                     image = def.image,
                     nodeName = "mock-node-1",
                     phase = "Running",
                     podIp = ip,
-                    creationTimestamp = MockClusterProvider.minutesAgo(120),
+                    creationTimestamp = podCreated,
                     owner = createdRs,
                 ),
             ).create()
+            if (def.podCreatedMinutesAgo != null) backdate("/api/v1/namespaces/${def.ns}/pods/$podName", podCreated)
             totalPodsSeeded++
         }
     }
