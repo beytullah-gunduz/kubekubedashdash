@@ -60,6 +60,10 @@ import com.kubekubedashdash.ui.components.usageLevel
 import com.kubekubedashdash.ui.screens.ExtraTab
 import com.kubekubedashdash.ui.screens.OverviewSection
 import com.kubekubedashdash.ui.screens.relatedOverviewSection
+import com.kubekubedashdash.ui.screens.successOrEmpty
+import com.kubekubedashdash.ui.screens.workloads.WorkloadUsageHistorySection
+import com.kubekubedashdash.ui.screens.workloads.cronJobTarget
+import com.kubekubedashdash.ui.screens.workloads.jobTarget
 import com.kubekubedashdash.util.EndpointSliceDetail
 import com.kubekubedashdash.util.PolicyRuleRow
 import com.kubekubedashdash.util.QuotaUsageRow
@@ -70,6 +74,7 @@ import com.kubekubedashdash.util.builtInKindLabelOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.time.ZoneId
 
 /**
  * Returns kind-specific extra tabs for [ResourceDetailPanel].
@@ -133,6 +138,44 @@ fun kindOverviewSections(
 
         else -> emptyList()
     }
+}
+
+/**
+ * Returns kind-specific sections placed before the Details of the Overview tab of [ResourceDetailPanel],
+ * the way [kindOverviewSections] places them after it. A built-in Job or CronJob in a namespace gets the
+ * "usage-history" section: its pods' usage over time, in [zone] for the CronJob's run markers.
+ */
+fun kindLeadingSections(
+    kind: String,
+    res: GenericResourceInfo,
+    client: ReactiveKubeClient,
+    group: String? = null,
+    zone: ZoneId = ZoneId.systemDefault(),
+): List<OverviewSection> {
+    if (res.namespace == null) return emptyList()
+    return when (builtInKindLabelOrNull(kind, group)) {
+        "Job" -> listOf(OverviewSection(USAGE_HISTORY_KEY) { JobUsageHistory(res, client) })
+        "CronJob" -> listOf(OverviewSection(USAGE_HISTORY_KEY) { CronJobUsageHistory(res, client, zone) })
+        else -> emptyList()
+    }
+}
+
+private const val USAGE_HISTORY_KEY = "usage-history"
+
+@Composable
+private fun JobUsageHistory(res: GenericResourceInfo, client: ReactiveKubeClient) {
+    val livePods = client.pods.successOrEmpty()
+    val target = remember(res, livePods) { jobTarget(res, livePods) }
+    target?.let { WorkloadUsageHistorySection(it, client.metricsHistory) }
+}
+
+@Composable
+private fun CronJobUsageHistory(res: GenericResourceInfo, client: ReactiveKubeClient, zone: ZoneId) {
+    val livePods = client.pods.successOrEmpty()
+    // Only this CronJob's Jobs: another Job appearing does not change the list, so it does not rebuild the target.
+    val jobs = client.jobs.successOrEmpty().filter { job -> job.owners.any { it.uid == res.uid } }
+    val target = remember(res, livePods, jobs, zone) { cronJobTarget(res, jobs, livePods, zone) }
+    target?.let { WorkloadUsageHistorySection(it, client.metricsHistory) }
 }
 
 private fun resourceQuotaUsageTab(

@@ -595,6 +595,7 @@ fun GenericResourceScreen(
                                 modifier = Modifier.fillMaxSize().crtContentCut("$kind/" + res.uid.ifBlank { "${res.namespace.orEmpty()}/${res.name}" }),
                                 extraTabs = kindExtraTabs(kind, res, client, onNavigate, group = apiGroup),
                                 overviewSections = kindOverviewSections(kind, res, client, related, onNavigate, group = apiGroup),
+                                leadingSections = kindLeadingSections(kind, res, client, group = apiGroup),
                                 labelQuery = labelQuery,
                                 onToggleLabel = { k, v ->
                                     onLabelQueryChange(toggleSelectorEntry(labelQuery, k, v))

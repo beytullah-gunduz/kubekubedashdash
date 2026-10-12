@@ -89,6 +89,26 @@ class DetailExtraTabsGuardTest {
     }
 
     @Test
+    fun `a built-in Job or CronJob in a namespace gets the usage-history section`() {
+        for (k in listOf("Job", "CronJob")) {
+            assertEquals(listOf("usage-history"), kindLeadingSections(k, res, client).map { it.key }, "a built-in $k gets the usage section")
+            assertEquals(listOf("usage-history"), kindLeadingSections(k, res, client, group = "").map { it.key }, "a blank group is no group")
+            assertTrue(kindLeadingSections(k, res.copy(namespace = null), client).isEmpty(), "a $k without a namespace has no pods to chart")
+        }
+    }
+
+    @Test
+    fun `other kinds and CRDs that reuse a Job's name get no usage-history section`() {
+        for (k in listOf("ConfigMap", "Deployment", "Pod", "ReplicaSet", "StatefulSet", "DaemonSet", "Widget")) {
+            assertTrue(kindLeadingSections(k, res, client).isEmpty(), "$k has no usage section")
+        }
+        for (k in listOf("Job", "CronJob")) {
+            assertTrue(kindLeadingSections(k, res, client, group = "widgets.example").isEmpty(), "a CRD named $k must not chart built-in pods")
+        }
+        assertTrue(kindLeadingSections("Widget", res, client, group = "widgets.example").isEmpty())
+    }
+
+    @Test
     fun `a CRD kind matched on purpose keeps matching whatever its group`() {
         assertEquals(1, kindOverviewSections("SparkApplication", res, client, group = "sparkoperator.k8s.io").size)
         assertEquals(1, kindOverviewSections("SparkApplication", res, client).size)
