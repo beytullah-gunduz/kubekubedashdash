@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -49,6 +50,7 @@ import com.kubekubedashdash.resources.security_filled
 import com.kubekubedashdash.resources.settings_ethernet_filled
 import com.kubekubedashdash.retroCaps
 import com.kubekubedashdash.retroChrome
+import com.kubekubedashdash.services.metricshistory.ownedSparkRuns
 import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.BusyScanner
 import com.kubekubedashdash.ui.components.EmptyState
@@ -64,6 +66,8 @@ import com.kubekubedashdash.ui.screens.successOrEmpty
 import com.kubekubedashdash.ui.screens.workloads.WorkloadUsageHistorySection
 import com.kubekubedashdash.ui.screens.workloads.cronJobTarget
 import com.kubekubedashdash.ui.screens.workloads.jobTarget
+import com.kubekubedashdash.ui.screens.workloads.scheduledSparkTarget
+import com.kubekubedashdash.ui.screens.workloads.sparkTarget
 import com.kubekubedashdash.util.EndpointSliceDetail
 import com.kubekubedashdash.util.PolicyRuleRow
 import com.kubekubedashdash.util.QuotaUsageRow
@@ -143,7 +147,8 @@ fun kindOverviewSections(
 /**
  * Returns kind-specific sections placed before the Details of the Overview tab of [ResourceDetailPanel],
  * the way [kindOverviewSections] places them after it. A built-in Job or CronJob in a namespace gets the
- * "usage-history" section: its pods' usage over time, in [zone] for the CronJob's run markers.
+ * "usage-history" section: its pods' usage over time, in [zone] for the CronJob's run markers. So does a
+ * SparkApplication or ScheduledSparkApplication, but only in the Spark operator's group.
  */
 fun kindLeadingSections(
     kind: String,
@@ -153,6 +158,14 @@ fun kindLeadingSections(
     zone: ZoneId = ZoneId.systemDefault(),
 ): List<OverviewSection> {
     if (res.namespace == null) return emptyList()
+    // CRD kinds are matched in their own group only, so a CRD of another group reusing the name gets nothing.
+    if (group == SPARK_OPERATOR_GROUP) {
+        return when (kind) {
+            "SparkApplication" -> listOf(OverviewSection(USAGE_HISTORY_KEY) { SparkUsageHistory(res, client) })
+            "ScheduledSparkApplication" -> listOf(OverviewSection(USAGE_HISTORY_KEY) { ScheduledSparkUsageHistory(res, client, zone) })
+            else -> emptyList()
+        }
+    }
     return when (builtInKindLabelOrNull(kind, group)) {
         "Job" -> listOf(OverviewSection(USAGE_HISTORY_KEY) { JobUsageHistory(res, client) })
         "CronJob" -> listOf(OverviewSection(USAGE_HISTORY_KEY) { CronJobUsageHistory(res, client, zone) })
@@ -161,6 +174,8 @@ fun kindLeadingSections(
 }
 
 private const val USAGE_HISTORY_KEY = "usage-history"
+
+private const val SPARK_OPERATOR_GROUP = "sparkoperator.k8s.io"
 
 @Composable
 private fun JobUsageHistory(res: GenericResourceInfo, client: ReactiveKubeClient) {
@@ -175,6 +190,25 @@ private fun CronJobUsageHistory(res: GenericResourceInfo, client: ReactiveKubeCl
     // Only this CronJob's Jobs: another Job appearing does not change the list, so it does not rebuild the target.
     val jobs = client.jobs.successOrEmpty().filter { job -> job.owners.any { it.uid == res.uid } }
     val target = remember(res, livePods, jobs, zone) { cronJobTarget(res, jobs, livePods, zone) }
+    target?.let { WorkloadUsageHistorySection(it, client.metricsHistory) }
+}
+
+@Composable
+private fun SparkUsageHistory(res: GenericResourceInfo, client: ReactiveKubeClient) {
+    val livePods = client.pods.successOrEmpty()
+    val target = remember(res, livePods) { sparkTarget(res, livePods) }
+    target?.let { WorkloadUsageHistorySection(it, client.metricsHistory) }
+}
+
+@Composable
+private fun ScheduledSparkUsageHistory(res: GenericResourceInfo, client: ReactiveKubeClient, zone: ZoneId) {
+    val livePods = client.pods.successOrEmpty()
+    val crd = client.crds.successOrEmpty().firstOrNull { it.group == SPARK_OPERATOR_GROUP && it.kind == "SparkApplication" }
+    // Keyed on the CRD, so each CRD collects its own instances flow; without one the runs are none.
+    val instances = if (crd == null) emptyList() else key(crd) { client.customResourceInstances(crd).successOrEmpty() }
+    // Only this application's runs: another SparkApplication changing does not change the list, so it does not rebuild the target.
+    val runs = ownedSparkRuns(res, instances)
+    val target = remember(res, runs, livePods, zone) { scheduledSparkTarget(res, runs, livePods, zone) }
     target?.let { WorkloadUsageHistorySection(it, client.metricsHistory) }
 }
 

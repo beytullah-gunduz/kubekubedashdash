@@ -100,9 +100,7 @@ fun sparkUsage(app: GenericResourceInfo): BatchUsage? {
  */
 fun scheduledSparkUsage(scheduled: GenericResourceInfo, runs: List<GenericResourceInfo>, zone: ZoneId): BatchUsage? {
     val namespace = scheduled.namespace ?: return null
-    val owned = runs
-        .filter { it.namespace == namespace && (it.isOwnedBy(scheduled.uid) || it.labels[SPARK_OPERATOR_SCHEDULED_LABEL] == scheduled.name) }
-        .distinctBy { it.name }
+    val owned = ownedSparkRuns(scheduled, runs)
     val sparkRuns = owned.mapNotNull { it.spark }
     val starts = owned.mapNotNull { submissionOf(it) }
     return BatchUsage(
@@ -113,6 +111,17 @@ fun scheduledSparkUsage(scheduled: GenericResourceInfo, runs: List<GenericResour
         runEndSec = null,
         cutNames = false,
     )
+}
+
+/**
+ * The runs of [scheduled] among [runs], which may hold other applications too: those in its namespace that
+ * it owns by uid, else that carry the operator's `scheduled-app-name` label with its name.
+ */
+internal fun ownedSparkRuns(scheduled: GenericResourceInfo, runs: List<GenericResourceInfo>): List<GenericResourceInfo> {
+    val namespace = scheduled.namespace ?: return emptyList()
+    return runs
+        .filter { it.namespace == namespace && (it.isOwnedBy(scheduled.uid) || it.labels[SPARK_OPERATOR_SCHEDULED_LABEL] == scheduled.name) }
+        .distinctBy { it.name }
 }
 
 private fun GenericResourceInfo.isOwnedBy(uid: String): Boolean = uid.isNotBlank() && owners.any { it.uid == uid }

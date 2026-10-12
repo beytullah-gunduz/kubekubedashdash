@@ -7,12 +7,19 @@ import com.kubekubedashdash.services.metricshistory.HistoryRange
 import com.kubekubedashdash.services.metricshistory.PodSetRef
 import com.kubekubedashdash.services.metricshistory.cronJobUsage
 import com.kubekubedashdash.services.metricshistory.jobUsage
+import com.kubekubedashdash.services.metricshistory.ownedSparkRuns
+import com.kubekubedashdash.services.metricshistory.scheduledSparkUsage
+import com.kubekubedashdash.services.metricshistory.sparkUsage
 import com.kubekubedashdash.ui.components.ChartMarker
 import java.time.ZoneId
 
 internal const val NO_JOB_POD_PATTERN_NOTE = "This Job has no usable name for a pod pattern."
 
 internal const val NO_CRONJOB_RUNS_NOTE = "No Job of this CronJob is loaded."
+
+internal const val NO_SPARK_PODS_NOTE = "This application's status names no pods yet."
+
+internal const val NO_SCHEDULED_SPARK_RUNS_NOTE = "No run of this application is loaded."
 
 internal const val CUT_BATCH_NAME_NOTE =
     "This name is longer than a pod name keeps, so the charts can include pods of another workload whose name starts the same way."
@@ -52,6 +59,41 @@ internal fun cronJobTarget(res: GenericResourceInfo, jobs: List<GenericResourceI
     )
 }
 
+/**
+ * What a SparkApplication's usage section charts; null only when [res] has no namespace. The driver is one
+ * line and the executors another, and the run (submission to termination, or to the present) is the default window.
+ */
+internal fun sparkTarget(res: GenericResourceInfo, livePods: List<PodInfo>): UsageTarget? {
+    val usage = sparkUsage(res) ?: return null
+    return driverExecutorsTarget(
+        res = res,
+        usage = usage,
+        livePods = livePods,
+        missingNote = NO_SPARK_PODS_NOTE,
+        driverPods = res.spark?.let { setOf(it.driverPod) }.orEmpty(),
+        defaultWindow = usage.runStartSec?.let { UsageWindow.Run(it, usage.runEndSec) } ?: UsageWindow.Sliding(HistoryRange.H6),
+        runLabel = "Run",
+    )
+}
+
+/**
+ * What a ScheduledSparkApplication's usage section charts; null only when [res] has no namespace. [runs] are
+ * SparkApplications (others are ignored); the drivers of the ones it owns are the driver line, and the runs
+ * from the oldest one on are the default window.
+ */
+internal fun scheduledSparkTarget(res: GenericResourceInfo, runs: List<GenericResourceInfo>, livePods: List<PodInfo>, zone: ZoneId): UsageTarget? {
+    val usage = scheduledSparkUsage(res, runs, zone) ?: return null
+    return driverExecutorsTarget(
+        res = res,
+        usage = usage,
+        livePods = livePods,
+        missingNote = NO_SCHEDULED_SPARK_RUNS_NOTE,
+        driverPods = ownedSparkRuns(res, runs).mapNotNull { it.spark?.driverPod }.toSet(),
+        defaultWindow = usage.runStartSec?.let { UsageWindow.Runs(it) } ?: UsageWindow.Sliding(HistoryRange.H24),
+        runLabel = "Runs",
+    )
+}
+
 private fun batchTarget(
     res: GenericResourceInfo,
     usage: BatchUsage,
@@ -69,18 +111,40 @@ private fun batchTarget(
         grouping = grouping,
         defaultWindow = defaultWindow,
         markers = usage.markers.map { ChartMarker(it.epochSec, it.label) },
-        currentPods = livePodsOf(res.namespace, usage.ref, grouping, livePods),
+        currentPods = livePodsOf(res.namespace, usage.ref, livePods, grouping::isCurrent),
         notes = if (usage.cutNames) listOf(CUT_BATCH_NAME_NOTE) else emptyList(),
         runLabel = runLabel,
         perPodDescription = perPodDescription,
     )
 }
 
-// The live pods the pattern selects that [grouping] draws in colour, sorted by name; none without a pattern.
-private fun livePodsOf(namespace: String?, ref: PodSetRef?, grouping: UsageGrouping.PerPod, livePods: List<PodInfo>): List<PodInfo> {
+// Every live pod the pattern selects is current; they decide which charts apply (network, throttling), and a driver and executors get no request or limit line.
+private fun driverExecutorsTarget(
+    res: GenericResourceInfo,
+    usage: BatchUsage,
+    livePods: List<PodInfo>,
+    missingNote: String,
+    driverPods: Set<String>,
+    defaultWindow: UsageWindow,
+    runLabel: String,
+): UsageTarget = UsageTarget(
+    key = res.uid,
+    podSet = usage.ref,
+    missingNote = missingNote,
+    grouping = UsageGrouping.DriverExecutors(driverPods),
+    defaultWindow = defaultWindow,
+    markers = usage.markers.map { ChartMarker(it.epochSec, it.label) },
+    currentPods = livePodsOf(res.namespace, usage.ref, livePods),
+    notes = emptyList(),
+    runLabel = runLabel,
+    perPodDescription = "",
+)
+
+// The live pods the pattern selects that [isCurrent] draws in colour, sorted by name; none without a pattern.
+private fun livePodsOf(namespace: String?, ref: PodSetRef?, livePods: List<PodInfo>, isCurrent: (String) -> Boolean = { true }): List<PodInfo> {
     if (ref == null) return emptyList()
     val pattern = Regex(ref.pattern)
     return livePods
-        .filter { it.namespace == namespace && pattern.matches(it.name) && grouping.isCurrent(it.name) }
+        .filter { it.namespace == namespace && pattern.matches(it.name) && isCurrent(it.name) }
         .sortedBy { it.name }
 }

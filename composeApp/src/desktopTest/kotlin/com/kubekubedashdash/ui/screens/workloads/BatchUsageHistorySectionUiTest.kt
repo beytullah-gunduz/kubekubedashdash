@@ -23,6 +23,7 @@ import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.SparkRun
 import com.kubekubedashdash.models.WorkloadRun
 import com.kubekubedashdash.services.metricshistory.DetectionState
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
@@ -79,18 +80,20 @@ private val Limited = listOf(ContainerResources("main", cpuRequestMillis = 100, 
 
 private val Larger = listOf(ContainerResources("main", cpuRequestMillis = 250, cpuLimitMillis = 1_000, memoryRequestBytes = 256L shl 20, memoryLimitBytes = 512L shl 20))
 
-/** Answers a per-pod query with one series for each of [podNames] and a total with one unnamed series; records the windows asked. */
+/** Answers a per-pod query with one series for each of [podNames] and a total with one unnamed series; records the windows and modes asked. */
 private class RecordingSource(private val podNames: List<String>) : MetricsHistorySource {
     override val label = "Fake source"
 
     val pods = CopyOnWriteArrayList<PodSetRef>()
     val windows = CopyOnWriteArrayList<QueryWindow>()
+    val modes = CopyOnWriteArrayList<Pair<PodSeriesKind, PodSetMode>>()
 
     override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
 
     override suspend fun podSetSeries(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, window: QueryWindow): SeriesResult {
         this.pods += pods
         windows += window
+        modes += kind to mode
 
         fun points(peak: Double) = listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, peak))
         return SeriesResult.Ok(
@@ -133,8 +136,9 @@ private fun job(name: String, start: Long, end: Long?, owners: List<OwnerRefInfo
 )
 
 /**
- * The Job and CronJob usage sections: [WorkloadUsageHistorySection] over the targets of [jobTarget] and
- * [cronJobTarget] and a fake source. The Settings flow is a plain [MutableStateFlow] handed to the service's
+ * The usage sections of the Job, CronJob, SparkApplication and ScheduledSparkApplication panels:
+ * [WorkloadUsageHistorySection] over the targets of [jobTarget], [cronJobTarget], [sparkTarget] and
+ * [scheduledSparkTarget] and a fake source. The Settings flow is a plain [MutableStateFlow] handed to the service's
  * internal constructor, so nothing here reads the preference store, the network or gcloud.
  */
 @Suppress("DEPRECATION")
@@ -326,6 +330,216 @@ class BatchUsageHistorySectionUiTest {
         show(source, assertNotNull(cronJobTarget(longCron, emptyList(), emptyList(), ZoneOffset.UTC)))
 
         onNodeWithText("No Job of this CronJob is loaded.").assertExists()
+        onNodeWithText("24h ▾").assertExists()
+        assertTrue(source.windows.isEmpty())
+    }
+
+    // ── SparkApplication ────────────────────────────────────────────────────
+
+    private val sparkDriver = "spark-etl-nightly-driver"
+    private val sparkExecutors = listOf("spark-etl-nightly-1a2b3c4d5e6f7890-exec-1", "spark-etl-nightly-1a2b3c4d5e6f7890-exec-2")
+    private val sparkPodNames = listOf(sparkDriver) + sparkExecutors
+
+    private fun sparkApp(
+        name: String = "spark-etl-nightly",
+        state: String = "COMPLETED",
+        submitted: Long? = NOW - 7_200,
+        terminated: Long? = NOW - 6_000,
+        driverPod: String = sparkDriver,
+        executorPods: List<String> = sparkExecutors,
+        owners: List<OwnerRefInfo> = emptyList(),
+        withSpark: Boolean = true,
+    ) = GenericResourceInfo(
+        uid = "uid-$name",
+        name = name,
+        namespace = NAMESPACE,
+        status = null,
+        age = "1h",
+        labels = emptyMap(),
+        annotations = emptyMap(),
+        owners = owners,
+        spark = if (withSpark) {
+            SparkRun(
+                driverPod = driverPod,
+                executorPods = executorPods,
+                submittedAt = submitted?.let(::iso).orEmpty(),
+                terminatedAt = terminated?.let(::iso).orEmpty(),
+                state = state,
+            )
+        } else {
+            null
+        },
+    )
+
+    @Test
+    fun `a completed SparkApplication is charted over its run as a driver line and an executors line, with its submission and end marked`() = runComposeUiTest {
+        val start = NOW - 7_200
+        val end = NOW - 6_000
+        val source = RecordingSource(sparkPodNames)
+        val target = assertNotNull(sparkTarget(sparkApp(), listOf(pod(sparkDriver))))
+        show(source, target)
+
+        assertEquals(setOf(QueryWindow.spanning(start, end)), source.windows.toSet())
+        assertEquals(setOf(target.podSet), source.pods.toSet())
+        onNodeWithText("Run ▾").assertExists()
+        onNodeWithText("Driver + executors").assertExists()
+        onNodeWithText("Total").assertExists()
+        onNodeWithText("Per pod").assertDoesNotExist()
+        // CPU, memory and throttling; the driver pod's CPU limit brings the throttling chart in, which averages the executors.
+        onAllNodesWithText("Driver").assertCountEquals(3)
+        onAllNodesWithText("Executors").assertCountEquals(2)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        sparkPodNames.forEach { onAllNodesWithText(it).assertCountEquals(0) }
+        onAllNodesWithText("submitted").assertCountEquals(4)
+        onAllNodesWithText("ended").assertCountEquals(4)
+        // A driver and executors differ, so no pod's request or limit stands for the lines.
+        onAllNodesWithText("request 100m", substring = true).assertCountEquals(0)
+        onAllNodesWithText("limit 500m", substring = true).assertCountEquals(0)
+        // The per-pod series are summed on the client: the pods are asked for one by one, the network as a sum.
+        assertEquals(
+            setOf(PodSetMode.PerPod),
+            source.modes.filter { (kind, _) -> kind in setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling) }.map { it.second }.toSet(),
+        )
+        assertEquals(
+            setOf(PodSetMode.Total),
+            source.modes.filter { (kind, _) -> kind in setOf(PodSeriesKind.NetworkRx, PodSeriesKind.NetworkTx) }.map { it.second }.toSet(),
+        )
+    }
+
+    @Test
+    fun `a SparkApplication without a pod that has a CPU limit has no throttling line and no mean`() = runComposeUiTest {
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(), listOf(pod(sparkDriver, resources = emptyList())))))
+
+        onAllNodesWithText("Driver").assertCountEquals(2)
+        onAllNodesWithText("Executors").assertCountEquals(2)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the Total toggle of a SparkApplication asks for the sum and draws one line`() = runComposeUiTest {
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(), listOf(pod(sparkDriver)))))
+
+        onNodeWithText("Total").performClick()
+        waitForIdle()
+
+        assertEquals(PodSetMode.Total, source.modes.last().second)
+        onAllNodesWithText("Driver").assertCountEquals(0)
+        onAllNodesWithText("Executors").assertCountEquals(0)
+        onAllNodesWithText("All pods").assertCountEquals(3)
+    }
+
+    @Test
+    fun `the SparkApplication's menu lists its run first and then the fixed ranges`() = runComposeUiTest {
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(), emptyList())))
+
+        onNodeWithText("Run ▾").performClick()
+        onNodeWithText("Run").assertExists()
+        HistoryRange.entries.forEach { onNodeWithText(it.label).assertExists() }
+        onNodeWithText("6h").performClick()
+        waitForIdle()
+
+        onNodeWithText("6h ▾").assertExists()
+        assertEquals(HistoryRange.H6.window(NOW), source.windows.last())
+    }
+
+    @Test
+    fun `a SparkApplication that is still running ends its window at the present and marks only its submission`() = runComposeUiTest {
+        val start = NOW - 600
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(state = "RUNNING", submitted = start, terminated = null), emptyList())))
+
+        val run = QueryWindow.spanning(start, NOW)
+        assertTrue(run.endEpochSec > NOW, "the margin reaches past the present")
+        assertEquals(setOf(run.copy(endEpochSec = NOW - NOW % run.stepSec)), source.windows.toSet())
+        onAllNodesWithText("submitted").assertCountEquals(4)
+        onAllNodesWithText("ended").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a SparkApplication whose status names no pods says so and asks nothing`() = runComposeUiTest {
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(withSpark = false), emptyList())))
+
+        onNodeWithText("This application's status names no pods yet.").assertExists()
+        onNodeWithText("6h ▾").assertExists()
+        assertTrue(source.windows.isEmpty())
+    }
+
+    // ── ScheduledSparkApplication ───────────────────────────────────────────
+
+    private val scheduledUid = "uid-sched-1"
+
+    private val scheduledApp = GenericResourceInfo(
+        uid = scheduledUid,
+        name = "spark-report-hourly",
+        namespace = NAMESPACE,
+        status = null,
+        age = "3d",
+        labels = emptyMap(),
+        annotations = emptyMap(),
+    )
+
+    private val scheduledOwners = listOf(OwnerRefInfo(kind = "ScheduledSparkApplication", name = "spark-report-hourly", uid = scheduledUid, controller = true))
+
+    // Two runs, at 11:00 and 12:00 UTC (a few seconds past).
+    private val firstRunStart = NOW - 2 * 3_600
+    private val scheduledRuns = listOf("1760252400", "1760256000").mapIndexed { index, suffix ->
+        sparkApp(
+            name = "spark-report-hourly-$suffix",
+            submitted = firstRunStart + index * 3_600L,
+            terminated = firstRunStart + index * 3_600L + 300,
+            driverPod = "spark-report-hourly-$suffix-driver",
+            executorPods = listOf("spark-report-hourly-$suffix-1a2b3c4d5e6f7890-exec-1"),
+            owners = scheduledOwners,
+        )
+    }
+    private val scheduledPodNames = scheduledRuns.flatMap { run -> listOfNotNull(run.spark?.driverPod) + run.spark?.executorPods.orEmpty() }
+
+    @Test
+    fun `a ScheduledSparkApplication is charted from its oldest run to the present as a driver line and an executors line, with a marker at each run`() = runComposeUiTest {
+        val source = RecordingSource(scheduledPodNames)
+        val target = assertNotNull(scheduledSparkTarget(scheduledApp, scheduledRuns, listOf(pod(scheduledPodNames.first())), ZoneOffset.UTC))
+        show(source, target)
+
+        val runs = QueryWindow.spanning(firstRunStart, NOW)
+        assertTrue(runs.endEpochSec > NOW, "the margin reaches past the present")
+        assertEquals(setOf(runs.copy(endEpochSec = NOW - NOW % runs.stepSec)), source.windows.toSet())
+        assertEquals(setOf(target.podSet), source.pods.toSet())
+        onNodeWithText("Runs ▾").assertExists()
+        onNodeWithText("Driver + executors").assertExists()
+        onAllNodesWithText("Driver").assertCountEquals(3)
+        onAllNodesWithText("Executors").assertCountEquals(2)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        scheduledPodNames.forEach { onAllNodesWithText(it).assertCountEquals(0) }
+        listOf("11:00", "12:00").forEach { onAllNodesWithText(it).assertCountEquals(4) }
+        onAllNodesWithText("submitted").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the ScheduledSparkApplication's menu lists Runs first and then the fixed ranges`() = runComposeUiTest {
+        val source = RecordingSource(scheduledPodNames)
+        show(source, assertNotNull(scheduledSparkTarget(scheduledApp, scheduledRuns, emptyList(), ZoneOffset.UTC)))
+
+        onNodeWithText("Runs ▾").performClick()
+        onNodeWithText("Runs").assertExists()
+        onNodeWithText("Run").assertDoesNotExist()
+        HistoryRange.entries.forEach { onNodeWithText(it.label).assertExists() }
+        onNodeWithText("24h").performClick()
+        waitForIdle()
+
+        onNodeWithText("24h ▾").assertExists()
+        assertEquals(HistoryRange.H24.window(NOW), source.windows.last())
+    }
+
+    @Test
+    fun `a ScheduledSparkApplication with no run loaded says so and asks nothing`() = runComposeUiTest {
+        val source = RecordingSource(scheduledPodNames)
+        show(source, assertNotNull(scheduledSparkTarget(scheduledApp, emptyList(), emptyList(), ZoneOffset.UTC)))
+
+        onNodeWithText("No run of this application is loaded.").assertExists()
         onNodeWithText("24h ▾").assertExists()
         assertTrue(source.windows.isEmpty())
     }

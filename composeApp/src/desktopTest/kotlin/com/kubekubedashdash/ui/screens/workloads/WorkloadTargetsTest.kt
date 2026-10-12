@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.workloads
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.SparkRun
 import com.kubekubedashdash.models.WorkloadRun
 import com.kubekubedashdash.services.metricshistory.HistoryRange
 import com.kubekubedashdash.services.metricshistory.PromQl
@@ -25,7 +26,7 @@ private const val CRON_UID = "uid-cron-1"
 // 2026-10-12T08:00:00Z, a whole minute.
 private const val T0 = 1_791_792_000L
 
-/** The pure builders behind the usage sections of the Job and CronJob panels. */
+/** The pure builders behind the usage sections of the Job, CronJob, SparkApplication and ScheduledSparkApplication panels. */
 class WorkloadTargetsTest {
 
     private var previousCloudClis: String? = null
@@ -55,17 +56,20 @@ class WorkloadTargetsTest {
         created: String = "",
         owners: List<OwnerRefInfo> = emptyList(),
         run: WorkloadRun? = null,
+        labels: Map<String, String> = emptyMap(),
+        spark: SparkRun? = null,
     ) = GenericResourceInfo(
         uid = uid,
         name = name,
         namespace = namespace,
         status = null,
         age = "1m",
-        labels = emptyMap(),
+        labels = labels,
         annotations = emptyMap(),
         owners = owners,
         creationTimestamp = created,
         run = run,
+        spark = spark,
     )
 
     private fun job(
@@ -266,5 +270,251 @@ class WorkloadTargetsTest {
     @Test
     fun `a CronJob without a namespace has no section`() {
         assertNull(cronJobTarget(row("nightly-backup", uid = CRON_UID, namespace = null), emptyList(), emptyList(), ZoneOffset.UTC))
+    }
+
+    // ── SparkApplication ────────────────────────────────────────────────────
+
+    private val driver = "spark-etl-nightly-driver"
+    private val executors = listOf("spark-etl-nightly-1a2b3c4d5e6f7890-exec-1", "spark-etl-nightly-1a2b3c4d5e6f7890-exec-2")
+
+    private fun sparkApp(
+        name: String = "spark-etl-nightly",
+        state: String = "COMPLETED",
+        submitted: Long? = T0,
+        terminated: Long? = T0 + 1_200,
+        driverPod: String = driver,
+        executorPods: List<String> = executors,
+        created: String = "",
+        namespace: String? = NAMESPACE,
+        labels: Map<String, String> = emptyMap(),
+        owners: List<OwnerRefInfo> = emptyList(),
+    ) = row(
+        name = name,
+        namespace = namespace,
+        created = created,
+        labels = labels,
+        owners = owners,
+        spark = SparkRun(
+            driverPod = driverPod,
+            executorPods = executorPods,
+            submittedAt = submitted?.let(::iso).orEmpty(),
+            terminatedAt = terminated?.let(::iso).orEmpty(),
+            state = state,
+        ),
+    )
+
+    @Test
+    fun `a completed SparkApplication is charted over its run as a driver and its executors, with its submission and end marked`() {
+        val target = assertNotNull(sparkTarget(sparkApp(), emptyList()))
+
+        assertEquals("uid-spark-etl-nightly", target.key)
+        assertEquals(PromQl.ofExactPods(NAMESPACE, listOf(driver) + executors), target.podSet)
+        assertEquals(UsageGrouping.DriverExecutors(setOf(driver)), target.grouping)
+        assertEquals(UsageWindow.Run(T0, T0 + 1_200), target.defaultWindow)
+        assertEquals(listOf(ChartMarker(T0, "submitted"), ChartMarker(T0 + 1_200, "ended")), target.markers)
+        assertEquals("Run", target.runLabel)
+        assertEquals("This application's status names no pods yet.", target.missingNote)
+        assertEquals(emptyList(), target.notes)
+    }
+
+    @Test
+    fun `a running SparkApplication's run has no end, even when an earlier attempt left a termination time`() {
+        val target = assertNotNull(sparkTarget(sparkApp(state = "RUNNING", terminated = T0 - 600), emptyList()))
+
+        assertEquals(UsageWindow.Run(T0, null), target.defaultWindow)
+        assertEquals(listOf(ChartMarker(T0, "submitted")), target.markers)
+    }
+
+    @Test
+    fun `a failed SparkApplication ends its run too`() {
+        val target = assertNotNull(sparkTarget(sparkApp(name = "spark-failed-job", state = "FAILED"), emptyList()))
+
+        assertEquals(UsageWindow.Run(T0, T0 + 1_200), target.defaultWindow)
+        assertEquals(listOf("submitted", "ended"), target.markers.map { it.label })
+    }
+
+    @Test
+    fun `the driver line follows the driver pod the status names`() {
+        val target = assertNotNull(sparkTarget(sparkApp(driverPod = "spark-etl-nightly-custom-driver"), emptyList()))
+
+        assertEquals(UsageGrouping.DriverExecutors(setOf("spark-etl-nightly-custom-driver")), target.grouping)
+    }
+
+    @Test
+    fun `a SparkApplication whose status names no pods says so, follows its creation time and has no current pod`() {
+        val target = assertNotNull(sparkTarget(row("spark-etl-nightly", created = iso(T0 - 60)), listOf(pod(driver))))
+
+        assertNull(target.podSet)
+        assertEquals("This application's status names no pods yet.", target.missingNote)
+        assertEquals(UsageGrouping.DriverExecutors(emptySet()), target.grouping)
+        assertEquals(UsageWindow.Run(T0 - 60, null), target.defaultWindow)
+        assertEquals(emptyList(), target.markers)
+        assertEquals(emptyList(), target.currentPods)
+    }
+
+    @Test
+    fun `a SparkApplication with no known time falls back to the last 6 hours`() {
+        val target = assertNotNull(sparkTarget(row("spark-etl-nightly"), emptyList()))
+
+        assertEquals(UsageWindow.Sliding(HistoryRange.H6), target.defaultWindow)
+    }
+
+    @Test
+    fun `the current pods of a SparkApplication are the live pods of its driver and executors, in name order`() {
+        val livePods = listOf(
+            pod(executors[1]),
+            pod(driver),
+            pod(executors[0]),
+            // Another namespace, another application whose name starts the same way, and an executor of an earlier submission.
+            pod(driver, namespace = "team-b"),
+            pod("spark-etl-nightly-extra-driver"),
+            pod("spark-etl-nightly-0f9e8d7c6b5a4321-exec-1"),
+        )
+
+        val target = assertNotNull(sparkTarget(sparkApp(), livePods))
+
+        assertEquals(listOf(executors[0], executors[1], driver), target.currentPods.map { it.name })
+        assertTrue(target.currentPods.all { it.namespace == NAMESPACE })
+    }
+
+    @Test
+    fun `a SparkApplication with many executors matches its live executors by stem`() {
+        val many = (1..80).map { "spark-etl-nightly-1a2b3c4d5e6f7890-exec-$it" }
+        val livePods = listOf(pod(driver), pod(many.last()), pod("spark-etl-nightly-0f9e8d7c6b5a4321-exec-1"))
+
+        val target = assertNotNull(sparkTarget(sparkApp(executorPods = many), livePods))
+
+        assertEquals(listOf(many.last(), driver), target.currentPods.map { it.name })
+    }
+
+    @Test
+    fun `a SparkApplication without a namespace has no section`() {
+        assertNull(sparkTarget(sparkApp(namespace = null), emptyList()))
+    }
+
+    // ── ScheduledSparkApplication ───────────────────────────────────────────
+
+    private val scheduledUid = "uid-sched-1"
+    private val scheduledLabel = "sparkoperator.k8s.io/scheduled-app-name"
+    private val scheduled = row("spark-report-hourly", uid = scheduledUid)
+
+    private fun ownedByScheduled(uid: String = scheduledUid) = listOf(OwnerRefInfo(kind = "ScheduledSparkApplication", name = "spark-report-hourly", uid = uid, controller = true))
+
+    private fun runDriver(suffix: String) = "spark-report-hourly-$suffix-driver"
+
+    private fun runExecutor(suffix: String) = "spark-report-hourly-$suffix-1a2b3c4d5e6f7890-exec-1"
+
+    private fun scheduledRun(
+        suffix: String,
+        submitted: Long,
+        ownerUid: String? = scheduledUid,
+        label: String? = null,
+        namespace: String? = NAMESPACE,
+    ) = sparkApp(
+        name = "spark-report-hourly-$suffix",
+        submitted = submitted,
+        terminated = submitted + 300,
+        driverPod = runDriver(suffix),
+        executorPods = listOf(runExecutor(suffix)),
+        namespace = namespace,
+        labels = if (label != null) mapOf(scheduledLabel to label) else emptyMap(),
+        owners = if (ownerUid != null) ownedByScheduled(ownerUid) else emptyList(),
+    )
+
+    private val firstRun = scheduledRun("1760252400", submitted = T0)
+    private val secondRun = scheduledRun("1760256000", submitted = T0 + 3_600)
+
+    @Test
+    fun `a ScheduledSparkApplication is charted from its oldest run, with a marker at each run's local start time`() {
+        val target = assertNotNull(scheduledSparkTarget(scheduled, listOf(secondRun, firstRun), emptyList(), ZoneOffset.UTC))
+
+        assertEquals(scheduledUid, target.key)
+        assertEquals(
+            PromQl.ofExactPods(NAMESPACE, listOf(runDriver("1760252400"), runExecutor("1760252400"), runDriver("1760256000"), runExecutor("1760256000"))),
+            target.podSet,
+        )
+        assertEquals(UsageGrouping.DriverExecutors(setOf(runDriver("1760252400"), runDriver("1760256000"))), target.grouping)
+        assertEquals(UsageWindow.Runs(T0), target.defaultWindow)
+        assertEquals(listOf(ChartMarker(T0, "08:00"), ChartMarker(T0 + 3_600, "09:00")), target.markers)
+        assertEquals("Runs", target.runLabel)
+        assertEquals("No run of this application is loaded.", target.missingNote)
+        assertEquals(emptyList(), target.notes)
+    }
+
+    @Test
+    fun `the run markers of a ScheduledSparkApplication are labelled in the zone it is given`() {
+        val target = assertNotNull(scheduledSparkTarget(scheduled, listOf(firstRun, secondRun), emptyList(), ZoneOffset.ofHoursMinutes(5, 30)))
+
+        assertEquals(listOf("13:30", "14:30"), target.markers.map { it.label })
+    }
+
+    @Test
+    fun `a run counts by the operator's label when its owner is missing or another uid, and only in the namespace of the scheduled application`() {
+        val runs = listOf(
+            firstRun,
+            scheduledRun("1760256000", submitted = T0 + 3_600, ownerUid = null, label = "spark-report-hourly"),
+            scheduledRun("1760259600", submitted = T0 + 7_200, ownerUid = "uid-sched-2", label = "spark-report-hourly"),
+            scheduledRun("1760263200", submitted = T0 + 10_800, ownerUid = "uid-sched-2"),
+            scheduledRun("1760266800", submitted = T0 + 14_400, ownerUid = null, label = "spark-report-daily"),
+            scheduledRun("1760270400", submitted = T0 + 18_000, namespace = "team-b"),
+            scheduledRun("1760274000", submitted = T0 + 21_600, namespace = null),
+            scheduledRun("1760277600", submitted = T0 + 25_200, ownerUid = null),
+        )
+
+        val target = assertNotNull(scheduledSparkTarget(scheduled, runs, emptyList(), ZoneOffset.UTC))
+
+        assertEquals(listOf("08:00", "09:00", "10:00"), target.markers.map { it.label })
+        assertEquals(UsageGrouping.DriverExecutors(setOf("1760252400", "1760256000", "1760259600").map(::runDriver).toSet()), target.grouping)
+    }
+
+    @Test
+    fun `a run row without Spark data is marked but adds no driver`() {
+        val withoutSpark = row("spark-report-hourly-1760256000", owners = ownedByScheduled(), created = iso(T0 + 3_600))
+
+        val target = assertNotNull(scheduledSparkTarget(scheduled, listOf(firstRun, withoutSpark), emptyList(), ZoneOffset.UTC))
+
+        assertEquals(UsageGrouping.DriverExecutors(setOf(runDriver("1760252400"))), target.grouping)
+        assertEquals(listOf("08:00", "09:00"), target.markers.map { it.label })
+    }
+
+    @Test
+    fun `the current pods of a ScheduledSparkApplication are the live pods of its runs, in name order`() {
+        val livePods = listOf(
+            pod(runExecutor("1760256000")),
+            pod(runDriver("1760252400")),
+            pod(runDriver("1760256000")),
+            pod(runDriver("1760256000"), namespace = "team-b"),
+            pod(runDriver("1760259600")),
+            pod("spark-etl-nightly-driver"),
+        )
+
+        val target = assertNotNull(scheduledSparkTarget(scheduled, listOf(firstRun, secondRun), livePods, ZoneOffset.UTC))
+
+        assertEquals(listOf(runDriver("1760252400"), runExecutor("1760256000"), runDriver("1760256000")), target.currentPods.map { it.name })
+    }
+
+    @Test
+    fun `a ScheduledSparkApplication with no run loaded says so and is charted over the last 24 hours`() {
+        val target = assertNotNull(scheduledSparkTarget(scheduled, emptyList(), listOf(pod(runDriver("1760252400"))), ZoneOffset.UTC))
+
+        assertNull(target.podSet)
+        assertEquals("No run of this application is loaded.", target.missingNote)
+        assertEquals(UsageGrouping.DriverExecutors(emptySet()), target.grouping)
+        assertEquals(UsageWindow.Sliding(HistoryRange.H24), target.defaultWindow)
+        assertEquals(emptyList(), target.markers)
+        assertEquals(emptyList(), target.currentPods)
+    }
+
+    @Test
+    fun `a ScheduledSparkApplication whose runs all belong to others has no run either`() {
+        val target = assertNotNull(scheduledSparkTarget(scheduled, listOf(scheduledRun("1760252400", submitted = T0, ownerUid = "uid-sched-2")), emptyList(), ZoneOffset.UTC))
+
+        assertNull(target.podSet)
+        assertEquals(UsageWindow.Sliding(HistoryRange.H24), target.defaultWindow)
+    }
+
+    @Test
+    fun `a ScheduledSparkApplication without a namespace has no section`() {
+        assertNull(scheduledSparkTarget(row("spark-report-hourly", uid = scheduledUid, namespace = null), emptyList(), emptyList(), ZoneOffset.UTC))
     }
 }
