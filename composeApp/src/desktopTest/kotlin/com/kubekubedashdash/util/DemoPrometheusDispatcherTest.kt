@@ -31,6 +31,9 @@ import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetListBuilder
 import io.fabric8.kubernetes.api.model.authorization.v1.SelfSubjectAccessReviewBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.Job
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.JobListBuilder
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetrics
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsListBuilder
 import io.fabric8.kubernetes.client.Config
@@ -67,6 +70,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -79,6 +83,7 @@ class DemoPrometheusDispatcherTest {
     /**
      * Records every request it gets; answers the one known pod, 404 for other pods and a marker for the rest.
      * Once [replicaSets], [pods] or [podMetrics] is set it also answers those lists, the way the CRUD store does.
+     * [jobs] works the same way.
      */
     private class RecordingDelegate :
         Dispatcher(),
@@ -90,6 +95,7 @@ class DemoPrometheusDispatcherTest {
         val expectedContexts = CopyOnWriteArrayList<CustomResourceDefinitionContext>()
         var replicaSets: List<ReplicaSet>? = null
         var pods: List<Pod>? = null
+        var jobs: List<Job>? = null
         var podMetrics: List<PodMetrics>? = null
 
         override fun dispatch(request: RecordedRequest): MockResponse {
@@ -97,6 +103,7 @@ class DemoPrometheusDispatcherTest {
             seen += "${request.method} $path"
             val replicaSetsNamespace = REPLICASETS_PATH.matchEntire(path)?.groupValues?.get(1)
             val podsNamespace = PODS_PATH.matchEntire(path)?.groupValues?.get(1)
+            val jobsNamespace = JOBS_PATH.matchEntire(path)?.groupValues?.get(1)
             val metricsNamespace = POD_METRICS_PATH.matchEntire(path)?.groupValues?.get(1)
             return when {
                 request.method == "GET" && path == ALL_POD_METRICS_PATH && podMetrics != null ->
@@ -112,6 +119,9 @@ class DemoPrometheusDispatcherTest {
 
                 request.method == "GET" && podsNamespace != null && pods != null ->
                     MockResponse().setResponseCode(200).setBody(Serialization.asJson(PodListBuilder().withItems(pods.orEmpty().filter { it.metadata.namespace == podsNamespace }).build()))
+
+                request.method == "GET" && jobsNamespace != null && jobs != null ->
+                    MockResponse().setResponseCode(200).setBody(Serialization.asJson(JobListBuilder().withItems(jobs.orEmpty().filter { it.metadata.namespace == jobsNamespace }).build()))
 
                 request.method == "GET" && path.startsWith("/api/v1/namespaces/") && "/pods/" in path -> MockResponse().setResponseCode(404)
 
@@ -596,6 +606,263 @@ class DemoPrometheusDispatcherTest {
         assertEquals(emptyList(), delegate.seen.toList())
     }
 
+    // ── Job, CronJob and Spark pod sets ─────────────────────────────────────
+
+    private val jobName = "db-vacuum-28000002"
+
+    private fun batchPath(kind: PodSeriesKind, ref: PodSetRef, mode: PodSetMode) = rangeQueryPath(PromQl.inClusterPodSetQuery(kind, ref, mode, window.stepSec))
+
+    private fun podsOf(ref: PodSetRef, kind: PodSeriesKind = PodSeriesKind.Cpu): List<Series> = seriesOf(get(batchPath(kind, ref, PodSetMode.PerPod)), "pod")
+
+    @Test
+    fun `a Job's pods are found when its name is a listed Job, each from its creation to its last container's end`() {
+        delegate.replicaSets = emptyList()
+        delegate.jobs = listOf(jobNamed(jobName), jobNamed("db-vacuum-28000003"))
+        delegate.pods = listOf(
+            endedPod("$jobName-k4m7p", 1_100, 1_400),
+            livePod("$jobName-r2t5v", 1_500),
+            endedPod("db-vacuum-28000003-b4c5d", 1_200, 1_300),
+            livePod("$jobName-extra-abcde", 1_100),
+        )
+        val ref = PromQl.ofJob("team-a", jobName, indexed = false)!!
+
+        for (kind in PodSeriesKind.entries) {
+            val series = podsOf(ref, kind)
+
+            assertEquals(listOf("$jobName-k4m7p", "$jobName-r2t5v"), series.map { it.name }, "$kind")
+            assertEquals(expected(kind, "$jobName-k4m7p", 1_100, 1_400), series[0].points, "$kind")
+            assertEquals(expected(kind, "$jobName-r2t5v", 1_500), series[1].points, "$kind")
+        }
+        assertEquals(
+            listOf("GET /apis/apps/v1/namespaces/team-a/replicasets", "GET /apis/batch/v1/namespaces/team-a/jobs", "GET /api/v1/namespaces/team-a/pods"),
+            delegate.seen.take(3),
+        )
+    }
+
+    @Test
+    fun `the total of a Job adds its pods where they overlap`() {
+        delegate.replicaSets = emptyList()
+        delegate.jobs = listOf(jobNamed(jobName))
+        delegate.pods = listOf(endedPod("$jobName-k4m7p", 1_100, 1_600), endedPod("$jobName-r2t5v", 1_400, 1_800))
+        val ref = PromQl.ofJob("team-a", jobName, indexed = false)!!
+
+        val line = seriesOf(get(batchPath(PodSeriesKind.Memory, ref, PodSetMode.Total)), null).single().points
+
+        val parts = listOf(expected(PodSeriesKind.Memory, "$jobName-k4m7p", 1_100, 1_600), expected(PodSeriesKind.Memory, "$jobName-r2t5v", 1_400, 1_800))
+        assertEquals(combine(PodSeriesKind.Memory, parts), line)
+        assertTrue(line.any { it.epochSec in 1_400..1_600 }, "the pods overlap in this fixture")
+    }
+
+    @Test
+    fun `the Jobs are listed only when an alternative is not a listed ReplicaSet`() {
+        seedRollout()
+
+        podsOf(PromQl.ofReplicaSets("team-a", listOf(previous, current))!!)
+
+        assertFalse(delegate.seen.any { "/jobs" in it }, delegate.seen.toString())
+    }
+
+    @Test
+    fun `an alternative that is neither a listed ReplicaSet nor a listed Job draws nothing and lists no pods`() {
+        val cases = mapOf(
+            "the store answers no list" to null,
+            "another Job" to listOf(jobNamed("db-vacuum-28000003")),
+            "the Job of another namespace" to listOf(jobNamed(jobName, namespace = "team-b")),
+        )
+        for ((label, jobs) in cases) {
+            delegate.seen.clear()
+            delegate.replicaSets = emptyList()
+            delegate.jobs = jobs
+            delegate.pods = listOf(livePod("$jobName-k4m7p", 1_100))
+            val ref = PromQl.ofJob("team-a", jobName, indexed = false)!!
+
+            for (mode in PodSetMode.entries) {
+                val response = get(batchPath(PodSeriesKind.Cpu, ref, mode))
+
+                assertEquals(200, response.code(), "$label $mode")
+                assertEquals(0, resultOf(response).size, "$label $mode")
+            }
+            assertFalse(delegate.seen.any { it.endsWith("/pods") }, label)
+        }
+    }
+
+    @Test
+    fun `an indexed Job's pods are selected by index, and a name too long to keep whole at every index width`() {
+        val short = PromQl.ofJob("team-a", "db-vacuum", indexed = true)!!
+        val long = "nightly-backup-" + "a".repeat(40)
+        assertEquals(55, long.length)
+        val cut = PromQl.ofJob("team-a", long, indexed = true)!!
+        delegate.pods = listOf(
+            livePod("db-vacuum-0-abcde", 1_100),
+            livePod("db-vacuum-12-fghjk", 1_200),
+            livePod("db-vacuum-abcde", 1_100),
+            livePod("db-vacuum-x-abcde", 1_100),
+            livePod("${long.take(55)}-3-abcde", 1_300),
+            livePod("${long.take(54)}-12-fghjk", 1_300),
+            livePod("${long.take(55)}-abcde", 1_300),
+        )
+
+        assertEquals(listOf("db-vacuum-0-abcde", "db-vacuum-12-fghjk"), podsOf(short).map { it.name })
+        assertEquals(listOf("${long.take(54)}-12-fghjk", "${long.take(55)}-3-abcde"), podsOf(cut).map { it.name })
+        assertEquals(listOf("GET /api/v1/namespaces/team-a/pods", "GET /api/v1/namespaces/team-a/pods"), delegate.seen.toList(), "a pattern of this kind needs no other list")
+    }
+
+    @Test
+    fun `a CronJob's pods are those of every run, and its total adds them`() {
+        val ref = PromQl.ofCronJob("team-a", "nightly-backup", emptyList())!!
+        delegate.pods = listOf(
+            endedPod("nightly-backup-28000001-abcde", 1_050, 1_500),
+            endedPod("nightly-backup-28000002-fghjk", 1_300, 1_700),
+            livePod("nightly-backup-28000003-mnpqr", 1_800),
+            livePod("nightly-backup-2800000-stvwx", 1_100),
+            livePod("nightly-backup-28000001-abc", 1_100),
+            livePod("log-rotation-28000001-abcde", 1_100),
+        )
+        val runs = listOf(
+            Triple("nightly-backup-28000001-abcde", 1_050L, 1_500L),
+            Triple("nightly-backup-28000002-fghjk", 1_300L, 1_700L),
+            Triple("nightly-backup-28000003-mnpqr", 1_800L, window.endEpochSec),
+        )
+
+        for (kind in PodSeriesKind.entries) {
+            val series = podsOf(ref, kind)
+
+            assertEquals(runs.map { it.first }, series.map { it.name }, "$kind")
+            runs.forEachIndexed { i, (name, from, to) -> assertEquals(expected(kind, name, from, to), series[i].points, "$kind $name") }
+        }
+        val total = seriesOf(get(batchPath(PodSeriesKind.Cpu, ref, PodSetMode.Total)), null).single().points
+        assertEquals(combine(PodSeriesKind.Cpu, runs.map { (name, from, to) -> expected(PodSeriesKind.Cpu, name, from, to) }), total)
+        assertEquals(listOf("GET /api/v1/namespaces/team-a/pods"), delegate.seen.distinct())
+    }
+
+    @Test
+    fun `a Spark app's pods are selected by their exact names`() {
+        val ref = PromQl.ofSparkPods("team-a", listOf("spark-etl-nightly-driver"), listOf("spark-etl-nightly-exec-2", "spark-etl-nightly-exec-1"))!!
+        delegate.pods = listOf(
+            endedPod("spark-etl-nightly-driver", 1_100, 1_700),
+            endedPod("spark-etl-nightly-exec-1", 1_150, 1_700),
+            endedPod("spark-etl-nightly-exec-2", 1_150, 1_650),
+            livePod("spark-etl-nightly-exec-3", 1_150),
+            livePod("spark-etl-nightly-driver-x", 1_100),
+        )
+
+        for (kind in PodSeriesKind.entries) {
+            val series = podsOf(ref, kind)
+
+            assertEquals(listOf("spark-etl-nightly-driver", "spark-etl-nightly-exec-1", "spark-etl-nightly-exec-2"), series.map { it.name }, "$kind")
+            assertEquals(expected(kind, "spark-etl-nightly-exec-2", 1_150, 1_650), series[2].points, "$kind")
+        }
+    }
+
+    @Test
+    fun `the executors of a Spark app with more than 60 pods are selected by their stem`() {
+        val stem = "spark-etl-nightly-1a2b3c4d5e6f7890"
+        val executors = (1..70).map { "$stem-exec-$it" }
+        val ref = PromQl.ofSparkPods("team-a", listOf("spark-etl-nightly-driver"), executors)!!
+        assertTrue("$stem-exec-[0-9]+" in ref.pattern, ref.pattern)
+        delegate.pods = listOf(livePod("spark-etl-nightly-driver", 1_100)) + executors.map { livePod(it, 1_200) } +
+            listOf(livePod("$stem-exec-x", 1_200), livePod("spark-failed-job-1a2b3c4d5e6f7890-exec-1", 1_200), livePod("$stem-exec-1-extra", 1_200))
+
+        val series = podsOf(ref)
+
+        assertEquals((listOf("spark-etl-nightly-driver") + executors).sorted(), series.map { it.name })
+        assertEquals(expected(PodSeriesKind.Cpu, "$stem-exec-70", 1_200), series.single { it.name == "$stem-exec-70" }.points)
+    }
+
+    @Test
+    fun `the longest pattern the client writes is answered`() {
+        val names = (1..80).map { "spark-report-hourly-1760000000000000000-exec-$it" }
+        val ref = PromQl.ofExactPods("team-a", names)!!
+        assertTrue(PromQl.isValidPodSet(ref))
+        assertTrue(ref.pattern.length in 3_500..4_000, "${ref.pattern.length} characters")
+        delegate.pods = listOf(livePod(names[0], 1_100), livePod(names[79], 1_100), livePod("spark-report-hourly-1760000000000000000-exec-81", 1_100))
+
+        val series = podsOf(ref)
+
+        assertEquals(listOf(names[0], names[79]).sorted(), series.map { it.name })
+    }
+
+    private fun factoryPatterns(): Map<String, PodSetRef> = mapOf(
+        "ReplicaSets" to PromQl.ofReplicaSets("team-a", listOf(previous, "frontend.v2-7c8d9e0f1"))!!,
+        "a Job" to PromQl.ofJob("team-a", jobName, indexed = false)!!,
+        "a Job with a dot" to PromQl.ofJob("team-a", "db.vacuum-28000002", indexed = false)!!,
+        "an indexed Job" to PromQl.ofJob("team-a", "db-vacuum", indexed = true)!!,
+        "an indexed Job with a long name" to PromQl.ofJob("team-a", "nightly-backup-" + "a".repeat(40), indexed = true)!!,
+        "a CronJob" to PromQl.ofCronJob("team-a", "nightly-backup", emptyList())!!,
+        "exact pods" to PromQl.ofExactPods("team-a", listOf("web-0", "web.1", "spark-etl-nightly-exec-1"))!!,
+        "Spark pods by stem" to PromQl.ofSparkPods("team-a", listOf("spark-etl-nightly-driver"), (1..70).map { "spark-etl-nightly-1a2b3c4d5e6f7890-exec-$it" })!!,
+    )
+
+    @Test
+    fun `every pattern a factory writes is answered, for every kind and mode`() {
+        for ((label, ref) in factoryPatterns()) {
+            for (kind in PodSeriesKind.entries) {
+                for (mode in PodSetMode.entries) {
+                    val response = get(batchPath(kind, ref, mode))
+
+                    assertEquals(200, response.code(), "$label $kind $mode: ${response.text()}")
+                    assertEquals(0, resultOf(response).size, "$label $kind $mode: the store has no pods")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a pattern the client does not write is bad_data and asks the delegate nothing`() {
+        val patterns = listOf(
+            ".*",
+            "(web-0|.*)",
+            "(a)[a-z0-9]{5}x",
+            "((a))",
+            "(a-[0-9]{7}-)[a-z0-9]{5}",
+            "(a-[0-9]*-)[a-z0-9]{5}",
+            "(a-[0-9]{8}-)[a-z0-9]{5}",
+            "(a-[0-9]{7}-|b-[0-9]{2}-)[a-z0-9]{5}",
+            "(a-[0-9]+-|b-[0-9]+-)[a-z0-9]{5}",
+            "(a-exec-[0-9]*)",
+            "(a-exec-[0-9]+-x)",
+            "(a|)",
+            "(a-[0-9]{1}-|)[a-z0-9]{5}",
+            "(a--b)(c)",
+        )
+        for (pattern in patterns) {
+            val response = get(rangeQueryPath(PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("team-a", pattern), PodSetMode.PerPod, window.stepSec)))
+
+            assertEquals(400, response.code(), pattern)
+            assertEquals("bad_data", errorType(response), pattern)
+        }
+        assertEquals(emptyList(), delegate.seen.toList())
+    }
+
+    @Test
+    fun `a string literal that does not close, or an escape the client does not write, is bad_data`() {
+        val good = PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PromQl.ofExactPods("team-a", listOf("web-0"))!!, PodSetMode.PerPod, window.stepSec)
+        val queries = listOf(
+            good.replace("(web-0)\"", "(web-0)\\\""),
+            good.replace("(web-0)", "(web-0)\\"),
+            good.replace("(web-0)", "(web\\x-0)"),
+            "namespace=\"team-a\",pod=~\"" + "a".repeat(5_000) + "\\",
+        )
+        for (query in queries) {
+            val response = get(rangeQueryPath(query))
+
+            assertEquals(400, response.code(), query)
+            assertEquals("bad_data", errorType(response), query)
+        }
+        assertEquals(emptyList(), delegate.seen.toList())
+    }
+
+    @Test
+    fun `java regex compiles every pattern a factory writes, and a bad one is no regex`() {
+        for ((label, ref) in factoryPatterns()) {
+            assertNotNull(DemoPrometheusDispatcher.compilePattern(ref.pattern), label)
+        }
+        // The grammars admit no pattern that does not compile, so the refusal of one is only reachable through this function.
+        assertNull(DemoPrometheusDispatcher.compilePattern("(web-0"))
+        assertNull(DemoPrometheusDispatcher.compilePattern("web-0)"))
+        assertNull(DemoPrometheusDispatcher.compilePattern("a{2,1}"))
+    }
+
     // ── scopes ──────────────────────────────────────────────────────────────
 
     private fun scopePath(kind: ScopeKind, namespaces: Set<String>) = rangeQueryPath(PromQl.inClusterScopeQuery(kind, ScopeRef(namespaces), window.stepSec))
@@ -970,6 +1237,7 @@ class DemoPrometheusDispatcherTest {
         const val POD_PATH = "/api/v1/namespaces/team-a/pods/web-0"
         val REPLICASETS_PATH = Regex("/apis/apps/v1/namespaces/([^/]+)/replicasets")
         val PODS_PATH = Regex("/api/v1/namespaces/([^/]+)/pods")
+        val JOBS_PATH = Regex("/apis/batch/v1/namespaces/([^/]+)/jobs")
         const val ALL_POD_METRICS_PATH = "/apis/metrics.k8s.io/v1beta1/pods"
         val POD_METRICS_PATH = Regex("/apis/metrics.k8s.io/v1beta1/namespaces/([^/]+)/pods")
         const val ACCESS_REVIEW_PATH = "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
@@ -1005,6 +1273,19 @@ class DemoPrometheusDispatcherTest {
         fun livePod(name: String, createdSec: Long, namespace: String = "team-a"): Pod = PodBuilder()
             .withNewMetadata().withNamespace(namespace).withName(name).withCreationTimestamp(Instant.ofEpochSecond(createdSec).toString()).endMetadata()
             .withSpec(rolloutSpec())
+            .build()
+
+        fun jobNamed(name: String, namespace: String = "team-a"): Job = JobBuilder()
+            .withNewMetadata().withNamespace(namespace).withName(name).endMetadata()
+            .build()
+
+        // A pod whose containers have ended: the app at [finishedSec], the sidecar five seconds before it.
+        fun endedPod(name: String, createdSec: Long, finishedSec: Long, namespace: String = "team-a"): Pod = PodBuilder(livePod(name, createdSec, namespace))
+            .withNewStatus()
+            .withPhase("Succeeded")
+            .addNewContainerStatus().withName("sidecar").withNewState().withNewTerminated().withExitCode(0).withFinishedAt(Instant.ofEpochSecond(finishedSec - 5).toString()).endTerminated().endState().endContainerStatus()
+            .addNewContainerStatus().withName("app").withNewState().withNewTerminated().withExitCode(0).withFinishedAt(Instant.ofEpochSecond(finishedSec).toString()).endTerminated().endState().endContainerStatus()
+            .endStatus()
             .build()
 
         fun knownPod() = PodBuilder()

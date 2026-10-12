@@ -79,11 +79,11 @@ class DemoClusterSimulator(
     private sealed class JobFate {
         abstract val createdAt: Long
 
-        // Active until `runForMs` elapses, then transitions to Completed.
-        data class Active(override val createdAt: Long, val runForMs: Long, val willSucceed: Boolean) : JobFate()
+        // Active until `runForMs` elapses, then transitions to Completed. `podName` is the Job's pod, if one was created.
+        data class Active(override val createdAt: Long, val runForMs: Long, val willSucceed: Boolean, val podName: String?) : JobFate()
 
         // Terminal — keep visible until `expiresAt` then delete.
-        data class Completed(override val createdAt: Long, val expiresAt: Long) : JobFate()
+        data class Completed(override val createdAt: Long, val expiresAt: Long, val podName: String?) : JobFate()
     }
 
     private val log = LoggerFactory.getLogger(DemoClusterSimulator::class.java)
@@ -116,6 +116,9 @@ class DemoClusterSimulator(
 
     // Simulator-owned jobs. Key = "ns/name".
     private val jobFates = ConcurrentHashMap<String, JobFate>()
+
+    // The last minute (since the epoch) each CronJob scheduled a Job for: a real CronJob never schedules one minute twice.
+    private val lastScheduledMinute = ConcurrentHashMap<String, Long>()
 
     // Smoothly-drifting metrics baselines so the chart wobbles instead of jumping.
     private data class NodeMetricsBaseline(var cpuMillis: Long, var memBytes: Long)
@@ -700,14 +703,15 @@ class DemoClusterSimulator(
         }
     }
 
-    private fun spawnJob() {
+    // Internal so a test can take one step without the loop's timing.
+    internal fun spawnJob() {
         val (app, image) = jobAppPool.random()
         val cronOwner = cronOwnerPool.random()
         // Route Jobs into the owning CronJob's namespace so the owner ref
         // resolves; for free-standing jobs, pick a random ns.
         val ns = cronOwner?.let { cronOwnerNs[it] } ?: nsPool.random()
-        val suffix = "${random.nextInt(10_000, 99_999)}"
-        val name = if (cronOwner != null) "$cronOwner-${System.currentTimeMillis() / 1000}-$suffix" else "$app-$suffix"
+        // A CronJob's Jobs are named after the minute they were scheduled for.
+        val name = if (cronOwner != null) "$cronOwner-${nextScheduledMinute(cronOwner)}" else "$app-${random.nextInt(10_000, 99_999)}"
         val key = "$ns/$name"
 
         val cj = cronOwner?.let {
@@ -722,20 +726,22 @@ class DemoClusterSimulator(
             // One pod owned by this Job — without it, the Job has no children
             // and the topology graph won't render a workload card for it.
             val nodeName = client.nodes().list().items.randomOrNull()?.metadata?.name
-            if (nodeName != null) {
+            nodeName?.let { node ->
+                val podName = "$name-${podNameSuffix()}"
                 client.pods().inNamespace(ns).resource(
                     MockClusterProvider.buildPod(
-                        name = "$name-${random.nextInt(10_000, 99_999)}",
+                        name = podName,
                         ns = ns,
                         app = app,
                         image = image,
-                        nodeName = nodeName,
+                        nodeName = node,
                         phase = "Running",
                         owner = createdJob,
                     ),
                 ).create()
+                podName
             }
-        }.onSuccess {
+        }.onSuccess { podName ->
             emitEvent("Normal", "SuccessfulCreate", "Created job $name", "Job", ns, name, "job-controller")
             val now = System.currentTimeMillis()
             val willSucceed = screenshotCalm || random.nextInt(100) < JOB_SUCCESS_PROBABILITY
@@ -743,6 +749,7 @@ class DemoClusterSimulator(
                 createdAt = now,
                 runForMs = random.nextLong(JOB_RUN_MIN_MS, JOB_RUN_MAX_MS),
                 willSucceed = willSucceed,
+                podName = podName,
             )
             log.debug("Job spawned: {} (willSucceed={})", key, willSucceed)
         }.onFailure { log.warn("Failed to spawn job {}: {}", key, it.message) }
@@ -759,22 +766,24 @@ class DemoClusterSimulator(
                 is JobFate.Active -> {
                     if (now - fate.createdAt >= fate.runForMs) {
                         val expiresAt = now + random.nextLong(JOB_LINGER_MIN_MS, JOB_LINGER_MAX_MS)
-                        jobFates[key] = JobFate.Completed(createdAt = now, expiresAt = expiresAt)
-                        scope.launch { finishJob(ns, name, fate.willSucceed) }
+                        jobFates[key] = JobFate.Completed(createdAt = now, expiresAt = expiresAt, podName = fate.podName)
+                        scope.launch { finishJob(ns, name, fate.willSucceed, fate.podName) }
                     }
                 }
 
                 is JobFate.Completed -> {
                     if (now >= fate.expiresAt) {
                         iter.remove()
-                        scope.launch { deleteJob(ns, name) }
+                        scope.launch { deleteJob(ns, name, fate.podName) }
                     }
                 }
             }
         }
     }
 
-    private fun finishJob(ns: String, name: String, succeeded: Boolean) {
+    internal fun finishJob(ns: String, name: String, succeeded: Boolean, podName: String?) {
+        // The pod ends first, then the Job controller notices.
+        if (podName != null) finishJobPod(ns, podName, succeeded)
         runCatching {
             val existing = client.batch().v1().jobs().inNamespace(ns).withName(name).get() ?: return
             val builder = JobBuilder(existing).editStatus().withActive(0).withCompletionTime(now())
@@ -793,10 +802,49 @@ class DemoClusterSimulator(
         log.debug("Job finished: {}/{} succeeded={}", ns, name, succeeded)
     }
 
-    private fun deleteJob(ns: String, name: String) {
+    private fun finishJobPod(ns: String, podName: String, succeeded: Boolean) {
+        runCatching {
+            val existing = client.pods().inNamespace(ns).withName(podName).get() ?: return@runCatching
+            val container = existing.spec?.containers?.firstOrNull() ?: return@runCatching
+            val updated = PodBuilder(existing)
+                .editStatus()
+                .withPhase(if (succeeded) "Succeeded" else "Failed")
+                .withContainerStatuses(
+                    ContainerStatusBuilder()
+                        .withName(container.name)
+                        .withImage(container.image)
+                        .withReady(false)
+                        .withState(
+                            ContainerStateBuilder()
+                                .withTerminated(
+                                    ContainerStateTerminatedBuilder()
+                                        .withExitCode(if (succeeded) 0 else 1)
+                                        .withReason(if (succeeded) "Completed" else "Error")
+                                        .withStartedAt(existing.metadata?.creationTimestamp)
+                                        .withFinishedAt(now())
+                                        .build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                )
+                .endStatus()
+                .build()
+            client.pods().inNamespace(ns).resource(updated).update()
+        }
+    }
+
+    internal fun deleteJob(ns: String, name: String, podName: String?) {
+        if (podName != null) runCatching { client.pods().inNamespace(ns).withName(podName).delete() }
         runCatching { client.batch().v1().jobs().inNamespace(ns).withName(name).delete() }
         log.debug("Job deleted: {}/{}", ns, name)
     }
+
+    // The minute a CronJob's next Job is named after: the current one, or the one after its last when it already scheduled that.
+    private fun nextScheduledMinute(cronJob: String): Long = lastScheduledMinute.merge(cronJob, System.currentTimeMillis() / 60_000) { last, current -> maxOf(current, last + 1) }!!
+
+    // Kubernetes draws the 5 random characters of a generated name from an alphabet without vowels or digits that look like them.
+    private fun podNameSuffix(): String = (1..POD_NAME_SUFFIX_LENGTH).map { POD_NAME_ALPHABET.random(random) }.joinToString("")
 
     // ── Metrics loop ──────────────────────────────────────────────────────────
 
@@ -1061,5 +1109,7 @@ class DemoClusterSimulator(
         private const val JOB_RUN_MAX_MS = 90_000L
         private const val JOB_LINGER_MIN_MS = 30_000L
         private const val JOB_LINGER_MAX_MS = 180_000L
+        private const val POD_NAME_ALPHABET = "bcdfghjklmnpqrstvwxz2456789"
+        private const val POD_NAME_SUFFIX_LENGTH = 5
     }
 }
