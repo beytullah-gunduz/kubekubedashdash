@@ -368,4 +368,143 @@ class TableOptionsTest {
         // An in-range but absurd year must not overflow (toEpochMilli would throw).
         assertTrue(ageSortKey("+1000000000-12-31T23:59:59Z")!! < ageSortKey("2026-06-01T00:00:00Z")!!)
     }
+
+    // ── Persisted sort ───────────────────────────────────────────────────────
+
+    private val allHeaders = listOf("Name", "Type", "Age", "CPU", "Last Seen", "X")
+    private val lastSeenDescending = TableSort("Last Seen", ascending = false)
+
+    /** One header click: what the table stores afterwards, given what it stored, its default and what is visible. */
+    private fun click(
+        stored: TableSort?,
+        default: TableSort?,
+        header: String,
+        visible: Collection<String> = allHeaders,
+    ): TableSort? = nextTableSort(displayedTableSort(stored, default, visible), default, header)
+
+    /** Clicks [headers] in turn; the list holds what the table stored after each click. */
+    private fun clickEach(
+        default: TableSort?,
+        vararg headers: String,
+        stored: TableSort? = null,
+        visible: Collection<String> = allHeaders,
+    ): List<TableSort?> {
+        var current = stored
+        return headers.map { header ->
+            current = click(current, default, header, visible)
+            current
+        }
+    }
+
+    private fun List<TableSort?>.shown(default: TableSort?, visible: Collection<String> = allHeaders) = map { displayedTableSort(it, default, visible) }
+
+    @Test
+    fun `Pods without a default — three clicks on Name go up, down, then back to the source order`() {
+        val stored = clickEach(null, "Name", "Name", "Name")
+        assertEquals(listOf("asc:Name", "desc:Name", null), stored.map { it?.let(::encodeTableSort) })
+        assertEquals(
+            listOf(TableSort("Name", true), TableSort("Name", false), null),
+            stored.shown(default = null),
+        )
+    }
+
+    @Test
+    fun `Pods without a default — Name then Age moves the sort to Age ascending`() {
+        val stored = clickEach(null, "Name", "Age")
+        assertEquals(listOf("asc:Name", "asc:Age"), stored.map { it?.let(::encodeTableSort) })
+        assertEquals(listOf(TableSort("Name", true), TableSort("Age", true)), stored.shown(default = null))
+    }
+
+    @Test
+    fun `Events — two clicks on the default column flip it and flip it back, never storing the default`() {
+        val stored = clickEach(lastSeenDescending, "Last Seen", "Last Seen")
+        assertEquals(listOf("asc:Last Seen", null), stored.map { it?.let(::encodeTableSort) })
+        assertEquals(
+            listOf(TableSort("Last Seen", true), lastSeenDescending),
+            stored.shown(lastSeenDescending),
+        )
+    }
+
+    @Test
+    fun `Events — three clicks on another column go up, down, then back to the default order`() {
+        val stored = clickEach(lastSeenDescending, "Type", "Type", "Type")
+        assertEquals(listOf("asc:Type", "desc:Type", null), stored.map { it?.let(::encodeTableSort) })
+        assertEquals(
+            listOf(TableSort("Type", true), TableSort("Type", false), lastSeenDescending),
+            stored.shown(lastSeenDescending),
+        )
+    }
+
+    @Test
+    fun `Events — clicking the default column while another one sorts goes straight to the default`() {
+        val stored = clickEach(lastSeenDescending, "Type", "Last Seen")
+        assertEquals(listOf("asc:Type", null), stored.map { it?.let(::encodeTableSort) })
+        assertEquals(listOf(TableSort("Type", true), lastSeenDescending), stored.shown(lastSeenDescending))
+    }
+
+    @Test
+    fun `Events with Type hidden — the default shows, and a click on it replaces the hidden Type sort`() {
+        val visible = allHeaders - "Type"
+        val storedType = TableSort("Type", ascending = true)
+
+        assertEquals(lastSeenDescending, displayedTableSort(storedType, lastSeenDescending, visible))
+        val after = click(storedType, lastSeenDescending, "Last Seen", visible)
+        assertEquals("asc:Last Seen", after?.let(::encodeTableSort))
+        assertEquals(TableSort("Last Seen", true), displayedTableSort(after, lastSeenDescending, visible))
+    }
+
+    @Test
+    fun `Pods with CPU hidden — the source order shows, and a click on Name replaces the hidden CPU sort`() {
+        val visible = allHeaders - "CPU"
+        val storedCpu = TableSort("CPU", ascending = false)
+
+        assertNull(displayedTableSort(storedCpu, default = null, visibleHeaders = visible))
+        val after = click(storedCpu, default = null, header = "Name", visible = visible)
+        assertEquals("asc:Name", after?.let(::encodeTableSort))
+        assertEquals(TableSort("Name", true), displayedTableSort(after, default = null, visibleHeaders = visible))
+    }
+
+    @Test
+    fun `a table whose default is ascending — two clicks on that column go descending, then back to the default`() {
+        val defaultX = TableSort("X", ascending = true)
+        val stored = clickEach(defaultX, "X", "X")
+        assertEquals(listOf("desc:X", null), stored.map { it?.let(::encodeTableSort) })
+        assertEquals(listOf(TableSort("X", false), defaultX), stored.shown(defaultX))
+    }
+
+    @Test
+    fun `a click that lands on the default returns null — the default is never stored`() {
+        // Ascending Last Seen flips to the default (descending); another column jumps straight to it.
+        assertNull(nextTableSort(TableSort("Last Seen", true), lastSeenDescending, "Last Seen"))
+        assertNull(nextTableSort(TableSort("Type", true), lastSeenDescending, "Last Seen"))
+    }
+
+    @Test
+    fun `a sort survives the encoding round-trip, headers with a colon or spaces included`() {
+        for (sort in listOf(TableSort("a: b c", true), TableSort("Name", false))) {
+            assertEquals(sort, decodeTableSort(encodeTableSort(sort)))
+        }
+    }
+
+    @Test
+    fun `decodeTableSort ignores anything encodeTableSort could not have produced`() {
+        for (raw in listOf(null, "", "asc", "sideways:Name", "asc:", "desc:   ")) {
+            assertNull(decodeTableSort(raw), "expected null for $raw")
+        }
+    }
+
+    @Test
+    fun `displayedTableSort falls back to the default when the stored column is not visible`() {
+        val stored = TableSort("CPU", ascending = true)
+        assertEquals(stored, displayedTableSort(stored, lastSeenDescending, allHeaders))
+        assertEquals(lastSeenDescending, displayedTableSort(stored, lastSeenDescending, listOf("Name", "Last Seen")))
+    }
+
+    @Test
+    fun `displayedTableSort is null when neither the stored nor the default column is visible`() {
+        val stored = TableSort("CPU", ascending = true)
+        assertNull(displayedTableSort(stored, lastSeenDescending, listOf("Name", "Age")))
+        assertNull(displayedTableSort(null, lastSeenDescending, listOf("Name", "Age")))
+        assertNull(displayedTableSort(null, null, allHeaders))
+    }
 }

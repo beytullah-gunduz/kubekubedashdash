@@ -94,7 +94,9 @@ internal fun HelmReleaseTable(
             selectedRowId = selectedUid,
             onRowClick = { row -> rows.find { it.uid == row.id }?.let(onClick) },
             emptyMessage = "No Helm releases found",
-            tableKey = "HelmRelease",
+            // Plural like "Pods": a CRD table's key is its singular kind, and Flux
+            // ships a HelmRelease CRD whose sort and columns must not share this one.
+            tableKey = "HelmReleases",
         )
     }
 }

@@ -138,3 +138,61 @@ fun ageSortKey(creationTimestamp: String): Double? {
         null
     }
 }
+
+/**
+ * A table's sort: which column — by HEADER, because the responsive column list
+ * is width-filtered and an index would silently re-target — and which way.
+ */
+data class TableSort(val header: String, val ascending: Boolean)
+
+/** The `table_sort` preference value for [sort]: `"asc:<header>"` or `"desc:<header>"`. */
+fun encodeTableSort(sort: TableSort): String = (if (sort.ascending) "asc:" else "desc:") + sort.header
+
+/**
+ * Reverses [encodeTableSort]. Splits on the FIRST `:` so a header containing
+ * one survives. Null for anything it could not have produced — the table then
+ * shows its default.
+ */
+fun decodeTableSort(raw: String?): TableSort? {
+    if (raw == null) return null
+    val separator = raw.indexOf(':')
+    if (separator < 0) return null
+    val ascending = when (raw.substring(0, separator)) {
+        "asc" -> true
+        "desc" -> false
+        else -> return null
+    }
+    val header = raw.substring(separator + 1)
+    return if (header.isBlank()) null else TableSort(header, ascending)
+}
+
+/**
+ * The sort to STORE after a click on [clicked], given the sort the table
+ * [displayed] and its [default]; null means "no override, show the default".
+ * Another column → ascending, except the default column, which goes straight
+ * to the default. The same column → ascending flips to descending; descending
+ * flips back to ascending when that descending IS the default, and otherwise
+ * clears the override — so a third click returns to the default order. A
+ * result equal to [default] is returned as null: the default is never stored,
+ * so a default changed in a later release still applies.
+ */
+fun nextTableSort(displayed: TableSort?, default: TableSort?, clicked: String): TableSort? {
+    val next = when {
+        displayed == null || displayed.header != clicked ->
+            if (clicked == default?.header) default else TableSort(clicked, ascending = true)
+
+        displayed.ascending -> TableSort(clicked, ascending = false)
+
+        default == TableSort(clicked, ascending = false) -> TableSort(clicked, ascending = true)
+
+        else -> null
+    }
+    return next?.takeIf { it != default }
+}
+
+/**
+ * The sort actually driving the table: the [stored] one while its column is
+ * visible, else the [default] while ITS column is visible, else null (source
+ * order). The stored entry is not dropped, so re-showing its column brings it back.
+ */
+fun displayedTableSort(stored: TableSort?, default: TableSort?, visibleHeaders: Collection<String>): TableSort? = stored?.takeIf { it.header in visibleHeaders } ?: default?.takeIf { it.header in visibleHeaders }
