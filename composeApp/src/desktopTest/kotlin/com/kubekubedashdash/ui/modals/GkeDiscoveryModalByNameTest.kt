@@ -8,7 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.lifecycle.viewModelScope
 import com.kubekubedashdash.ui.modals.viewmodel.DiscoveryMode
@@ -35,8 +35,12 @@ import kotlin.test.assertTrue
  * view-model state a `waitForIdle()` follows: a Button's `enabled` comes from a collected
  * State that is one frame behind the flow, and `performClick` on a disabled node silently
  * does nothing.
+ *
+ * Runs on the v2 harness, whose StandardTestDispatcher queues composition effects. The v1
+ * harness ran them unconfined, so `collectAsState` wrote the scan rows on the view model's IO
+ * thread; a write landing mid-measure crashed the scan step's LazyColumn ("Index 0, size 0"
+ * in getKey). No wait in the test can prevent that: the write races the frame, not the test.
  */
-@Suppress("DEPRECATION")
 @OptIn(ExperimentalTestApi::class)
 class GkeDiscoveryModalByNameTest {
 
