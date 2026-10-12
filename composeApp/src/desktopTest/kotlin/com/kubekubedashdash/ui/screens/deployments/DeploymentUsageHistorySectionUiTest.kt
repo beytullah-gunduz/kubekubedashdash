@@ -60,6 +60,17 @@ import com.kubekubedashdash.ui.components.podSetHue
 import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.LoadedHistory
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
+import com.kubekubedashdash.ui.screens.workloads.GMP_STALENESS_NOTE
+import com.kubekubedashdash.ui.screens.workloads.NO_CURRENT_CPU_LIMIT_NOTE
+import com.kubekubedashdash.ui.screens.workloads.TOTAL_SERIES_NAME
+import com.kubekubedashdash.ui.screens.workloads.currentPodsOf
+import com.kubekubedashdash.ui.screens.workloads.deploymentFailureMessage
+import com.kubekubedashdash.ui.screens.workloads.deploymentKinds
+import com.kubekubedashdash.ui.screens.workloads.headlineFailure
+import com.kubekubedashdash.ui.screens.workloads.notDrawnCurrentPods
+import com.kubekubedashdash.ui.screens.workloads.perPodChartSeries
+import com.kubekubedashdash.ui.screens.workloads.podSumReferences
+import com.kubekubedashdash.ui.screens.workloads.totalChartSeries
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly

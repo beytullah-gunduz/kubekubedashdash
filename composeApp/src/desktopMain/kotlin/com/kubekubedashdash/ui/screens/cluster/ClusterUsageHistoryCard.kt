@@ -62,12 +62,12 @@ import com.kubekubedashdash.ui.components.ChartSeries
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
-import com.kubekubedashdash.ui.screens.deployments.deploymentFailureMessage
 import com.kubekubedashdash.ui.screens.pods.HISTORY_REFRESH_MS
 import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.ui.screens.pods.shortFailure
+import com.kubekubedashdash.ui.screens.workloads.deploymentFailureMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
