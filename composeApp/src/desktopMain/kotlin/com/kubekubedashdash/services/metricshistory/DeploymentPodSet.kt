@@ -13,7 +13,10 @@ data class Rollout(val revision: Long, val replicaSet: String, val createdEpochS
  * `revisionHistoryLimit` of them), [currentReplicaSet] is the newest revision and [rollouts] are the
  * ReplicaSets' creation instants in time order.
  */
-data class DeploymentPodSet(val ref: PodSetRef, val currentReplicaSet: String?, val rollouts: List<Rollout>)
+data class DeploymentPodSet(val ref: PodSetRef, val currentReplicaSet: String?, val rollouts: List<Rollout>) {
+    /** True when a pod name cannot hold some ReplicaSet's whole name: the name pattern is then not exact. */
+    val podNamesCut: Boolean get() = ref.replicaSets.any { PromQl.podPrefix(it) != "$it-" }
+}
 
 private const val REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 
@@ -24,6 +27,14 @@ private class Candidate(val name: String, val revision: Long, val createdEpochSe
  * `RelatedResolver` does; null when it has none. A ReplicaSet whose creation time is missing or
  * unreadable keeps its pods in [DeploymentPodSet.ref] but marks no rollout, and counts as the oldest
  * when two share a revision. Pods of a ReplicaSet that was deleted are not selected.
+ *
+ * Pods are matched by name, and a pod's name keeps only the first 58 characters of
+ * `<replicaset>-` ([PromQl.podPrefix]). When that cuts into a ReplicaSet's name (a Deployment name
+ * of about 48 characters or more), the pattern also matches pods of another workload whose name
+ * starts the same way, and pods of two revisions can share one prefix, so the current ReplicaSet's
+ * pods cannot be told from earlier ones ([DeploymentPodSet.podNamesCut]). A rollback
+ * (`kubectl rollout undo`) brings an earlier ReplicaSet back: its revision goes up but its creation
+ * time stays, so the rollback marks no rollout and that revision's marker sits at its first rollout.
  *
  * Staleness differs by backend. Managed Prometheus writes no staleness markers, so a deleted pod's
  * memory line lingers up to 5 minutes and its CPU line up to the rate window (5 minutes at least):

@@ -321,6 +321,22 @@ class DeploymentUsageHistorySectionUiTest {
         onAllNodesWithText("rev 2").assertCountEquals(4)
         onAllNodesWithText("rev 1").assertCountEquals(0)
         assertEquals(AllKinds, source.calls.map { it.kind }.toSet())
+        // Short ReplicaSet names fit whole in their pods' names: the pattern is exact.
+        onNodeWithText(CUT_POD_NAMES_NOTE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `ReplicaSet names cut short in their pods' names are called out under the charts`() = runComposeUiTest {
+        // A 57-character Deployment name: both revisions' pods are named from the same 58 characters.
+        val longName = "redis-cache-" + "x".repeat(45)
+        val cut = listOf(
+            replicaSet("$longName-5f7a3b1d0", revision = 2, createdEpochSec = NOW - 3_600),
+            replicaSet("$longName-6d9f8c7b5", revision = 1, createdEpochSec = NOW - 4 * 3_600),
+        )
+        show(serviceOver(settingsOf(GmpSetting), FakeSource(seriesNames)), replicaSets = cut)
+
+        onNodeWithText("CPU").assertExists()
+        onNodeWithText(CUT_POD_NAMES_NOTE).assertExists()
     }
 
     @Test

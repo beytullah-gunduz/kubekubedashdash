@@ -2,14 +2,37 @@ package com.kubekubedashdash.services.metricshistory
 
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.OwnerRefInfo
+import com.kubekubedashdash.util.ShellEnvironment
 import java.time.Instant
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Which ReplicaSets belong to a Deployment, which one is current, and when each revision started. */
 class DeploymentPodSetTest {
+
+    private var previousCloudClis: String? = null
+
+    @BeforeTest
+    fun disableCloudClis() {
+        previousCloudClis = System.getProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY)
+        System.setProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY, "true")
+    }
+
+    @AfterTest
+    fun restoreCloudClis() {
+        val previous = previousCloudClis
+        if (previous == null) {
+            System.clearProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY)
+        } else {
+            System.setProperty(ShellEnvironment.DISABLE_CLOUD_CLIS_PROPERTY, previous)
+        }
+    }
 
     private val deploymentUid = "uid-deploy-1"
     private val revisionAnnotation = "deployment.kubernetes.io/revision"
@@ -202,5 +225,24 @@ class DeploymentPodSetTest {
 
         assertEquals(listOf("redis-cache-5f7a3b1d0"), result?.ref?.replicaSets)
         assertEquals(1, result?.rollouts?.size)
+    }
+
+    @Test
+    fun `pod names are cut once a ReplicaSet name and its dash pass 58 characters`() {
+        val short = podSet(rs("redis-cache-5f7a3b1d0"))
+        assertNotNull(short)
+        assertFalse(short.podNamesCut)
+
+        // 57 characters: with its dash it still fits whole.
+        val fits = podSet(rs("redis-cache-" + "x".repeat(45)))
+        assertNotNull(fits)
+        assertFalse(fits.podNamesCut)
+
+        // A 57-character Deployment name: every revision's pods are named from the same 58 characters.
+        val deployment = "redis-cache-" + "x".repeat(45)
+        val cut = podSet(rs("$deployment-5f7a3b1d0"), rs("$deployment-6d9f8c7b5"))
+        assertNotNull(cut)
+        assertTrue(cut.podNamesCut)
+        assertEquals(1, cut.ref.replicaSets.map { PromQl.podPrefix(it) }.distinct().size)
     }
 }

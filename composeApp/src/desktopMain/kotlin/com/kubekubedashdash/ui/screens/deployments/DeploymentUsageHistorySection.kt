@@ -79,7 +79,10 @@ internal const val NO_REPLICASETS_NOTE = "No ReplicaSets of this Deployment are 
 internal const val NO_CURRENT_CPU_LIMIT_NOTE = "No current pod has a CPU limit — CFS throttling does not apply."
 
 internal const val GMP_STALENESS_NOTE =
-    "Managed Prometheus keeps a deleted pod's last values for at least 5 minutes, so earlier pods' lines can run past a rollout marker, and Total counts them twice there."
+    "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so earlier pods' lines can run past a rollout marker, and Total counts them twice there."
+
+internal const val CUT_POD_NAMES_NOTE =
+    "These ReplicaSet names are longer than a pod name keeps, so the charts can include pods of another workload whose name starts the same way, and Per pod may not tell revisions apart."
 
 // Every pod name is its ReplicaSet's prefix plus 5 generated characters.
 private const val POD_SUFFIX_LENGTH = 5
@@ -492,6 +495,7 @@ private fun DeploymentHistoryCharts(
             val pods = if (notDrawn == 1) "1 more pod is" else "$notDrawn more pods are"
             NoteLine("$pods not drawn — switch to Total.")
         }
+        if (podSet.podNamesCut) NoteLine(CUT_POD_NAMES_NOTE)
         if (choice is SourceChoice.Gmp) NoteLine(GMP_STALENESS_NOTE)
     }
 }
