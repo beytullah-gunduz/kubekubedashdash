@@ -723,6 +723,46 @@ class PromQlTest {
         assertNull(PromQl.ofSparkPods("team-a", listOf(sparkDriver), sparkExecutors(70) + "$sparkStem-exec-"), "a trailing hyphen is no DNS name")
     }
 
+    @Test
+    fun `Spark executors are selected by exact name up to 60 and by stem past that, whatever the drivers`() {
+        val sixty = sparkExecutors(60)
+        assertEquals(PromQl.ofExactPods("team-a", sixty), PromQl.ofSparkExecutors("team-a", sixty))
+        assertFalse(PromQl.ofSparkExecutors("team-a", sixty)!!.pattern.contains("[0-9]+"))
+
+        // With a driver, 60 executors already pass ofSparkPods' threshold; here the executors' own count decides.
+        assertEquals("($sparkStem-exec-[0-9]+)", PromQl.ofSparkExecutors("team-a", sparkExecutors(61))?.pattern)
+        assertEquals("(spark-pi-success-exec-1)", PromQl.ofSparkExecutors("team-a", listOf("spark-pi-success-exec-1"))?.pattern)
+    }
+
+    @Test
+    fun `Spark executors past the threshold keep the stem grouping of the Spark pod set, and a name without -exec- its exact form`() {
+        val otherStem = "spark-etl-nightly-2b3c4d5e6f708901"
+        val odd = "spark-etl-nightly-sidecar"
+        val dotted = "spark.etl-exec-3"
+        val executors = sparkExecutors(40) + sparkExecutors(40, otherStem) + listOf(odd, dotted)
+
+        val pattern = PromQl.ofSparkExecutors("team-a", executors)!!.pattern
+
+        assertEquals("($sparkStem-exec-[0-9]+|$otherStem-exec-[0-9]+|$odd|" + """spark\.etl-exec-[0-9]+)""", pattern)
+        // The executors' alternatives are the Spark pod set's with the drivers taken out.
+        assertEquals(PromQl.ofSparkPods("team-a", emptyList(), executors)?.pattern, pattern)
+        assertTrue(Regex(pattern).matches("$sparkStem-exec-1000"), "an executor the status does not list yet")
+        assertFalse(Regex(pattern).matches(sparkDriver))
+    }
+
+    @Test
+    fun `Spark executors are refused when none is named, the namespace is not a label or a name is not a DNS name`() {
+        assertNull(PromQl.ofSparkExecutors("team-a", emptyList()))
+        for (namespace in listOf("", "Team-A", "team_a", "team-a\"b", "team a")) {
+            assertNull(PromQl.ofSparkExecutors(namespace, listOf("spark-pi-success-exec-1")), namespace)
+            assertNull(PromQl.ofSparkExecutors(namespace, sparkExecutors(70)), namespace)
+        }
+        for (bad in listOf("Spark-Exec-1", "spark_exec_1", "spark|exec", "spark\"exec", "", "-spark", "spark-")) {
+            assertNull(PromQl.ofSparkExecutors("team-a", listOf("spark-pi-success-exec-1", bad)), bad)
+            assertNull(PromQl.ofSparkExecutors("team-a", sparkExecutors(70) + bad), bad)
+        }
+    }
+
     // ── pod set validity ────────────────────────────────────────────────────────
 
     @Test
@@ -735,6 +775,7 @@ class PromQlTest {
             PromQl.ofCronJob("team-a", "nightly-backup", emptyList()),
             PromQl.ofExactPods("team-a", listOf("web-0", "redis-cache.v2-0")),
             PromQl.ofSparkPods("team-a", listOf(sparkDriver), sparkExecutors(80)),
+            PromQl.ofSparkExecutors("team-a", sparkExecutors(80)),
         )
         for (ref in refs) {
             assertTrue(PromQl.isValidPodSet(ref!!), ref.pattern)

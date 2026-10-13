@@ -215,14 +215,27 @@ internal object PromQl {
     fun ofSparkPods(namespace: String, driverPods: List<String>, executorPods: List<String>): PodSetRef? {
         if (driverPods.size + executorPods.size <= SPARK_EXACT_NAMES_MAX) return ofExactPods(namespace, driverPods + executorPods)
         if (!KubernetesNames.isDnsLabel(namespace) || !(driverPods + executorPods).all(KubernetesNames::isDnsSubdomain)) return null
-        val executors = executorPods.map { name ->
-            val stem = name.substringBeforeLast(EXECUTOR_MARKER, missingDelimiterValue = "")
-            val index = name.substringAfterLast(EXECUTOR_MARKER, missingDelimiterValue = "")
-            if (stem.isNotEmpty() && index.isNotEmpty() && index.all { it in '0'..'9' }) "${regexEscape(stem)}${EXECUTOR_MARKER}[0-9]+" else regexEscape(name)
-        }.distinct().sorted()
         val drivers = driverPods.distinct().sorted().map { regexEscape(it) }
-        return PodSetRef(namespace, (drivers + executors).joinToString("|", prefix = "(", postfix = ")"))
+        return PodSetRef(namespace, (drivers + sparkExecutorAlternatives(executorPods)).joinToString("|", prefix = "(", postfix = ")"))
     }
+
+    /**
+     * The executor pods of Spark applications alone, for a line of their own beside the drivers'. Its
+     * threshold counts executors only (the drivers form another set); past it the executors are selected
+     * by stem as in [ofSparkPods]. Null when [executorPods] is empty or a name is not valid.
+     */
+    fun ofSparkExecutors(namespace: String, executorPods: List<String>): PodSetRef? {
+        if (executorPods.size <= SPARK_EXACT_NAMES_MAX) return ofExactPods(namespace, executorPods)
+        if (!KubernetesNames.isDnsLabel(namespace) || !executorPods.all(KubernetesNames::isDnsSubdomain)) return null
+        return PodSetRef(namespace, sparkExecutorAlternatives(executorPods).joinToString("|", prefix = "(", postfix = ")"))
+    }
+
+    // An executor named `<stem>-exec-<n>` is selected by its stem, one named otherwise by its exact name.
+    private fun sparkExecutorAlternatives(executorPods: List<String>): List<String> = executorPods.map { name ->
+        val stem = name.substringBeforeLast(EXECUTOR_MARKER, missingDelimiterValue = "")
+        val index = name.substringAfterLast(EXECUTOR_MARKER, missingDelimiterValue = "")
+        if (stem.isNotEmpty() && index.isNotEmpty() && index.all { it in '0'..'9' }) "${regexEscape(stem)}${EXECUTOR_MARKER}[0-9]+" else regexEscape(name)
+    }.distinct().sorted()
 
     fun gmpPodSetSelector(target: GmpTarget, namespace: String, regex: String): String = "cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\"," +
         inClusterPodSetSelector(namespace, regex)

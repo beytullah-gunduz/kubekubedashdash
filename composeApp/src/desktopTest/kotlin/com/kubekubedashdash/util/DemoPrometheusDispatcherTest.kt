@@ -881,6 +881,8 @@ class DemoPrometheusDispatcherTest {
         "a CronJob" to PromQl.ofCronJob("team-a", "nightly-backup", emptyList())!!,
         "exact pods" to PromQl.ofExactPods("team-a", listOf("web-0", "web.1", "spark-etl-nightly-exec-1"))!!,
         "Spark pods by stem" to PromQl.ofSparkPods("team-a", listOf("spark-etl-nightly-driver"), (1..70).map { "spark-etl-nightly-1a2b3c4d5e6f7890-exec-$it" })!!,
+        "a Spark driver" to PromQl.ofExactPods("team-a", listOf("spark-etl-nightly-driver"))!!,
+        "Spark executors by stem" to PromQl.ofSparkExecutors("team-a", (1..70).map { "spark-etl-nightly-1a2b3c4d5e6f7890-exec-$it" })!!,
         "a namespace" to PromQl.ofNamespace("team-a")!!,
     )
 

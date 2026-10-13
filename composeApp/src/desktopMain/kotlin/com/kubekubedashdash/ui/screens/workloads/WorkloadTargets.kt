@@ -89,16 +89,21 @@ internal fun cronJobTarget(res: GenericResourceInfo, jobs: List<GenericResourceI
 
 /**
  * What a SparkApplication's usage section charts; null only when [res] has no namespace. The driver is one
- * line and the executors another, and the run (submission to termination, or to the present) is the default window.
+ * line and the executors another, each a sum Prometheus computes, and the run (submission to termination,
+ * or to the present) is the default window.
  */
 internal fun sparkTarget(res: GenericResourceInfo, livePods: List<PodInfo>): UsageTarget? {
     val usage = sparkUsage(res) ?: return null
+    val namespace = res.namespace ?: return null
     return driverExecutorsTarget(
         res = res,
         usage = usage,
         livePods = livePods,
         missingNote = NO_SPARK_PODS_NOTE,
-        driverPods = res.spark?.let { setOf(it.driverPod) }.orEmpty(),
+        grouping = UsageGrouping.DriverExecutors(
+            PromQl.ofExactPods(namespace, listOfNotNull(res.spark?.driverPod)),
+            PromQl.ofSparkExecutors(namespace, res.spark?.executorPods.orEmpty()),
+        ),
         defaultWindow = usage.runStartSec?.let { UsageWindow.Run(it, usage.runEndSec) } ?: UsageWindow.Sliding(HistoryRange.H6),
         runLabel = "Run",
         noCpuLimitNote = SPARK_NO_CPU_LIMIT_NOTE,
@@ -107,17 +112,22 @@ internal fun sparkTarget(res: GenericResourceInfo, livePods: List<PodInfo>): Usa
 
 /**
  * What a ScheduledSparkApplication's usage section charts; null only when [res] has no namespace. [runs] are
- * SparkApplications (others are ignored); the drivers of the ones it owns are the driver line, and the runs
- * from the oldest one on are the default window.
+ * SparkApplications (others are ignored); the drivers of the ones it owns are the driver line, their
+ * executors the executors line, and the runs from the oldest one on are the default window.
  */
 internal fun scheduledSparkTarget(res: GenericResourceInfo, runs: List<GenericResourceInfo>, livePods: List<PodInfo>, zone: ZoneId): UsageTarget? {
     val usage = scheduledSparkUsage(res, runs, zone) ?: return null
+    val namespace = res.namespace ?: return null
+    val sparkRuns = ownedSparkRuns(res, runs).mapNotNull { it.spark }
     return driverExecutorsTarget(
         res = res,
         usage = usage,
         livePods = livePods,
         missingNote = NO_SCHEDULED_SPARK_RUNS_NOTE,
-        driverPods = ownedSparkRuns(res, runs).mapNotNull { it.spark?.driverPod }.toSet(),
+        grouping = UsageGrouping.DriverExecutors(
+            PromQl.ofExactPods(namespace, sparkRuns.map { it.driverPod }),
+            PromQl.ofSparkExecutors(namespace, sparkRuns.flatMap { it.executorPods }),
+        ),
         defaultWindow = usage.runStartSec?.let { UsageWindow.Runs(it) } ?: UsageWindow.Sliding(HistoryRange.H24),
         runLabel = "Runs",
         noCpuLimitNote = SCHEDULED_SPARK_NO_CPU_LIMIT_NOTE,
@@ -201,7 +211,7 @@ private fun driverExecutorsTarget(
     usage: BatchUsage,
     livePods: List<PodInfo>,
     missingNote: String,
-    driverPods: Set<String>,
+    grouping: UsageGrouping.DriverExecutors,
     defaultWindow: UsageWindow,
     runLabel: String,
     noCpuLimitNote: String,
@@ -209,7 +219,7 @@ private fun driverExecutorsTarget(
     key = res.uid,
     podSet = usage.ref,
     missingNote = missingNote,
-    grouping = UsageGrouping.DriverExecutors(driverPods),
+    grouping = grouping,
     defaultWindow = defaultWindow,
     markers = usage.markers.map { ChartMarker(it.epochSec, it.label) },
     currentPods = livePodsOf(res.namespace, usage.ref, livePods),

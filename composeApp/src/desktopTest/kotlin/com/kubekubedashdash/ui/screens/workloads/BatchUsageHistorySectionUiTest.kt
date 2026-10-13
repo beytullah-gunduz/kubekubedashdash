@@ -118,6 +118,12 @@ private class RecordingSource(private val podNames: List<String>) : MetricsHisto
 
 private fun iso(epochSec: Long) = Instant.ofEpochSecond(epochSec).toString()
 
+/** The refs of a Spark target's driver and executors lines. */
+private fun UsageTarget.groupRefs(): Set<PodSetRef> {
+    val grouping = grouping as UsageGrouping.DriverExecutors
+    return setOfNotNull(grouping.driverPods, grouping.executorPods)
+}
+
 private fun pod(name: String, resources: List<ContainerResources> = Limited) = PodInfo(
     uid = "uid-$name",
     name = name,
@@ -416,30 +422,24 @@ class BatchUsageHistorySectionUiTest {
         show(source, target)
 
         assertEquals(setOf(QueryWindow.spanning(start, end)), source.windows.toSet())
-        assertEquals(setOf(target.podSet), source.pods.toSet())
+        // Each group is asked for by its own ref, and the network for the whole set.
+        assertEquals(setOf(target.podSet) + target.groupRefs(), source.pods.toSet())
         onNodeWithText("Run ▾").assertExists()
         onNodeWithText("Driver + executors").assertExists()
         onNodeWithText("Total").assertExists()
         onNodeWithText("Per pod").assertDoesNotExist()
-        // CPU, memory and throttling; the driver pod's CPU limit brings the throttling chart in, which averages the executors.
+        // CPU, memory and throttling; the driver pod's CPU limit brings the throttling chart in.
         onAllNodesWithText("Driver").assertCountEquals(3)
-        onAllNodesWithText("Executors").assertCountEquals(2)
-        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        onAllNodesWithText("Executors").assertCountEquals(3)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(0)
         sparkPodNames.forEach { onAllNodesWithText(it).assertCountEquals(0) }
         onAllNodesWithText("submitted").assertCountEquals(4)
         onAllNodesWithText("ended").assertCountEquals(4)
         // A driver and executors differ, so no pod's request or limit stands for the lines.
         onAllNodesWithText("request 100m", substring = true).assertCountEquals(0)
         onAllNodesWithText("limit 500m", substring = true).assertCountEquals(0)
-        // The per-pod series are summed on the client: the pods are asked for one by one, the network as a sum.
-        assertEquals(
-            setOf(PodSetMode.PerPod),
-            source.modes.filter { (kind, _) -> kind in setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling) }.map { it.second }.toSet(),
-        )
-        assertEquals(
-            setOf(PodSetMode.Total),
-            source.modes.filter { (kind, _) -> kind in setOf(PodSeriesKind.NetworkRx, PodSeriesKind.NetworkTx) }.map { it.second }.toSet(),
-        )
+        // Prometheus sums each group: every query is a Total, none asks for the pods one by one.
+        assertEquals(setOf(PodSetMode.Total), source.modes.map { it.second }.toSet())
     }
 
     @Test
@@ -459,7 +459,7 @@ class BatchUsageHistorySectionUiTest {
 
         assertTrue(PodSeriesKind.Throttling in source.modes.map { it.first }, "no throttling query: ${source.modes}")
         onAllNodesWithText("Driver").assertCountEquals(3)
-        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        onAllNodesWithText("Executors").assertCountEquals(3)
         onNodeWithText(SPARK_NO_CPU_LIMIT_NOTE).assertDoesNotExist()
         onNodeWithText(BATCH_GMP_STALENESS_NOTE).assertExists()
         onNodeWithText(GMP_STALENESS_NOTE).assertDoesNotExist()
@@ -566,12 +566,12 @@ class BatchUsageHistorySectionUiTest {
         val runs = QueryWindow.spanning(firstRunStart, NOW)
         assertTrue(runs.endEpochSec > NOW, "the margin reaches past the present")
         assertEquals(setOf(runs.copy(endEpochSec = NOW - NOW % runs.stepSec)), source.windows.toSet())
-        assertEquals(setOf(target.podSet), source.pods.toSet())
+        assertEquals(setOf(target.podSet) + target.groupRefs(), source.pods.toSet())
         onNodeWithText("Runs ▾").assertExists()
         onNodeWithText("Driver + executors").assertExists()
         onAllNodesWithText("Driver").assertCountEquals(3)
-        onAllNodesWithText("Executors").assertCountEquals(2)
-        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        onAllNodesWithText("Executors").assertCountEquals(3)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(0)
         scheduledPodNames.forEach { onAllNodesWithText(it).assertCountEquals(0) }
         listOf("11:00", "12:00").forEach { onAllNodesWithText(it).assertCountEquals(4) }
         onAllNodesWithText("submitted").assertCountEquals(0)

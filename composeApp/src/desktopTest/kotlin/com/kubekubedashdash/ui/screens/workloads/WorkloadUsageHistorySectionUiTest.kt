@@ -111,19 +111,26 @@ private val IndexedJobPodSet = PromQl.ofJob(NAMESPACE, JOB, indexed = true)!!
 
 private val SparkPodSet = PromQl.ofSparkPods(NAMESPACE, listOf(DRIVER), listOf(EXECUTOR_1, EXECUTOR_2))!!
 
+private val DriverRef = PromQl.ofExactPods(NAMESPACE, listOf(DRIVER))!!
+
+private val ExecutorsRef = PromQl.ofSparkExecutors(NAMESPACE, listOf(EXECUTOR_1, EXECUTOR_2))!!
+
 /** One query the fake source answered. */
 private data class Call(val kind: PodSeriesKind, val mode: PodSetMode, val pods: PodSetRef, val window: QueryWindow)
 
 /**
  * Answers a per-pod query with one series for each of [podNames], the later ones with the higher peak,
  * and a total with one unnamed series; records what it was asked. [failure] answers every kind with that
- * failure and [empty] with no series; both can be changed between refreshes. While [gate] is set, an answer
- * is held back until it completes.
+ * failure and [empty] with no series; both can be changed between refreshes. [failFor] answers a failure for
+ * that pod set only, for the kinds in [failForKinds] (null: every kind). While [gate] is set, an answer is
+ * held back until it completes.
  */
 private class FakeSource(
     @Volatile var podNames: List<String> = emptyList(),
     @Volatile var failure: SeriesResult.Failed? = null,
     @Volatile var empty: Boolean = false,
+    @Volatile var failFor: PodSetRef? = null,
+    @Volatile var failForKinds: Set<PodSeriesKind>? = null,
     override val label: String = "Fake source",
 ) : MetricsHistorySource {
     val calls = CopyOnWriteArrayList<Call>()
@@ -136,6 +143,7 @@ private class FakeSource(
     override suspend fun podSetSeries(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, window: QueryWindow): SeriesResult {
         calls += Call(kind, mode, pods, window)
         gate?.await()
+        failFor?.let { if (it == pods && failForKinds?.contains(kind) != false) return SeriesResult.Failed(HistoryFailure.Unavailable, "ref") }
         failure?.let { return it }
         if (empty) return SeriesResult.Ok(emptyList())
 
@@ -648,27 +656,45 @@ class WorkloadUsageHistorySectionUiTest {
         val source = FakeSource(listOf(DRIVER, EXECUTOR_1))
         val oneExecutor = PromQl.ofSparkPods(NAMESPACE, listOf(DRIVER), listOf(EXECUTOR_1))!!
         assertNotEquals(SparkPodSet, oneExecutor)
-        var shown by mutableStateOf(sparkTarget().copy(podSet = oneExecutor))
+        // The driver and executors refs change with the pod set, so the grouping has to restart the fetch too.
+        val oneExecutorRef = PromQl.ofSparkExecutors(NAMESPACE, listOf(EXECUTOR_1))!!
+        assertNotEquals(ExecutorsRef, oneExecutorRef)
+        var shown by mutableStateOf(sparkTarget().copy(podSet = oneExecutor, grouping = UsageGrouping.DriverExecutors(DriverRef, oneExecutorRef)))
         showChanging(source) { shown }
         onAllNodesWithText("Driver").assertCountEquals(3)
-        assertEquals(5, source.calls.size)
+        assertEquals(8, source.calls.size)
 
         val gate = CompletableDeferred<Unit>()
         source.gate = gate
-        shown = shown.copy(podSet = SparkPodSet)
+        shown = shown.copy(podSet = SparkPodSet, grouping = UsageGrouping.DriverExecutors(DriverRef, ExecutorsRef))
         waitForIdle()
 
-        assertEquals(10, source.calls.size)
+        assertEquals(16, source.calls.size)
         onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
         onAllNodesWithText("Driver").assertCountEquals(3)
-        onAllNodesWithText("Executors").assertCountEquals(2)
+        onAllNodesWithText("Executors").assertCountEquals(3)
 
         gate.complete(Unit)
         waitForIdle()
 
         onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
         onAllNodesWithText("Driver").assertCountEquals(3)
-        assertEquals(setOf(SparkPodSet), source.calls.drop(5).map { it.pods }.toSet())
+        assertEquals(setOf(SparkPodSet, DriverRef, ExecutorsRef), source.calls.drop(8).map { it.pods }.toSet())
+    }
+
+    @Test
+    fun `a Spark application whose group refs change while its pod set does not asks again`() = runComposeUiTest {
+        val source = FakeSource()
+        var shown by mutableStateOf(sparkTarget())
+        showChanging(source) { shown }
+        assertEquals(8, source.calls.size)
+
+        val oneExecutorRef = PromQl.ofSparkExecutors(NAMESPACE, listOf(EXECUTOR_1))!!
+        shown = shown.copy(grouping = UsageGrouping.DriverExecutors(DriverRef, oneExecutorRef))
+        waitForIdle()
+
+        assertEquals(16, source.calls.size)
+        assertEquals(setOf(SparkPodSet, DriverRef, oneExecutorRef), source.calls.drop(8).map { it.pods }.toSet())
     }
 
     @Test
@@ -759,39 +785,42 @@ class WorkloadUsageHistorySectionUiTest {
 
     private fun sparkTarget(window: UsageWindow = UsageWindow.Run(NOW - 7_200, NOW - 3_600)) = targetOf(
         window = window,
-        grouping = UsageGrouping.DriverExecutors(setOf(DRIVER)),
+        grouping = UsageGrouping.DriverExecutors(DriverRef, ExecutorsRef),
         podSet = SparkPodSet,
         // The driver carries a CPU limit, so the throttling chart applies.
         currentPods = listOf(pod(DRIVER)),
     )
 
     @Test
-    fun `a Spark application draws a driver line and an executors line, throttling the executors' mean`() = runComposeUiTest {
+    fun `a Spark application draws a driver line and an executors line, throttling the executors' ratio`() = runComposeUiTest {
         val source = FakeSource(listOf(DRIVER, EXECUTOR_1, EXECUTOR_2))
         show(source, sparkTarget())
 
         onNodeWithText("Driver + executors").assertExists()
         onNodeWithText("Per pod").assertDoesNotExist()
-        // CPU, memory and throttling each list the two lines; the executors of throttling are a mean.
+        // CPU, memory and throttling each list the two lines; the executors of throttling are the group's ratio, like the others' sum.
         onAllNodesWithText("Driver").assertCountEquals(3)
-        onAllNodesWithText("Executors").assertCountEquals(2)
-        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        onAllNodesWithText("Executors").assertCountEquals(3)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(0)
         listOf(DRIVER, EXECUTOR_1, EXECUTOR_2).forEach { onAllNodesWithText(it).assertCountEquals(0) }
         // No per-pod machinery: no grey lines, no request and limit guides, no uncounted pods.
         onAllNodes(earlierPodsEntry).assertCountEquals(0)
         onAllNodesWithText("request", substring = true).assertCountEquals(0)
         onAllNodesWithText("not drawn", substring = true).assertCountEquals(0)
+        // Prometheus sums each group: two Total queries per kind, and network is one Total over the whole set.
         assertEquals(
             setOf(
-                PodSeriesKind.Cpu to PodSetMode.PerPod,
-                PodSeriesKind.Memory to PodSetMode.PerPod,
-                PodSeriesKind.Throttling to PodSetMode.PerPod,
+                PodSeriesKind.Cpu to PodSetMode.Total,
+                PodSeriesKind.Memory to PodSetMode.Total,
+                PodSeriesKind.Throttling to PodSetMode.Total,
                 PodSeriesKind.NetworkRx to PodSetMode.Total,
                 PodSeriesKind.NetworkTx to PodSetMode.Total,
             ),
             source.calls.map { it.pair }.toSet(),
         )
-        assertEquals(setOf(SparkPodSet), source.calls.map { it.pods }.toSet())
+        assertEquals(setOf(DriverRef, ExecutorsRef, SparkPodSet), source.calls.map { it.pods }.toSet())
+        assertEquals(8, source.calls.size)
+        assertEquals(setOf(SparkPodSet), source.calls.filter { it.kind == PodSeriesKind.NetworkRx || it.kind == PodSeriesKind.NetworkTx }.map { it.pods }.toSet())
     }
 
     @Test
@@ -802,8 +831,9 @@ class WorkloadUsageHistorySectionUiTest {
         onNodeWithText("Total").performClick()
         waitForIdle()
 
-        assertEquals(10, source.calls.size)
-        assertTrue(source.calls.drop(5).all { it.mode == PodSetMode.Total })
+        assertEquals(13, source.calls.size)
+        assertTrue(source.calls.drop(8).all { it.mode == PodSetMode.Total })
+        assertEquals(setOf(SparkPodSet), source.calls.drop(8).map { it.pods }.toSet())
         onAllNodesWithText("Driver").assertCountEquals(0)
         onAllNodesWithText("Executors").assertCountEquals(0)
         // A chart with a single coloured line prints its last value in the title row.
@@ -816,43 +846,75 @@ class WorkloadUsageHistorySectionUiTest {
     }
 
     @Test
-    fun `the driver is the sum of the driver pods and the executors the sum of the rest, pointwise`() {
+    fun `the two named series become the Driver and Executors lines, in that order`() {
         fun series(name: String, vararg points: Pair<Long, Double>) = Series(name, points.map { (t, v) -> SeriesPoint(t, v) })
         val result = SeriesResult.Ok(
             listOf(
-                series(DRIVER, 10L to 1.0, 20L to 2.0),
-                series(EXECUTOR_1, 10L to 0.5, 20L to 1.0),
-                // Missing at 10: the sum adds what is present.
-                series(EXECUTOR_2, 20L to 3.0, 30L to 1.0),
+                series(EXECUTORS_SERIES_NAME, 10L to 0.5, 20L to 4.0, 30L to 1.0),
+                series(DRIVER_SERIES_NAME, 10L to 1.0, 20L to 2.0),
+                // Another name belongs to neither line.
+                series(EXECUTOR_1, 10L to 9.0),
             ),
         )
-        val drivers = setOf(DRIVER)
 
-        val cpu = driverExecutorsChartSeries(result, drivers, PodSeriesKind.Cpu)
-        assertEquals(listOf(DRIVER_SERIES_NAME, EXECUTORS_SERIES_NAME), cpu.map { it.name })
-        assertEquals(listOf(SeriesPoint(10, 1.0), SeriesPoint(20, 2.0)), cpu[0].points)
-        assertEquals(listOf(SeriesPoint(10, 0.5), SeriesPoint(20, 4.0), SeriesPoint(30, 1.0)), cpu[1].points)
-        assertEquals(listOf(false, false), cpu.map { it.muted })
-        assertEquals(listOf(0, 1).map { ClusterColor(hue = podSetHue(it)).composeColor }, cpu.map { it.color })
-        assertEquals(cpu, driverExecutorsChartSeries(result, drivers, PodSeriesKind.Memory))
+        val lines = driverExecutorsChartSeries(result)
 
-        // A throttling ratio is averaged, not added; the driver line is still the sum over the driver pods.
-        val throttling = driverExecutorsChartSeries(result, drivers, PodSeriesKind.Throttling)
-        assertEquals(listOf(DRIVER_SERIES_NAME, EXECUTORS_MEAN_SERIES_NAME), throttling.map { it.name })
-        assertEquals(cpu[0].points, throttling[0].points)
-        assertEquals(listOf(SeriesPoint(10, 0.5), SeriesPoint(20, 2.0), SeriesPoint(30, 1.0)), throttling[1].points)
+        assertEquals(listOf(DRIVER_SERIES_NAME, EXECUTORS_SERIES_NAME), lines.map { it.name })
+        assertEquals(listOf(SeriesPoint(10, 1.0), SeriesPoint(20, 2.0)), lines[0].points)
+        assertEquals(listOf(SeriesPoint(10, 0.5), SeriesPoint(20, 4.0), SeriesPoint(30, 1.0)), lines[1].points)
+        assertEquals(listOf(false, false), lines.map { it.muted })
+        assertEquals(listOf(0, 1).map { ClusterColor(hue = podSetHue(it)).composeColor }, lines.map { it.color })
     }
 
     @Test
     fun `a group without series draws no line, and a failed answer draws none at all`() {
-        val driverOnly = SeriesResult.Ok(listOf(Series(DRIVER, listOf(SeriesPoint(10, 1.0)))))
-        val executorsOnly = SeriesResult.Ok(listOf(Series(EXECUTOR_1, listOf(SeriesPoint(10, 1.0)))))
+        val driverOnly = SeriesResult.Ok(listOf(Series(DRIVER_SERIES_NAME, listOf(SeriesPoint(10, 1.0)))))
+        val executorsOnly = SeriesResult.Ok(listOf(Series(EXECUTORS_SERIES_NAME, listOf(SeriesPoint(10, 1.0)))))
+        val executorsWithoutPoints = SeriesResult.Ok(listOf(Series(DRIVER_SERIES_NAME, listOf(SeriesPoint(10, 1.0))), Series(EXECUTORS_SERIES_NAME, emptyList())))
 
-        assertEquals(listOf(DRIVER_SERIES_NAME), driverExecutorsChartSeries(driverOnly, setOf(DRIVER), PodSeriesKind.Cpu).map { it.name })
-        assertEquals(listOf(EXECUTORS_SERIES_NAME), driverExecutorsChartSeries(executorsOnly, setOf(DRIVER), PodSeriesKind.Cpu).map { it.name })
-        assertEquals(emptyList(), driverExecutorsChartSeries(SeriesResult.Ok(emptyList()), setOf(DRIVER), PodSeriesKind.Cpu))
-        assertEquals(emptyList(), driverExecutorsChartSeries(SeriesResult.Failed(HistoryFailure.Unavailable), setOf(DRIVER), PodSeriesKind.Cpu))
-        assertEquals(emptyList(), driverExecutorsChartSeries(null, setOf(DRIVER), PodSeriesKind.Cpu))
+        assertEquals(listOf(DRIVER_SERIES_NAME), driverExecutorsChartSeries(driverOnly).map { it.name })
+        assertEquals(listOf(EXECUTORS_SERIES_NAME), driverExecutorsChartSeries(executorsOnly).map { it.name })
+        assertEquals(listOf(DRIVER_SERIES_NAME), driverExecutorsChartSeries(executorsWithoutPoints).map { it.name })
+        assertEquals(emptyList(), driverExecutorsChartSeries(SeriesResult.Ok(emptyList())))
+        assertEquals(emptyList(), driverExecutorsChartSeries(SeriesResult.Failed(HistoryFailure.Unavailable)))
+        assertEquals(emptyList(), driverExecutorsChartSeries(null))
+    }
+
+    @Test
+    fun `a failed executors query fails the kind, not the network`() = runComposeUiTest {
+        // CPU stays answered: a section whose CPU and memory both failed shows one message instead of the charts.
+        val source = FakeSource(failFor = ExecutorsRef, failForKinds = setOf(PodSeriesKind.Memory, PodSeriesKind.Throttling))
+        show(source, sparkTarget())
+
+        onAllNodesWithText("Not answering (ref)").assertCountEquals(2)
+        // CPU draws both lines, the failed kinds none; network asks the whole set and draws.
+        onAllNodesWithText("Driver").assertCountEquals(1)
+        onAllNodesWithText("Executors").assertCountEquals(1)
+        onAllNodesWithText("Received").assertCountEquals(1)
+        onAllNodesWithText("Sent").assertCountEquals(1)
+    }
+
+    @Test
+    fun `a failed executors query on CPU and memory leaves the section's failure message, like any failed answer`() = runComposeUiTest {
+        val source = FakeSource(failFor = ExecutorsRef)
+        show(source, sparkTarget())
+
+        onNodeWithText("Managed Prometheus didn't answer (ref). Retrying every 30 s.").assertExists()
+        onAllNodesWithText("Driver").assertCountEquals(0)
+        onAllNodesWithText("CPU throttling").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a null executor ref asks for the driver only`() = runComposeUiTest {
+        val source = FakeSource()
+        show(source, sparkTarget().copy(grouping = UsageGrouping.DriverExecutors(DriverRef, null)))
+
+        assertEquals(5, source.calls.size)
+        assertEquals(setOf(DriverRef, SparkPodSet), source.calls.map { it.pods }.toSet())
+        // A chart with one line has no legend: the driver's value stands in the title row instead.
+        onAllNodesWithText("Driver").assertCountEquals(0)
+        onAllNodesWithText("Executors").assertCountEquals(0)
+        onNodeWithText("2.00 cores").assertExists()
     }
 
     // ── Per pod: which pods are current ─────────────────────────────────────
