@@ -1138,7 +1138,10 @@ class ReactiveKubeClient(
                         inf.run()
                     } catch (e: Exception) {
                         runCatching { inf.close() }
-                            .onFailure { log.warn("Failed to close CRD informer after a start failure: {}", it.message) }
+                            .onFailure {
+                                log.warn("Failed to close CRD informer after a start failure: {}", describeFailureShape(it))
+                                log.debug("Failed to close CRD informer after a start failure: {}", it.message)
+                            }
                         throw e
                     }
                     launch {
@@ -1157,7 +1160,8 @@ class ReactiveKubeClient(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    log.info("CRD discovery unavailable (likely RBAC): {}", e.message)
+                    log.info("CRD discovery unavailable (likely RBAC): {}", describeFailureShape(e))
+                    log.debug("CRD discovery unavailable (likely RBAC): {}", e.message)
                     send(ResourceState.Success(emptyList()))
                     null
                 }
@@ -1182,7 +1186,8 @@ class ReactiveKubeClient(
                             // of fault hide. Not fed to reportError: CRD
                             // discovery is optional and must not trip the
                             // connection-health counter.
-                            log.error("CRD informer failed: {}", e.message)
+                            log.error("CRD informer failed: {}", describeFailureShape(e))
+                            log.debug("CRD informer failed: {}", e.message)
                             send(ResourceState.Error(e.message ?: "Unknown error"))
                         }
                         awaitCancellation()
@@ -1191,7 +1196,10 @@ class ReactiveKubeClient(
                         // exception (F1) — a swapped CancellationException would
                         // be reported as a failure.
                         runCatching { informer.close() }
-                            .onFailure { log.warn("Failed to close CRD informer: {}", it.message) }
+                            .onFailure {
+                                log.warn("Failed to close CRD informer: {}", describeFailureShape(it))
+                                log.debug("Failed to close CRD informer: {}", it.message)
+                            }
                     }
                 }
             }
@@ -1629,11 +1637,13 @@ class ReactiveKubeClient(
         if (res != null) {
             Serialization.asYaml(res)
         } else {
-            log.warn("Resource not found kind={} name={} namespace={}", kind, name, namespace)
+            log.warn("Resource not found kind={}", kind)
+            log.debug("Resource not found kind={} name={} namespace={}", kind, name, namespace)
             "# Resource not found"
         }
     } catch (e: Exception) {
-        log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+        log.error("Failed to fetch YAML kind={}: {}", kind, describeFailureShape(e))
+        log.debug("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         "# Error: ${e.message}"
     }
 
@@ -1646,7 +1656,8 @@ class ReactiveKubeClient(
         val withC = if (container != null) op.inContainer(container) else op
         withC.tailingLines(tailLines).log ?: ""
     } catch (e: Exception) {
-        log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
+        log.error("Failed to fetch pod logs: {}", describeFailureShape(e))
+        log.debug("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
         "Error fetching logs: ${e.message}"
     }
 
@@ -1691,7 +1702,8 @@ class ReactiveKubeClient(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        log.warn("Failed to list job pods namespace={}: {}", namespace, e.message)
+        log.warn("Failed to list job pods: {}", describeFailureShape(e))
+        log.debug("Failed to list job pods namespace={}: {}", namespace, e.message)
         Result.failure(e)
     }
 
@@ -1716,7 +1728,8 @@ class ReactiveKubeClient(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        log.warn("Failed to list SparkApplication pods namespace={}: {}", namespace, e.message)
+        log.warn("Failed to list SparkApplication pods: {}", describeFailureShape(e))
+        log.debug("Failed to list SparkApplication pods namespace={}: {}", namespace, e.message)
         Result.failure(e)
     }
 
@@ -1744,7 +1757,8 @@ class ReactiveKubeClient(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        log.warn("Failed to list CronJob pods namespace={}: {}", namespace, e.message)
+        log.warn("Failed to list CronJob pods: {}", describeFailureShape(e))
+        log.debug("Failed to list CronJob pods namespace={}: {}", namespace, e.message)
         Result.failure(e)
     }
 
@@ -1819,14 +1833,18 @@ class ReactiveKubeClient(
             }
             awaitInformerSync(informer, "Tail informer for namespace=$namespace")
             val items = informer.store.list().map(CapturePodMapper::map)
-            log.info("Tail informer synced with {} items for namespace={}", items.size, namespace)
+            log.info("Tail informer synced with {} items", items.size)
+            log.debug("Tail informer synced with {} items for namespace={}", items.size, namespace)
             send(items)
             awaitCancellation()
         } finally {
             log.debug("Closing tail informer for namespace={}", namespace)
             // F1: a close() failure must not replace the propagating exception.
             runCatching { informer.close() }
-                .onFailure { log.warn("Failed to close tail informer for namespace={}: {}", namespace, it.message) }
+                .onFailure {
+                    log.warn("Failed to close tail informer: {}", describeFailureShape(it))
+                    log.debug("Failed to close tail informer for namespace={}: {}", namespace, it.message)
+                }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -1936,7 +1954,8 @@ class ReactiveKubeClient(
                     text.lineSequence().forEach { emit(it) }
                 }
             } catch (e: Exception) {
-                log.warn("Failed to fetch historical logs pod={} namespace={}: {}", name, namespace, e.message)
+                log.warn("Failed to fetch historical logs: {}", describeFailureShape(e))
+                log.debug("Failed to fetch historical logs pod={} namespace={}: {}", name, namespace, e.message)
                 emit("[fetch error: ${e.message}]")
             }
         } else {
@@ -1954,7 +1973,8 @@ class ReactiveKubeClient(
         val watch = try {
             podLogSource(name, namespace, container, options, tailLines = 100).watchLog()
         } catch (e: Exception) {
-            log.error("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
+            log.error("Failed to start log stream: {}", describeFailureShape(e))
+            log.debug("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
             trySend("Error: ${e.message}")
             close()
             return@callbackFlow
@@ -1971,7 +1991,8 @@ class ReactiveKubeClient(
                 // line to the buffer the user is about to throw away.
                 throw e
             } catch (e: Exception) {
-                log.warn("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
+                log.warn("Log stream ended: {}", describeFailureShape(e))
+                log.debug("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
                 trySend("[stream error: ${e.message}]")
                 close(e)
             }
@@ -2021,7 +2042,8 @@ class ReactiveKubeClient(
                 }
 
                 override fun onFailure(t: Throwable, failureResponse: ExecListener.Response?) {
-                    log.warn("Exec failed pod={}: {}", name, t.message)
+                    log.warn("Exec failed: {}", describeFailureShape(t))
+                    log.debug("Exec failed pod={}: {}", name, t.message)
                     onClose(-1, t.message)
                 }
             })
@@ -2289,7 +2311,8 @@ class ReactiveKubeClient(
         return try {
             k8s.pods().inNamespace(namespace).withName(name).get()?.let(::mapPod)
         } catch (e: Exception) {
-            log.warn("Failed to fetch pod name={} namespace={}: {}", name, namespace, e.message)
+            log.warn("Failed to fetch a pod: {}", describeFailureShape(e))
+            log.debug("Failed to fetch pod name={} namespace={}: {}", name, namespace, e.message)
             null
         }
     }
@@ -2300,7 +2323,8 @@ class ReactiveKubeClient(
         log.debug("Building resource graph for deployment={} namespace={}", name, namespace)
         val deployment = k8s.apps().deployments().inNamespace(namespace).withName(name).get()
             ?: run {
-                log.warn("Deployment not found name={} namespace={}", name, namespace)
+                log.warn("Deployment not found")
+                log.debug("Deployment not found name={} namespace={}", name, namespace)
                 return ResourceGraph(emptyList(), emptyList())
             }
 
@@ -2317,20 +2341,23 @@ class ReactiveKubeClient(
             allReplicaSets = k8s.apps().replicaSets().inNamespace(namespace).list().items ?: emptyList()
             allPods = k8s.pods().inNamespace(namespace).list().items ?: emptyList()
         } catch (e: Exception) {
-            log.warn("Failed to fetch ReplicaSets/Pods for deployment graph: {}", e.message)
+            log.warn("Failed to fetch ReplicaSets/Pods for deployment graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch ReplicaSets/Pods for deployment graph: {}", e.message)
         }
 
         val allServices = try {
             k8s.services().inNamespace(namespace).list().items ?: emptyList()
         } catch (e: Exception) {
-            log.warn("Failed to fetch Services for deployment graph: {}", e.message)
+            log.warn("Failed to fetch Services for deployment graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Services for deployment graph: {}", e.message)
             emptyList()
         }
 
         val allIngresses = try {
             k8s.network().v1().ingresses().inNamespace(namespace).list().items ?: emptyList()
         } catch (e: Exception) {
-            log.warn("Failed to fetch Ingresses for service graph: {}", e.message)
+            log.warn("Failed to fetch Ingresses for service graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Ingresses for service graph: {}", e.message)
             emptyList()
         }
 
@@ -2338,7 +2365,8 @@ class ReactiveKubeClient(
             k8s.autoscaling().v2().horizontalPodAutoscalers()
                 .inNamespace(namespace).list().items ?: emptyList()
         } catch (e: Exception) {
-            log.warn("Failed to fetch HPAs for deployment graph: {}", e.message)
+            log.warn("Failed to fetch HPAs for deployment graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch HPAs for deployment graph: {}", e.message)
             emptyList()
         }
 
@@ -2372,7 +2400,8 @@ class ReactiveKubeClient(
                 k8s.network().v1().ingresses().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch Ingresses for topology graph: {}", e.message)
+            log.warn("Failed to fetch Ingresses for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Ingresses for topology graph: {}", e.message)
             emptyList()
         }
         val services = try {
@@ -2382,7 +2411,8 @@ class ReactiveKubeClient(
                 k8s.services().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch Services for topology graph: {}", e.message)
+            log.warn("Failed to fetch Services for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Services for topology graph: {}", e.message)
             emptyList()
         }
         val allPods = try {
@@ -2392,7 +2422,8 @@ class ReactiveKubeClient(
                 k8s.pods().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch Pods for topology graph: {}", e.message)
+            log.warn("Failed to fetch Pods for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Pods for topology graph: {}", e.message)
             emptyList()
         }
         val allRS = try {
@@ -2402,7 +2433,8 @@ class ReactiveKubeClient(
                 k8s.apps().replicaSets().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch ReplicaSets for topology graph: {}", e.message)
+            log.warn("Failed to fetch ReplicaSets for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch ReplicaSets for topology graph: {}", e.message)
             emptyList()
         }
         val allJobs = try {
@@ -2412,7 +2444,8 @@ class ReactiveKubeClient(
                 k8s.batch().v1().jobs().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch Jobs for topology graph: {}", e.message)
+            log.warn("Failed to fetch Jobs for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Jobs for topology graph: {}", e.message)
             emptyList()
         }
         val allDeployments = try {
@@ -2422,7 +2455,8 @@ class ReactiveKubeClient(
                 k8s.apps().deployments().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch Deployments for topology graph: {}", e.message)
+            log.warn("Failed to fetch Deployments for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch Deployments for topology graph: {}", e.message)
             emptyList()
         }
         val allStatefulSets = try {
@@ -2432,7 +2466,8 @@ class ReactiveKubeClient(
                 k8s.apps().statefulSets().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch StatefulSets for topology graph: {}", e.message)
+            log.warn("Failed to fetch StatefulSets for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch StatefulSets for topology graph: {}", e.message)
             emptyList()
         }
         val allDaemonSets = try {
@@ -2442,7 +2477,8 @@ class ReactiveKubeClient(
                 k8s.apps().daemonSets().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch DaemonSets for topology graph: {}", e.message)
+            log.warn("Failed to fetch DaemonSets for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch DaemonSets for topology graph: {}", e.message)
             emptyList()
         }
         val allCronJobs = try {
@@ -2452,7 +2488,8 @@ class ReactiveKubeClient(
                 k8s.batch().v1().cronjobs().inNamespace(serverNs).list().items ?: emptyList()
             }
         } catch (e: Exception) {
-            log.warn("Failed to fetch CronJobs for topology graph: {}", e.message)
+            log.warn("Failed to fetch CronJobs for topology graph: {}", describeFailureShape(e))
+            log.debug("Failed to fetch CronJobs for topology graph: {}", e.message)
             emptyList()
         }
 

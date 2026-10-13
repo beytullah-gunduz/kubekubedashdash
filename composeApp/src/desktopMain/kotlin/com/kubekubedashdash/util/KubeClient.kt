@@ -531,14 +531,16 @@ class KubeClient(
         plural: String? = null,
     ): String = try {
         fetchResourceYaml(kind, name, namespace, group, version, plural) ?: run {
-            log.warn("Resource not found kind={} name={} namespace={}", kind, name, namespace)
+            log.warn("Resource not found kind={}", kind)
+            log.debug("Resource not found kind={} name={} namespace={}", kind, name, namespace)
             "# Resource not found"
         }
     } catch (e: Exception) {
         if (isInterruption(e)) {
             log.debug("YAML fetch interrupted kind={} name={} namespace={}", kind, name, namespace)
         } else {
-            log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+            log.error("Failed to fetch YAML kind={}: {}", kind, describeFailureShape(e))
+            log.debug("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         }
         "# Error: ${e.message}"
     }
@@ -643,7 +645,8 @@ class KubeClient(
         if (isInterruption(e)) {
             log.debug("Pod log fetch interrupted pod={} namespace={}", name, namespace)
         } else {
-            log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
+            log.error("Failed to fetch pod logs: {}", describeFailureShape(e))
+            log.debug("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
         }
         "Error fetching logs: ${e.message}"
     }
@@ -691,7 +694,8 @@ class KubeClient(
                     client.top().pods().metrics().items ?: emptyList()
                 }
             } catch (e: Exception) {
-                log.warn("Metrics server unavailable: {}", e.message)
+                log.warn("Metrics server unavailable: {}", describeFailureShape(e))
+                log.debug("Metrics server unavailable: {}", e.message)
                 return ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
             }
 
@@ -720,7 +724,8 @@ class KubeClient(
             log.debug("Resource usage: cpu={}m/{}m mem={}/{}", cpuUsed, cpuCap, memUsed, memCap)
             return ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true)
         } catch (e: Exception) {
-            log.warn("Failed to compute resource usage: {}", e.message)
+            log.warn("Failed to compute resource usage: {}", describeFailureShape(e))
+            log.debug("Failed to compute resource usage: {}", e.message)
             return ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
         }
     }
