@@ -89,6 +89,49 @@ class CliRunnerTest {
         }
     }
 
+    // `sh` started `sleep 60` in the background and waits for it: the CLI's child outlives a
+    // kill of the direct child alone, as gcloud.cmd's python.exe does under cmd.exe on Windows.
+    private fun shellWithBackgroundChild(pidFile: File): List<String> = listOf("sh", "-c", "sleep 60 & echo $! > '${pidFile.absolutePath}'; wait")
+
+    private fun tempPidFile(prefix: String): File = File.createTempFile(prefix, ".pid").apply {
+        delete()
+        deleteOnExit()
+    }
+
+    @Test
+    fun `cancellation also terminates the processes the child started`() = runBlocking {
+        if (!posix()) return@runBlocking
+        val pidFile = tempPidFile("clirunner-cancel-tree")
+        val job = launch(Dispatchers.IO) {
+            CliRunner.run(shellWithBackgroundChild(pidFile), timeoutSeconds = 120)
+        }
+        // 30 s: the first CliRunner.run in the JVM may still be resolving the PATH.
+        withTimeout(30_000) {
+            while (!pidFile.exists() || pidFile.readText().isBlank()) delay(50)
+        }
+        val grandchild = pidFile.readText().trim().toLong()
+        job.cancelAndJoin()
+        // 15 s against a 60 s sleep: only a kill ends it this early.
+        withTimeout(15_000) {
+            while (childAlive(grandchild)) delay(100)
+        }
+    }
+
+    @Test
+    fun `a timeout also terminates the processes the child started`() = runBlocking {
+        if (!posix()) return@runBlocking
+        val pidFile = tempPidFile("clirunner-timeout-tree")
+        val failure = CliRunner.run(shellWithBackgroundChild(pidFile), timeoutSeconds = 2).exceptionOrNull()
+        assertTrue(failure is CliInvocationFailure && failure.message.orEmpty().contains("Timed out"), "unexpected result: $failure")
+        withTimeout(10_000) {
+            while (!pidFile.exists() || pidFile.readText().isBlank()) delay(50)
+        }
+        val grandchild = pidFile.readText().trim().toLong()
+        withTimeout(15_000) {
+            while (childAlive(grandchild)) delay(100)
+        }
+    }
+
     @Test
     fun `NonCancellable shields a call inside an already-cancelled coroutine`() = runBlocking {
         if (!posix()) return@runBlocking
