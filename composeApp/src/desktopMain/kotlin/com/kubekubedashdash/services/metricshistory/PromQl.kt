@@ -222,7 +222,8 @@ internal object PromQl {
     /**
      * The executor pods of Spark applications alone, for a line of their own beside the drivers'. Its
      * threshold counts executors only (the drivers form another set); past it the executors are selected
-     * by stem as in [ofSparkPods]. Null when [executorPods] is empty or a name is not valid.
+     * by stem as in [ofSparkPods]. Null when [executorPods] is empty, the namespace is not a DNS label or a
+     * name is not valid.
      */
     fun ofSparkExecutors(namespace: String, executorPods: List<String>): PodSetRef? {
         if (executorPods.size <= SPARK_EXACT_NAMES_MAX) return ofExactPods(namespace, executorPods)

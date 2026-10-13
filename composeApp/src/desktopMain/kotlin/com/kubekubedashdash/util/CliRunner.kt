@@ -202,8 +202,8 @@ object CliRunner {
      * Strips email-shaped substrings out of CLI error text before it is logged or surfaced in
      * the UI. Cloud CLIs name the signed-in identity in ordinary failure messages — gcloud's
      * "Your current active account [<email>] does not have any valid credentials" being the
-     * common one — and this text reaches both the rolling file log and the in-app log drawer,
-     * which is exactly what users paste into public bug reports.
+     * common one — and this text reaches the UI and the in-app log drawer, which is exactly
+     * what users paste into public bug reports.
      */
     internal fun redact(text: String): String = EMAIL_RX.replace(text, "<redacted-account>")
 }

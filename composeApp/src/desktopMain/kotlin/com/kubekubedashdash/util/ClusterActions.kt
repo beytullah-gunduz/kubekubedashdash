@@ -555,7 +555,7 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * `instantiate=manual` annotation wins over the template's (kubectl lets the template win).
      * Like `kubectl create job --from=cronjob/<name>`, the Job is owned by the CronJob (controller, no
      * blockOwnerDeletion): the controller warns `UnexpectedJob` while it runs, counts it toward the history
-     * limits once finished, and deletes it with the CronJob.
+     * limits once finished, and the garbage collector deletes it with the CronJob.
      */
     fun triggerCronJob(name: String, namespace: String): Result<Unit> = runCatching {
         log.info("Triggering a CronJob")
