@@ -290,6 +290,31 @@ class BatchPodSetsTest {
     }
 
     @Test
+    fun `a Job started by hand from the CronJob is selected, and current when it started last`() {
+        val jobs = listOf(
+            job("nightly-backup-29123400", start = "2026-10-12T07:00:00Z", owners = ownedBy(cronUid)),
+            job("nightly-backup-29123460", start = "2026-10-12T08:00:00Z", owners = ownedBy(cronUid)),
+            job("log-rotation", start = "2026-10-12T08:20:00Z", owners = ownedBy(cronUid)),
+            job("db-vacuum", start = "2026-10-12T08:30:00Z", owners = emptyList()),
+        )
+
+        val usage = cronJobUsage(cronJob, jobs, ZoneOffset.UTC)
+
+        assertNotNull(usage)
+        val ref = assertNotNull(usage.ref)
+        assertEquals(setOf("log-rotation-"), usage.currentPrefixes)
+        val matcher = Regex(ref.pattern)
+        assertTrue(matcher.matches("log-rotation-x7k2p"), "the manual run's pod")
+        assertTrue(matcher.matches("nightly-backup-29123400-x7k2p"), "an earlier scheduled run's pod")
+        assertTrue(matcher.matches("nightly-backup-29123460-x7k2p"))
+        assertFalse(matcher.matches("db-vacuum-x7k2p"), "a run without an ownerReference is not the CronJob's")
+        assertEquals(listOf("07:00", "08:00", "08:20"), usage.markers.map { it.label })
+        val current = usage.currentPrefixes.orEmpty()
+        assertTrue(current.any { "log-rotation-x7k2p".startsWith(it) })
+        assertTrue(current.none { "nightly-backup-29123460-x7k2p".startsWith(it) }, "the scheduled runs are matched, not current")
+    }
+
+    @Test
     fun `a CronJob of 50 characters is selected by its listed Jobs and says its names are cut`() {
         val name = "nightly-backup-" + "abcdefghij".repeat(4).take(35)
         assertEquals(50, name.length)

@@ -563,6 +563,75 @@ class PromQlTest {
     }
 
     @Test
+    fun `a CronJob selects a Job started by hand by its own prefix and the scheduled ones as before`() {
+        val scheduled = listOf("nightly-backup-29123456", "nightly-backup-29123457")
+        assertEquals(
+            PromQl.ofCronJob("team-a", "nightly-backup", emptyList()),
+            PromQl.ofCronJob("team-a", "nightly-backup", scheduled),
+            "scheduled Jobs add nothing to the pattern",
+        )
+
+        val ref = PromQl.ofCronJob("team-a", "nightly-backup", scheduled + listOf("log-rotation", "nightly-backup-extra", "nightly-backup-2912345", "nightly-backup-291234567", "log-rotation"))!!
+        assertEquals(
+            "(nightly-backup-[0-9]{8}-([0-9]+-)?|log-rotation-|nightly-backup-2912345-|nightly-backup-291234567-|nightly-backup-extra-)[a-z0-9]{5}",
+            ref.pattern,
+        )
+        assertTrue(PromQl.isValidPodSet(ref))
+
+        val matcher = Regex(ref.pattern)
+        assertTrue(matcher.matches("nightly-backup-29123456-x7k2p"))
+        assertTrue(matcher.matches("nightly-backup-29123457-3-x7k2p"), "an Indexed job template")
+        assertTrue(matcher.matches("log-rotation-x7k2p"))
+        assertTrue(matcher.matches("nightly-backup-extra-x7k2p"))
+        assertFalse(matcher.matches("log-rotation-extra-x7k2p"))
+        assertFalse(matcher.matches("log-rotation-x7k2"))
+        assertFalse(matcher.matches("db-vacuum-x7k2p"), "a Job that is not listed")
+    }
+
+    @Test
+    fun `a dotted Job started by hand is escaped and a name too long to keep whole is cut like its pods`() {
+        assertEquals(
+            """(nightly-backup-[0-9]{8}-([0-9]+-)?|log-rotation\.v2-)[a-z0-9]{5}""",
+            PromQl.ofCronJob("team-a", "nightly-backup", listOf("log-rotation.v2"))?.pattern,
+        )
+
+        val long = "log-rotation-" + "abcdefghij".repeat(5)
+        assertEquals(63, long.length)
+        val ref = PromQl.ofCronJob("team-a", "nightly-backup", listOf(long))!!
+        assertEquals("(nightly-backup-[0-9]{8}-([0-9]+-)?|${long.take(58)})[a-z0-9]{5}", ref.pattern)
+        assertTrue(Regex(ref.pattern).matches(long.take(58) + "x7k2p"))
+    }
+
+    @Test
+    fun `a CronJob refuses a listed Job whose name is not a DNS subdomain`() {
+        for (bad in listOf("Log-Rotation", "log_rotation", "log|rotation", "log\"rotation", "", "-log-rotation", "log-rotation-")) {
+            assertNull(PromQl.ofCronJob("team-a", "nightly-backup", listOf("nightly-backup-29123456", bad)), bad)
+        }
+    }
+
+    @Test
+    fun `a CronJob of 52 characters keeps one alternative per distinct cut prefix and stays a valid pod set`() {
+        val cronJob = "nightly-backup-" + "abcdefghij".repeat(4).take(37)
+        assertEquals(52, cronJob.length)
+        // A Job name of 52 + 1 + 8 = 61 characters is cut to its first 58 in the pod name, so the last three digits are lost.
+        val jobs = (0 until 70).map { "$cronJob-${29_123_000 + it * 60}" }
+        val prefixes = jobs.map { PromQl.podPrefix(it) }.distinct()
+        assertTrue(prefixes.size < jobs.size, "several Jobs share a pod-name prefix")
+        assertTrue(PromQl.ofReplicaSets("team-a", jobs)!!.pattern.length > 4_000, "the Job names alone would be too long")
+
+        val ref = PromQl.ofCronJob("team-a", cronJob, jobs)!!
+
+        assertTrue(PromQl.isValidPodSet(ref), "${ref.pattern.length} characters")
+        assertEquals(prefixes.size, ref.pattern.removePrefix("(").removeSuffix(")[a-z0-9]{5}").split('|').size)
+        assertEquals(ref, PromQl.ofCronJob("team-a", cronJob, jobs.reversed() + jobs))
+        val matcher = Regex(ref.pattern)
+        for (job in jobs) {
+            assertTrue(matcher.matches(PromQl.podPrefix(job) + "x7k2p"), job)
+        }
+        assertFalse(matcher.matches(PromQl.podPrefix("$cronJob-29130000") + "x7k2p"), "a Job that is not listed")
+    }
+
+    @Test
     fun `exact pods are listed sorted, once, with their dots escaped`() {
         assertEquals("(frontend-1|web-0)", PromQl.ofExactPods("team-a", listOf("web-0", "frontend-1", "web-0"))?.pattern)
         assertEquals("""(redis-cache\.v2-0)""", PromQl.ofExactPods("team-a", listOf("redis-cache.v2-0"))?.pattern)

@@ -858,6 +858,54 @@ class WorkloadUsageHistorySectionUiTest {
     }
 
     @Test
+    fun `a run that is still going after two months is windowed to its last week`() {
+        val day = 86_400L
+        val week = HistoryRange.D7.seconds
+
+        val window = queryWindowOf(UsageWindow.Run(NOW - 60 * day, null), NOW)
+
+        assertEquals(queryWindowOf(UsageWindow.Run(NOW - week, null), NOW), window)
+        assertTrue(window.endEpochSec - window.startEpochSec <= week + 2 * (week / 20), "${window.endEpochSec - window.startEpochSec} s")
+        assertTrue(window.endEpochSec <= NOW)
+        assertEquals(0L, window.startEpochSec % window.stepSec)
+        assertEquals(0L, window.endEpochSec % window.stepSec)
+        assertNull(shortRunNote(GmpChoice, UsageWindow.Run(NOW - 60 * day, null), NOW, stepSec = window.stepSec), "the note measures the run, not the window")
+    }
+
+    @Test
+    fun `a finished run of ten days shows its last week up to its end, whenever it is looked at`() {
+        val day = 86_400L
+        val week = HistoryRange.D7.seconds
+        val start = NOW - 12 * day
+        val end = NOW - 2 * day
+
+        val window = queryWindowOf(UsageWindow.Run(start, end), NOW)
+
+        assertEquals(QueryWindow.spanning(end - week, end), window)
+        assertTrue(window.startEpochSec > start, "the first three days are left out")
+        // Both margins, each aligned outwards to the step.
+        assertTrue(window.endEpochSec - window.startEpochSec <= week + 2 * (week / 20) + 2 * window.stepSec)
+        assertTrue(window.endEpochSec <= NOW)
+        assertEquals(window, queryWindowOf(UsageWindow.Run(start, end), NOW + 3_600))
+        assertEquals(window, queryWindowOf(UsageWindow.Run(start, end), NOW + 40 * day))
+    }
+
+    @Test
+    fun `a run of exactly a week is not cut, and the runs of a CronJob from a month ago are windowed to a week`() {
+        val day = 86_400L
+        val week = HistoryRange.D7.seconds
+
+        // Ended two days ago, so its margin is past and nothing is clamped.
+        val ended = NOW - 2 * day
+        assertEquals(QueryWindow.spanning(ended - week, ended), queryWindowOf(UsageWindow.Run(ended - week, ended), NOW))
+
+        val runs = queryWindowOf(UsageWindow.Runs(NOW - 30 * day), NOW)
+        assertEquals(queryWindowOf(UsageWindow.Run(NOW - week, null), NOW), runs)
+        assertTrue(runs.endEpochSec - runs.startEpochSec <= week + 2 * (week / 20))
+        assertTrue(runs.endEpochSec <= NOW)
+    }
+
+    @Test
     fun `a final window keeps an empty answer, and failures are asked for again either way`() {
         val window = QueryWindow(0, 60, 30)
         val points = SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(0, 1.0)))))

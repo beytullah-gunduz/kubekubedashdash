@@ -736,6 +736,53 @@ class DemoPrometheusDispatcherTest {
     }
 
     @Test
+    fun `a CronJob's pattern with a run started by hand selects that run's pods too`() {
+        val ref = PromQl.ofCronJob("team-a", "nightly-backup", listOf("nightly-backup-28000001", "log-rotation", "log-rotation.v2"))!!
+        assertTrue("|log-rotation-|" in ref.pattern, ref.pattern)
+        assertNotNull(DemoPrometheusDispatcher.compilePattern(ref.pattern))
+        delegate.pods = listOf(
+            endedPod("nightly-backup-28000001-abcde", 1_050, 1_500),
+            livePod("nightly-backup-28000003-mnpqr", 1_800),
+            endedPod("log-rotation-fghjk", 1_300, 1_700),
+            endedPod("log-rotation.v2-stvwx", 1_350, 1_750),
+            livePod("log-rotation-extra-fghjk", 1_100),
+            livePod("db-vacuum-fghjk", 1_100),
+        )
+
+        for (kind in PodSeriesKind.entries) {
+            val series = podsOf(ref, kind)
+
+            assertEquals(
+                listOf("log-rotation-fghjk", "log-rotation.v2-stvwx", "nightly-backup-28000001-abcde", "nightly-backup-28000003-mnpqr"),
+                series.map { it.name },
+                "$kind",
+            )
+            assertEquals(expected(kind, "log-rotation-fghjk", 1_300, 1_700), series[0].points, "$kind")
+        }
+        assertEquals(listOf("GET /api/v1/namespaces/team-a/pods"), delegate.seen.distinct())
+    }
+
+    @Test
+    fun `a CronJob's pattern refuses an alternative that is not a pod prefix`() {
+        val good = PromQl.ofCronJob("team-a", "nightly-backup", listOf("log-rotation"))!!.pattern
+        val patterns = listOf(
+            good.replace("|log-rotation-", "|"),
+            good.replace("|log-rotation-", "|.*"),
+            good.replace("|log-rotation-", "|log-rotation-[0-9]+"),
+            good.replace("|log-rotation-", "|Log-"),
+            """(log-rotation-|nightly-backup-[0-9]{8}-([0-9]+-)?)[a-z0-9]{5}""",
+            good.replace("(nightly-backup-[0-9]{8}-([0-9]+-)?|", "(nightly-backup-[0-9]{8}-|"),
+        )
+        for (pattern in patterns) {
+            val response = get(rangeQueryPath(PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, PodSetRef("team-a", pattern), PodSetMode.PerPod, window.stepSec)))
+
+            assertEquals(400, response.code(), pattern)
+            assertEquals("bad_data", errorType(response), pattern)
+        }
+        assertEquals(emptyList(), delegate.seen.toList())
+    }
+
+    @Test
     fun `a Spark app's pods are selected by their exact names`() {
         val ref = PromQl.ofSparkPods("team-a", listOf("spark-etl-nightly-driver"), listOf("spark-etl-nightly-exec-2", "spark-etl-nightly-exec-1"))!!
         delegate.pods = listOf(

@@ -594,8 +594,8 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         private val INDEXED_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\+-\)$SUFFIX""")
         private val CUT_INDEXED_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\{[1-6]\}-(?:\|$NAME-\[0-9\]\{[1-6]\}-)*\)$SUFFIX""")
 
-        // ofCronJob: (name-[0-9]{8}-([0-9]+-)?)xxxxx
-        private val CRON_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\{8\}-\(\[0-9\]\+-\)\?\)$SUFFIX""")
+        // ofCronJob: (name-[0-9]{8}-([0-9]+-)?)xxxxx, plus one |prefix- alternative per run started by hand
+        private val CRON_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\{8\}-\(\[0-9\]\+-\)\?(?:\|$NAME)*\)$SUFFIX""")
 
         // ofExactPods, and ofSparkPods past its exact-name limit: (driver|exec-1|stem-exec-[0-9]+)
         private const val STEM = """$NAME-exec-\[0-9\]\+"""

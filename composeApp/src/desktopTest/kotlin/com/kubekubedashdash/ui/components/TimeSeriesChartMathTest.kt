@@ -75,6 +75,22 @@ class TimeSeriesChartMathTest {
         assertEquals(listOf("02:00", "02:30", "03:00"), timeAxisLabels(0, 3_600, ZoneOffset.ofHours(2)))
     }
 
+    @Test
+    fun `the hover readout names the day only in a window longer than a day`() {
+        // 1970-01-01 was a Thursday.
+        assertEquals("00:00:00", readoutTime(0, multiDay = false, zone = ZoneOffset.UTC))
+        assertEquals("Thu 00:00:00", readoutTime(0, multiDay = true, zone = ZoneOffset.UTC))
+        assertEquals("Sun 12:34:56", readoutTime(3 * 86_400L + 12 * 3_600 + 34 * 60 + 56, multiDay = true, zone = ZoneOffset.UTC))
+        assertEquals("12:34:56", readoutTime(3 * 86_400L + 12 * 3_600 + 34 * 60 + 56, multiDay = false, zone = ZoneOffset.UTC))
+    }
+
+    @Test
+    fun `the hover readout follows the zone, and its day with it`() {
+        assertEquals("02:00:00", readoutTime(0, multiDay = false, zone = ZoneOffset.ofHours(2)))
+        assertEquals("Thu 02:00:00", readoutTime(0, multiDay = true, zone = ZoneOffset.ofHours(2)))
+        assertEquals("Wed 22:00:00", readoutTime(0, multiDay = true, zone = ZoneOffset.ofHours(-2)))
+    }
+
     private fun points(vararg epochSecs: Long) = epochSecs.map { SeriesPoint(it, 1.0) }
 
     @Test

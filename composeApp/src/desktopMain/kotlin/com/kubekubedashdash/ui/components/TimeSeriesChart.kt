@@ -82,6 +82,7 @@ private const val NO_DATA_TEXT = "No data in this range"
 private val PlotHeight = 96.dp
 
 private val ReadoutTime = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT)
+private val ReadoutDayTime = DateTimeFormatter.ofPattern("EEE HH:mm:ss", Locale.ROOT)
 private val AxisTime = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
 private val AxisDayTime = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.ROOT)
 
@@ -298,7 +299,7 @@ fun TimeSeriesChart(
 
             // minLines keeps the row's height when the readout is empty, so a hover never resizes the card.
             Text(
-                readoutText(message, hoverTimestamp, drawn, formatValue, dim),
+                readoutText(message, hoverTimestamp, window.endEpochSec - window.startEpochSec > DAY_SEC, drawn, formatValue, dim),
                 style = MaterialTheme.typography.labelSmall,
                 color = dim,
                 maxLines = 2,
@@ -365,6 +366,7 @@ private fun ChartSeries.peak(): Double = points.maxOfOrNull { it.value } ?: 0.0
 private fun readoutText(
     message: String?,
     hoverTimestamp: Long?,
+    multiDay: Boolean,
     drawn: List<ChartSeries>,
     formatValue: (Double) -> String,
     baseColor: Color,
@@ -373,7 +375,7 @@ private fun readoutText(
 
     hoverTimestamp != null -> buildAnnotatedString {
         withStyle(SpanStyle(color = baseColor)) {
-            append(ReadoutTime.format(Instant.ofEpochSecond(hoverTimestamp).atZone(ZoneId.systemDefault())))
+            append(readoutTime(hoverTimestamp, multiDay, ZoneId.systemDefault()))
         }
         drawn.forEach { s ->
             val point = s.points.firstOrNull { it.epochSec == hoverTimestamp } ?: return@forEach
@@ -391,6 +393,9 @@ private fun readoutText(
 
     else -> AnnotatedString("")
 }
+
+/** The hovered time as "HH:mm:ss" in [zone]; in a window of more than a day ([multiDay]) it names the day too, as the same time recurs. */
+internal fun readoutTime(epochSec: Long, multiDay: Boolean, zone: ZoneId): String = (if (multiDay) ReadoutDayTime else ReadoutTime).format(Instant.ofEpochSecond(epochSec).atZone(zone))
 
 /** How far above the data's peak a guide line may sit and still join the axis. */
 internal const val REFERENCE_SCALE_FACTOR = 2.0

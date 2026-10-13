@@ -171,16 +171,22 @@ private fun modeFor(kind: PodSeriesKind, mode: PodSetMode): PodSetMode = when (k
     else -> mode
 }
 
+// The longest fixed range: a run that lasted longer shows its last week instead of a window of months.
+private val MAX_RUN_WINDOW_SEC = HistoryRange.D7.seconds
+
 /**
- * The window to query for [window] at [nowSec]. A run window is the run plus a margin on both sides, which
- * reaches into the future for a run that is going or has just ended. It then ends at [nowSec], aligned down
- * to its step: it moves every step until the margin is past, and each refresh asks again.
+ * The window to query for [window] at [nowSec]. A run window is the run (its last week, when longer) plus a
+ * margin on both sides, which reaches into the future for a run that is going or has just ended. It then
+ * ends at [nowSec], aligned down to its step: it moves every step until the margin is past, and each
+ * refresh asks again.
  */
 internal fun queryWindowOf(window: UsageWindow, nowSec: Long): QueryWindow = when (window) {
     is UsageWindow.Sliding -> window.range.window(nowSec)
-    is UsageWindow.Run -> untilNow(QueryWindow.spanning(window.startSec, window.endSec ?: nowSec), nowSec)
-    is UsageWindow.Runs -> untilNow(QueryWindow.spanning(window.startSec, nowSec), nowSec)
+    is UsageWindow.Run -> runWindow(window.startSec, window.endSec ?: nowSec, nowSec)
+    is UsageWindow.Runs -> runWindow(window.startSec, nowSec, nowSec)
 }
+
+private fun runWindow(fromSec: Long, toSec: Long, nowSec: Long): QueryWindow = untilNow(QueryWindow.spanning(maxOf(fromSec, toSec - MAX_RUN_WINDOW_SEC), toSec), nowSec)
 
 // A run that starts after this machine's clock (skew) keeps its window in the future rather than ending it before it starts.
 private fun untilNow(window: QueryWindow, nowSec: Long): QueryWindow {

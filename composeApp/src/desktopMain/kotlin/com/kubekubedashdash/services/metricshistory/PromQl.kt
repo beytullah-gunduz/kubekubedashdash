@@ -99,7 +99,8 @@ internal object PromQl {
     // The operator names executors `<app>-<hash>-exec-<n>`.
     private const val EXECUTOR_MARKER = "-exec-"
 
-    // Indexes of up to this many digits are matched in an Indexed Job's pod names.
+    // A cut Indexed Job name is matched at indexes of up to this many digits (a million completions). Kubernetes
+    // caps parallelism and failed indexes at 100 000 but not completions, so a longer index can exist and is missed.
     private const val INDEX_DIGITS_MAX = 6
 
     // A Job name up to this long is never cut inside an Indexed Job's pod names: 58 - ("-" + 6 digits + "-").
@@ -107,6 +108,9 @@ internal object PromQl {
 
     // A CronJob name up to this long keeps its Jobs' names whole in their pods: Job = cronjob + "-" + 8 digits, pod prefix = Job + "-".
     const val CRONJOB_UNCUT_MAX = GENERATED_NAME_BASE_MAX - 10
+
+    // The scheduled time in minutes since the epoch that ends a scheduled Job's name.
+    private const val SCHEDULED_TIME_DIGITS = 8
 
     /** True when a query can be built: the pattern ends up in a string literal, so a stray character would change what it matches. */
     fun isValidPodSet(pods: PodSetRef): Boolean = KubernetesNames.isDnsLabel(pods.namespace) &&
@@ -163,16 +167,35 @@ internal object PromQl {
     /**
      * The pods of the CronJob [cronJob]'s Jobs, whose names are `<cronjob>-<8 digits>` (the scheduled time in
      * minutes since the epoch): the pattern also matches runs whose Job object is gone. A Job named that way
-     * which the CronJob did not create is charted with it, because a name pattern cannot tell. A CronJob of 47
-     * or 48 characters with an Indexed job template has its pods' names cut, which this pattern does not cover.
+     * which the CronJob did not create is charted with it, because a name pattern cannot tell. A listed Job
+     * with another name (a run started by hand, e.g. `kubectl create job --from=cronjob/...`) is selected by
+     * its own prefix; a run started without an ownerReference is not the CronJob's and is not charted.
      * Past 48 characters the Jobs' names are cut inside their pods' names, so [jobs] (the listed Jobs) give the
-     * prefixes instead; null when none is listed.
+     * prefixes instead; null when none is listed. Null too when a name in [jobs] is not a DNS subdomain.
+     * With an Indexed job template a pod name keeps `<job>-<index>-` only while it fits 58 characters, so a
+     * name of 42 to 48 characters misses the indexes of (48 - its length) digits or more (every index at 47
+     * and 48), and a longer name misses every index.
      */
     fun ofCronJob(namespace: String, cronJob: String, jobs: List<String>): PodSetRef? {
-        if (!KubernetesNames.isDnsLabel(namespace) || !KubernetesNames.isDnsSubdomain(cronJob)) return null
-        if (cronJob.length > CRONJOB_UNCUT_MAX) return ofReplicaSets(namespace, jobs)
-        return PodSetRef(namespace, "(" + regexEscape(cronJob) + "-[0-9]{8}-([0-9]+-)?)" + POD_SUFFIX)
+        if (!KubernetesNames.isDnsLabel(namespace) || !KubernetesNames.isDnsSubdomain(cronJob) || !jobs.all(KubernetesNames::isDnsSubdomain)) return null
+        if (cronJob.length > CRONJOB_UNCUT_MAX) {
+            if (jobs.isEmpty()) return null
+            return PodSetRef(namespace, alternatives(distinctSortedPrefixes(jobs)))
+        }
+        val scheduled = regexEscape(cronJob) + "-[0-9]{$SCHEDULED_TIME_DIGITS}-([0-9]+-)?"
+        val byHand = distinctSortedPrefixes(jobs.filterNot { isScheduledJobName(cronJob, it) })
+        return PodSetRef(namespace, alternatives(listOf(scheduled) + byHand))
     }
+
+    // Sorted before escaping, as podSetRegex does; the pattern does not depend on the order of the list.
+    private fun distinctSortedPrefixes(jobs: List<String>): List<String> = jobs.map(::podPrefix).distinct().sorted().map(::regexEscape)
+
+    // `<cronjob>-<8 digits>`: a Job the schedule created, whose pods the scheduled alternative already matches.
+    private fun isScheduledJobName(cronJob: String, job: String): Boolean = job.startsWith("$cronJob-") &&
+        job.length - cronJob.length - 1 == SCHEDULED_TIME_DIGITS &&
+        job.takeLast(SCHEDULED_TIME_DIGITS).all { it in '0'..'9' }
+
+    private fun alternatives(patterns: List<String>): String = patterns.joinToString("|", prefix = "(", postfix = ")$POD_SUFFIX")
 
     /** Exactly the pods named in [pods]. */
     fun ofExactPods(namespace: String, pods: List<String>): PodSetRef? {
