@@ -222,7 +222,7 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
 
         val pods = when {
             REPLICA_SET_POD_SET.matches(ref.pattern) -> replicaSetAndJobPods(namespace, ref.pattern)
-            BATCH_POD_SETS.any { it.matches(ref.pattern) } -> podsMatching(namespace, ref.pattern)
+            BATCH_POD_SETS.any { it.matches(ref.pattern) } || NAMESPACE_POD_SET.matches(ref.pattern) -> podsMatching(namespace, ref.pattern)
             else -> null
         } ?: return badData("unsupported query")
         val perPod = pods.mapNotNull { pod ->
@@ -602,6 +602,9 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         private val EXACT_POD_SET = Regex("""\((?:$NAME|$STEM)(?:\|(?:$NAME|$STEM))*\)""")
 
         private val BATCH_POD_SETS = listOf(INDEXED_JOB_POD_SET, CUT_INDEXED_JOB_POD_SET, CRON_JOB_POD_SET, EXACT_POD_SET)
+
+        // ofNamespace: every pod of the namespace
+        private val NAMESPACE_POD_SET = Regex("""\.\+""")
 
         // The pod that stands for a ReplicaSet whose pods are gone; it fits the [a-z0-9]{5} of the pattern.
         private const val VIRTUAL_POD_SUFFIX = "old01"

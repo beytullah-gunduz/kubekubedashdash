@@ -4,13 +4,18 @@ import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.services.metricshistory.BatchUsage
 import com.kubekubedashdash.services.metricshistory.HistoryRange
+import com.kubekubedashdash.services.metricshistory.PodSeriesKind
+import com.kubekubedashdash.services.metricshistory.PodSetMode
 import com.kubekubedashdash.services.metricshistory.PodSetRef
+import com.kubekubedashdash.services.metricshistory.PromQl
 import com.kubekubedashdash.services.metricshistory.cronJobUsage
 import com.kubekubedashdash.services.metricshistory.jobUsage
 import com.kubekubedashdash.services.metricshistory.ownedSparkRuns
 import com.kubekubedashdash.services.metricshistory.scheduledSparkUsage
 import com.kubekubedashdash.services.metricshistory.sparkUsage
 import com.kubekubedashdash.ui.components.ChartMarker
+import com.kubekubedashdash.ui.components.ChartReference
+import com.kubekubedashdash.util.QuotaCeilings
 import java.time.ZoneId
 
 internal const val NO_JOB_POD_PATTERN_NOTE = "This Job has no usable name for a pod pattern."
@@ -34,6 +39,16 @@ internal const val SCHEDULED_SPARK_NO_CPU_LIMIT_NOTE = "No pod of these runs has
 
 internal const val BATCH_GMP_STALENESS_NOTE =
     "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so a pod's line can run past the end of its run."
+
+internal const val NAMESPACE_MISSING_NOTE = "This namespace name cannot be used in a query."
+
+internal const val NAMESPACE_GMP_STALENESS_NOTE =
+    "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so Total can count a replaced pod twice for that long."
+
+internal const val NAMESPACE_HOST_NETWORK_NOTE =
+    "Some pods of this namespace use the host network: their counters are their node's, so the namespace's network is not charted."
+
+internal const val NAMESPACE_HOST_NETWORK_PENDING_NOTE = "Checking whether pods of this namespace use the host network…"
 
 /**
  * What a Job's usage section charts; null only when [res] has no namespace. Every pod of the Job is current,
@@ -108,6 +123,49 @@ internal fun scheduledSparkTarget(res: GenericResourceInfo, runs: List<GenericRe
         noCpuLimitNote = SCHEDULED_SPARK_NO_CPU_LIMIT_NOTE,
     )
 }
+
+/**
+ * What a Namespace's usage section charts: every pod of the namespace, summed first, with the quota hard values
+ * in [ceilings] as guide lines in that sum. Never null: a name that cannot be queried gives no pod set and the
+ * section says so. Per pod has no guide lines, as no one pod stands for the namespace. A host-network pod's
+ * network counters are its node's, so when [hostNetwork] is true the network is not charted; null (not
+ * known) charts it. While [hostNetworkPending], the network waits for that answer and says so.
+ */
+internal fun namespaceTarget(
+    namespace: GenericResourceInfo,
+    ceilings: QuotaCeilings,
+    hostNetwork: Boolean? = null,
+    hostNetworkPending: Boolean = false,
+): UsageTarget = UsageTarget(
+    key = namespace.uid.ifBlank { "Namespace/" + namespace.name },
+    podSet = PromQl.ofNamespace(namespace.name),
+    missingNote = NAMESPACE_MISSING_NOTE,
+    grouping = UsageGrouping.PerPod(currentPrefixes = null),
+    defaultWindow = UsageWindow.Sliding(HistoryRange.H6),
+    markers = emptyList(),
+    currentPods = emptyList(),
+    notes = emptyList(),
+    runLabel = "",
+    perPodDescription = "One line per pod; the biggest consumers in colour.",
+    stalenessNote = NAMESPACE_GMP_STALENESS_NOTE,
+    throttlingWithoutLivePods = true,
+    defaultMode = PodSetMode.Total,
+    totalReferences = mapOf(
+        PodSeriesKind.Cpu to quotaReferences(ceilings.requestsCpu, ceilings.limitsCpu),
+        PodSeriesKind.Memory to quotaReferences(ceilings.requestsMemory, ceilings.limitsMemory),
+    ).filterValues { it.isNotEmpty() },
+    networkExcludedNote = when {
+        hostNetworkPending -> NAMESPACE_HOST_NETWORK_PENDING_NOTE
+        hostNetwork == true -> NAMESPACE_HOST_NETWORK_NOTE
+        else -> null
+    },
+)
+
+// They bound the sum of the pods' requests or limits, not their usage, so usage above the requests line is normal.
+private fun quotaReferences(requests: Double?, limits: Double?): List<ChartReference> = listOfNotNull(
+    requests?.let { ChartReference("quota requests", it, dashed = true) },
+    limits?.let { ChartReference("quota limits", it, dashed = false) },
+)
 
 private fun batchTarget(
     res: GenericResourceInfo,

@@ -6,8 +6,13 @@ import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.SparkRun
 import com.kubekubedashdash.models.WorkloadRun
 import com.kubekubedashdash.services.metricshistory.HistoryRange
+import com.kubekubedashdash.services.metricshistory.PodSeriesKind
+import com.kubekubedashdash.services.metricshistory.PodSetMode
+import com.kubekubedashdash.services.metricshistory.PodSetRef
 import com.kubekubedashdash.services.metricshistory.PromQl
 import com.kubekubedashdash.ui.components.ChartMarker
+import com.kubekubedashdash.ui.components.ChartReference
+import com.kubekubedashdash.util.QuotaCeilings
 import com.kubekubedashdash.util.ShellEnvironment
 import java.time.Instant
 import java.time.ZoneOffset
@@ -15,6 +20,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -26,7 +32,7 @@ private const val CRON_UID = "uid-cron-1"
 // 2026-10-12T08:00:00Z, a whole minute.
 private const val T0 = 1_791_792_000L
 
-/** The pure builders behind the usage sections of the Job, CronJob, SparkApplication and ScheduledSparkApplication panels. */
+/** The pure builders behind the usage sections of the Job, CronJob, SparkApplication, ScheduledSparkApplication and Namespace panels. */
 class WorkloadTargetsTest {
 
     private var previousCloudClis: String? = null
@@ -541,5 +547,106 @@ class WorkloadTargetsTest {
             "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so a pod's line can run past the end of its run.",
             BATCH_GMP_STALENESS_NOTE,
         )
+    }
+
+    // ── Namespace ───────────────────────────────────────────────────────────
+
+    private val teamA = row("team-a", namespace = null)
+
+    private val eightGiB = 8.0 * 1024 * 1024 * 1024
+
+    @Test
+    fun `a Namespace is charted as the sum of every pod over the last 6 hours, with the quota lines in the sum`() {
+        val ceilings = QuotaCeilings(requestsCpu = 4.0, limitsCpu = 8.0, requestsMemory = eightGiB, limitsMemory = 2 * eightGiB)
+
+        val target = namespaceTarget(teamA, ceilings)
+
+        assertEquals("uid-team-a", target.key)
+        assertEquals(PodSetRef("team-a", ".+"), target.podSet)
+        assertEquals(PromQl.ofNamespace("team-a"), target.podSet)
+        assertEquals(NAMESPACE_MISSING_NOTE, target.missingNote)
+        assertEquals(UsageGrouping.PerPod(null), target.grouping)
+        assertEquals(UsageWindow.Sliding(HistoryRange.H6), target.defaultWindow)
+        assertEquals(emptyList(), target.markers)
+        assertEquals(emptyList(), target.currentPods)
+        assertEquals(emptyList(), target.notes)
+        assertEquals("", target.runLabel)
+        assertEquals("One line per pod; the biggest consumers in colour.", target.perPodDescription)
+        assertTrue(target.throttlingWithoutLivePods)
+        assertEquals(PodSetMode.Total, target.defaultMode)
+        assertEquals(NAMESPACE_GMP_STALENESS_NOTE, target.stalenessNote)
+        assertEquals(
+            mapOf(
+                PodSeriesKind.Cpu to listOf(ChartReference("quota requests", 4.0, dashed = true), ChartReference("quota limits", 8.0, dashed = false)),
+                PodSeriesKind.Memory to listOf(ChartReference("quota requests", eightGiB, dashed = true), ChartReference("quota limits", 2 * eightGiB, dashed = false)),
+            ),
+            target.totalReferences,
+        )
+    }
+
+    @Test
+    fun `a Namespace without a quota has no guide line, and a kind with none is left out`() {
+        assertEquals(emptyMap(), namespaceTarget(teamA, QuotaCeilings()).totalReferences)
+
+        val limitsOnly = namespaceTarget(teamA, QuotaCeilings(limitsMemory = eightGiB)).totalReferences
+        assertEquals(mapOf(PodSeriesKind.Memory to listOf(ChartReference("quota limits", eightGiB, dashed = false))), limitsOnly)
+
+        val requestsOnly = namespaceTarget(teamA, QuotaCeilings(requestsCpu = 0.5)).totalReferences
+        assertEquals(mapOf(PodSeriesKind.Cpu to listOf(ChartReference("quota requests", 0.5, dashed = true))), requestsOnly)
+    }
+
+    @Test
+    fun `the Namespace's staleness note is its own, not the Deployment's or the batch one`() {
+        val target = namespaceTarget(teamA, QuotaCeilings())
+
+        assertEquals(
+            "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so Total can count a replaced pod twice for that long.",
+            target.stalenessNote,
+        )
+        assertNotEquals(GMP_STALENESS_NOTE, target.stalenessNote)
+        assertNotEquals(BATCH_GMP_STALENESS_NOTE, target.stalenessNote)
+    }
+
+    @Test
+    fun `a Namespace without a uid is keyed on its name`() {
+        assertEquals("Namespace/team-a", namespaceTarget(row("team-a", uid = "", namespace = null), QuotaCeilings()).key)
+    }
+
+    @Test
+    fun `a Namespace whose name cannot be queried still has a target, without a pod set`() {
+        val target = namespaceTarget(row("Team-A", namespace = null), QuotaCeilings(requestsCpu = 4.0))
+
+        assertNull(target.podSet)
+        assertEquals("This namespace name cannot be used in a query.", target.missingNote)
+        assertEquals(NAMESPACE_MISSING_NOTE, target.missingNote)
+    }
+
+    @Test
+    fun `a Namespace with host-network pods charts no network and says why`() {
+        val target = namespaceTarget(teamA, QuotaCeilings(), hostNetwork = true)
+
+        assertEquals(NAMESPACE_HOST_NETWORK_NOTE, target.networkExcludedNote)
+        assertEquals(
+            "Some pods of this namespace use the host network: their counters are their node's, so the namespace's network is not charted.",
+            target.networkExcludedNote,
+        )
+        // Nothing else of the target moves with it.
+        assertEquals(namespaceTarget(teamA, QuotaCeilings()).copy(networkExcludedNote = NAMESPACE_HOST_NETWORK_NOTE), target)
+    }
+
+    @Test
+    fun `a Namespace whose pods are still being listed holds its network back and says so, whatever the answer will be`() {
+        for (hostNetwork in listOf(true, false, null)) {
+            val target = namespaceTarget(teamA, QuotaCeilings(), hostNetwork, hostNetworkPending = true)
+
+            assertEquals(NAMESPACE_HOST_NETWORK_PENDING_NOTE, target.networkExcludedNote, "$hostNetwork")
+        }
+    }
+
+    @Test
+    fun `a Namespace whose pods are on their own network, or not known, charts its network`() {
+        assertNull(namespaceTarget(teamA, QuotaCeilings(), hostNetwork = false).networkExcludedNote)
+        assertNull(namespaceTarget(teamA, QuotaCeilings(), hostNetwork = null).networkExcludedNote)
+        assertNull(namespaceTarget(teamA, QuotaCeilings()).networkExcludedNote)
     }
 }

@@ -197,6 +197,9 @@ internal object PromQl {
 
     private fun alternatives(patterns: List<String>): String = patterns.joinToString("|", prefix = "(", postfix = ")$POD_SUFFIX")
 
+    /** Every pod of [namespace]. */
+    fun ofNamespace(namespace: String): PodSetRef? = if (KubernetesNames.isDnsLabel(namespace)) PodSetRef(namespace, ".+") else null
+
     /** Exactly the pods named in [pods]. */
     fun ofExactPods(namespace: String, pods: List<String>): PodSetRef? {
         if (!KubernetesNames.isDnsLabel(namespace) || pods.isEmpty() || !pods.all(KubernetesNames::isDnsSubdomain)) return null

@@ -36,6 +36,7 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Node
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.Secret
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
 import io.fabric8.kubernetes.api.model.apps.DaemonSetBuilder
@@ -2058,6 +2059,38 @@ class ReactiveKubeClient(
         }
     }.getOrDefault(emptyList())
 
+    // ── On-demand: ResourceQuota ceilings of a namespace ───────────────────────
+
+    fun getNamespaceQuotaCeilings(namespace: String): QuotaCeilings = runCatching {
+        log.debug("Fetching quota ceilings")
+        // A scoped quota caps a subset of the pods, not the namespace; fabric8 gives `scopes` an empty list when absent,
+        // and an empty `scopeSelector` scopes nothing.
+        val hardValues = k8s.resourceQuotas().inNamespace(namespace).list().items
+            .filter { rq -> rq.spec?.scopes.isNullOrEmpty() && rq.spec?.scopeSelector?.matchExpressions.isNullOrEmpty() }
+            .map { rq -> rq.status?.hard?.takeIf { it.isNotEmpty() } ?: rq.spec?.hard.orEmpty() }
+
+        // Each quota is enforced on its own, so the tightest value is the ceiling; an unparsable quantity is skipped.
+        fun tightest(vararg keys: String): Double? = hardValues
+            .flatMap { hard -> keys.mapNotNull { hard[it] } }
+            .mapNotNull { quantity -> runCatching { Quantity.getAmountInBytes(quantity).toDouble() }.getOrNull() }
+            .minOrNull()
+        QuotaCeilings(
+            requestsCpu = tightest("requests.cpu", "cpu"),
+            limitsCpu = tightest("limits.cpu"),
+            requestsMemory = tightest("requests.memory", "memory"),
+            limitsMemory = tightest("limits.memory"),
+        )
+    }.getOrDefault(QuotaCeilings())
+
+    /**
+     * Whether any pod of [namespace] runs on the host network, where its network counters are its node's; null
+     * where the pods cannot be listed (RBAC refusal included).
+     */
+    fun namespaceHasHostNetworkPods(namespace: String): Boolean? = runCatching {
+        log.debug("Checking for host-network pods")
+        k8s.pods().inNamespace(namespace).list().items.any { it.spec?.hostNetwork == true }
+    }.getOrNull()
+
     // ── On-demand: RBAC Rules & Binding Detail ─────────────────────────────────
 
     fun getPolicyRules(kind: String, name: String, namespace: String?): List<PolicyRuleRow> = runCatching {
@@ -2482,6 +2515,14 @@ data class QuotaUsageRow(
     val used: String,
     val hard: String,
     val fraction: Float,
+)
+
+/** The tightest unscoped ResourceQuota hard values of a namespace: cores and bytes, null where no quota sets them. */
+data class QuotaCeilings(
+    val requestsCpu: Double? = null,
+    val limitsCpu: Double? = null,
+    val requestsMemory: Double? = null,
+    val limitsMemory: Double? = null,
 )
 
 /** A single policy rule in a Role / ClusterRole. */

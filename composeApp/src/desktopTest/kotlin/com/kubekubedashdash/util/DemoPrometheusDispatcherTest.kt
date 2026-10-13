@@ -829,6 +829,49 @@ class DemoPrometheusDispatcherTest {
         assertEquals(listOf(names[0], names[79]).sorted(), series.map { it.name })
     }
 
+    @Test
+    fun `a namespace's pods are every pod the store lists for it, a line each, and its total adds them`() {
+        delegate.pods = listOf(
+            livePod("web-1", 1_200),
+            endedPod("web-0", 1_100, 1_600),
+            livePod("web-0", 1_100, namespace = "team-b"),
+        )
+        val ref = PromQl.ofNamespace("team-a")!!
+
+        for (kind in PodSeriesKind.entries) {
+            val series = podsOf(ref, kind)
+
+            assertEquals(listOf("web-0", "web-1"), series.map { it.name }, "$kind")
+            assertEquals(expected(kind, "web-0", 1_100, 1_600), series[0].points, "$kind")
+            assertEquals(expected(kind, "web-1", 1_200), series[1].points, "$kind")
+
+            val total = seriesOf(get(batchPath(kind, ref, PodSetMode.Total)), null).single().points
+            assertEquals(combine(kind, listOf(expected(kind, "web-0", 1_100, 1_600), expected(kind, "web-1", 1_200))), total, "$kind")
+        }
+        assertEquals(listOf("GET /api/v1/namespaces/team-a/pods"), delegate.seen.distinct())
+    }
+
+    @Test
+    fun `a namespace without a pod answers an empty matrix`() {
+        delegate.pods = listOf(livePod("web-0", 1_100, namespace = "team-b"))
+        val ref = PromQl.ofNamespace("team-a")!!
+
+        for (mode in PodSetMode.entries) {
+            assertEquals(0, resultOf(get(batchPath(PodSeriesKind.Cpu, ref, mode))).size, "$mode")
+        }
+    }
+
+    @Test
+    fun `a pattern that only resembles a namespace's is bad_data and asks the delegate nothing`() {
+        for (pattern in listOf(".+x", "x.+", "(.+)", ".++", ".+?", ".+|web-0", "..+", ".+.+")) {
+            val response = get(batchPath(PodSeriesKind.Cpu, PodSetRef("team-a", pattern), PodSetMode.PerPod))
+
+            assertEquals(400, response.code(), pattern)
+            assertEquals("bad_data", errorType(response), pattern)
+        }
+        assertEquals(emptyList(), delegate.seen.toList())
+    }
+
     private fun factoryPatterns(): Map<String, PodSetRef> = mapOf(
         "ReplicaSets" to PromQl.ofReplicaSets("team-a", listOf(previous, "frontend.v2-7c8d9e0f1"))!!,
         "a Job" to PromQl.ofJob("team-a", jobName, indexed = false)!!,
@@ -838,6 +881,7 @@ class DemoPrometheusDispatcherTest {
         "a CronJob" to PromQl.ofCronJob("team-a", "nightly-backup", emptyList())!!,
         "exact pods" to PromQl.ofExactPods("team-a", listOf("web-0", "web.1", "spark-etl-nightly-exec-1"))!!,
         "Spark pods by stem" to PromQl.ofSparkPods("team-a", listOf("spark-etl-nightly-driver"), (1..70).map { "spark-etl-nightly-1a2b3c4d5e6f7890-exec-$it" })!!,
+        "a namespace" to PromQl.ofNamespace("team-a")!!,
     )
 
     @Test
