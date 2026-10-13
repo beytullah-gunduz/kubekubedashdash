@@ -239,6 +239,31 @@ class BatchUsageHistorySectionUiTest {
     }
 
     @Test
+    fun `a finished Job whose pods are gone still charts CPU throttling, and the Managed Prometheus note speaks of the run`() = runComposeUiTest {
+        val source = RecordingSource(jobPods)
+        show(source, assertNotNull(jobTarget(job("db-vacuum", NOW - 7_200, NOW - 3_600), emptyList())))
+
+        assertTrue(PodSeriesKind.Throttling in source.modes.map { it.first }, "no throttling query: ${source.modes}")
+        // CPU, memory and throttling list the three pods.
+        jobPods.forEach { onAllNodesWithText(it).assertCountEquals(3) }
+        onNodeWithText(JOB_NO_CPU_LIMIT_NOTE).assertDoesNotExist()
+        onNodeWithText(NO_CURRENT_CPU_LIMIT_NOTE).assertDoesNotExist()
+        onNodeWithText(BATCH_GMP_STALENESS_NOTE).assertExists()
+        onNodeWithText(GMP_STALENESS_NOTE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a Job whose live pods have no CPU limit says so in its own words and asks no throttling`() = runComposeUiTest {
+        val source = RecordingSource(jobPods)
+        show(source, assertNotNull(jobTarget(job("db-vacuum", NOW - 7_200, NOW - 3_600), listOf(pod(jobPods.first(), resources = emptyList())))))
+
+        onNodeWithText(JOB_NO_CPU_LIMIT_NOTE).assertExists()
+        onNodeWithText(NO_CURRENT_CPU_LIMIT_NOTE).assertDoesNotExist()
+        assertTrue(PodSeriesKind.Throttling !in source.modes.map { it.first }, "a throttling query was made: ${source.modes}")
+        jobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+    }
+
+    @Test
     fun `a Job that is still running ends its window at the present and marks only its start`() = runComposeUiTest {
         val start = NOW - 600
         val source = RecordingSource(jobPods)
@@ -414,6 +439,29 @@ class BatchUsageHistorySectionUiTest {
         onAllNodesWithText("Driver").assertCountEquals(2)
         onAllNodesWithText("Executors").assertCountEquals(2)
         onAllNodesWithText("Executors (mean)").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a completed SparkApplication whose pods are gone still charts CPU throttling, and the Managed Prometheus note speaks of the run`() = runComposeUiTest {
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(), emptyList())))
+
+        assertTrue(PodSeriesKind.Throttling in source.modes.map { it.first }, "no throttling query: ${source.modes}")
+        onAllNodesWithText("Driver").assertCountEquals(3)
+        onAllNodesWithText("Executors (mean)").assertCountEquals(1)
+        onNodeWithText(SPARK_NO_CPU_LIMIT_NOTE).assertDoesNotExist()
+        onNodeWithText(BATCH_GMP_STALENESS_NOTE).assertExists()
+        onNodeWithText(GMP_STALENESS_NOTE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a SparkApplication whose live pods have no CPU limit says so in its own words`() = runComposeUiTest {
+        val source = RecordingSource(sparkPodNames)
+        show(source, assertNotNull(sparkTarget(sparkApp(), listOf(pod(sparkDriver, resources = emptyList())))))
+
+        onNodeWithText(SPARK_NO_CPU_LIMIT_NOTE).assertExists()
+        onNodeWithText(NO_CURRENT_CPU_LIMIT_NOTE).assertDoesNotExist()
+        assertTrue(PodSeriesKind.Throttling !in source.modes.map { it.first }, "a throttling query was made: ${source.modes}")
     }
 
     @Test

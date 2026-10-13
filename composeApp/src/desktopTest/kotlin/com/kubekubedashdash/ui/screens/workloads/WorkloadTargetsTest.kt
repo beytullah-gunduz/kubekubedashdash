@@ -517,4 +517,29 @@ class WorkloadTargetsTest {
     fun `a ScheduledSparkApplication without a namespace has no section`() {
         assertNull(scheduledSparkTarget(row("spark-report-hourly", uid = scheduledUid, namespace = null), emptyList(), emptyList(), ZoneOffset.UTC))
     }
+
+    // ── all four ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `the batch targets carry their own CPU limit note, the run staleness note, and chart throttling without live pods`() {
+        val forJob = assertNotNull(jobTarget(job("db-vacuum", start = T0), emptyList()))
+        val forCronJob = assertNotNull(cronJobTarget(cron, listOf(oldest, newest), emptyList(), ZoneOffset.UTC))
+        val forSpark = assertNotNull(sparkTarget(sparkApp(), emptyList()))
+        val forScheduledSpark = assertNotNull(scheduledSparkTarget(scheduled, listOf(firstRun, secondRun), emptyList(), ZoneOffset.UTC))
+
+        assertEquals("No pod of this Job has a CPU limit — CFS throttling does not apply.", forJob.noCpuLimitNote)
+        assertEquals("No pod of the newest run has a CPU limit — CFS throttling does not apply.", forCronJob.noCpuLimitNote)
+        assertEquals("No pod of this application has a CPU limit — CFS throttling does not apply.", forSpark.noCpuLimitNote)
+        assertEquals("No pod of these runs has a CPU limit — CFS throttling does not apply.", forScheduledSpark.noCpuLimitNote)
+        val targets = listOf(forJob, forCronJob, forSpark, forScheduledSpark)
+        assertEquals(4, targets.map { it.noCpuLimitNote }.toSet().size)
+        targets.forEach {
+            assertEquals(BATCH_GMP_STALENESS_NOTE, it.stalenessNote)
+            assertTrue(it.throttlingWithoutLivePods)
+        }
+        assertEquals(
+            "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so a pod's line can run past the end of its run.",
+            BATCH_GMP_STALENESS_NOTE,
+        )
+    }
 }

@@ -132,6 +132,10 @@ internal sealed interface UsageGrouping {
  * staleness notes.
  * @property runLabel the menu entry and button label of a [UsageWindow.Run] or [UsageWindow.Runs] default.
  * @property perPodDescription the "Per pod" toggle's tooltip.
+ * @property noCpuLimitNote what the CPU throttling chart says when no pod can be throttled.
+ * @property stalenessNote the note under the charts on Managed Prometheus.
+ * @property throttlingWithoutLivePods whether CPU throttling is charted while no live pod is known: the pods
+ * of a finished run are gone, though their limits applied.
  */
 internal data class UsageTarget(
     val key: String,
@@ -144,6 +148,9 @@ internal data class UsageTarget(
     val notes: List<String>,
     val runLabel: String,
     val perPodDescription: String,
+    val noCpuLimitNote: String = NO_CURRENT_CPU_LIMIT_NOTE,
+    val stalenessNote: String = GMP_STALENESS_NOTE,
+    val throttlingWithoutLivePods: Boolean = false,
 )
 
 /** The newest ReplicaSet's pods that the pod informer holds, by name (demo pods can have a blank uid), sorted. */
@@ -163,6 +170,16 @@ internal fun deploymentKinds(currentPods: List<PodInfo>): List<PodSeriesKind> = 
         add(PodSeriesKind.NetworkTx)
     }
     if (currentPods.any { pod -> pod.resources.any { it.cpuLimitMillis != null } }) add(PodSeriesKind.Throttling)
+}
+
+/**
+ * The charts of a target: [deploymentKinds] of its live pods, or every kind when it has none and
+ * [throttlingWithoutLivePods] (a run whose pods are gone), since their limits cannot be read.
+ */
+internal fun usageKinds(currentPods: List<PodInfo>, throttlingWithoutLivePods: Boolean): List<PodSeriesKind> = if (throttlingWithoutLivePods && currentPods.isEmpty()) {
+    PodSeriesKind.entries.toList()
+} else {
+    deploymentKinds(currentPods)
 }
 
 // A per-pod network chart would need two lines per pod, so network is always the sum.
@@ -316,17 +333,24 @@ internal fun WorkloadUsageHistorySection(
     LaunchedEffect(choice, detection) {
         if (choice is SourceChoice.Detecting) service.ensureDetected()
     }
-    // Null selects the target's own window; read fresh on every composition, so a run that gains its end
-    // (the informer emits it again) changes the window and restarts the fetch.
-    var selected by remember(target.key) { mutableStateOf<HistoryRange?>((target.defaultWindow as? UsageWindow.Sliding)?.range) }
+    // The range the user picked; null keeps the target's own window, read fresh on every composition, so a run
+    // that gains its end, or a run window that replaces the fallback range once the Jobs or runs load, takes over.
+    var selected by remember(target.key) { mutableStateOf<HistoryRange?>(null) }
     var mode by remember { mutableStateOf(PodSetMode.PerPod) }
     val window = selected?.let { UsageWindow.Sliding(it) } ?: target.defaultWindow
-    val kinds = deploymentKinds(target.currentPods)
+    val shownRange = (window as? UsageWindow.Sliding)?.range
+    val kinds = usageKinds(target.currentPods, target.throttlingWithoutLivePods)
     val podSet = target.podSet
-    var loaded by remember(target.key, window, mode, choice, podSet, kinds) { mutableStateOf<LoadedHistory?>(null) }
+    // Keyed on what the user picks and on the workload's identity, not on the pod set, the kinds or the run
+    // window: those move while a workload runs (an executor or a run appears, a Job gains its end), and the
+    // charts keep the last answer while the next one is fetched.
+    var loaded by remember(target.key, mode, choice, selected) { mutableStateOf<LoadedHistory?>(null) }
+    // What [loaded] answered, so a changed pod set or kinds ask again even when the window did not move.
+    var answeredFor by remember(target.key, mode, choice, selected) { mutableStateOf<Pair<PodSetRef, List<PodSeriesKind>>?>(null) }
 
     if (source != null && podSet != null) {
-        LaunchedEffect(target.key, window, mode, choice, podSet, kinds) {
+        // [selected] is a key too: [loaded] starts over with it, so the effect has to restart onto the new state even when the window is the same.
+        LaunchedEffect(target.key, selected, window, mode, choice, podSet, kinds) {
             while (true) {
                 val now = nowEpochSec()
                 val queryWindow = queryWindowOf(window, now)
@@ -334,7 +358,7 @@ internal fun WorkloadUsageHistorySection(
                 // repeat an answer, an empty one included. A sliding window asks again while it has nothing to draw.
                 val finalWhenAnswered = window !is UsageWindow.Sliding && queryWindow.endEpochSec <= now
                 // A 24 h window moves only every 720 s: refetching an identical, fully answered one wastes quota.
-                if (needsFetch(loaded, queryWindow, finalWhenAnswered)) {
+                if (answeredFor != (podSet to kinds) || needsFetch(loaded, queryWindow, finalWhenAnswered)) {
                     loaded = LoadedHistory(
                         queryWindow,
                         coroutineScope {
@@ -342,6 +366,7 @@ internal fun WorkloadUsageHistorySection(
                                 .associate { (k, deferred) -> k to deferred.await() }
                         },
                     )
+                    answeredFor = podSet to kinds
                 }
                 delay(refreshMs)
             }
@@ -383,9 +408,9 @@ internal fun WorkloadUsageHistorySection(
                 description = "One line: the sum over every pod.",
             )
             Spacer(Modifier.width(8.dp))
-            val rangeItems = HistoryRange.entries.map { option -> LogToolbarMenuItem(option.label, option == selected) { selected = option } }
+            val rangeItems = HistoryRange.entries.map { option -> LogToolbarMenuItem(option.label, option == shownRange) { selected = option } }
             LogToolbarMenu(
-                label = "${selected?.label ?: target.runLabel} ▾",
+                label = "${shownRange?.label ?: target.runLabel} ▾",
                 items = if (target.defaultWindow is UsageWindow.Sliding) {
                     rangeItems
                 } else {
@@ -409,7 +434,9 @@ internal fun WorkloadUsageHistorySection(
                 choice = choice,
                 target = target,
                 mode = mode,
-                kinds = kinds,
+                // The kinds the shown answer was fetched for: while the next one loads, a kind just added
+                // would otherwise draw an empty chart.
+                kinds = answeredFor?.second ?: kinds,
                 loaded = answer,
                 shortRun = shortRunNote(choice, target.defaultWindow, nowEpochSec(), answer.window.stepSec),
             )
@@ -600,7 +627,7 @@ private fun WorkloadHistoryCharts(
 
     val throttling = results[PodSeriesKind.Throttling]
     val throttlingNote = when {
-        PodSeriesKind.Throttling !in kinds -> NO_CURRENT_CPU_LIMIT_NOTE
+        PodSeriesKind.Throttling !in kinds -> target.noCpuLimitNote
         throttling is SeriesResult.Ok && throttling.series.isEmpty() -> NO_THROTTLING_DATA_NOTE
         else -> noteOf(throttling)
     }
@@ -655,7 +682,7 @@ private fun WorkloadHistoryCharts(
         }
         target.notes.forEach { NoteLine(it) }
         if (shortRun != null) NoteLine(shortRun)
-        if (choice is SourceChoice.Gmp) NoteLine(GMP_STALENESS_NOTE)
+        if (choice is SourceChoice.Gmp) NoteLine(target.stalenessNote)
     }
 }
 

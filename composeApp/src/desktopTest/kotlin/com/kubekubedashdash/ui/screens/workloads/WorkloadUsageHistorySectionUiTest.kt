@@ -56,6 +56,7 @@ import com.kubekubedashdash.ui.screens.pods.needsFetch
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,6 +68,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -105,6 +107,8 @@ private val JobPods = listOf("x7k2p", "92f6w", "h4m8q").map { "$JOB-$it" }
 
 private val JobPodSet = PromQl.ofJob(NAMESPACE, JOB, indexed = false)!!
 
+private val IndexedJobPodSet = PromQl.ofJob(NAMESPACE, JOB, indexed = true)!!
+
 private val SparkPodSet = PromQl.ofSparkPods(NAMESPACE, listOf(DRIVER), listOf(EXECUTOR_1, EXECUTOR_2))!!
 
 /** One query the fake source answered. */
@@ -113,7 +117,8 @@ private data class Call(val kind: PodSeriesKind, val mode: PodSetMode, val pods:
 /**
  * Answers a per-pod query with one series for each of [podNames], the later ones with the higher peak,
  * and a total with one unnamed series; records what it was asked. [failure] answers every kind with that
- * failure and [empty] with no series; both can be changed between refreshes.
+ * failure and [empty] with no series; both can be changed between refreshes. While [gate] is set, an answer
+ * is held back until it completes.
  */
 private class FakeSource(
     @Volatile var podNames: List<String> = emptyList(),
@@ -123,10 +128,14 @@ private class FakeSource(
 ) : MetricsHistorySource {
     val calls = CopyOnWriteArrayList<Call>()
 
+    @Volatile
+    var gate: CompletableDeferred<Unit>? = null
+
     override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
 
     override suspend fun podSetSeries(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, window: QueryWindow): SeriesResult {
         calls += Call(kind, mode, pods, window)
+        gate?.await()
         failure?.let { return it }
         if (empty) return SeriesResult.Ok(emptyList())
 
@@ -247,6 +256,17 @@ class WorkloadUsageHistorySectionUiTest {
             }
         }
         settle()
+    }
+
+    /** [show] for a target that changes while the section is composed: [target] is read in composition. */
+    private fun ComposeUiTest.showChanging(source: MetricsHistorySource, target: () -> UsageTarget) {
+        val service = serviceOver(source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { WorkloadUsageHistorySection(target(), service, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
     }
 
     // Under a paused test clock a frame composes the content and a second one the answer the effect fetched.
@@ -492,6 +512,32 @@ class WorkloadUsageHistorySectionUiTest {
         assertEquals(8, source.calls.size, "the final window is not asked for again")
     }
 
+    @Test
+    fun `a run window that arrives after the first composition replaces the fallback range`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = FakeSource(JobPods)
+        // The panel opens before the CronJob's Jobs are loaded: no run yet, so the fallback range.
+        var shown by mutableStateOf(targetOf(UsageWindow.Sliding(HistoryRange.H24), runLabel = "Runs"))
+        val service = serviceOver(source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { WorkloadUsageHistorySection(shown, service, { NOW }, REFRESH_MS) }
+            }
+        }
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        onNodeWithText("24h ▾").assertExists()
+
+        val start = NOW - 2_700
+        shown = shown.copy(defaultWindow = UsageWindow.Runs(start))
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+
+        onNodeWithText("Runs ▾").assertExists()
+        val runs = QueryWindow.spanning(start, NOW)
+        assertEquals(runs.copy(endEpochSec = NOW - NOW % runs.stepSec), source.cpuWindows.last())
+    }
+
     // ── state keys ──────────────────────────────────────────────────────────
 
     @Test
@@ -564,6 +610,149 @@ class WorkloadUsageHistorySectionUiTest {
 
         onNodeWithText("Run ▾").assertExists()
         assertEquals(QueryWindow.spanning(NOW - 1_800, NOW - 900), source.calls.last().window)
+    }
+
+    // ── a changed query keeps the charts of the last answer ─────────────────
+
+    @Test
+    fun `a pod set that changes keeps the charts drawn until the new answer arrives`() = runComposeUiTest {
+        val source = FakeSource(JobPods.take(2))
+        var shown by mutableStateOf(targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600)))
+        showChanging(source) { shown }
+        JobPods.take(2).forEach { onAllNodesWithText(it).assertCountEquals(2) }
+        assertEquals(4, source.calls.size)
+
+        // A pod appears: the pattern changes, and the second answer is held back.
+        val gate = CompletableDeferred<Unit>()
+        source.gate = gate
+        source.podNames = JobPods
+        shown = shown.copy(podSet = IndexedJobPodSet)
+        waitForIdle()
+
+        assertEquals(8, source.calls.size)
+        assertEquals(setOf(IndexedJobPodSet), source.calls.drop(4).map { it.pods }.toSet())
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        JobPods.take(2).forEach { onAllNodesWithText(it).assertCountEquals(2) }
+        onAllNodesWithText(JobPods.last()).assertCountEquals(0)
+
+        gate.complete(Unit)
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+        assertEquals(8, source.calls.size, "one more round, not a refetch loop")
+    }
+
+    @Test
+    fun `a Spark application that gains an executor keeps the charts drawn, and then asks for the new pod set`() = runComposeUiTest {
+        val source = FakeSource(listOf(DRIVER, EXECUTOR_1))
+        val oneExecutor = PromQl.ofSparkPods(NAMESPACE, listOf(DRIVER), listOf(EXECUTOR_1))!!
+        assertNotEquals(SparkPodSet, oneExecutor)
+        var shown by mutableStateOf(sparkTarget().copy(podSet = oneExecutor))
+        showChanging(source) { shown }
+        onAllNodesWithText("Driver").assertCountEquals(3)
+        assertEquals(5, source.calls.size)
+
+        val gate = CompletableDeferred<Unit>()
+        source.gate = gate
+        shown = shown.copy(podSet = SparkPodSet)
+        waitForIdle()
+
+        assertEquals(10, source.calls.size)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText("Driver").assertCountEquals(3)
+        onAllNodesWithText("Executors").assertCountEquals(2)
+
+        gate.complete(Unit)
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText("Driver").assertCountEquals(3)
+        assertEquals(setOf(SparkPodSet), source.calls.drop(5).map { it.pods }.toSet())
+    }
+
+    @Test
+    fun `charts that gain a kind keep the charts drawn until the new answer arrives`() = runComposeUiTest {
+        val source = FakeSource(JobPods)
+        var shown by mutableStateOf(targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600)))
+        showChanging(source) { shown }
+        assertEquals(4, source.calls.size)
+        onNodeWithText(NO_CURRENT_CPU_LIMIT_NOTE).assertExists()
+
+        // A pod with a CPU limit is listed: throttling applies, and the answer that has it is held back.
+        val gate = CompletableDeferred<Unit>()
+        source.gate = gate
+        shown = shown.copy(currentPods = listOf(pod("$JOB-x7k2p")))
+        waitForIdle()
+
+        assertEquals(9, source.calls.size)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+
+        gate.complete(Unit)
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText(NO_CURRENT_CPU_LIMIT_NOTE).assertDoesNotExist()
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(3) }
+    }
+
+    @Test
+    fun `a run that gains its end keeps the charts drawn until the answer for its final window arrives`() = runComposeUiTest {
+        val source = FakeSource(JobPods)
+        val start = NOW - 3_600
+        val end = NOW - 3_000
+        var shown by mutableStateOf(targetOf(UsageWindow.Run(start, null)))
+        showChanging(source) { shown }
+        assertEquals(4, source.calls.size)
+
+        val gate = CompletableDeferred<Unit>()
+        source.gate = gate
+        shown = shown.copy(defaultWindow = UsageWindow.Run(start, end))
+        waitForIdle()
+
+        assertEquals(8, source.calls.size)
+        assertEquals(QueryWindow.spanning(start, end), source.cpuWindows.last())
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+
+        gate.complete(Unit)
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+    }
+
+    @Test
+    fun `choosing the range that the default window has become fetches it instead of waiting on the dropped answer`() = runComposeUiTest {
+        val source = FakeSource(JobPods)
+        // The Job loses the start time its run window came from, so its default falls back to the last 6 hours.
+        var shown by mutableStateOf(targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600)))
+        showChanging(source) { shown }
+        shown = shown.copy(defaultWindow = UsageWindow.Sliding(HistoryRange.H6))
+        waitForIdle()
+        assertEquals(HistoryRange.H6.window(NOW), source.cpuWindows.last())
+
+        // The button names the window shown, the fallback range.
+        onNodeWithText("6h ▾").performClick()
+        onNodeWithText("6h").performClick()
+        waitForIdle()
+
+        onNodeWithText("6h ▾").assertExists()
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+    }
+
+    @Test
+    fun `choosing another window or mode shows the loading line while its answer is out`() = runComposeUiTest {
+        val source = FakeSource(JobPods)
+        showChanging(source) { targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600)) }
+
+        source.gate = CompletableDeferred()
+        onNodeWithText("Total").performClick()
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
     }
 
     // ── Driver + executors ──────────────────────────────────────────────────
@@ -822,6 +1011,30 @@ class WorkloadUsageHistorySectionUiTest {
     }
 
     // ── the pure pieces ─────────────────────────────────────────────────────
+
+    @Test
+    fun `a target that says nothing else keeps the Deployment's notes and charts no throttling without live pods`() {
+        val target = targetOf(UsageWindow.Sliding(HistoryRange.H6))
+
+        assertEquals(NO_CURRENT_CPU_LIMIT_NOTE, target.noCpuLimitNote)
+        assertEquals(GMP_STALENESS_NOTE, target.stalenessNote)
+        assertFalse(target.throttlingWithoutLivePods)
+    }
+
+    @Test
+    fun `a target without live pods charts every kind only when it asks for throttling without them`() {
+        val everyKind = listOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.NetworkRx, PodSeriesKind.NetworkTx, PodSeriesKind.Throttling)
+        val limited = pod("$JOB-x7k2p")
+        val unlimited = pod("$JOB-92f6w", resources = emptyList())
+
+        assertEquals(everyKind, usageKinds(emptyList(), throttlingWithoutLivePods = true))
+        assertEquals(deploymentKinds(emptyList()), usageKinds(emptyList(), throttlingWithoutLivePods = false))
+        // Live pods decide, whichever way the flag is set.
+        assertEquals(deploymentKinds(listOf(unlimited)), usageKinds(listOf(unlimited), throttlingWithoutLivePods = true))
+        assertFalse(PodSeriesKind.Throttling in usageKinds(listOf(unlimited), throttlingWithoutLivePods = true))
+        assertEquals(everyKind, usageKinds(listOf(limited), throttlingWithoutLivePods = true))
+        assertEquals(deploymentKinds(listOf(limited, unlimited.copy(hostNetwork = true))), usageKinds(listOf(limited, unlimited.copy(hostNetwork = true)), throttlingWithoutLivePods = true))
+    }
 
     @Test
     fun `a sliding window is the range's, and a run window is the run's with a margin`() {

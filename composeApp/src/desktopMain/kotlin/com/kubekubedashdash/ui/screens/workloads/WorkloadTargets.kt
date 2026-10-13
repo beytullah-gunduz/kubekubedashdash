@@ -24,6 +24,17 @@ internal const val NO_SCHEDULED_SPARK_RUNS_NOTE = "No run of this application is
 internal const val CUT_BATCH_NAME_NOTE =
     "This name is longer than a pod name keeps, so the charts can include pods of another workload whose name starts the same way."
 
+internal const val JOB_NO_CPU_LIMIT_NOTE = "No pod of this Job has a CPU limit — CFS throttling does not apply."
+
+internal const val CRONJOB_NO_CPU_LIMIT_NOTE = "No pod of the newest run has a CPU limit — CFS throttling does not apply."
+
+internal const val SPARK_NO_CPU_LIMIT_NOTE = "No pod of this application has a CPU limit — CFS throttling does not apply."
+
+internal const val SCHEDULED_SPARK_NO_CPU_LIMIT_NOTE = "No pod of these runs has a CPU limit — CFS throttling does not apply."
+
+internal const val BATCH_GMP_STALENESS_NOTE =
+    "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so a pod's line can run past the end of its run."
+
 /**
  * What a Job's usage section charts; null only when [res] has no namespace. Every pod of the Job is current,
  * retries included, and the run is the default window.
@@ -38,6 +49,7 @@ internal fun jobTarget(res: GenericResourceInfo, livePods: List<PodInfo>): Usage
         defaultWindow = usage.runStartSec?.let { UsageWindow.Run(it, usage.runEndSec) } ?: UsageWindow.Sliding(HistoryRange.H6),
         runLabel = "Run",
         perPodDescription = "One line per pod.",
+        noCpuLimitNote = JOB_NO_CPU_LIMIT_NOTE,
     )
 }
 
@@ -56,6 +68,7 @@ internal fun cronJobTarget(res: GenericResourceInfo, jobs: List<GenericResourceI
         defaultWindow = usage.runStartSec?.let { UsageWindow.Runs(it) } ?: UsageWindow.Sliding(HistoryRange.H24),
         runLabel = "Runs",
         perPodDescription = "One line per pod; earlier runs in grey.",
+        noCpuLimitNote = CRONJOB_NO_CPU_LIMIT_NOTE,
     )
 }
 
@@ -73,6 +86,7 @@ internal fun sparkTarget(res: GenericResourceInfo, livePods: List<PodInfo>): Usa
         driverPods = res.spark?.let { setOf(it.driverPod) }.orEmpty(),
         defaultWindow = usage.runStartSec?.let { UsageWindow.Run(it, usage.runEndSec) } ?: UsageWindow.Sliding(HistoryRange.H6),
         runLabel = "Run",
+        noCpuLimitNote = SPARK_NO_CPU_LIMIT_NOTE,
     )
 }
 
@@ -91,6 +105,7 @@ internal fun scheduledSparkTarget(res: GenericResourceInfo, runs: List<GenericRe
         driverPods = ownedSparkRuns(res, runs).mapNotNull { it.spark?.driverPod }.toSet(),
         defaultWindow = usage.runStartSec?.let { UsageWindow.Runs(it) } ?: UsageWindow.Sliding(HistoryRange.H24),
         runLabel = "Runs",
+        noCpuLimitNote = SCHEDULED_SPARK_NO_CPU_LIMIT_NOTE,
     )
 }
 
@@ -102,6 +117,7 @@ private fun batchTarget(
     defaultWindow: UsageWindow,
     runLabel: String,
     perPodDescription: String,
+    noCpuLimitNote: String,
 ): UsageTarget {
     val grouping = UsageGrouping.PerPod(usage.currentPrefixes)
     return UsageTarget(
@@ -115,6 +131,9 @@ private fun batchTarget(
         notes = if (usage.cutNames) listOf(CUT_BATCH_NAME_NOTE) else emptyList(),
         runLabel = runLabel,
         perPodDescription = perPodDescription,
+        noCpuLimitNote = noCpuLimitNote,
+        stalenessNote = BATCH_GMP_STALENESS_NOTE,
+        throttlingWithoutLivePods = true,
     )
 }
 
@@ -127,6 +146,7 @@ private fun driverExecutorsTarget(
     driverPods: Set<String>,
     defaultWindow: UsageWindow,
     runLabel: String,
+    noCpuLimitNote: String,
 ): UsageTarget = UsageTarget(
     key = res.uid,
     podSet = usage.ref,
@@ -138,6 +158,9 @@ private fun driverExecutorsTarget(
     notes = emptyList(),
     runLabel = runLabel,
     perPodDescription = "",
+    noCpuLimitNote = noCpuLimitNote,
+    stalenessNote = BATCH_GMP_STALENESS_NOTE,
+    throttlingWithoutLivePods = true,
 )
 
 // The live pods the pattern selects that [isCurrent] draws in colour, sorted by name; none without a pattern.
