@@ -12,10 +12,14 @@ import java.util.concurrent.TimeUnit
  * usable PATH from the user's shell profile + well-known install locations and applies it
  * explicitly to every subprocess we spawn, so we don't depend on the JVM's own env map
  * propagating correctly to child processes.
+ *
+ * Windows starts a GUI app with the user's full PATH, so there the PATH is only searched —
+ * with PATHEXT, since `aws` is `aws.exe` and `gcloud` is `gcloud.cmd` — and never rewritten.
  */
 object ShellEnvironment {
     private val log = LoggerFactory.getLogger(ShellEnvironment::class.java)
     private val sep: String = File.pathSeparator
+    private val isWindows: Boolean = System.getProperty("os.name").orEmpty().lowercase().startsWith("windows")
 
     @Volatile
     private var resolvedPath: String? = null
@@ -31,6 +35,8 @@ object ShellEnvironment {
         }
 
     fun applyTo(pb: ProcessBuilder) {
+        // Windows: the inherited PATH is already complete; see installIntoJvmEnv.
+        if (isWindows) return
         pb.environment()["PATH"] = augmentedPath
     }
 
@@ -47,32 +53,31 @@ object ShellEnvironment {
      *
      * Requires `--add-opens java.base/java.lang=ALL-UNNAMED` on JDK 17+ (set in
      * composeApp/build.gradle.kts).
+     *
+     * Skipped on Windows: Explorer hands a GUI app the user's full PATH, so there is nothing to
+     * fix. Injecting there used to replace the whole PATH with the Unix fallback directories
+     * (the Windows entries never passed the absolute-path filter), and the JVM's env map is
+     * case-sensitive, so writing `PATH` also left a second variable beside the inherited `Path`
+     * in every child's environment — fabric8 launches exec plugins as `cmd.exe /c aws …`.
      */
     fun installIntoJvmEnv() {
+        if (isWindows) {
+            log.info("Windows: keeping the inherited PATH")
+            return
+        }
         try {
             val path = augmentedPath
             val peClass = Class.forName("java.lang.ProcessEnvironment")
             val envField = peClass.getDeclaredField("theEnvironment").apply { isAccessible = true }
             val env = envField.get(null)
 
-            // Windows: theEnvironment is Map<String, String> and there's a sibling
-            // theCaseInsensitiveEnvironment that the launcher reads from. Unix/macOS:
-            // theEnvironment is Map<Variable, Value> with byte-array-backed wrapper types.
-            val ciField = runCatching { peClass.getDeclaredField("theCaseInsensitiveEnvironment") }.getOrNull()
-            if (ciField != null) {
-                @Suppress("UNCHECKED_CAST")
-                (env as MutableMap<String, String>)["PATH"] = path
-                ciField.isAccessible = true
-                @Suppress("UNCHECKED_CAST")
-                (ciField.get(null) as MutableMap<String, String>)["PATH"] = path
-            } else {
-                val varClass = Class.forName("java.lang.ProcessEnvironment\$Variable")
-                val valClass = Class.forName("java.lang.ProcessEnvironment\$Value")
-                val varOf = varClass.getDeclaredMethod("valueOf", String::class.java).apply { isAccessible = true }
-                val valOf = valClass.getDeclaredMethod("valueOf", String::class.java).apply { isAccessible = true }
-                @Suppress("UNCHECKED_CAST")
-                (env as MutableMap<Any, Any>)[varOf.invoke(null, "PATH")] = valOf.invoke(null, path)
-            }
+            // Unix/macOS: theEnvironment is Map<Variable, Value> with byte-array-backed wrapper types.
+            val varClass = Class.forName("java.lang.ProcessEnvironment\$Variable")
+            val valClass = Class.forName("java.lang.ProcessEnvironment\$Value")
+            val varOf = varClass.getDeclaredMethod("valueOf", String::class.java).apply { isAccessible = true }
+            val valOf = valClass.getDeclaredMethod("valueOf", String::class.java).apply { isAccessible = true }
+            @Suppress("UNCHECKED_CAST")
+            (env as MutableMap<Any, Any>)[varOf.invoke(null, "PATH")] = valOf.invoke(null, path)
             log.info("Injected augmented PATH into JVM process env ({} chars)", path.length)
         } catch (t: Throwable) {
             log.warn(
@@ -116,24 +121,73 @@ object ShellEnvironment {
         val found = scanForExecutable(command)
         commandCache[command] = Optional.ofNullable(found)
         if (found != null) {
-            log.debug("Resolved '{}' -> {}", command, displayPath(found))
+            // INFO, so app.log (INFO and up) shows which binary a support report is about.
+            // Cached, so once per command until the next invalidate().
+            log.info("Resolved '{}' -> {}", command, displayPath(found))
         } else {
             log.debug("Command '{}' not found on augmented PATH", command)
         }
         return found
     }
 
-    private fun scanForExecutable(command: String): String? {
-        for (dir in augmentedPath.split(sep)) {
-            val candidate = File(dir.trim(), command)
-            if (candidate.isFile && candidate.canExecute()) {
-                return candidate.absolutePath
+    private fun scanForExecutable(command: String): String? = findExecutable(command, augmentedPath.split(sep), isWindows, System.getenv("PATHEXT"))
+
+    // The PATHEXT extensions CreateProcess can start (.bat/.cmd through cmd.exe), in the default
+    // PATHEXT order. PATHEXT also lists script types (.vbs, .js, …) that ProcessBuilder can't run.
+    private val windowsLaunchableExtensions = listOf(".com", ".exe", ".bat", ".cmd")
+
+    /**
+     * The first of [dirs] that holds [command], as an absolute path. On Windows a name without
+     * an extension is tried with each launchable PATHEXT extension, in PATHEXT order within each
+     * directory as cmd.exe does, and never bare: the Google Cloud SDK ships an extensionless
+     * `gcloud` shell script beside `gcloud.cmd`, and Windows can't start it.
+     */
+    internal fun findExecutable(command: String, dirs: List<String>, windows: Boolean, pathExt: String?): String? {
+        val names = if (windows) windowsCandidateNames(command, pathExt) else listOf(command)
+        for (dir in dirs) {
+            if (dir.isBlank()) continue
+            for (name in names) {
+                val candidate = File(dir, name)
+                // Windows has no execute bit; there canExecute() only says the file exists.
+                if (candidate.isFile && (windows || candidate.canExecute())) {
+                    return candidate.absolutePath
+                }
             }
         }
         return null
     }
 
+    private fun windowsCandidateNames(command: String, pathExt: String?): List<String> {
+        if (windowsLaunchableExtensions.any { command.endsWith(it, ignoreCase = true) }) return listOf(command)
+        val extensions = pathExt.orEmpty().split(';')
+            .map { it.trim().lowercase() }
+            .filter { it in windowsLaunchableExtensions }
+            .distinct()
+            .ifEmpty { windowsLaunchableExtensions }
+        return extensions.map { command + it }
+    }
+
+    /**
+     * Windows: the inherited PATH, then the default install directories of the AWS CLI and the
+     * Google Cloud SDK, so a CLI installed after launch — whose installer updated the PATH this
+     * process no longer reads — is found on the next check.
+     */
+    internal fun windowsSearchDirs(env: (String) -> String?): List<String> {
+        val seen = LinkedHashSet<String>()
+        seen += pathEntries(env("PATH"), windows = true)
+        env("ProgramFiles")?.let { seen += pathEntries("$it\\Amazon\\AWSCLIV2", windows = true) }
+        env("LOCALAPPDATA")?.let { seen += pathEntries("$it\\Google\\Cloud SDK\\google-cloud-sdk\\bin", windows = true) }
+        return seen.toList()
+    }
+
     private fun resolveAugmentedPath(): String {
+        if (isWindows) {
+            val dirs = windowsSearchDirs(System::getenv)
+            log.info("Resolved augmented PATH: {} entries", dirs.size)
+            log.debug("Augmented PATH: {}", dirs.joinToString(sep) { displayPath(it) })
+            return dirs.joinToString(sep)
+        }
+
         val seen = LinkedHashSet<String>()
         addPathDirs(seen, System.getenv("PATH"))
 
@@ -141,10 +195,8 @@ object ShellEnvironment {
         if (osName.contains("mac")) {
             addPathDirs(seen, runPathHelper())
         }
-        if (!osName.contains("windows")) {
-            addPathDirs(seen, runShellPathQuery(login = true))
-            addPathDirs(seen, runShellPathQuery(login = false))
-        }
+        addPathDirs(seen, runShellPathQuery(login = true))
+        addPathDirs(seen, runShellPathQuery(login = false))
 
         addPathDirs(seen, "/opt/homebrew/bin")
         addPathDirs(seen, "/opt/homebrew/sbin")
@@ -180,13 +232,22 @@ object ShellEnvironment {
     }
 
     private fun addPathDirs(seen: MutableSet<String>, raw: String?) {
-        if (raw == null) return
-        for (dir in raw.split(sep)) {
-            val trimmed = dir.trim()
-            if (trimmed.isNotBlank() && trimmed.startsWith("/")) {
-                seen += trimmed
-            }
-        }
+        seen += pathEntries(raw, windows = false)
+    }
+
+    // C:\dir, C:/dir or a UNC share (\\server\share) — not C:dir (relative to that drive's
+    // current directory) nor \dir (relative to the current drive).
+    private val windowsAbsolutePath = Regex("""^(?:[A-Za-z]:[\\/]|\\\\[^\\]).*""")
+
+    /**
+     * The absolute directories in a PATH value. Relative entries (".", "bin") are dropped so
+     * the working directory can never shadow a CLI. Windows entries may be quoted.
+     */
+    internal fun pathEntries(raw: String?, windows: Boolean): List<String> {
+        if (raw == null) return emptyList()
+        return raw.split(if (windows) ';' else ':')
+            .map { entry -> entry.trim().let { if (windows) it.removeSurrounding("\"") else it } }
+            .filter { if (windows) windowsAbsolutePath.matches(it) else it.startsWith("/") }
     }
 
     private fun runPathHelper(): String? {
