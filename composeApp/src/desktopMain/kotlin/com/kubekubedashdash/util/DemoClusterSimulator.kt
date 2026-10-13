@@ -117,8 +117,11 @@ class DemoClusterSimulator(
     // Simulator-owned jobs. Key = "ns/name".
     private val jobFates = ConcurrentHashMap<String, JobFate>()
 
-    // The last minute (since the epoch) each CronJob scheduled a Job for: a real CronJob never schedules one minute twice.
+    // The last schedule slot (a minute since the epoch) each simulated CronJob ran a Job for: a real CronJob runs once per slot.
     private val lastScheduledMinute = ConcurrentHashMap<String, Long>()
+
+    // The clock the CronJob schedule slots are read from; a test replaces it.
+    internal var nowMillis: () -> Long = System::currentTimeMillis
 
     // Smoothly-drifting metrics baselines so the chart wobbles instead of jumping.
     private data class NodeMetricsBaseline(var cpuMillis: Long, var memBytes: Long)
@@ -165,6 +168,9 @@ class DemoClusterSimulator(
         "db-migrate" to "postgres:16",
     )
     private val cronOwnerPool = listOf("nightly-backup", "log-rotation", "db-vacuum", null, null, null)
+
+    // The CronJobs whose `*/N` schedule is simulated, with N. The daily and weekly ones never get a simulated run.
+    private val cronEveryMinutes = mapOf("log-rotation" to 15)
 
     // Where each seeded CronJob actually lives — used to route Job spawns into
     // the right namespace so the Job's ownerRef resolves to a real CronJob.
@@ -706,16 +712,17 @@ class DemoClusterSimulator(
     // Internal so a test can take one step without the loop's timing.
     internal fun spawnJob() {
         val (app, image) = jobAppPool.random()
-        val cronOwner = cronOwnerPool.random()
+        // A CronJob owns the Job only when its schedule has a slot that hasn't run yet; otherwise the Job is free-standing.
+        val due = cronOwnerPool.random()?.let { owner -> claimScheduleSlot(owner)?.let { owner to it } }
         // Route Jobs into the owning CronJob's namespace so the owner ref
         // resolves; for free-standing jobs, pick a random ns.
-        val ns = cronOwner?.let { cronOwnerNs[it] } ?: nsPool.random()
-        // A CronJob's Jobs are named after the minute they were scheduled for.
-        val name = if (cronOwner != null) "$cronOwner-${nextScheduledMinute(cronOwner)}" else "$app-${random.nextInt(10_000, 99_999)}"
+        val ns = due?.let { cronOwnerNs[it.first] } ?: nsPool.random()
+        // A CronJob's Jobs are named after the minute of the slot they were scheduled for.
+        val name = if (due != null) "${due.first}-${due.second}" else "$app-${random.nextInt(10_000, 99_999)}"
         val key = "$ns/$name"
 
-        val cj = cronOwner?.let {
-            runCatching { client.batch().v1().cronjobs().inNamespace(ns).withName(it).get() }.getOrNull()
+        val cj = due?.let {
+            runCatching { client.batch().v1().cronjobs().inNamespace(ns).withName(it.first).get() }.getOrNull()
         }
 
         runCatching {
@@ -840,8 +847,31 @@ class DemoClusterSimulator(
         log.debug("Job deleted: {}/{}", ns, name)
     }
 
-    // The minute a CronJob's next Job is named after: the current one, or the one after its last when it already scheduled that.
-    private fun nextScheduledMinute(cronJob: String): Long = lastScheduledMinute.merge(cronJob, System.currentTimeMillis() / 60_000) { last, current -> maxOf(current, last + 1) }!!
+    // The current schedule slot of a CronJob with a simulated schedule (its minute since the epoch), recorded as used;
+    // null when the CronJob has no simulated schedule or already ran in this slot.
+    private fun claimScheduleSlot(cronJob: String): Long? {
+        val everyMinutes = cronEveryMinutes[cronJob] ?: return null
+        val ns = cronOwnerNs[cronJob] ?: return null
+        val slotMinute = nowMillis() / 60_000 / everyMinutes * everyMinutes
+        var claimed: Long? = null
+        lastScheduledMinute.compute(cronJob) { _, last ->
+            val lastRun = last ?: newestRunMinute(cronJob, ns)
+            if (slotMinute > lastRun) {
+                claimed = slotMinute
+                slotMinute
+            } else {
+                lastRun
+            }
+        }
+        return claimed
+    }
+
+    // The minute the newest existing Job of a CronJob is named after (`<cronjob>-<minute>`), 0 when it has none.
+    private fun newestRunMinute(cronJob: String, ns: String): Long = runCatching {
+        client.batch().v1().jobs().inNamespace(ns).withLabel("cronjob", cronJob).list().items
+            .mapNotNull { it.metadata.name.substringAfterLast('-').toLongOrNull() }
+            .maxOrNull()
+    }.getOrNull() ?: 0L
 
     // Kubernetes draws the 5 random characters of a generated name from an alphabet without vowels or digits that look like them.
     private fun podNameSuffix(): String = (1..POD_NAME_SUFFIX_LENGTH).map { POD_NAME_ALPHABET.random(random) }.joinToString("")

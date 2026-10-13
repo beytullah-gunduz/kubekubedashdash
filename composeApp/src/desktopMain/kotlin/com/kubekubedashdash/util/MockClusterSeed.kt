@@ -55,6 +55,7 @@ import io.fabric8.kubernetes.api.model.storage.CSIDriverBuilder
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
+import java.time.Instant
 import java.util.Base64
 
 /**
@@ -606,23 +607,53 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
     }
 
     // ── CronJobs ───────────────────────────────────────────────────────────
-    data class CjDef(val name: String, val ns: String, val schedule: String, val app: String, val image: String, val command: String)
+    // log-rotation runs every 15 minutes: its history is the three slots before the current one, each run 4 minutes long.
+    data class CronRun(val minute: Long, val podSuffix: String) {
+        val start: String = Instant.ofEpochSecond(minute * 60).toString()
+        val finish: String = Instant.ofEpochSecond(minute * 60 + 240).toString()
+    }
+
+    val logRotationSlot = System.currentTimeMillis() / 60_000 / 15 * 15
+    val logRotationRuns = listOf(45L to "k2m4p", 30L to "q7r9t", 15L to "b5x8z").map { (minutesBack, suffix) ->
+        CronRun(logRotationSlot - minutesBack, suffix)
+    }
+
+    data class CjDef(
+        val name: String,
+        val ns: String,
+        val schedule: String,
+        val app: String,
+        val image: String,
+        val command: String,
+        val lastScheduleTime: String = MockClusterProvider.minutesAgo(60),
+        val lastSuccessfulTime: String? = null,
+    )
 
     val cjDefs = listOf(
         CjDef("nightly-backup", "production", "0 2 * * *", "backup", "busybox:1.36", "echo 'taking backup' && sleep 5"),
         CjDef("db-vacuum", "production", "30 4 * * 0", "db-vacuum", "postgres:16", "vacuumdb --all --analyze"),
-        CjDef("log-rotation", "monitoring", "*/15 * * * *", "log-rotator", "busybox:1.36", "find /var/log -name '*.gz' -mtime +7 -delete"),
+        CjDef(
+            "log-rotation",
+            "monitoring",
+            "*/15 * * * *",
+            "log-rotator",
+            "busybox:1.36",
+            "find /var/log -name '*.gz' -mtime +7 -delete",
+            lastScheduleTime = logRotationRuns.last().start,
+            lastSuccessfulTime = logRotationRuns.last().finish,
+        ),
         CjDef("cert-renewal", "default", "0 0 * * 1", "cert-bot", "certbot/certbot:v2.10.0", "certbot renew --quiet"),
     )
 
     val createdCjByName = mutableMapOf<String, CronJob>()
     cjDefs.forEach { def ->
+        val createdAt = MockClusterProvider.minutesAgo(1440)
         val cj = client.batch().v1().cronjobs().inNamespace(def.ns).resource(
             CronJobBuilder()
                 .withNewMetadata()
                 .withName(def.name)
                 .withNamespace(def.ns)
-                .withCreationTimestamp(MockClusterProvider.minutesAgo(1440))
+                .withCreationTimestamp(createdAt)
                 .addToLabels("app", def.app)
                 .endMetadata()
                 .withNewSpec()
@@ -650,20 +681,21 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
                 .endJobTemplate()
                 .endSpec()
                 .withNewStatus()
-                .withLastScheduleTime(MockClusterProvider.minutesAgo(60))
+                .withLastScheduleTime(def.lastScheduleTime)
+                .withLastSuccessfulTime(def.lastSuccessfulTime)
                 .endStatus()
                 .build(),
         ).create()
+        backdate("/apis/batch/v1/namespaces/${def.ns}/cronjobs/${def.name}", createdAt)
         createdCjByName[def.name] = cj
     }
 
-    // Seed a recent Job + owned Pod for two CronJobs so the topology graph
+    // Seed a recent Job + owned Pod for a CronJob so the topology graph
     // has CronJob cards on first render. The simulator's job loop creates
     // more jobs over time but isn't guaranteed to fire within the screenshot
     // task's warmup window.
     val seedJobChains = listOf(
         Triple("nightly-backup", "backup", "busybox:1.36"),
-        Triple("log-rotation", "log-rotator", "busybox:1.36"),
     )
     seedJobChains.forEach { (cjName, app, image) ->
         val cj = createdCjByName[cjName] ?: return@forEach
@@ -690,6 +722,44 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
         ).create()
         backdate("/api/v1/namespaces/$ns/pods/$podName", started)
         totalPodsSeeded++
+    }
+
+    // log-rotation's finished runs, one per 15-minute slot, so its usage chart shows evenly spaced markers.
+    createdCjByName["log-rotation"]?.let { cj ->
+        val ns = cj.metadata.namespace
+        logRotationRuns.forEach { run ->
+            val jobName = "log-rotation-${run.minute}"
+            val podName = "$jobName-${run.podSuffix}"
+            val createdJob = client.batch().v1().jobs().inNamespace(ns).resource(
+                MockClusterProvider.buildJob(
+                    jobName,
+                    ns,
+                    "log-rotator",
+                    "busybox:1.36",
+                    creationTimestamp = run.start,
+                    cronJob = cj,
+                    active = 0,
+                    succeeded = 1,
+                    completionTime = run.finish,
+                ),
+            ).create()
+            backdate("/apis/batch/v1/namespaces/$ns/jobs/$jobName", run.start)
+            client.pods().inNamespace(ns).resource(
+                MockClusterProvider.buildPod(
+                    name = podName,
+                    ns = ns,
+                    app = "log-rotator",
+                    image = "busybox:1.36",
+                    nodeName = "mock-node-1",
+                    phase = "Succeeded",
+                    creationTimestamp = run.start,
+                    owner = createdJob,
+                    finishedAt = run.finish,
+                ),
+            ).create()
+            backdate("/api/v1/namespaces/$ns/pods/$podName", run.start)
+            totalPodsSeeded++
+        }
     }
 
     // A finished run of db-vacuum, so its usage chart has a Job that ended next to the running ones.

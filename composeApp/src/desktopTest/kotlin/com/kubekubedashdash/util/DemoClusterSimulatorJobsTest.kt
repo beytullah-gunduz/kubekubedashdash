@@ -19,8 +19,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The Jobs the demo simulator creates, as the usage history charts meet them: CronJob Jobs named after the
- * minute they were scheduled for, pods named like generated ones, and a pod that ends with its Job.
+ * The Jobs the demo simulator creates, as the usage history charts meet them: CronJob Jobs run on their
+ * schedule's slots and named after the slot's minute, pods named like generated ones, and a pod that ends with its Job.
  */
 class DemoClusterSimulatorJobsTest {
 
@@ -65,25 +65,67 @@ class DemoClusterSimulatorJobsTest {
         repeat(count) { simulator.spawnJob() }
     }
 
+    // The names of the Jobs a CronJob owns, oldest slot first.
+    private fun ownedBy(cronJob: String): List<String> = jobs()
+        .filter { job -> job.metadata.ownerReferences.any { it.kind == "CronJob" && it.name == cronJob } }
+        .map { it.metadata.name }
+        .sorted()
+
     @Test
-    fun `a CronJob's Jobs are named after the minute they were scheduled for, never one minute twice`() {
-        val firstMinute = System.currentTimeMillis() / 60_000
+    fun `log-rotation runs once per 15-minute slot, named after the slot's minute, and the daily and weekly CronJobs never run`() {
+        var now = Instant.parse("2026-10-13T08:37:20Z").toEpochMilli()
+        simulator.nowMillis = { now }
+        val slot = now / 60_000 / 15 * 15
 
-        spawnJobs(150)
+        spawnJobs(100)
 
-        val owned = jobs().filter { job -> job.metadata.ownerReferences.any { it.kind == "CronJob" } }
-        assertTrue(owned.size >= 40, "only ${owned.size} of the Jobs belong to a CronJob")
-        val minutesByCronJob = owned.groupBy({ job -> job.metadata.ownerReferences.single { it.kind == "CronJob" }.name }) { job ->
-            val owner = job.metadata.ownerReferences.single { it.kind == "CronJob" }.name
-            assertTrue(Regex("${Regex.escape(owner)}-[0-9]{8}").matches(job.metadata.name), job.metadata.name)
-            job.metadata.name.substringAfterLast('-').toLong()
-        }
-        assertEquals(CRON_JOBS.map { it.first }.toSet(), minutesByCronJob.keys)
-        for ((cronJob, minutes) in minutesByCronJob) {
-            assertEquals(minutes.size, minutes.toSet().size, "$cronJob scheduled a minute twice: $minutes")
-            assertTrue(minutes.min() >= firstMinute, "$cronJob has a Job from before the test began")
-            assertEquals(minutes.size - 1L, minutes.max() - minutes.min(), "$cronJob skipped a minute: ${minutes.sorted()}")
-        }
+        assertEquals(listOf("log-rotation-$slot"), ownedBy("log-rotation"))
+        assertEquals(0, slot % 15, "the slot is a minute the schedule fires on")
+
+        now += 5 * 60_000
+        spawnJobs(100)
+        assertEquals(listOf("log-rotation-$slot"), ownedBy("log-rotation"), "the slot has not changed")
+
+        now += 10 * 60_000
+        spawnJobs(100)
+        assertEquals(listOf("log-rotation-$slot", "log-rotation-${slot + 15}"), ownedBy("log-rotation"))
+
+        assertEquals(emptyList(), ownedBy("nightly-backup"))
+        assertEquals(emptyList(), ownedBy("db-vacuum"))
+        val free = jobs().filter { job -> job.metadata.ownerReferences.isEmpty() }
+        assertTrue(free.size >= 250, "only ${free.size} of the Jobs are free-standing")
+    }
+
+    // A Job of log-rotation that the cluster already holds, named after the minute it was scheduled for.
+    private fun existingRun(minute: Long) {
+        val cronJob = assertNotNull(client.batch().v1().cronjobs().inNamespace("monitoring").withName("log-rotation").get())
+        client.batch().v1().jobs().inNamespace("monitoring")
+            .resource(MockClusterProvider.buildJob("log-rotation-$minute", "monitoring", "log-rotator", "busybox:1.36", cronJob = cronJob))
+            .create()
+    }
+
+    @Test
+    fun `log-rotation does not run a slot again that its newest Job in the cluster was scheduled for`() {
+        val now = Instant.parse("2026-10-13T08:37:20Z").toEpochMilli()
+        simulator.nowMillis = { now }
+        val slot = now / 60_000 / 15 * 15
+        existingRun(slot)
+
+        spawnJobs(100)
+
+        assertEquals(listOf("log-rotation-$slot"), ownedBy("log-rotation"))
+    }
+
+    @Test
+    fun `log-rotation runs the current slot when its newest Job in the cluster is an earlier one`() {
+        val now = Instant.parse("2026-10-13T08:37:20Z").toEpochMilli()
+        simulator.nowMillis = { now }
+        val slot = now / 60_000 / 15 * 15
+        existingRun(slot - 15)
+
+        spawnJobs(100)
+
+        assertEquals(listOf("log-rotation-${slot - 15}", "log-rotation-$slot"), ownedBy("log-rotation"))
     }
 
     @Test
