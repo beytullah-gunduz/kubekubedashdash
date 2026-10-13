@@ -27,6 +27,7 @@ import com.kubekubedashdash.ui.yamledit.YamlEditorWindows
 import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
+import com.kubekubedashdash.util.describeFailureShape
 import com.kubekubedashdash.util.toGeometry
 import com.kubekubedashdash.yamledit.session.QuitGuard
 import com.kubekubedashdash.yamledit.session.YamlEditRegistry
@@ -48,10 +49,12 @@ fun main() {
     // workers, the AWT EDT, coroutine workers) into logback. Without this
     // they go to System.err, which is /dev/null when the .app bundle is
     // launched from Finder, and the app silently hangs instead of telling
-    // us what blew up.
-    val crashLogger = LoggerFactory.getLogger("UncaughtException")
+    // us what blew up. The logger sits under com.kubekubedashdash because only that subtree logs at
+    // DEBUG (drawer and console), where the trace goes: app.log never carries it.
+    val crashLogger = LoggerFactory.getLogger("com.kubekubedashdash.UncaughtException")
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-        crashLogger.error("Uncaught exception in thread {}", thread.name, throwable)
+        crashLogger.error("Uncaught exception: {}", describeFailureShape(throwable))
+        crashLogger.debug("Uncaught exception in thread {}", thread.name, throwable)
     }
 
     // Graceful shutdown (audit C2). exitApplication() (fired when the last
@@ -63,14 +66,23 @@ fun main() {
     // running, so registering unconditionally is safe.
     Runtime.getRuntime().addShutdownHook(
         Thread({
-            val shutdownLog = LoggerFactory.getLogger("Shutdown")
+            val shutdownLog = LoggerFactory.getLogger("com.kubekubedashdash.Shutdown")
             shutdownLog.info("Shutdown hook: stopping MCP server, log streams and port forwards")
             runCatching { McpServerManager.stop() }
-                .onFailure { shutdownLog.warn("MCP server stop failed: {}", it.message) }
+                .onFailure {
+                    shutdownLog.warn("MCP server stop failed: {}", describeFailureShape(it))
+                    shutdownLog.debug("MCP server stop failed: {}", it.message)
+                }
             runCatching { LogStreamRegistry.clearAll() }
-                .onFailure { shutdownLog.warn("Log stream teardown failed: {}", it.message) }
+                .onFailure {
+                    shutdownLog.warn("Log stream teardown failed: {}", describeFailureShape(it))
+                    shutdownLog.debug("Log stream teardown failed: {}", it.message)
+                }
             runCatching { PortForwardRegistry.stopAll() }
-                .onFailure { shutdownLog.warn("Port forward teardown failed: {}", it.message) }
+                .onFailure {
+                    shutdownLog.warn("Port forward teardown failed: {}", describeFailureShape(it))
+                    shutdownLog.debug("Port forward teardown failed: {}", it.message)
+                }
         }, "app-shutdown"),
     )
 

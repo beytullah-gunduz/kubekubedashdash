@@ -6,6 +6,7 @@ import com.kubekubedashdash.util.AwsProfile
 import com.kubekubedashdash.util.ClusterReferenceParser
 import com.kubekubedashdash.util.EksCluster
 import com.kubekubedashdash.util.EksClusterDiscoverer
+import com.kubekubedashdash.util.describeFailureShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -388,7 +389,8 @@ class EksDiscoveryViewModel(
                 RegionScope.COMMON -> (listOfNotNull(profileDefault) + gateway.commonRegions).distinct()
 
                 RegionScope.ALL_ENABLED -> gateway.listEnabledRegions(profile).getOrElse {
-                    log.warn("Falling back to common regions for {}: {}", profile, it.message)
+                    log.warn("Falling back to common regions: {}", describeFailureShape(it))
+                    log.debug("Falling back to common regions for {}: {}", profile, it.message)
                     gateway.commonRegions
                 }
             }

@@ -73,12 +73,13 @@ object ShellEnvironment {
                 @Suppress("UNCHECKED_CAST")
                 (env as MutableMap<Any, Any>)[varOf.invoke(null, "PATH")] = valOf.invoke(null, path)
             }
-            log.info("Injected augmented PATH into JVM process env ({} chars)", path.length)
+            log.info("Injected augmented PATH into JVM process env ({} chars)", path.length) // log-safe: the length only
         } catch (t: Throwable) {
             log.warn(
                 "Could not inject PATH into JVM process env: {}. Exec credential plugins (aws/gcloud/kubelogin) may fail in packaged .app bundles.",
-                t.message,
+                describeFailureShape(t),
             )
+            log.debug("Could not inject PATH into JVM process env", t)
         }
     }
 

@@ -1502,6 +1502,8 @@ class YamlEditSessionTest {
             val sessionEvents = appender.list.filter { it.loggerName == YamlEditSession::class.java.name && it.formattedMessage != "probe-event" }
             assertEquals(
                 listOf(
+                    // The INFO line reaches app.log and names the kind only; the DEBUG line after it names the object.
+                    "Edit session 7 opened Secret",
                     "Edit session 7 opened Secret demo-secret ns=$TEST_NAMESPACE",
                     "Edit session 7 closed",
                     "Edit session 7 failed: IllegalStateException",

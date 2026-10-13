@@ -121,7 +121,8 @@ object PrerequisiteChecker {
                 detail = readable.joinToString(File.pathSeparator) { displayPath(it) },
             )
         } else {
-            log.warn("Kubeconfig not found at {}", paths.map { displayPath(it) })
+            log.warn("Kubeconfig not found")
+            log.debug("Kubeconfig not found at {}", paths.map { displayPath(it) })
             PrerequisiteCheck(
                 name = NAME_KUBECONFIG,
                 description = "Kubernetes configuration file",

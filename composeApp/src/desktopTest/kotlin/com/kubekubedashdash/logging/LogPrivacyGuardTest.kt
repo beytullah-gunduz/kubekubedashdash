@@ -19,9 +19,11 @@ import kotlin.test.fail
  *
  * A call is flagged when it interpolates into a string (TEMPLATE), logs an exception message or a
  * stack trace (MESSAGE), passes an argument or concatenates code into its message named like an
- * identifier from the D5 list (IDENTIFIER), or passes a bare throwable last (THROWABLE). A call that
- * is safe anyway ends its last line with `// log-safe: <reason>`; the reason is mandatory. The dev-only
- * demo and screenshot sources log fixtures only and are exempt ([LogPrivacyScanner.EXEMPT]).
+ * identifier from the D5 list (IDENTIFIER: a word such as `namespace`, `host`, `msg` or `output`, or a
+ * camelCase name ending in one, such as `displayLabel` or `kubeconfigPath`; `simpleName` is fine), or
+ * passes a bare throwable last (THROWABLE). A call that is safe anyway ends its last line with
+ * `// log-safe: <reason>`; the reason is mandatory. The scan covers every main source except the
+ * dev-only demo and screenshot ones, which log fixtures only ([LogPrivacyScanner.EXEMPT]).
  *
  * Known blind spots, left to review: a message built in a variable first (`val msg = ...; log.warn(msg)`),
  * and an argument whose `toString()` prints names although its variable is not named like one.
@@ -37,7 +39,7 @@ class LogPrivacyGuardTest {
     fun `no INFO WARN or ERROR line in the scanned sources names an identifier or prints a raw exception`() {
         val root = mainRoot()
         assertTrue(root.isDirectory, "main source root not found: ${root.path}")
-        val files = listedFiles(root)
+        val files = allFiles(root)
         assertTrue(files.isNotEmpty(), "the scan covers no file")
 
         val violations = files.flatMap { (file, relative) -> LogPrivacyScanner.scan(relative, file.readText()) }
@@ -61,12 +63,6 @@ class LogPrivacyGuardTest {
             val target = root.resolve(exempt)
             assertTrue(if (exempt.endsWith("/")) target.isDirectory else target.isFile, "stale exemption: $exempt")
         }
-    }
-
-    @Test
-    fun `the listed sources exist`() {
-        val root = mainRoot()
-        SCANNED.forEach { assertTrue(root.resolve(it).isFile, "listed source not found: $it") }
     }
 
     @Test
@@ -120,12 +116,50 @@ class LogPrivacyGuardTest {
         for (word in listOf("ns", "podName", "nodeName", "ctx", "contextName", "cluster", "clusterName", "host", "server", "url", "uri", "endpoint", "user", "account", "project", "profile", "path", "label")) {
             assertEquals(listOf(1 to "IDENTIFIER"), hits("log.info(\"x {}\", $word)"), word)
         }
+        for (word in listOf("namespaces", "names", "contexts", "clusters", "hosts", "paths", "msg", "message", "stderr", "stdout", "output")) {
+            assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"x {}\", $word)"), word)
+        }
         assertEquals(emptyList(), hits("log.info(\"namespace {} name {}\", count, size)"))
         assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"Failed for \" + namespace)"))
         assertEquals(listOf(2 to "IDENTIFIER"), hits(src("val a = 1", "log.warn(", "    \"Failed for \" + pod.name,", ")")))
         assertEquals(emptyList(), hits("log.info(\"x {}\", nameCount)"))
         assertEquals(emptyList(), hits("log.info(\"x {}\", coroutineContext)"))
         assertEquals(emptyList(), hits("log.info(\"Deleting a pod\")"))
+    }
+
+    @Test
+    fun `a camelCase name ending in an identifier word fires`() {
+        for (word in listOf("session.displayLabel", "nsLabel", "kubeconfigPath", "errorMessage", "contextName", "pod.hostName", "nsNames", "roots.labelPaths", "cfg.apiUrl", "req.targetUri", "apiEndpoint", "gcpProject", "awsProfile", "currentUser", "cliOutput", "defaultNamespace", "defaultNamespaces", "activeContext", "serverHost", "billingAccount", "tags.podLabels", "dirPaths")) {
+            assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"x {}\", $word)"), word)
+        }
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"x {}\", msg)"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"x {}\", paths.map { it })"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"x {}\", count, session.displayLabel)"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"Failed for \" + kubeconfigPath)"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits(src("log.warn(", "    \"x {}\",", "    stderr.trim(),", ")")))
+    }
+
+    @Test
+    fun `a class name and a plain suffix lookalike do not fire`() {
+        assertEquals(emptyList(), hits("log.warn(\"x {}\", it::class.simpleName)"))
+        assertEquals(emptyList(), hits("log.warn(\"x {}\", e.javaClass.simpleName)"))
+        assertEquals(emptyList(), hits("log.warn(\"x {}\", type.qualifiedName)"))
+        assertEquals(emptyList(), hits("log.warn(\"x {}\", type.canonicalName)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", coroutineContext)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", pathCount)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", messageCount)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", outputs.size)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", Name)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", userId)"))
+    }
+
+    @Test
+    fun `an exception message is the message rule and not also an identifier`() {
+        assertEquals(listOf(1 to "MESSAGE"), hits("log.warn(\"f {}\", e.message)"))
+        assertEquals(listOf(1 to "MESSAGE"), hits("log.warn(\"f {}\", e.localizedMessage)"))
+        assertEquals(listOf(1 to "MESSAGE"), hits("log.warn(\"f {}\", e.message?.take(80))"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"f {}\", result.message.orEmpty())"))
+        assertEquals(listOf(1 to "MESSAGE", 1 to "IDENTIFIER"), hits("log.warn(\"f {}\", e.message, msg)"))
     }
 
     @Test
@@ -300,10 +334,7 @@ class LogPrivacyGuardTest {
         return kotlinRoot.resolve(MAIN_PACKAGE)
     }
 
-    /** The sources this guard covers today: [SCANNED] minus the exempt ones. */
-    private fun listedFiles(root: File): List<Pair<File, String>> = LogPrivacyScanner.selectScanned(SCANNED).map { root.resolve(it) to it }
-
-    /** Every main source minus the exempt ones: the scope once the sweep covers all of main. */
+    /** Every main source minus the exempt ones. */
     private fun allFiles(root: File): List<Pair<File, String>> = root.walkTopDown()
         .filter { it.isFile && it.extension == "kt" }
         .map { it to it.relativeTo(root).invariantSeparatorsPath }
@@ -315,14 +346,6 @@ class LogPrivacyGuardTest {
         const val D = "$"
         const val TQ = "\"\"\""
 
-        /** Relative to the main package. Widening the guard to all of main means swapping [listedFiles] for [allFiles] in the repo scan. */
-        val SCANNED = listOf(
-            "util/ReactiveKubeClient.kt",
-            "util/ClusterActions.kt",
-            "util/KubeClient.kt",
-            "util/ReactiveInformerFactory.kt",
-        )
-
         const val HEADER =
             "An INFO, WARN or ERROR log line reaches app.log, which users attach to bug reports (D5). " +
                 "It must not name a namespace, resource, context, cluster, host, URL, user, account, project, " +
@@ -330,7 +353,7 @@ class LogPrivacyGuardTest {
                 "Log a failure as describeFailureShape(e) and move the names, the raw message or the throwable " +
                 "to a log.debug line. A call that is safe anyway ends its last line with \"// log-safe: <reason>\". " +
                 "Rules: TEMPLATE (string template), MESSAGE (exception message or stack trace), " +
-                "IDENTIFIER (argument named like an identifier), THROWABLE (bare throwable last), " +
+                "IDENTIFIER (argument named like an identifier: a word such as namespace or msg, or a camelCase name ending in Name, Path, Label, Message and the like), THROWABLE (bare throwable last), " +
                 "UNTERMINATED (call the guard cannot read)."
     }
 }
@@ -366,12 +389,17 @@ internal object LogPrivacyScanner {
 
     private val callStart = Regex("""\b(?:log|logger|[a-z][A-Za-z0-9]*(?:Log|Logger))\s*\.\s*(?:info|warn|error)\s*\(""")
 
-    // `?:`, `?.` and `!!` after the access catch `e.message ?: "x"` and `e.message?.take(80)` too.
+    // `?:`, `?.` and `!!` after the access catch `e.message ?: "x"` and `e.message?.take(80)` too. The
+    // lookahead leaves the delimiter out of the match, so [blankMessageAccess] can blank the access alone.
     private val messageAccess =
-        Regex("""\.(?:message|localizedMessage|stackTrace|stackTraceToString|toString)\b\s*(?:\(\s*\))?\s*(?:[,)]|\?[:.]|!!)""")
+        Regex("""\.(?:message|localizedMessage|stackTrace|stackTraceToString|toString)\b(?=\s*(?:\(\s*\))?\s*(?:[,)]|\?[:.]|!!))""")
 
-    private val identifierWord =
-        Regex("""\b(?:namespace|ns|name|podName|nodeName|context|ctx|contextName|cluster|clusterName|host|server|url|uri|endpoint|user|account|project|profile|path|label)\b""")
+    // Plain words, then camelCase names ending in a D5 word. Class names are fine (R1: `e.javaClass.simpleName`),
+    // and `coroutineContext` is a coroutine scope element, not a kubeconfig context.
+    private val identifierWord = Regex(
+        """\b(?:namespace|namespaces|ns|name|names|podName|nodeName|context|contexts|ctx|contextName|cluster|clusters|clusterName|host|hosts|server|url|uri|endpoint|user|account|project|profile|path|paths|label|msg|message|stderr|stdout|output)\b""" +
+            """|\b(?!(?:simpleName|qualifiedName|canonicalName|coroutineContext)\b)[a-z][A-Za-z0-9]*(?:Name|Names|Path|Paths|Label|Labels|Namespace|Namespaces|Context|Host|Url|Uri|Endpoint|Account|Project|Profile|User|Message|Output)\b""",
+    )
 
     private val throwableNames = setOf("e", "t", "ex", "err", "cause", "throwable", "error", "exception", "failure", "it")
 
@@ -425,16 +453,21 @@ internal object LogPrivacyScanner {
             if (safeMarker.containsMatchIn(lineText(lineOf(close)))) continue
 
             val arguments = splitArguments(masked.substring(open + 1, close))
+            // `e.message` is the MESSAGE rule's, so it must not also count as the word `message` here.
+            val identifierCall = blankMessageAccess(masked.substring(open, close + 1))
+            val identifierArguments = splitArguments(identifierCall.substring(1, identifierCall.length - 1))
             if (hasTemplate(source, withComments, open, close)) violations += violation(file, line, TEMPLATE)
             if (messageAccess.containsMatchIn(masked.substring(open, close + 1))) violations += violation(file, line, MESSAGE)
             // The message too: its literals are blanked, so only code concatenated into it (`"x " + name`) can match.
-            if (arguments.any { identifierWord.containsMatchIn(it) }) violations += violation(file, line, IDENTIFIER)
+            if (identifierArguments.any { identifierWord.containsMatchIn(it) }) violations += violation(file, line, IDENTIFIER)
             if (arguments.size >= 2 && arguments.last() in throwableNames) violations += violation(file, line, THROWABLE)
         }
         return violations.sortedBy { it.line }
     }
 
     private fun violation(file: String, line: Int, rule: String) = Violation(file, line, rule, hints.getValue(rule))
+
+    private fun blankMessageAccess(call: String): String = messageAccess.replace(call) { " ".repeat(it.value.length) }
 
     /** True when [source] holds an unescaped `$` between [open] and [close] that sits inside a string or char literal. */
     private fun hasTemplate(source: String, withComments: String, open: Int, close: Int): Boolean {

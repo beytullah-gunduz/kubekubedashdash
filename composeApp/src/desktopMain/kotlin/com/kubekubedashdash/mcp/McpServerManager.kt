@@ -1,6 +1,7 @@
 package com.kubekubedashdash.mcp
 
 import com.kubekubedashdash.data.repository.PreferenceRepository
+import com.kubekubedashdash.util.describeFailureShape
 import com.kubekubedashdash.util.isInterruption
 import io.fabric8.kubernetes.client.KubernetesClientException
 import io.ktor.server.application.Application
@@ -132,7 +133,8 @@ object McpServerManager {
     } catch (e: Exception) {
         currentCoroutineContext().ensureActive()
         if (isInterruption(e)) throw CancellationException("MCP tool $tool interrupted", e)
-        log.warn("MCP tool {} failed ({}): {}", tool, e::class.simpleName, e.message)
+        log.warn("MCP tool {} failed: {}", tool, describeFailureShape(e))
+        log.debug("MCP tool {} failed ({}): {}", tool, e::class.simpleName, e.message)
         toolError(errorText(e))
     }
 
@@ -190,10 +192,10 @@ object McpServerManager {
                 "MCP server bound to {} (LAN-exposed); authentication was force-enabled " +
                     "despite the 'require auth' preference being off (audit S2).",
                 bindHost,
-            )
+            ) // log-safe: bindHost is the wildcard address 0.0.0.0 here, never a user host
         }
 
-        log.info("Starting MCP server host={} port={} auth={} localhostOnly={}", bindHost, port, _requireAuth, localhostOnly)
+        log.info("Starting MCP server host={} port={} auth={} localhostOnly={}", bindHost, port, _requireAuth, localhostOnly) // log-safe: bindHost is 127.0.0.1 or 0.0.0.0, never a user host
 
         try {
             val mcpServer = createMcpServer()
@@ -204,9 +206,10 @@ object McpServerManager {
             }
             ktorServer.start(wait = false)
             server = ktorServer
-            log.info("MCP server started on http://{}:{}/ (SSE)", bindHost, port)
+            log.info("MCP server started on http://{}:{}/ (SSE)", bindHost, port) // log-safe: bindHost is 127.0.0.1 or 0.0.0.0, never a user host
         } catch (e: Exception) {
-            log.error("Failed to start MCP server: {}", e.message, e)
+            log.error("Failed to start MCP server: {}", describeFailureShape(e))
+            log.debug("Failed to start MCP server: {}", e.message, e)
             server = null
             _bearerToken = null
         }
@@ -219,7 +222,8 @@ object McpServerManager {
             try {
                 it.stop(gracePeriodMillis = 1000, timeoutMillis = 3000)
             } catch (e: Exception) {
-                log.warn("Error stopping MCP server: {}", e.message)
+                log.warn("Error stopping MCP server: {}", describeFailureShape(e))
+                log.debug("Error stopping MCP server: {}", e.message)
             }
             server = null
             _bearerToken = null

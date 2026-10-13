@@ -56,7 +56,8 @@ object CliRunner {
         log.debug("{} CLI invocation cancelled: {}", args.firstOrNull() ?: "?", safeCmd(args))
         throw e
     } catch (e: Exception) {
-        log.warn("{} CLI invocation failed: {}", args.firstOrNull() ?: "?", e.message)
+        log.warn("{} CLI invocation failed: {}", args.firstOrNull() ?: "?", describeFailureShape(e))
+        log.debug("{} CLI invocation failed: {}", args.firstOrNull() ?: "?", e.message)
         Result.failure(e)
     }
 
@@ -104,7 +105,8 @@ object CliRunner {
                 Result.success(combined)
             } else {
                 val msg = redact(combined.trim().ifBlank { "exit $exitCode" })
-                log.warn("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
+                log.warn("{} CLI failed: cmd={} exit={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), exitCode)
+                log.debug("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
                 Result.failure(CliInvocationFailure(exitCode, msg.take(500), msg))
             }
         }
@@ -164,7 +166,8 @@ object CliRunner {
                 Result.success(stdoutText)
             } else {
                 val msg = redact(stderrText.trim().ifBlank { stdoutText.trim() }.ifBlank { "exit $exitCode" })
-                log.warn("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
+                log.warn("{} CLI failed: cmd={} exit={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), exitCode)
+                log.debug("{} CLI failed: cmd={} msg={}", originalArgs.firstOrNull() ?: "?", safeCmd(originalArgs), msg)
                 Result.failure(CliInvocationFailure(exitCode, redact(stderrText).take(500), msg))
             }
         }

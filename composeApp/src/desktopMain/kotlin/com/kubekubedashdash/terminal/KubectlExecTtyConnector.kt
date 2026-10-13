@@ -50,7 +50,8 @@ class KubectlExecTtyConnector(
         // half decoding to U+FFFD.
         reader = output?.let { InputStreamReader(it, StandardCharsets.UTF_8) }
         connected = true
-        log.info("Exec session started for {}", session.displayLabel)
+        log.info("Exec session started")
+        log.debug("Exec session started for {}", session.displayLabel)
     }
 
     override fun read(buf: CharArray, offset: Int, length: Int): Int {
@@ -130,7 +131,8 @@ class KubectlExecTtyConnector(
         } catch (_: Throwable) {}
         watch = null
         reader = null
-        log.info("Exec session closed for {}", session.displayLabel)
+        log.info("Exec session closed")
+        log.debug("Exec session closed for {}", session.displayLabel)
     }
 
     override fun resize(termSize: com.jediterm.core.util.TermSize) {

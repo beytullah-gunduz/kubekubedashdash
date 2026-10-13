@@ -85,7 +85,9 @@ class KubeConnectionManager(
         val count = _consecutiveFailures.incrementAndGet()
         if (count >= 3) {
             _connectionError.value = message
-            log.warn("Connection error after {} consecutive failures: {}", count, message)
+            // The message is the caller's e.message, which names the request URL.
+            log.warn("Connection error after {} consecutive failures", count)
+            log.debug("Connection error after {} consecutive failures: {}", count, message)
         }
     }
 
@@ -175,9 +177,15 @@ class KubeConnectionManager(
             // release, also closes its client), then the client (a no-op for
             // mock, real cleanup otherwise).
             runCatching { prevMock?.close() }
-                .onFailure { log.warn("Error retiring previous mock handle: {}", it.message) }
+                .onFailure {
+                    log.warn("Error retiring previous mock handle: {}", describeFailureShape(it))
+                    log.debug("Error retiring previous mock handle: {}", it.message)
+                }
             runCatching { prevClient?.close() }
-                .onFailure { log.warn("Error retiring previous client: {}", it.message) }
+                .onFailure {
+                    log.warn("Error retiring previous client: {}", describeFailureShape(it))
+                    log.debug("Error retiring previous client: {}", it.message)
+                }
             log.debug("Retired previous Kubernetes connection")
         }.apply {
             name = "kube-conn-retire"
@@ -202,7 +210,8 @@ class KubeConnectionManager(
         // HTTP client, one event loop) per attempt.
         var built: KubernetesClient? = null
         try {
-            log.info("Connecting to cluster context={}", context ?: "<default>")
+            log.info("Connecting to cluster")
+            log.debug("Connecting to cluster context={}", context ?: "<default>")
             log.debug("connect step 1/4: load config")
             val config = loadConfig(context)
             log.debug("connect step 2/4: build client (masterUrl={})", redactUrl(config.masterUrl))
@@ -216,7 +225,7 @@ class KubeConnectionManager(
             _connectedContext = context ?: config.currentContext?.name
             clearConnectionError()
             _cachedFallbackContext = null
-            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, redactUrl(config.masterUrl))
+            log.info("Connected to cluster version={}.{} server={}", v.major, v.minor, redactUrl(config.masterUrl)) // log-safe: redactUrl keeps the scheme and port, the host is replaced
             // Bump version FIRST so the old informers cancel, THEN retire the
             // previous client off-thread after a grace period (audit C1).
             _connectionVersion.update { it + 1 }
@@ -226,9 +235,13 @@ class KubeConnectionManager(
             // Catch Throwable, not just Exception, so that NoClassDefFoundError /
             // LinkageError / OutOfMemoryError surface in the log + UI instead of
             // disappearing into the void and leaving the app stuck on the spinner.
-            log.error("Failed to connect to cluster context={}", context, t)
+            log.error("Failed to connect to cluster: {}", describeFailureShape(t))
+            log.debug("Failed to connect to cluster context={}", context, t)
             runCatching { built?.close() }
-                .onFailure { log.warn("Error closing the client of a failed connect: {}", it.message) }
+                .onFailure {
+                    log.warn("Error closing the client of a failed connect: {}", describeFailureShape(it))
+                    log.debug("Error closing the client of a failed connect: {}", it.message)
+                }
             tearDownAfterFailure(prevClient, prevMock)
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
@@ -260,34 +273,46 @@ class KubeConnectionManager(
             // Ownership of [client] was handed to us; a closed manager can only
             // release it, never publish it.
             runCatching { client.close() }
-                .onFailure { log.warn("Error closing a client handed to a closed manager: {}", it.message) }
+                .onFailure {
+                    log.warn("Error closing a client handed to a closed manager: {}", describeFailureShape(it))
+                    log.debug("Error closing a client handed to a closed manager: {}", it.message)
+                }
             return closedFailure()
         }
         if (!claimAttempt(attempt)) {
             // Same ownership rule: a refused connect can only release what it was handed.
             runCatching { client.close() }
-                .onFailure { log.warn("Error closing a client handed to a superseded connect: {}", it.message) }
+                .onFailure {
+                    log.warn("Error closing a client handed to a superseded connect: {}", describeFailureShape(it))
+                    log.debug("Error closing a client handed to a superseded connect: {}", it.message)
+                }
             return supersededFailure(attempt)
         }
         val prevClient = _client
         val prevMock = _mockHandle
         try {
-            log.info("Connecting with pre-built client label={}", label)
+            log.info("Connecting with pre-built client")
+            log.debug("Connecting with pre-built client label={}", label)
             _client = client
             _mockHandle = null
             _connectedContext = label
             clearConnectionError()
-            log.info("Connected via pre-built client label={}", label)
+            log.info("Connected via pre-built client")
+            log.debug("Connected via pre-built client label={}", label)
             _connectionVersion.update { it + 1 }
             retirePrevious(prevClient, prevMock)
             Result.success("mock")
         } catch (t: Throwable) {
-            log.error("Failed to connect with pre-built client label={}", label, t)
+            log.error("Failed to connect with pre-built client: {}", describeFailureShape(t))
+            log.debug("Failed to connect with pre-built client label={}", label, t)
             tearDownAfterFailure(prevClient, prevMock)
             // Ownership of [client] was handed to us; it was never published for
             // good, so release it — the same rule connect() applies to `built`.
             runCatching { client.close() }
-                .onFailure { log.warn("Error closing the client of a failed pre-built connect: {}", it.message) }
+                .onFailure {
+                    log.warn("Error closing the client of a failed pre-built connect: {}", describeFailureShape(it))
+                    log.debug("Error closing the client of a failed pre-built connect: {}", it.message)
+                }
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }
@@ -296,18 +321,25 @@ class KubeConnectionManager(
         if (closed) {
             // Releases the provider ref-count (and the handle's client).
             runCatching { handle.close() }
-                .onFailure { log.warn("Error releasing a mock handle handed to a closed manager: {}", it.message) }
+                .onFailure {
+                    log.warn("Error releasing a mock handle handed to a closed manager: {}", describeFailureShape(it))
+                    log.debug("Error releasing a mock handle handed to a closed manager: {}", it.message)
+                }
             return closedFailure()
         }
         if (!claimAttempt(attempt)) {
             runCatching { handle.close() }
-                .onFailure { log.warn("Error releasing a mock handle handed to a superseded connect: {}", it.message) }
+                .onFailure {
+                    log.warn("Error releasing a mock handle handed to a superseded connect: {}", describeFailureShape(it))
+                    log.debug("Error releasing a mock handle handed to a superseded connect: {}", it.message)
+                }
             return supersededFailure(attempt)
         }
         val prevClient = _client
         val prevMock = _mockHandle
         try {
-            log.info("Connecting via mock handle '{}'", handle.label)
+            log.info("Connecting via mock handle")
+            log.debug("Connecting via mock handle '{}'", handle.label)
             _client = handle.client
             _mockHandle = handle
             _connectedContext = handle.label
@@ -316,11 +348,15 @@ class KubeConnectionManager(
             retirePrevious(prevClient, prevMock)
             Result.success("mock")
         } catch (t: Throwable) {
-            log.error("Failed to connect via mock handle", t)
+            log.error("Failed to connect via mock handle: {}", describeFailureShape(t))
+            log.debug("Failed to connect via mock handle", t)
             tearDownAfterFailure(prevClient, prevMock)
             // Same rule as connectWithClient: release the handle we were given.
             runCatching { handle.close() }
-                .onFailure { log.warn("Error releasing the mock handle of a failed connect: {}", it.message) }
+                .onFailure {
+                    log.warn("Error releasing the mock handle of a failed connect: {}", describeFailureShape(it))
+                    log.debug("Error releasing the mock handle of a failed connect: {}", it.message)
+                }
             Result.failure(if (t is Exception) t else RuntimeException(t))
         }
     }

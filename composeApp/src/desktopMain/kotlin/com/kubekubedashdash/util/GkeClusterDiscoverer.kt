@@ -95,11 +95,13 @@ object GkeClusterDiscoverer {
         kubeconfigPath: String,
     ): Result<String> = withContext(Dispatchers.IO) {
         validate(projectId, location, clusterName)?.let { return@withContext Result.failure(it) }
-        log.info("Importing GKE cluster name={} location={} project={}", clusterName, location, projectId)
+        log.info("Importing GKE cluster location={}", location)
+        log.debug("Importing GKE cluster name={} location={} project={}", clusterName, location, projectId)
         try {
             KubeconfigLocator.ensureParentDirectory(kubeconfigPath)
         } catch (e: Exception) {
-            log.error("Failed to create kubeconfig parent dir: {}", e.message)
+            log.error("Failed to create kubeconfig parent dir: {}", describeFailureShape(e))
+            log.debug("Failed to create kubeconfig parent dir: {}", e.message)
             return@withContext Result.failure(e)
         }
         val env = mapOf("KUBECONFIG" to kubeconfigPath)
@@ -115,12 +117,8 @@ object GkeClusterDiscoverer {
         ) {
             val zonal = LOCATION_RX.matches(location) && ZONAL_SUFFIX_RX.containsMatchIn(location)
             val fallbackFlag = if (zonal) "--zone=$location" else "--region=$location"
-            log.warn(
-                "gcloud rejected --location for cluster={} project={}, retrying once with {} (old SDK fallback)",
-                clusterName,
-                projectId,
-                if (zonal) "--zone" else "--region",
-            )
+            log.warn("gcloud rejected --location, retrying once with {} (old SDK fallback)", if (zonal) "--zone" else "--region")
+            log.debug("gcloud rejected --location for cluster={} project={}", clusterName, projectId)
             result = CliRunner.run(
                 getCredentialsArgs(clusterName, projectId, locationFlag = fallbackFlag),
                 timeoutSeconds = 60,
@@ -129,7 +127,8 @@ object GkeClusterDiscoverer {
             )
         }
         result.map { stdout ->
-            log.info("Imported GKE cluster {} (location={}, project={})", clusterName, location, projectId)
+            log.info("Imported GKE cluster (location={})", location)
+            log.debug("Imported GKE cluster {} (location={}, project={})", clusterName, location, projectId)
             stdout.ifBlank { contextNameFor(projectId, location, clusterName) }
         }
     }
@@ -214,7 +213,8 @@ object GkeClusterDiscoverer {
         }
         Result.success(active)
     } catch (e: Exception) {
-        log.warn("Failed to parse 'gcloud auth list' output: {}", e.message)
+        log.warn("Failed to parse 'gcloud auth list' output: {}", describeFailureShape(e))
+        log.debug("Failed to parse 'gcloud auth list' output: {}", e.message)
         Result.failure(e)
     }
 
@@ -231,7 +231,8 @@ object GkeClusterDiscoverer {
         }.sortedBy { it.projectId }
         Result.success(projects)
     } catch (e: Exception) {
-        log.warn("Failed to parse 'gcloud projects list' output: {}", e.message)
+        log.warn("Failed to parse 'gcloud projects list' output: {}", describeFailureShape(e))
+        log.debug("Failed to parse 'gcloud projects list' output: {}", e.message)
         Result.failure(e)
     }
 
@@ -246,13 +247,15 @@ object GkeClusterDiscoverer {
                 val obj = element.jsonObject
                 val name = obj["name"]?.jsonPrimitive?.contentOrNull
                 if (name == null) {
-                    log.warn("Skipping GKE cluster entry with no name in project={}", projectId)
+                    log.warn("Skipping GKE cluster entry with no name")
+                    log.debug("Skipping GKE cluster entry with no name in project={}", projectId)
                     continue
                 }
                 val location = obj["location"]?.jsonPrimitive?.contentOrNull
                     ?: obj["zone"]?.jsonPrimitive?.contentOrNull
                 if (location == null) {
-                    log.warn("Skipping GKE cluster '{}' with no location or zone in project={}", name, projectId)
+                    log.warn("Skipping a GKE cluster with no location or zone")
+                    log.debug("Skipping GKE cluster '{}' with no location or zone in project={}", name, projectId)
                     continue
                 }
                 val status = obj["status"]?.jsonPrimitive?.contentOrNull
@@ -265,7 +268,8 @@ object GkeClusterDiscoverer {
             }
         }
     } catch (e: Exception) {
-        log.warn("Failed to parse cluster list output for project={}: {}", projectId, e.message)
+        log.warn("Failed to parse cluster list output: {}", describeFailureShape(e))
+        log.debug("Failed to parse cluster list output for project={}: {}", projectId, e.message)
         Result.failure(e)
     }
 }

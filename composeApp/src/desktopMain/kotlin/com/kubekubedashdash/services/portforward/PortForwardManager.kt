@@ -93,15 +93,8 @@ class PortForwardManager internal constructor(
             _forwards.update { it + entry }
             session.start()
             sweepJobs[id] = scope.launch { sweepLoop(id, connection, context, target.kind) }
-            log.info(
-                "Port forward {} started: {} -> {} {}/{}:{}",
-                id,
-                "127.0.0.1:${entry.localPort}",
-                target.kind.label,
-                target.namespace,
-                target.name,
-                target.remotePort,
-            )
+            log.info("Port forward {} started: 127.0.0.1:{} -> {} port {}", id, entry.localPort, target.kind.label, target.remotePort) // log-safe: the kind label is a fixed enum (pod or service)
+            log.debug("Port forward {} target: {} {}/{}", id, target.kind.label, target.namespace, target.name)
             return StartResult(entry, false)
         }
     }
@@ -161,7 +154,15 @@ class PortForwardManager internal constructor(
             _forwards.update { list -> list.filterNot { it.id == id } }
         }
         session?.close() // synchronous: closing the server socket and fabric8 handles does not block
-        if (session != null) log.info("Port forward {} stopped{}", id, reason?.let { ": $it" } ?: "")
+        if (session != null) {
+            // The reason of a fatal stop carries the listener's exception message; the fixed reasons name nothing.
+            when (reason) {
+                null -> log.info("Port forward {} stopped", id)
+                CLOSED_REASON, SWITCHED_REASON -> log.info("Port forward {} stopped: {}", id, reason)
+                else -> log.info("Port forward {} stopped listening", id)
+            }
+            if (reason != null) log.debug("Port forward {} stopped: {}", id, reason)
+        }
     }
 
     private fun findRunning(sessionId: String, context: String, target: PortForwardTarget) = _forwards.value.firstOrNull { it.sessionId == sessionId && it.context == context && it.target == target && it.isRunning }

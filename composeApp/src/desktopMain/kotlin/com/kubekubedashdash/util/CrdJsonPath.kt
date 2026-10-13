@@ -53,7 +53,8 @@ object CrdJsonPath {
         val json = try {
             Serialization.asJson(resource)
         } catch (e: Exception) {
-            log.warn("Failed to serialize CR {} for JSONPath eval: {}", resource.metadata?.name, e.message)
+            log.warn("Failed to serialize a CR for JSONPath eval: {}", describeFailureShape(e))
+            log.debug("Failed to serialize CR {} for JSONPath eval: {}", resource.metadata?.name, e.message)
             return null
         }
         return try {

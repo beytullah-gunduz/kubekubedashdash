@@ -81,7 +81,8 @@ object AwsProfileReader {
                 }
             }
         } catch (e: Exception) {
-            log.warn("Failed to parse AWS config file {}: {}", displayPath(file.path), e.message)
+            log.warn("Failed to parse an AWS config file: {}", describeFailureShape(e))
+            log.debug("Failed to parse AWS config file {}: {}", displayPath(file.path), e.message)
         }
         return sections
     }

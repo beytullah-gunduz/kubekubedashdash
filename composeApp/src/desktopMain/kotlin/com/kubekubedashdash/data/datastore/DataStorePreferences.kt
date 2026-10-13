@@ -70,11 +70,11 @@ internal fun replaceCorruptPreferences(
             "Preferences file {} could not be parsed and no copy could be kept ({}); leaving it in place",
             path.fileName,
             e::class.simpleName,
-        )
+        ) // log-safe: kkdd's own preferences file, a fixed name
         cause.addSuppressed(e)
         throw cause
     }
-    log.warn("Preferences file {} could not be parsed; a copy was kept as {} and defaults are in use", path.fileName, backup.fileName)
+    log.warn("Preferences file {} could not be parsed; a copy was kept as {} and defaults are in use", path.fileName, backup.fileName) // log-safe: kkdd's own preferences file, a fixed name plus a timestamp
     health.reportLoadFault(
         LoadFault(exceptionClass = cause::class.simpleName ?: "CorruptionException", backupFileName = backup.fileName.toString()),
     )

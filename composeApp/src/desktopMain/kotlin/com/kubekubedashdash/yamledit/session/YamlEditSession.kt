@@ -182,7 +182,8 @@ class YamlEditSession(
     fun start() {
         if (started || closed) return
         started = true
-        log.info("Edit session {} opened {} {} ns={}", id, target.kind, target.name, target.namespace)
+        log.info("Edit session {} opened {}", id, target.kind)
+        log.debug("Edit session {} opened {} {} ns={}", id, target.kind, target.name, target.namespace)
         launchLoad()
     }
 

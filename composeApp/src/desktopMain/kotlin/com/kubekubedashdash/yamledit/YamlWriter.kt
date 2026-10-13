@@ -271,17 +271,21 @@ class YamlWriter(
     /** Logs the start of a write and, when it fails, its code and kind; [request] failures are mapped first. */
     private fun <T> logged(target: EditTarget, applying: Boolean, request: () -> T): T {
         if (applying) {
-            log.info("Applying {} {} ns={}", target.kind, target.name, target.namespace)
+            log.info("Applying {}", target.kind)
+            log.debug("Applying {} {} ns={}", target.kind, target.name, target.namespace)
         } else {
-            log.info("Replacing {} {} ns={}", target.kind, target.name, target.namespace)
+            log.info("Replacing {}", target.kind)
+            log.debug("Replacing {} {} ns={}", target.kind, target.name, target.namespace)
         }
         try {
             return mapped(request)
         } catch (e: YamlWriteException) {
             if (applying) {
-                log.warn("Apply failed {} {} ns={} code={} kind={}", target.kind, target.name, target.namespace, e.code, e.kind.name)
+                log.warn("Apply failed {} code={} kind={}", target.kind, e.code, e.kind.name) // log-safe: the error kind is a fixed enum
+                log.debug("Apply failed {} {} ns={}", target.kind, target.name, target.namespace)
             } else {
-                log.warn("Replace failed {} {} ns={} code={} kind={}", target.kind, target.name, target.namespace, e.code, e.kind.name)
+                log.warn("Replace failed {} code={} kind={}", target.kind, e.code, e.kind.name) // log-safe: the error kind is a fixed enum
+                log.debug("Replace failed {} {} ns={}", target.kind, target.name, target.namespace)
             }
             throw e
         }
