@@ -642,6 +642,36 @@ class PromQlTest {
         assertFalse(matcher.matches("xweb-0"))
     }
 
+    @Test
+    fun `a namespace selects every pod of it and is valid, and a name that is not a label selects none`() {
+        val ref = PromQl.ofNamespace("team-a")
+        assertEquals(PodSetRef("team-a", ".+"), ref)
+        assertTrue(PromQl.isValidPodSet(ref!!))
+        for (namespace in listOf("", "Team-A", "team_a", "team-a\"b", "team a")) {
+            assertNull(PromQl.ofNamespace(namespace), namespace)
+        }
+    }
+
+    @Test
+    fun `a namespace's queries over the 6h window carry the pod regex that matches every pod`() {
+        val ref = PromQl.ofNamespace("team-a")!!
+        // 6h is charted at a 180 s step: the Managed Prometheus window grows to 300 s, the in-cluster one to 240 s.
+        val stepSec = 180L
+
+        assertEquals(
+            """sum(rate(container_cpu_usage_seconds_total{cluster="example-cluster",location="us-central1",namespace="team-a",pod=~".+",container!="",container!="POD"}[300s]))""",
+            PromQl.gmpPodSetQuery(PodSeriesKind.Cpu, target, ref, PodSetMode.Total, stepSec),
+        )
+        assertEquals(
+            """sum by (pod) (rate(container_cpu_usage_seconds_total{cluster="example-cluster",location="us-central1",namespace="team-a",pod=~".+",container!="",container!="POD"}[300s]))""",
+            PromQl.gmpPodSetQuery(PodSeriesKind.Cpu, target, ref, PodSetMode.PerPod, stepSec),
+        )
+        assertEquals(
+            """sum(rate(container_cpu_usage_seconds_total{namespace="team-a",pod=~".+",container!="",container!="POD"}[240s]))""",
+            PromQl.inClusterPodSetQuery(PodSeriesKind.Cpu, ref, PodSetMode.Total, stepSec),
+        )
+    }
+
     private val sparkDriver = "spark-etl-nightly-driver"
     private val sparkStem = "spark-etl-nightly-1a2b3c4d5e6f7890"
 
