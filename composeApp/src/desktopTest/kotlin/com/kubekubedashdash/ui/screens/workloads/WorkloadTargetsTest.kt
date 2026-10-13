@@ -620,4 +620,33 @@ class WorkloadTargetsTest {
         assertEquals("This namespace name cannot be used in a query.", target.missingNote)
         assertEquals(NAMESPACE_MISSING_NOTE, target.missingNote)
     }
+
+    @Test
+    fun `a Namespace with host-network pods charts no network and says why`() {
+        val target = namespaceTarget(teamA, QuotaCeilings(), hostNetwork = true)
+
+        assertEquals(NAMESPACE_HOST_NETWORK_NOTE, target.networkExcludedNote)
+        assertEquals(
+            "Some pods of this namespace use the host network: their counters are their node's, so the namespace's network is not charted.",
+            target.networkExcludedNote,
+        )
+        // Nothing else of the target moves with it.
+        assertEquals(namespaceTarget(teamA, QuotaCeilings()).copy(networkExcludedNote = NAMESPACE_HOST_NETWORK_NOTE), target)
+    }
+
+    @Test
+    fun `a Namespace whose pods are still being listed holds its network back and says so, whatever the answer will be`() {
+        for (hostNetwork in listOf(true, false, null)) {
+            val target = namespaceTarget(teamA, QuotaCeilings(), hostNetwork, hostNetworkPending = true)
+
+            assertEquals(NAMESPACE_HOST_NETWORK_PENDING_NOTE, target.networkExcludedNote, "$hostNetwork")
+        }
+    }
+
+    @Test
+    fun `a Namespace whose pods are on their own network, or not known, charts its network`() {
+        assertNull(namespaceTarget(teamA, QuotaCeilings(), hostNetwork = false).networkExcludedNote)
+        assertNull(namespaceTarget(teamA, QuotaCeilings(), hostNetwork = null).networkExcludedNote)
+        assertNull(namespaceTarget(teamA, QuotaCeilings()).networkExcludedNote)
+    }
 }

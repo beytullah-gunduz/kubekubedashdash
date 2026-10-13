@@ -47,12 +47,14 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.ui.screens.namespaces.NamespaceUsageSection
+import com.kubekubedashdash.ui.screens.pods.HOST_NETWORK_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.QuotaCeilings
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +62,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -625,13 +628,20 @@ class BatchUsageHistorySectionUiTest {
         setting: MetricsSourceSetting = GmpSetting,
         refreshMs: Long = Long.MAX_VALUE,
         fetchCeilings: suspend (String) -> QuotaCeilings = { quotaCeilings },
+        fetchHostNetwork: suspend (String) -> Boolean? = { false },
     ) {
         val service = serviceOver(source, setting)
         setContent {
             MaterialTheme(typography = kdTypography()) {
-                Column(Modifier.width(640.dp)) { NamespaceUsageSection(namespace, service, fetchCeilings, refreshMs, { NOW }, Long.MAX_VALUE) }
+                Column(Modifier.width(640.dp)) { NamespaceUsageSection(namespace, service, fetchCeilings, fetchHostNetwork, refreshMs, { NOW }, Long.MAX_VALUE) }
             }
         }
+        waitForIdle()
+    }
+
+    // With the clock held, the section needs a frame for each step: the lookups answer, the charts appear, their data loads.
+    private fun ComposeUiTest.advanceFrames(count: Int = 3) = repeat(count) {
+        mainClock.advanceTimeByFrame()
         waitForIdle()
     }
 
@@ -768,6 +778,7 @@ class BatchUsageHistorySectionUiTest {
                             fetched += name
                             QuotaCeilings(requestsCpu = 2.0 * fetched.size)
                         },
+                        { false },
                         60_000L,
                         { NOW },
                         Long.MAX_VALUE,
@@ -775,8 +786,7 @@ class BatchUsageHistorySectionUiTest {
                 }
             }
         }
-        mainClock.advanceTimeByFrame()
-        waitForIdle()
+        advanceFrames()
 
         assertEquals(listOf(NAMESPACE), fetched.toList())
         onNodeWithText("- - quota requests ${formatCoresValue(2.0)}", substring = true).assertExists()
@@ -804,6 +814,7 @@ class BatchUsageHistorySectionUiTest {
                             fetched += name
                             QuotaCeilings(requestsCpu = if (name == "team-b") 3.0 else 4.0)
                         },
+                        { false },
                         Long.MAX_VALUE,
                         { NOW },
                         Long.MAX_VALUE,
@@ -835,5 +846,206 @@ class BatchUsageHistorySectionUiTest {
         onNodeWithText(NAMESPACE_MISSING_NOTE).assertExists()
         onNodeWithText("6h ▾").assertExists()
         assertTrue(source.windows.isEmpty())
+    }
+
+    private fun ComposeUiTest.assertNetworkCharted(source: RecordingSource) {
+        assertEquals(PodSeriesKind.entries.toSet(), source.modes.map { it.first }.toSet())
+        onNodeWithText(NAMESPACE_HOST_NETWORK_NOTE).assertDoesNotExist()
+        onNodeWithText("Received").assertExists()
+    }
+
+    @Test
+    fun `a namespace with host-network pods asks no network and says why in the network chart`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source, fetchHostNetwork = { true })
+
+        assertEquals(setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling), source.modes.map { it.first }.toSet())
+        onNodeWithText("Network").assertExists()
+        onNodeWithText(NAMESPACE_HOST_NETWORK_NOTE).assertExists()
+        // Not the single-pod note: that one speaks of a pod, this chart of a namespace.
+        onNodeWithText(HOST_NETWORK_NOTE).assertDoesNotExist()
+        onNodeWithText("Received").assertDoesNotExist()
+        // The other charts and the quota lines are untouched.
+        onNodeWithText("CPU").assertExists()
+        onNodeWithText("Memory").assertExists()
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithText("quota requests", substring = true).assertCountEquals(2)
+
+        onNodeWithText("Per pod").performClick()
+        waitForIdle()
+
+        assertEquals(setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling), source.modes.map { it.first }.toSet())
+        onNodeWithText(NAMESPACE_HOST_NETWORK_NOTE).assertExists()
+    }
+
+    @Test
+    fun `while the pods are being listed the other charts draw and the network waits, saying so`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        val answer = CompletableDeferred<Boolean?>()
+        showNamespace(source, fetchHostNetwork = { answer.await() })
+
+        onNodeWithText(NAMESPACE_HOST_NETWORK_PENDING_NOTE).assertExists()
+        assertEquals(setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling), source.modes.map { it.first }.toSet())
+        onNodeWithText("CPU").assertExists()
+        onAllNodesWithText("quota requests", substring = true).assertCountEquals(2)
+
+        answer.complete(false)
+        waitForIdle()
+
+        onNodeWithText(NAMESPACE_HOST_NETWORK_PENDING_NOTE).assertDoesNotExist()
+        assertNetworkCharted(source)
+    }
+
+    @Test
+    fun `a namespace whose pods use their own network charts it`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source, fetchHostNetwork = { false })
+
+        assertNetworkCharted(source)
+    }
+
+    @Test
+    fun `a namespace whose pods cannot be listed charts its network`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source, fetchHostNetwork = { null })
+
+        assertNetworkCharted(source)
+    }
+
+    @Test
+    fun `the pods are listed once for the shown namespace, not again every refresh, and the answer is the namespace's own`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = RecordingSource(namespacePods)
+        val listed = CopyOnWriteArrayList<String>()
+        val service = serviceOver(source)
+        var shown by mutableStateOf(namespaceRow("team-a"))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) {
+                    NamespaceUsageSection(
+                        shown,
+                        service,
+                        { QuotaCeilings() },
+                        { name ->
+                            listed += name
+                            name == "team-a"
+                        },
+                        60_000L,
+                        { NOW },
+                        Long.MAX_VALUE,
+                    )
+                }
+            }
+        }
+        advanceFrames()
+
+        assertEquals(listOf("team-a"), listed.toList())
+        onNodeWithText(NAMESPACE_HOST_NETWORK_NOTE).assertExists()
+
+        mainClock.advanceTimeBy(180_001)
+        waitForIdle()
+
+        assertEquals(listOf("team-a"), listed.toList())
+
+        shown = namespaceRow("team-b")
+        advanceFrames()
+
+        assertEquals(listOf("team-a", "team-b"), listed.toList())
+        onNodeWithText(NAMESPACE_HOST_NETWORK_NOTE).assertDoesNotExist()
+        onNodeWithText("Received").assertExists()
+    }
+
+    @Test
+    fun `while the search for a source goes on neither the quotas nor the pods are read, and both are once there is one`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        // CONTEXT is not a gke_ name and nothing is stored: Auto is still looking for a Prometheus.
+        val settings = MutableStateFlow(emptyMap<String, MetricsSourceSetting>())
+        val searches = AtomicInteger()
+        val gate = CompletableDeferred<DetectionState>()
+        val service = MetricsHistoryService(
+            currentContext = { CONTEXT },
+            settingsFlow = { settings },
+            gmpSourceFor = { source },
+            detection = InClusterDetection(
+                scope = detectionScope,
+                nowMs = detectionClock::get,
+                detect = {
+                    searches.incrementAndGet()
+                    gate.await()
+                },
+            ),
+            clientFor = { dummyClient() },
+            nowMs = detectionClock::get,
+        )
+        val ceilingsListed = CopyOnWriteArrayList<String>()
+        val podsListed = CopyOnWriteArrayList<String>()
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) {
+                    NamespaceUsageSection(
+                        namespaceRow(),
+                        service,
+                        { name ->
+                            ceilingsListed += name
+                            quotaCeilings
+                        },
+                        { name ->
+                            podsListed += name
+                            false
+                        },
+                        Long.MAX_VALUE,
+                        { NOW },
+                        Long.MAX_VALUE,
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        assertEquals(1, searches.get(), "the section starts the search")
+        assertTrue(ceilingsListed.isEmpty(), "the quotas were listed while searching: $ceilingsListed")
+        assertTrue(podsListed.isEmpty(), "the pods were listed while searching: $podsListed")
+        assertTrue(source.windows.isEmpty())
+
+        settings.value = mapOf(DemoContext.preferenceKey(CONTEXT) to GmpSetting)
+        waitForIdle()
+
+        assertEquals(listOf(NAMESPACE), ceilingsListed.toList())
+        assertEquals(listOf(NAMESPACE), podsListed.toList())
+        assertTrue(source.windows.isNotEmpty())
+        onNodeWithText("- - quota requests ${formatCoresValue(4.0)}", substring = true).assertExists()
+    }
+
+    @Test
+    fun `the lookups run through the latest lambdas, not the ones the effect started with`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = RecordingSource(namespacePods)
+        val service = serviceOver(source)
+        var generation by mutableStateOf(1)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                val current = generation
+                Column(Modifier.width(640.dp)) {
+                    NamespaceUsageSection(
+                        namespaceRow(),
+                        service,
+                        { QuotaCeilings(requestsCpu = 2.0 * current) },
+                        { false },
+                        60_000L,
+                        { NOW },
+                        Long.MAX_VALUE,
+                    )
+                }
+            }
+        }
+        advanceFrames()
+
+        onNodeWithText("- - quota requests ${formatCoresValue(2.0)}", substring = true).assertExists()
+
+        generation = 5
+        mainClock.advanceTimeBy(60_001)
+        waitForIdle()
+
+        onNodeWithText("- - quota requests ${formatCoresValue(10.0)}", substring = true).assertExists()
     }
 }

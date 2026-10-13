@@ -2082,6 +2082,15 @@ class ReactiveKubeClient(
         )
     }.getOrDefault(QuotaCeilings())
 
+    /**
+     * Whether any pod of [namespace] runs on the host network, where its network counters are its node's; null
+     * where the pods cannot be listed (RBAC refusal included).
+     */
+    fun namespaceHasHostNetworkPods(namespace: String): Boolean? = runCatching {
+        log.debug("Checking for host-network pods")
+        k8s.pods().inNamespace(namespace).list().items.any { it.spec?.hostNetwork == true }
+    }.getOrNull()
+
     // ── On-demand: RBAC Rules & Binding Detail ─────────────────────────────────
 
     fun getPolicyRules(kind: String, name: String, namespace: String?): List<PolicyRuleRow> = runCatching {

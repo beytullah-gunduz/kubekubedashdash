@@ -139,6 +139,7 @@ internal sealed interface UsageGrouping {
  * @property defaultMode the mode shown first; the section's choice starts over when [key] changes.
  * @property totalReferences the guide lines of each chart in the Total mode (the Per pod mode draws the
  * request and limit lines of [currentPods] instead).
+ * @property networkExcludedNote when set, Network is not charted and its chart shows this note instead.
  */
 internal data class UsageTarget(
     val key: String,
@@ -156,6 +157,7 @@ internal data class UsageTarget(
     val throttlingWithoutLivePods: Boolean = false,
     val defaultMode: PodSetMode = PodSetMode.PerPod,
     val totalReferences: Map<PodSeriesKind, List<ChartReference>> = emptyMap(),
+    val networkExcludedNote: String? = null,
 )
 
 /** The newest ReplicaSet's pods that the pod informer holds, by name (demo pods can have a blank uid), sorted. */
@@ -344,7 +346,9 @@ internal fun WorkloadUsageHistorySection(
     var mode by remember(target.key) { mutableStateOf(target.defaultMode) }
     val window = selected?.let { UsageWindow.Sliding(it) } ?: target.defaultWindow
     val shownRange = (window as? UsageWindow.Sliding)?.range
-    val kinds = usageKinds(target.currentPods, target.throttlingWithoutLivePods)
+    val kinds = usageKinds(target.currentPods, target.throttlingWithoutLivePods).let { all ->
+        if (target.networkExcludedNote != null) all - PodSeriesKind.NetworkRx - PodSeriesKind.NetworkTx else all
+    }
     val podSet = target.podSet
     // Keyed on what the user picks and on the workload's identity, not on the pod set, the kinds or the run
     // window: those move while a workload runs (an executor or a run appears, a Job gains its end), and the
@@ -618,7 +622,7 @@ private fun WorkloadHistoryCharts(
     val rx = results[PodSeriesKind.NetworkRx]
     val tx = results[PodSeriesKind.NetworkTx]
     val networkNote = when {
-        PodSeriesKind.NetworkRx !in kinds -> HOST_NETWORK_NOTE
+        PodSeriesKind.NetworkRx !in kinds -> target.networkExcludedNote ?: HOST_NETWORK_NOTE
         else -> noteOf(rx) ?: noteOf(tx)
     }
     val network = if (networkNote != null) {

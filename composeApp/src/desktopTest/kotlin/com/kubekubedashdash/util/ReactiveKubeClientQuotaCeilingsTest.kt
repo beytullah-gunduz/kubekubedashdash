@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.ResourceQuotaBuilder
 import io.fabric8.kubernetes.api.model.StatusBuilder
@@ -19,11 +20,13 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /**
- * The quota lines of the namespace panel's Total charts: the tightest ResourceQuota hard values of a
- * namespace, from the quotas that cap the whole namespace. Loopback mock only: the CRUD store serves the
- * quotas, canned answers stand in for the failures.
+ * What the namespace panel's usage section reads from the cluster: the tightest ResourceQuota hard values of
+ * a namespace, from the quotas that cap the whole namespace (the lines of its Total charts), and whether any
+ * of its pods runs on the host network (its network is then not charted). Loopback mock only: the CRUD store
+ * serves the quotas and the pods, canned answers stand in for the failures.
  */
 class ReactiveKubeClientQuotaCeilingsTest {
 
@@ -173,5 +176,55 @@ class ReactiveKubeClientQuotaCeilingsTest {
             .once()
 
         assertEquals(QuotaCeilings(), client.getNamespaceQuotaCeilings("production"))
+    }
+
+    /** A pod in [namespace], on the host network or not. */
+    private fun seedPod(namespace: String, name: String, hostNetwork: Boolean) {
+        val pod = PodBuilder()
+            .withNewMetadata().withName(name).withNamespace(namespace).endMetadata()
+            .withNewSpec().withHostNetwork(hostNetwork).endSpec()
+            .build()
+        server.createClient().use { it.pods().inNamespace(namespace).resource(pod).create() }
+    }
+
+    @Test
+    fun `a namespace with one host-network pod among others has host-network pods`() {
+        seedPod("production", "web-0", hostNetwork = false)
+        seedPod("production", "web-1", hostNetwork = true)
+        seedPod("production", "web-2", hostNetwork = false)
+
+        assertEquals(true, client.namespaceHasHostNetworkPods("production"))
+    }
+
+    @Test
+    fun `a namespace whose pods all use their own network has no host-network pods, whatever another namespace holds`() {
+        seedPod("default", "web-0", hostNetwork = false)
+        seedPod("default", "web-1", hostNetwork = false)
+        seedPod("monitoring", "web-0", hostNetwork = true)
+
+        assertEquals(false, client.namespaceHasHostNetworkPods("default"))
+    }
+
+    @Test
+    fun `a namespace without pods has no host-network pods`() {
+        assertEquals(false, client.namespaceHasHostNetworkPods("team-a"))
+    }
+
+    @Test
+    fun `a server error on the pod list reads as unknown`() {
+        server.expect().get().withPath("/api/v1/namespaces/team-b/pods")
+            .andReturn(500, StatusBuilder().withCode(500).withReason("InternalError").build())
+            .once()
+
+        assertNull(client.namespaceHasHostNetworkPods("team-b"))
+    }
+
+    @Test
+    fun `a refused pod list reads as unknown`() {
+        server.expect().get().withPath("/api/v1/namespaces/production/pods")
+            .andReturn(403, StatusBuilder().withCode(403).withReason("Forbidden").build())
+            .once()
+
+        assertNull(client.namespaceHasHostNetworkPods("production"))
     }
 }
