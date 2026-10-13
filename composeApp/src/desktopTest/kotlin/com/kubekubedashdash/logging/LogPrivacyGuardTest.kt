@@ -19,14 +19,19 @@ import kotlin.test.fail
  *
  * A call is flagged when it interpolates into a string (TEMPLATE), logs an exception message or a
  * stack trace (MESSAGE), passes an argument or concatenates code into its message named like an
- * identifier from the D5 list (IDENTIFIER: a word such as `namespace`, `host`, `msg` or `output`, or a
- * camelCase name ending in one, such as `displayLabel` or `kubeconfigPath`; `simpleName` is fine), or
- * passes a bare throwable last (THROWABLE). A call that is safe anyway ends its last line with
- * `// log-safe: <reason>`; the reason is mandatory. The scan covers every main source except the
- * dev-only demo and screenshot ones, which log fixtures only ([LogPrivacyScanner.EXEMPT]).
+ * identifier from the D5 list (IDENTIFIER: a word such as `namespace`, `host`, `msg`, `projectId` or
+ * `file`, singular or plural, or a camelCase name ending in one, such as `displayLabel` or
+ * `kubeconfigPath`; `simpleName` and a `.size` or `.length` are fine), or passes a throwable, its
+ * cause or a Result's failure, or concatenates one into the message (THROWABLE). A call that is safe
+ * anyway ends its line with `// log-safe: <reason>`; the reason is mandatory, and the marker excuses
+ * only the call that ends that line. The scan covers every main source except the dev-only demo and
+ * screenshot ones, which log fixtures only ([LogPrivacyScanner.EXEMPT]).
  *
- * Known blind spots, left to review: a message built in a variable first (`val msg = ...; log.warn(msg)`),
- * and an argument whose `toString()` prints names although its variable is not named like one.
+ * Known blind spots, left to review: a message built in a variable first (`val msg = ...; log.warn(msg)`);
+ * an argument whose `toString()` prints names although its variable is not named like one; a value looked
+ * up by a literal key (`System.getProperty("user.home")`); `\$` in a raw string, which still interpolates;
+ * and calls the receiver pattern does not see (`with(log) { warn(...) }`, `log.atWarn()`,
+ * `LoggerFactory.getLogger(...).warn(...)`).
  *
  * The scan masks strings, char literals and comments first ([RetroShapeScanner.mask]), so a log call
  * quoted in a comment is not a call and a `)` inside a string never unbalances one. The canary tests
@@ -150,7 +155,31 @@ class LogPrivacyGuardTest {
         assertEquals(emptyList(), hits("log.info(\"x {}\", messageCount)"))
         assertEquals(emptyList(), hits("log.info(\"x {}\", outputs.size)"))
         assertEquals(emptyList(), hits("log.info(\"x {}\", Name)"))
-        assertEquals(emptyList(), hits("log.info(\"x {}\", userId)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", sessionId)"))
+    }
+
+    @Test
+    fun `plurals, ids, files and credentials fire`() {
+        for (word in listOf(
+            "profiles", "projects", "users", "urls", "endpoints", "accounts", "outputs", "messages", "hosts", "servers",
+            "awsProfiles", "gcpProjects", "errorMessages", "serverUrls", "kubeContexts", "nodeHosts",
+            "userId", "projectId", "gcpProjectId", "accountIds", "email", "accessToken", "clusterArn",
+            "file", "configFile", "dir", "outputDir", "directory", "home", "userHome", "kubeconfig",
+        )) {
+            assertEquals(listOf(1 to "IDENTIFIER"), hits("log.warn(\"x {}\", $word)"), word)
+        }
+    }
+
+    @Test
+    fun `a size or a count of names is a number`() {
+        assertEquals(emptyList(), hits("log.info(\"x {}\", namespaces.size)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", target.namespaces.size)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", name.length)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", paths?.size)"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", users.count())"))
+        assertEquals(emptyList(), hits("log.info(\"x {}\", hosts.isEmpty())"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.info(\"x {} {}\", namespaces.size, namespaces)"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log.info(\"x {}\", namespaces.first())"))
     }
 
     @Test
@@ -175,6 +204,26 @@ class LogPrivacyGuardTest {
         assertEquals(emptyList(), hits("log.warn(\"x {}\", errorCount)"))
         assertEquals(emptyList(), hits("log.warn(\"x {}\", e.javaClass.simpleName)"))
         assertEquals(emptyList(), hits("log.warn(\"x {}\", describeFailureShape(e))"))
+    }
+
+    @Test
+    fun `a throwable anywhere in the arguments, its cause or a Result's failure fires`() {
+        assertEquals(listOf(1 to "THROWABLE"), hits("log.warn(\"x {} {}\", e, count)"))
+        assertEquals(listOf(1 to "THROWABLE"), hits("log.warn(\"x {}\", (e))"))
+        assertEquals(listOf(1 to "THROWABLE"), hits("log.warn(\"x {}\", e as Throwable)"))
+        assertEquals(listOf(1 to "THROWABLE"), hits("log.warn(\"x {}\", e.cause)"))
+        assertEquals(listOf(1 to "THROWABLE"), hits("log.warn(\"x {}\", result.exceptionOrNull())"))
+        assertEquals(listOf(1 to "THROWABLE"), hits("log.warn(\"Failed: \" + e)"))
+        assertEquals(listOf(1 to "THROWABLE"), hits(src("log.error(", "    \"Failed: \" +", "        exception,", ")")))
+        assertEquals(emptyList(), hits("log.warn(\"Failed: {}\", count + extra)"))
+        assertEquals(emptyList(), hits("log.warn(\"Failed: \" + e.javaClass.simpleName)"))
+        assertEquals(emptyList(), hits("log.warn(\"Failed: {}\", describeFailureShape(e.cause ?: e))"))
+    }
+
+    @Test
+    fun `a stack trace fires wherever it goes next`() {
+        assertEquals(listOf(1 to "MESSAGE"), hits("log.warn(\"x {}\", e.stackTraceToString().take(200))"))
+        assertEquals(listOf(1 to "MESSAGE"), hits("log.warn(\"x {}\", e.stackTrace.joinToString())"))
     }
 
     @Test
@@ -227,6 +276,19 @@ class LogPrivacyGuardTest {
     }
 
     @Test
+    fun `a marker excuses only the call that ends its line`() {
+        assertEquals(
+            listOf(1 to "IDENTIFIER"),
+            hits("log.warn(\"a {}\", namespace); log.info(\"b {}\", host) // log-safe: the second only"),
+        )
+        assertEquals(
+            listOf(1 to "IDENTIFIER"),
+            hits("if (ok) log.warn(\"a {}\", namespace) else log.warn(\"b {}\", name) // log-safe: the second only"),
+        )
+        assertEquals(emptyList(), hits("runCatching { f() }.onFailure { log.warn(\"x {}\", name) } // log-safe: a fixed key"))
+    }
+
+    @Test
     fun `a marker inside a string does not exempt the call`() {
         assertEquals(listOf(1 to "IDENTIFIER"), hits("log.info(\"x {} // log-safe: nope\", name)"))
         assertEquals(listOf(1 to "IDENTIFIER"), hits("log.info(\"x {}\", name + \"// log-safe: nope\")"))
@@ -264,6 +326,8 @@ class LogPrivacyGuardTest {
         assertEquals(listOf(1 to "IDENTIFIER"), hits("this.log.warn(\"x {}\", ns)"))
         assertEquals(listOf(1 to "IDENTIFIER"), hits("logger.info(\"x {}\", host)"))
         assertEquals(listOf(1 to "IDENTIFIER"), hits("LoggerFactory.getLogger(\"x\").also { it.log.warn(\"x {}\", host) }"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("LOG.warn(\"x {}\", host)"))
+        assertEquals(listOf(1 to "IDENTIFIER"), hits("log?.warn(\"x {}\", host)"))
         assertEquals(emptyList(), hits("catalog.warn(\"x {}\", name)"))
         assertEquals(emptyList(), hits("blog.warn(\"x {}\", name)"))
         assertEquals(emptyList(), hits("Logger.warn(\"x {}\", name)"))
@@ -353,7 +417,7 @@ class LogPrivacyGuardTest {
                 "Log a failure as describeFailureShape(e) and move the names, the raw message or the throwable " +
                 "to a log.debug line. A call that is safe anyway ends its last line with \"// log-safe: <reason>\". " +
                 "Rules: TEMPLATE (string template), MESSAGE (exception message or stack trace), " +
-                "IDENTIFIER (argument named like an identifier: a word such as namespace or msg, or a camelCase name ending in Name, Path, Label, Message and the like), THROWABLE (bare throwable last), " +
+                "IDENTIFIER (argument named like an identifier: a word such as namespace or msg, or a camelCase name ending in Name, Path, Label, Message and the like), THROWABLE (a throwable, its cause or a Result's failure as an argument or concatenated into the message), " +
                 "UNTERMINATED (call the guard cannot read)."
     }
 }
@@ -387,21 +451,33 @@ internal object LogPrivacyScanner {
     private const val THROWABLE = "THROWABLE"
     private const val UNTERMINATED = "UNTERMINATED"
 
-    private val callStart = Regex("""\b(?:log|logger|[a-z][A-Za-z0-9]*(?:Log|Logger))\s*\.\s*(?:info|warn|error)\s*\(""")
+    private val callStart = Regex("""\b(?:log|logger|LOG|LOGGER|[a-z][A-Za-z0-9]*(?:Log|Logger))\s*\??\.\s*(?:info|warn|error)\s*\(""")
 
     // `?:`, `?.` and `!!` after the access catch `e.message ?: "x"` and `e.message?.take(80)` too. The
     // lookahead leaves the delimiter out of the match, so [blankMessageAccess] can blank the access alone.
+    // A stack trace is one wherever it goes next (`e.stackTraceToString().take(200)`).
     private val messageAccess =
-        Regex("""\.(?:message|localizedMessage|stackTrace|stackTraceToString|toString)\b(?=\s*(?:\(\s*\))?\s*(?:[,)]|\?[:.]|!!))""")
+        Regex("""\.(?:stackTrace|stackTraceToString)\b|\.(?:message|localizedMessage|toString)\b(?=\s*(?:\(\s*\))?\s*(?:[,)]|\?[:.]|!!))""")
 
-    // Plain words, then camelCase names ending in a D5 word. Class names are fine (R1: `e.javaClass.simpleName`),
-    // and `coroutineContext` is a coroutine scope element, not a kubeconfig context.
+    // Plain words, then camelCase names ending in a D5 word, each also plural. Class names are fine (R1:
+    // `e.javaClass.simpleName`), and `coroutineContext` is a coroutine scope element, not a kubeconfig context.
     private val identifierWord = Regex(
-        """\b(?:namespace|namespaces|ns|name|names|podName|nodeName|context|contexts|ctx|contextName|cluster|clusters|clusterName|host|hosts|server|url|uri|endpoint|user|account|project|profile|path|paths|label|msg|message|stderr|stdout|output)\b""" +
-            """|\b(?!(?:simpleName|qualifiedName|canonicalName|coroutineContext)\b)[a-z][A-Za-z0-9]*(?:Name|Names|Path|Paths|Label|Labels|Namespace|Namespaces|Context|Host|Url|Uri|Endpoint|Account|Project|Profile|User|Message|Output)\b""",
+        """\b(?:namespaces?|ns|names?|podNames?|nodeNames?|contexts?|ctx|contextNames?|clusters?|clusterNames?|hosts?|servers?|urls?|uris?|endpoints?|users?|accounts?|projects?|profiles?|paths?|labels?|msgs?|messages?|stderr|stdout|outputs?|userIds?|accountIds?|projectIds?|profileIds?|emails?|tokens?|arns?|files?|dirs?|director(?:y|ies)|home|kubeconfigs?)\b""" +
+            """|\b(?!(?:simpleName|qualifiedName|canonicalName|coroutineContext)\b)[a-z][A-Za-z0-9]*(?:Names?|Paths?|Labels?|Namespaces?|Contexts?|Hosts?|Urls?|Uris?|Endpoints?|Accounts?|Projects?|Profiles?|Users?|Messages?|Outputs?|AccountIds?|ProjectIds?|UserIds?|ProfileIds?|Emails?|Tokens?|Arns?|Files?|Dirs?|Director(?:y|ies)|Home|Kubeconfigs?)\b""",
+    )
+
+    // A size or a count is a number, whatever it counts (`namespaces.size`, `name.length`).
+    private val countAccess = Regex(
+        """\b[A-Za-z_][A-Za-z0-9_]*(?:\s*(?:\?\.|!!\.|\.)\s*[A-Za-z_][A-Za-z0-9_]*)*\s*(?:\?\.|!!\.|\.)\s*(?:(?:size|length)\b|(?:count|isEmpty|isNotEmpty)\s*\(\s*\))""",
     )
 
     private val throwableNames = setOf("e", "t", "ex", "err", "cause", "throwable", "error", "exception", "failure", "it")
+
+    // A throwable concatenated into the message prints its class and message: `"Failed: " + e`.
+    private val concatenatedThrowable = Regex("""\+\s*(?:${throwableNames.joinToString("|")})\b(?!\s*[.(\[])""")
+
+    // What a throwable argument looks like besides its bare name: its cause, or a Result's failure.
+    private val throwableAccess = Regex("""(?:\.cause|\bexceptionOrNull\s*\(\s*\))$""")
 
     private val safeMarker = Regex("""//\s*log-safe:\s*\S""")
 
@@ -450,17 +526,20 @@ internal object LogPrivacyScanner {
                 violations += violation(file, line, UNTERMINATED)
                 continue
             }
-            if (safeMarker.containsMatchIn(lineText(lineOf(close)))) continue
+            // The marker excuses the call that ends its line, not another call before it on that line.
+            if (safeMarker.containsMatchIn(lineText(lineOf(close))) && endsItsLine(masked, close)) continue
 
             val arguments = splitArguments(masked.substring(open + 1, close))
             // `e.message` is the MESSAGE rule's, so it must not also count as the word `message` here.
-            val identifierCall = blankMessageAccess(masked.substring(open, close + 1))
+            val identifierCall = blankCountAccess(blankMessageAccess(masked.substring(open, close + 1)))
             val identifierArguments = splitArguments(identifierCall.substring(1, identifierCall.length - 1))
             if (hasTemplate(source, withComments, open, close)) violations += violation(file, line, TEMPLATE)
             if (messageAccess.containsMatchIn(masked.substring(open, close + 1))) violations += violation(file, line, MESSAGE)
             // The message too: its literals are blanked, so only code concatenated into it (`"x " + name`) can match.
             if (identifierArguments.any { identifierWord.containsMatchIn(it) }) violations += violation(file, line, IDENTIFIER)
-            if (arguments.size >= 2 && arguments.last() in throwableNames) violations += violation(file, line, THROWABLE)
+            if (arguments.drop(1).any(::isThrowableLike) || arguments.any { concatenatedThrowable.containsMatchIn(it) }) {
+                violations += violation(file, line, THROWABLE)
+            }
         }
         return violations.sortedBy { it.line }
     }
@@ -468,6 +547,22 @@ internal object LogPrivacyScanner {
     private fun violation(file: String, line: Int, rule: String) = Violation(file, line, rule, hints.getValue(rule))
 
     private fun blankMessageAccess(call: String): String = messageAccess.replace(call) { " ".repeat(it.value.length) }
+
+    private fun blankCountAccess(call: String): String = countAccess.replace(call) { " ".repeat(it.value.length) }
+
+    // A bare throwable, in parentheses or cast (`(e)`, `e as Throwable`), its cause or a Result's failure.
+    private fun isThrowableLike(argument: String): Boolean {
+        var a = argument.trim().removePrefix("*").trim()
+        while (a.startsWith("(") && a.endsWith(")")) a = a.substring(1, a.length - 1).trim()
+        a = a.replace(Regex("""\s+as\??\s+[A-Za-z_][A-Za-z0-9_.]*\??$"""), "").trim()
+        return a in throwableNames || throwableAccess.containsMatchIn(a)
+    }
+
+    /** True when nothing but closing brackets, `;` or `,` follows [close] on its line in the masked text. */
+    private fun endsItsLine(masked: String, close: Int): Boolean {
+        val end = masked.indexOf('\n', close).let { if (it < 0) masked.length else it }
+        return masked.substring(close + 1, end).all { it.isWhitespace() || it in ";,)}]" }
+    }
 
     /** True when [source] holds an unescaped `$` between [open] and [close] that sits inside a string or char literal. */
     private fun hasTemplate(source: String, withComments: String, open: Int, close: Int): Boolean {
