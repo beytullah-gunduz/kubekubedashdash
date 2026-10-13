@@ -3,6 +3,9 @@ package com.kubekubedashdash.ui.screens.workloads
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -37,12 +40,17 @@ import com.kubekubedashdash.services.metricshistory.PodRef
 import com.kubekubedashdash.services.metricshistory.PodSeriesKind
 import com.kubekubedashdash.services.metricshistory.PodSetMode
 import com.kubekubedashdash.services.metricshistory.PodSetRef
+import com.kubekubedashdash.services.metricshistory.PromQl
 import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.Series
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.dummyClient
+import com.kubekubedashdash.ui.screens.namespaces.NamespaceUsageSection
+import com.kubekubedashdash.ui.screens.pods.formatBytesValue
+import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.util.DemoContext
+import com.kubekubedashdash.util.QuotaCeilings
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
 import kotlinx.coroutines.CoroutineScope
@@ -136,9 +144,9 @@ private fun job(name: String, start: Long, end: Long?, owners: List<OwnerRefInfo
 )
 
 /**
- * The usage sections of the Job, CronJob, SparkApplication and ScheduledSparkApplication panels:
+ * The usage sections of the Job, CronJob, SparkApplication, ScheduledSparkApplication and Namespace panels:
  * [WorkloadUsageHistorySection] over the targets of [jobTarget], [cronJobTarget], [sparkTarget] and
- * [scheduledSparkTarget] and a fake source. The Settings flow is a plain [MutableStateFlow] handed to the service's
+ * [scheduledSparkTarget] and a fake source, and [NamespaceUsageSection] over the same kind of source. The Settings flow is a plain [MutableStateFlow] handed to the service's
  * internal constructor, so nothing here reads the preference store, the network or gcloud.
  */
 @Suppress("DEPRECATION")
@@ -178,9 +186,9 @@ class BatchUsageHistorySectionUiTest {
         }
     }
 
-    private fun serviceOver(source: MetricsHistorySource) = MetricsHistoryService(
+    private fun serviceOver(source: MetricsHistorySource, setting: MetricsSourceSetting = GmpSetting) = MetricsHistoryService(
         currentContext = { CONTEXT },
-        settingsFlow = { MutableStateFlow(mapOf(DemoContext.preferenceKey(CONTEXT) to GmpSetting)) },
+        settingsFlow = { MutableStateFlow(mapOf(DemoContext.preferenceKey(CONTEXT) to setting)) },
         gmpSourceFor = { source },
         detection = InClusterDetection(scope = detectionScope, nowMs = detectionClock::get, detect = { DetectionState.NothingFound(detectionClock.get()) }),
         clientFor = { dummyClient() },
@@ -589,6 +597,243 @@ class BatchUsageHistorySectionUiTest {
 
         onNodeWithText("No run of this application is loaded.").assertExists()
         onNodeWithText("24h ▾").assertExists()
+        assertTrue(source.windows.isEmpty())
+    }
+
+    // ── Namespace ───────────────────────────────────────────────────────────
+
+    private fun namespaceRow(name: String = NAMESPACE) = GenericResourceInfo(
+        uid = "uid-ns-$name",
+        name = name,
+        namespace = null,
+        status = "Active",
+        age = "30d",
+        labels = emptyMap(),
+        annotations = emptyMap(),
+    )
+
+    private val quotaCeilings = QuotaCeilings(
+        requestsCpu = 4.0,
+        limitsCpu = 8.0,
+        requestsMemory = 8.0 * 1024 * 1024 * 1024,
+        limitsMemory = 16.0 * 1024 * 1024 * 1024,
+    )
+
+    private fun ComposeUiTest.showNamespace(
+        source: MetricsHistorySource,
+        namespace: GenericResourceInfo = namespaceRow(),
+        setting: MetricsSourceSetting = GmpSetting,
+        refreshMs: Long = Long.MAX_VALUE,
+        fetchCeilings: suspend (String) -> QuotaCeilings = { quotaCeilings },
+    ) {
+        val service = serviceOver(source, setting)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { NamespaceUsageSection(namespace, service, fetchCeilings, refreshMs, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+    }
+
+    private val namespacePods = listOf("web-0", "web-1", "web-2")
+
+    @Test
+    fun `a Namespace opens on Total over every pod of the namespace, in the last 6 hours, with all five charts asked`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source)
+
+        assertEquals(setOf(PromQl.ofNamespace(NAMESPACE)), source.pods.toSet())
+        assertEquals(setOf(PodSetMode.Total), source.modes.map { it.second }.toSet())
+        assertEquals(PodSeriesKind.entries.toSet(), source.modes.map { it.first }.toSet())
+        assertEquals(setOf(HistoryRange.H6.window(NOW)), source.windows.toSet())
+        onNodeWithText("Resource usage", ignoreCase = true).assertExists()
+        onNodeWithText("6h ▾").assertExists()
+        onNodeWithText("Per pod").assertExists()
+        onNodeWithText("Total").assertExists()
+        // CPU and memory list the one summed line next to their quota lines; a lone line with no guide has no legend.
+        onAllNodesWithText("All pods").assertCountEquals(2)
+        namespacePods.forEach { onAllNodesWithText(it).assertCountEquals(0) }
+    }
+
+    @Test
+    fun `the quota requests and limits are guide lines in Total only, with their values in the legend`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source)
+
+        // CPU and memory each list both lines; whether a line is drawn or marked off scale depends on the usage.
+        onAllNodesWithText("quota requests", substring = true).assertCountEquals(2)
+        onAllNodesWithText("quota limits", substring = true).assertCountEquals(2)
+        onNodeWithText("- - quota requests ${formatCoresValue(4.0)}", substring = true).assertExists()
+        onNodeWithText("── quota limits ${formatCoresValue(8.0)}", substring = true).assertExists()
+        onNodeWithText("- - quota requests ${formatBytesValue(quotaCeilings.requestsMemory!!)}", substring = true).assertExists()
+        onNodeWithText("── quota limits ${formatBytesValue(quotaCeilings.limitsMemory!!)}", substring = true).assertExists()
+
+        onNodeWithText("Per pod").performClick()
+        waitForIdle()
+
+        assertEquals(PodSetMode.PerPod, source.modes.last { it.first == PodSeriesKind.Cpu }.second)
+        onAllNodesWithText("quota", substring = true).assertCountEquals(0)
+        onAllNodesWithText("request", substring = true).assertCountEquals(0)
+        onAllNodesWithText("limit", substring = true).assertCountEquals(0)
+
+        onNodeWithText("Total").performClick()
+        waitForIdle()
+
+        onAllNodesWithText("quota requests", substring = true).assertCountEquals(2)
+    }
+
+    @Test
+    fun `a quota far above the usage is listed in the legend as off scale`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        // The fake source peaks at 2.0, so 1 000 cores and 1 TiB are far beyond twice the data.
+        showNamespace(source, fetchCeilings = { QuotaCeilings(requestsCpu = 1_000.0, limitsMemory = 1024.0 * 1024 * 1024 * 1024) })
+
+        onNodeWithText("- - quota requests ${formatCoresValue(1_000.0)} (off scale)").assertExists()
+        onNodeWithText("── quota limits ${formatBytesValue(1024.0 * 1024 * 1024 * 1024)} (off scale)").assertExists()
+        onAllNodesWithText("quota limits", substring = true).assertCountEquals(1)
+        onAllNodesWithText("quota requests", substring = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun `a namespace without a quota draws no guide line`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source, fetchCeilings = { QuotaCeilings() })
+
+        onNodeWithText("Resource usage", ignoreCase = true).assertExists()
+        onNodeWithText("CPU").assertExists()
+        onNodeWithText("Memory").assertExists()
+        onAllNodesWithText("quota", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `Per pod draws every pod in colour and counts those past the sixth in a line under the charts`() = runComposeUiTest {
+        val names = (0 until 8).map { "web-$it" }
+        val source = RecordingSource(names)
+        showNamespace(source)
+
+        onNodeWithText("Per pod").performClick()
+        waitForIdle()
+
+        onNodeWithText("2 more pods are not drawn — switch to Total.").assertExists()
+        // The two lowest peaks are the ones left out; the others are listed in CPU, memory and throttling.
+        names.take(2).forEach { onAllNodesWithText(it).assertCountEquals(0) }
+        names.drop(2).forEach { onAllNodesWithText(it).assertCountEquals(3) }
+        onAllNodes(earlierPodsEntry).assertCountEquals(0)
+
+        onNodeWithText("Total").performClick()
+        waitForIdle()
+
+        onAllNodesWithText("not drawn", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `on Managed Prometheus the namespace note speaks of a replaced pod counted twice in Total`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source)
+
+        onNodeWithText(NAMESPACE_GMP_STALENESS_NOTE).assertExists()
+        onNodeWithText(BATCH_GMP_STALENESS_NOTE).assertDoesNotExist()
+        onNodeWithText(GMP_STALENESS_NOTE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `with no history source the namespace section renders nothing and never lists the quotas`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        val fetched = CopyOnWriteArrayList<String>()
+        showNamespace(source, setting = MetricsSourceSetting(MetricsSourceMode.OFF), fetchCeilings = { name ->
+            fetched += name
+            quotaCeilings
+        })
+
+        onNodeWithText("Resource usage", ignoreCase = true).assertDoesNotExist()
+        onNodeWithText("6h ▾").assertDoesNotExist()
+        onNodeWithText("Per pod").assertDoesNotExist()
+        assertTrue(fetched.isEmpty(), "the quotas were listed without a source: $fetched")
+        assertTrue(source.windows.isEmpty())
+    }
+
+    @Test
+    fun `the quotas of the shown namespace are listed, and again every refresh`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = RecordingSource(namespacePods)
+        val fetched = CopyOnWriteArrayList<String>()
+        val service = serviceOver(source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) {
+                    NamespaceUsageSection(
+                        namespaceRow(),
+                        service,
+                        { name ->
+                            fetched += name
+                            QuotaCeilings(requestsCpu = 2.0 * fetched.size)
+                        },
+                        60_000L,
+                        { NOW },
+                        Long.MAX_VALUE,
+                    )
+                }
+            }
+        }
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+
+        assertEquals(listOf(NAMESPACE), fetched.toList())
+        onNodeWithText("- - quota requests ${formatCoresValue(2.0)}", substring = true).assertExists()
+
+        mainClock.advanceTimeBy(60_001)
+        waitForIdle()
+
+        assertEquals(listOf(NAMESPACE, NAMESPACE), fetched.toList())
+        onNodeWithText("- - quota requests ${formatCoresValue(4.0)}", substring = true).assertExists()
+    }
+
+    @Test
+    fun `another namespace in the same panel starts over on Total with its own quotas`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        val fetched = CopyOnWriteArrayList<String>()
+        val service = serviceOver(source)
+        var shown by mutableStateOf(namespaceRow("team-a"))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) {
+                    NamespaceUsageSection(
+                        shown,
+                        service,
+                        { name ->
+                            fetched += name
+                            QuotaCeilings(requestsCpu = if (name == "team-b") 3.0 else 4.0)
+                        },
+                        Long.MAX_VALUE,
+                        { NOW },
+                        Long.MAX_VALUE,
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText("Per pod").performClick()
+        waitForIdle()
+        assertEquals(PodSetMode.PerPod, source.modes.last { it.first == PodSeriesKind.Cpu }.second)
+        onAllNodesWithText("quota", substring = true).assertCountEquals(0)
+
+        shown = namespaceRow("team-b")
+        waitForIdle()
+
+        assertEquals(listOf("team-a", "team-b"), fetched.toList())
+        assertEquals(PromQl.ofNamespace("team-b"), source.pods.last())
+        assertEquals(PodSetMode.Total, source.modes.last { it.first == PodSeriesKind.Cpu }.second)
+        onNodeWithText("- - quota requests ${formatCoresValue(3.0)}", substring = true).assertExists()
+    }
+
+    @Test
+    fun `a namespace name that cannot be queried says so and asks nothing`() = runComposeUiTest {
+        val source = RecordingSource(namespacePods)
+        showNamespace(source, namespace = namespaceRow("Team-A"))
+
+        onNodeWithText(NAMESPACE_MISSING_NOTE).assertExists()
+        onNodeWithText("6h ▾").assertExists()
         assertTrue(source.windows.isEmpty())
     }
 }

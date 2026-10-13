@@ -5,8 +5,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.models.GenericResourceInfo
+import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.statusColor
 import com.kubekubedashdash.ui.screens.DetailField
+import com.kubekubedashdash.ui.screens.OverviewSection
 import com.kubekubedashdash.ui.screens.ResourceDetailPanel
 
 @Composable
@@ -19,6 +21,7 @@ fun NamespaceDetailScreen(
     annotationQuery: String = "",
     onToggleAnnotation: (String, String) -> Unit = { _, _ -> },
 ) {
+    val client = LocalReactiveKubeClient.current
     ResourceDetailPanel(
         kind = "Namespace",
         name = namespace.name,
@@ -30,6 +33,7 @@ fun NamespaceDetailScreen(
         ),
         labels = namespace.labels,
         annotations = namespace.annotations,
+        leadingSections = listOf(OverviewSection("usage-history") { NamespaceUsageSection(namespace, client) }),
         onClose = onClose,
         modifier = Modifier.fillMaxSize(),
         labelQuery = labelQuery,
