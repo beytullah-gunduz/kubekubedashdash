@@ -83,10 +83,16 @@ internal data class LoadedHistory(val window: QueryWindow, val results: Map<PodS
  * counts as not answered too, so a new pod's history shows up within a refresh even on a 24 h
  * range, whose window only moves every 720 s.
  */
-internal fun needsFetch(current: LoadedHistory?, window: QueryWindow): Boolean = current == null ||
+internal fun needsFetch(current: LoadedHistory?, window: QueryWindow): Boolean = needsFetch(current, window, finalWhenAnswered = false)
+
+/**
+ * [needsFetch] for a [window] that is [finalWhenAnswered] once every kind has answered: an empty answer
+ * is then the answer, and only a failure is asked for again.
+ */
+internal fun needsFetch(current: LoadedHistory?, window: QueryWindow, finalWhenAnswered: Boolean): Boolean = current == null ||
     current.window != window ||
     current.results.values.any { it !is SeriesResult.Ok } ||
-    !current.hasCpuOrMemoryPoints
+    (!finalWhenAnswered && !current.hasCpuOrMemoryPoints)
 
 /** What the section shows for a source choice and the fetch so far. */
 internal sealed interface HistoryView {

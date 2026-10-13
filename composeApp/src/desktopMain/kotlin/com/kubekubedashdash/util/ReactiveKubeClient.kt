@@ -567,6 +567,8 @@ class ReactiveKubeClient(
                 annotations = job.metadata.annotations ?: emptyMap(),
                 extraColumns = mapOf("Completions" to "$succ/$comp", "Status" to status),
                 owners = ResourceMappers.mapOwnerRefs(job.metadata.ownerReferences),
+                creationTimestamp = job.metadata.creationTimestamp ?: "",
+                run = ResourceMappers.mapJobRun(job),
             )
         },
     )

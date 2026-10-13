@@ -78,7 +78,7 @@ class DeploymentPodSetTest {
         )
 
         assertNotNull(result)
-        assertEquals(PodSetRef("default", listOf("redis-cache-5f7a3b1d0", "redis-cache-6d9f8c7b5")), result.ref)
+        assertEquals(PromQl.ofReplicaSets("default", listOf("redis-cache-5f7a3b1d0", "redis-cache-6d9f8c7b5"))!!, result.ref)
         assertEquals("redis-cache-6d9f8c7b5", result.currentReplicaSet)
     }
 
@@ -91,7 +91,7 @@ class DeploymentPodSetTest {
             ),
         )
 
-        assertEquals(listOf("redis-cache-5f7a3b1d0"), podSet(shared)?.ref?.replicaSets)
+        assertEquals(listOf("redis-cache-5f7a3b1d0"), podSet(shared)?.replicaSets)
     }
 
     @Test
@@ -154,7 +154,7 @@ class DeploymentPodSetTest {
         )
 
         assertNotNull(result)
-        assertEquals(listOf("redis-cache-5f7a3b1d0", "redis-cache-6d9f8c7b5", "redis-cache-7c8d9e0f1"), result.ref.replicaSets)
+        assertEquals(listOf("redis-cache-5f7a3b1d0", "redis-cache-6d9f8c7b5", "redis-cache-7c8d9e0f1"), result.replicaSets)
         assertEquals(listOf("redis-cache-7c8d9e0f1"), result.rollouts.map { it.replicaSet })
         assertEquals("redis-cache-7c8d9e0f1", result.currentReplicaSet)
     }
@@ -181,10 +181,10 @@ class DeploymentPodSetTest {
     fun `a ReplicaSet name with a dot is kept`() {
         val result = podSet(rs("redis-cache.v2-5f7a3b1d0", revision = "1", created = "2026-10-12T08:00:00Z"))
 
-        assertEquals(PodSetRef("default", listOf("redis-cache.v2-5f7a3b1d0")), result?.ref)
+        assertEquals(PromQl.ofReplicaSets("default", listOf("redis-cache.v2-5f7a3b1d0"))!!, result?.ref)
         assertEquals("redis-cache.v2-5f7a3b1d0", result?.currentReplicaSet)
         // The pod pattern for it escapes the dot.
-        assertEquals("""(redis-cache\.v2-5f7a3b1d0-)[a-z0-9]{5}""", PromQl.podSetRegex(result!!.ref.replicaSets))
+        assertEquals("""(redis-cache\.v2-5f7a3b1d0-)[a-z0-9]{5}""", PromQl.podSetRegex(result!!.replicaSets))
     }
 
     @Test
@@ -193,9 +193,9 @@ class DeploymentPodSetTest {
         val result = podSet(rs(long, revision = "1", created = "2026-10-12T08:00:00Z"))
 
         assertEquals(60, long.length)
-        assertEquals(PodSetRef("default", listOf(long)), result?.ref)
+        assertEquals(PromQl.ofReplicaSets("default", listOf(long))!!, result?.ref)
         assertEquals(long, result?.rollouts?.single()?.replicaSet)
-        assertEquals("(${long.take(58)})[a-z0-9]{5}", PromQl.podSetRegex(result!!.ref.replicaSets))
+        assertEquals("(${long.take(58)})[a-z0-9]{5}", PromQl.podSetRegex(result!!.replicaSets))
     }
 
     @Test
@@ -208,7 +208,7 @@ class DeploymentPodSetTest {
             rs("", revision = "9"),
         )
 
-        assertEquals(listOf("redis-cache-5f7a3b1d0"), result?.ref?.replicaSets)
+        assertEquals(listOf("redis-cache-5f7a3b1d0"), result?.replicaSets)
         assertEquals("redis-cache-5f7a3b1d0", result?.currentReplicaSet)
     }
 
@@ -223,7 +223,7 @@ class DeploymentPodSetTest {
 
         val result = podSet(one, one)
 
-        assertEquals(listOf("redis-cache-5f7a3b1d0"), result?.ref?.replicaSets)
+        assertEquals(listOf("redis-cache-5f7a3b1d0"), result?.replicaSets)
         assertEquals(1, result?.rollouts?.size)
     }
 
@@ -243,6 +243,6 @@ class DeploymentPodSetTest {
         val cut = podSet(rs("$deployment-5f7a3b1d0"), rs("$deployment-6d9f8c7b5"))
         assertNotNull(cut)
         assertTrue(cut.podNamesCut)
-        assertEquals(1, cut.ref.replicaSets.map { PromQl.podPrefix(it) }.distinct().size)
+        assertEquals(1, cut.replicaSets.map { PromQl.podPrefix(it) }.distinct().size)
     }
 }

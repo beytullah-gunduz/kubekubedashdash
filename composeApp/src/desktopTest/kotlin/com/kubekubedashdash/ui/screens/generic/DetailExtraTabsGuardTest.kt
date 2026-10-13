@@ -89,6 +89,44 @@ class DetailExtraTabsGuardTest {
     }
 
     @Test
+    fun `a built-in Job or CronJob in a namespace gets the usage-history section`() {
+        for (k in listOf("Job", "CronJob")) {
+            assertEquals(listOf("usage-history"), kindLeadingSections(k, res, client).map { it.key }, "a built-in $k gets the usage section")
+            assertEquals(listOf("usage-history"), kindLeadingSections(k, res, client, group = "").map { it.key }, "a blank group is no group")
+            assertTrue(kindLeadingSections(k, res.copy(namespace = null), client).isEmpty(), "a $k without a namespace has no pods to chart")
+        }
+    }
+
+    @Test
+    fun `other kinds and CRDs that reuse a Job's name get no usage-history section`() {
+        for (k in listOf("ConfigMap", "Deployment", "Pod", "ReplicaSet", "StatefulSet", "DaemonSet", "Widget")) {
+            assertTrue(kindLeadingSections(k, res, client).isEmpty(), "$k has no usage section")
+        }
+        for (k in listOf("Job", "CronJob")) {
+            assertTrue(kindLeadingSections(k, res, client, group = "widgets.example").isEmpty(), "a CRD named $k must not chart built-in pods")
+        }
+        assertTrue(kindLeadingSections("Widget", res, client, group = "widgets.example").isEmpty())
+    }
+
+    @Test
+    fun `a SparkApplication or ScheduledSparkApplication in the Spark operator's group in a namespace gets the usage-history section`() {
+        for (k in listOf("SparkApplication", "ScheduledSparkApplication")) {
+            assertEquals(listOf("usage-history"), kindLeadingSections(k, res, client, group = "sparkoperator.k8s.io").map { it.key }, "a $k of the Spark operator gets the usage section")
+            assertTrue(kindLeadingSections(k, res.copy(namespace = null), client, group = "sparkoperator.k8s.io").isEmpty(), "a $k without a namespace has no pods to chart")
+        }
+    }
+
+    @Test
+    fun `a Spark kind outside the Spark operator's group gets no usage-history section`() {
+        for (k in listOf("SparkApplication", "ScheduledSparkApplication")) {
+            assertTrue(kindLeadingSections(k, res, client).isEmpty(), "a $k with no group is not the operator's")
+            assertTrue(kindLeadingSections(k, res, client, group = "").isEmpty(), "a blank group is no group")
+            assertTrue(kindLeadingSections(k, res, client, group = "widgets.example").isEmpty(), "a CRD named $k in another group must not chart another application's pods")
+        }
+        assertTrue(kindLeadingSections("Widget", res, client, group = "sparkoperator.k8s.io").isEmpty(), "other kinds of the Spark operator have no usage section")
+    }
+
+    @Test
     fun `a CRD kind matched on purpose keeps matching whatever its group`() {
         assertEquals(1, kindOverviewSections("SparkApplication", res, client, group = "sparkoperator.k8s.io").size)
         assertEquals(1, kindOverviewSections("SparkApplication", res, client).size)

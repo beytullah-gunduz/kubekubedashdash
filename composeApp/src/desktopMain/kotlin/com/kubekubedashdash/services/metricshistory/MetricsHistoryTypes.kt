@@ -5,8 +5,8 @@ import com.kubekubedashdash.models.ContainerResources
 /** The pod a history query is about; [containers] feeds the demo cluster's generated series and the reference lines. */
 data class PodRef(val namespace: String, val name: String, val containers: List<ContainerResources> = emptyList())
 
-/** Pods selected by name pattern in one namespace: the pods of the given ReplicaSets, current and old. */
-data class PodSetRef(val namespace: String, val replicaSets: List<String>)
+/** Pods selected by a name pattern in one namespace: RE2, anchored by Prometheus, already escaped where it holds names; build it with the PromQl factories. */
+data class PodSetRef(val namespace: String, val pattern: String)
 
 enum class PodSeriesKind { Cpu, Memory, NetworkRx, NetworkTx, Throttling }
 
@@ -25,13 +25,33 @@ data class SeriesPoint(val epochSec: Long, val value: Double)
 data class Series(val name: String, val points: List<SeriesPoint>)
 
 /** A query window; [stepSec] is also the gap threshold the chart uses. */
-data class QueryWindow(val startEpochSec: Long, val endEpochSec: Long, val stepSec: Long)
+data class QueryWindow(val startEpochSec: Long, val endEpochSec: Long, val stepSec: Long) {
+    companion object {
+        private const val MIN_SPAN_SEC = 60L
+        private const val MIN_MARGIN_SEC = 60L
+        private const val MARGIN_DIVISOR = 20L
+
+        /**
+         * A window around the run [fromSec]..[toSec]: a margin of a twentieth of its length (at least a
+         * minute) on both sides, about [HistoryRange.TARGET_POINTS] points, and start and end aligned to
+         * the step. Equal inputs give equal windows, which the callers' window check relies on.
+         */
+        fun spanning(fromSec: Long, toSec: Long): QueryWindow {
+            val to = maxOf(toSec, fromSec)
+            val span = maxOf(to - fromSec, MIN_SPAN_SEC)
+            val margin = maxOf(MIN_MARGIN_SEC, span / MARGIN_DIVISOR)
+            val step = maxOf(HistoryRange.MIN_STEP_SEC, ceilToMultiple(ceilDiv(span + 2 * margin, HistoryRange.TARGET_POINTS), HistoryRange.MIN_STEP_SEC))
+            return QueryWindow(floorToMultiple(fromSec - margin, step), ceilToMultiple(to + margin, step), step)
+        }
+    }
+}
 
 enum class HistoryRange(val label: String, val seconds: Long) {
     M15("15m", 900),
     H1("1h", 3_600),
     H6("6h", 21_600),
     H24("24h", 86_400),
+    D7("7d", 604_800),
     ;
 
     /** About [TARGET_POINTS] points, never finer than [MIN_STEP_SEC]; the end is aligned down to the step. */
@@ -47,9 +67,11 @@ enum class HistoryRange(val label: String, val seconds: Long) {
     }
 }
 
-private fun ceilDiv(a: Long, b: Long): Long = (a + b - 1) / b
+internal fun ceilDiv(a: Long, b: Long): Long = (a + b - 1) / b
 
-private fun ceilToMultiple(value: Long, multiple: Long): Long = ceilDiv(value, multiple) * multiple
+internal fun ceilToMultiple(value: Long, multiple: Long): Long = ceilDiv(value, multiple) * multiple
+
+internal fun floorToMultiple(value: Long, multiple: Long): Long = Math.floorDiv(value, multiple) * multiple
 
 enum class HistoryFailure {
     GcloudUnavailable,

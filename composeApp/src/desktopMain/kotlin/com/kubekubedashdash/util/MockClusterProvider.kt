@@ -5,6 +5,7 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateBuilder
 import io.fabric8.kubernetes.api.model.ContainerStateRunningBuilder
+import io.fabric8.kubernetes.api.model.ContainerStateTerminatedBuilder
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.Node
@@ -282,14 +283,19 @@ object MockClusterProvider {
         creationTimestamp: String = now(),
         owner: HasMetadata? = null,
         resources: ResourceRequirements? = demoContainerResources(),
+        // When the container of a Succeeded or Failed pod ended; the exit code follows the phase.
+        finishedAt: String? = null,
+        labels: Map<String, String> = emptyMap(),
     ): Pod {
         val isRunning = phase == "Running"
+        val isTerminated = finishedAt != null && (phase == "Succeeded" || phase == "Failed")
         val ownerRefs = owner?.let { listOf(ownerRefOf(it)) } ?: emptyList()
         return PodBuilder()
             .withNewMetadata()
             .withName(name)
             .withNamespace(ns)
             .withCreationTimestamp(creationTimestamp)
+            .addToLabels(labels)
             .addToLabels("app", app)
             .withOwnerReferences(ownerRefs)
             .endMetadata()
@@ -325,6 +331,28 @@ object MockClusterProvider {
                                     )
                                     .build(),
                             )
+                        } else if (isTerminated) {
+                            val succeeded = phase == "Succeeded"
+                            listOf(
+                                ContainerStatusBuilder()
+                                    .withName(app)
+                                    .withImage(image)
+                                    .withReady(false)
+                                    .withRestartCount(restartCount)
+                                    .withState(
+                                        ContainerStateBuilder()
+                                            .withTerminated(
+                                                ContainerStateTerminatedBuilder()
+                                                    .withExitCode(if (succeeded) 0 else 1)
+                                                    .withReason(if (succeeded) "Completed" else "Error")
+                                                    .withStartedAt(creationTimestamp)
+                                                    .withFinishedAt(finishedAt)
+                                                    .build(),
+                                            )
+                                            .build(),
+                                    )
+                                    .build(),
+                            )
                         } else {
                             emptyList()
                         },
@@ -341,6 +369,10 @@ object MockClusterProvider {
         image: String,
         creationTimestamp: String = now(),
         cronJob: CronJob? = null,
+        active: Int = 1,
+        succeeded: Int = 0,
+        failed: Int = 0,
+        completionTime: String? = null,
     ): Job {
         val ownerRefs = cronJob?.let { listOf(ownerRefOf(it)) } ?: emptyList()
         val builder = JobBuilder()
@@ -375,8 +407,11 @@ object MockClusterProvider {
             .endTemplate()
             .endSpec()
             .withNewStatus()
-            .withActive(1)
+            .withActive(active.takeIf { it > 0 })
+            .withSucceeded(succeeded.takeIf { it > 0 })
+            .withFailed(failed.takeIf { it > 0 })
             .withStartTime(creationTimestamp)
+            .withCompletionTime(completionTime)
             .endStatus()
             .build()
     }

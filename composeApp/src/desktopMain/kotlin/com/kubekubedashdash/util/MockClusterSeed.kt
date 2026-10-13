@@ -9,13 +9,17 @@ import io.fabric8.kubernetes.api.model.EndpointsBuilder
 import io.fabric8.kubernetes.api.model.EventBuilder
 import io.fabric8.kubernetes.api.model.EventSourceBuilder
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
+import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.LimitRangeBuilder
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.api.model.NodeBuilder
 import io.fabric8.kubernetes.api.model.ObjectMeta
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
+import io.fabric8.kubernetes.api.model.OwnerReference
+import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.PersistentVolumeBuilder
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.ResourceQuotaBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
@@ -51,6 +55,7 @@ import io.fabric8.kubernetes.api.model.storage.CSIDriverBuilder
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
+import java.time.Instant
 import java.util.Base64
 
 /**
@@ -602,23 +607,53 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
     }
 
     // ── CronJobs ───────────────────────────────────────────────────────────
-    data class CjDef(val name: String, val ns: String, val schedule: String, val app: String, val image: String, val command: String)
+    // log-rotation runs every 15 minutes: its history is the three slots before the current one, each run 4 minutes long.
+    data class CronRun(val minute: Long, val podSuffix: String) {
+        val start: String = Instant.ofEpochSecond(minute * 60).toString()
+        val finish: String = Instant.ofEpochSecond(minute * 60 + 240).toString()
+    }
+
+    val logRotationSlot = System.currentTimeMillis() / 60_000 / 15 * 15
+    val logRotationRuns = listOf(45L to "k2m4p", 30L to "q7r9t", 15L to "b5x8z").map { (minutesBack, suffix) ->
+        CronRun(logRotationSlot - minutesBack, suffix)
+    }
+
+    data class CjDef(
+        val name: String,
+        val ns: String,
+        val schedule: String,
+        val app: String,
+        val image: String,
+        val command: String,
+        val lastScheduleTime: String = MockClusterProvider.minutesAgo(60),
+        val lastSuccessfulTime: String? = null,
+    )
 
     val cjDefs = listOf(
         CjDef("nightly-backup", "production", "0 2 * * *", "backup", "busybox:1.36", "echo 'taking backup' && sleep 5"),
         CjDef("db-vacuum", "production", "30 4 * * 0", "db-vacuum", "postgres:16", "vacuumdb --all --analyze"),
-        CjDef("log-rotation", "monitoring", "*/15 * * * *", "log-rotator", "busybox:1.36", "find /var/log -name '*.gz' -mtime +7 -delete"),
+        CjDef(
+            "log-rotation",
+            "monitoring",
+            "*/15 * * * *",
+            "log-rotator",
+            "busybox:1.36",
+            "find /var/log -name '*.gz' -mtime +7 -delete",
+            lastScheduleTime = logRotationRuns.last().start,
+            lastSuccessfulTime = logRotationRuns.last().finish,
+        ),
         CjDef("cert-renewal", "default", "0 0 * * 1", "cert-bot", "certbot/certbot:v2.10.0", "certbot renew --quiet"),
     )
 
     val createdCjByName = mutableMapOf<String, CronJob>()
     cjDefs.forEach { def ->
+        val createdAt = MockClusterProvider.minutesAgo(1440)
         val cj = client.batch().v1().cronjobs().inNamespace(def.ns).resource(
             CronJobBuilder()
                 .withNewMetadata()
                 .withName(def.name)
                 .withNamespace(def.ns)
-                .withCreationTimestamp(MockClusterProvider.minutesAgo(1440))
+                .withCreationTimestamp(createdAt)
                 .addToLabels("app", def.app)
                 .endMetadata()
                 .withNewSpec()
@@ -646,41 +681,122 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
                 .endJobTemplate()
                 .endSpec()
                 .withNewStatus()
-                .withLastScheduleTime(MockClusterProvider.minutesAgo(60))
+                .withLastScheduleTime(def.lastScheduleTime)
+                .withLastSuccessfulTime(def.lastSuccessfulTime)
                 .endStatus()
                 .build(),
         ).create()
+        backdate("/apis/batch/v1/namespaces/${def.ns}/cronjobs/${def.name}", createdAt)
         createdCjByName[def.name] = cj
     }
 
-    // Seed a recent Job + owned Pod for two CronJobs so the topology graph
+    // Seed a recent Job + owned Pod for a CronJob so the topology graph
     // has CronJob cards on first render. The simulator's job loop creates
     // more jobs over time but isn't guaranteed to fire within the screenshot
     // task's warmup window.
     val seedJobChains = listOf(
         Triple("nightly-backup", "backup", "busybox:1.36"),
-        Triple("log-rotation", "log-rotator", "busybox:1.36"),
     )
     seedJobChains.forEach { (cjName, app, image) ->
         val cj = createdCjByName[cjName] ?: return@forEach
         val ns = cj.metadata.namespace
         val jobName = "$cjName-28000001"
+        val started = MockClusterProvider.minutesAgo(15)
         val createdJob = client.batch().v1().jobs().inNamespace(ns).resource(
-            MockClusterProvider.buildJob(jobName, ns, app, image, creationTimestamp = MockClusterProvider.minutesAgo(15), cronJob = cj),
+            MockClusterProvider.buildJob(jobName, ns, app, image, creationTimestamp = started, cronJob = cj),
         ).create()
+        backdate("/apis/batch/v1/namespaces/$ns/jobs/$jobName", started)
+        val podName = "$jobName-r9q4z"
         client.pods().inNamespace(ns).resource(
             MockClusterProvider.buildPod(
-                name = "$jobName-r9q4z",
+                name = podName,
                 ns = ns,
                 app = app,
                 image = image,
                 nodeName = "mock-node-1",
                 phase = "Running",
                 podIp = null,
-                creationTimestamp = MockClusterProvider.minutesAgo(15),
+                creationTimestamp = started,
                 owner = createdJob,
             ),
         ).create()
+        backdate("/api/v1/namespaces/$ns/pods/$podName", started)
+        totalPodsSeeded++
+    }
+
+    // log-rotation's finished runs, one per 15-minute slot, so its usage chart shows evenly spaced markers.
+    createdCjByName["log-rotation"]?.let { cj ->
+        val ns = cj.metadata.namespace
+        logRotationRuns.forEach { run ->
+            val jobName = "log-rotation-${run.minute}"
+            val podName = "$jobName-${run.podSuffix}"
+            val createdJob = client.batch().v1().jobs().inNamespace(ns).resource(
+                MockClusterProvider.buildJob(
+                    jobName,
+                    ns,
+                    "log-rotator",
+                    "busybox:1.36",
+                    creationTimestamp = run.start,
+                    cronJob = cj,
+                    active = 0,
+                    succeeded = 1,
+                    completionTime = run.finish,
+                ),
+            ).create()
+            backdate("/apis/batch/v1/namespaces/$ns/jobs/$jobName", run.start)
+            client.pods().inNamespace(ns).resource(
+                MockClusterProvider.buildPod(
+                    name = podName,
+                    ns = ns,
+                    app = "log-rotator",
+                    image = "busybox:1.36",
+                    nodeName = "mock-node-1",
+                    phase = "Succeeded",
+                    creationTimestamp = run.start,
+                    owner = createdJob,
+                    finishedAt = run.finish,
+                ),
+            ).create()
+            backdate("/api/v1/namespaces/$ns/pods/$podName", run.start)
+            totalPodsSeeded++
+        }
+    }
+
+    // A finished run of db-vacuum, so its usage chart has a Job that ended next to the running ones.
+    createdCjByName["db-vacuum"]?.let { cj ->
+        val ns = cj.metadata.namespace
+        val jobName = "db-vacuum-28000002"
+        val podName = "$jobName-k4m7p"
+        val started = MockClusterProvider.minutesAgo(50)
+        val finished = MockClusterProvider.minutesAgo(41)
+        val createdJob = client.batch().v1().jobs().inNamespace(ns).resource(
+            MockClusterProvider.buildJob(
+                jobName,
+                ns,
+                "db-vacuum",
+                "postgres:16",
+                creationTimestamp = started,
+                cronJob = cj,
+                active = 0,
+                succeeded = 1,
+                completionTime = finished,
+            ),
+        ).create()
+        backdate("/apis/batch/v1/namespaces/$ns/jobs/$jobName", started)
+        client.pods().inNamespace(ns).resource(
+            MockClusterProvider.buildPod(
+                name = podName,
+                ns = ns,
+                app = "db-vacuum",
+                image = "postgres:16",
+                nodeName = "mock-node-1",
+                phase = "Succeeded",
+                creationTimestamp = started,
+                owner = createdJob,
+                finishedAt = finished,
+            ),
+        ).create()
+        backdate("/api/v1/namespaces/$ns/pods/$podName", started)
         totalPodsSeeded++
     }
 
@@ -1167,7 +1283,7 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
     MockClusterProvider.log.info("Mock cluster seeded network/storage/security fill-ins: 1 IngressClass, 1 EndpointSlice, 1 CSIDriver, 2 CertificateSigningRequests (1 approved, 1 pending)")
 
     // ── CRDs + CR instances ─────────────────────────────────────────────────
-    seedSparkAndArgo(client)
+    seedSparkAndArgo(client, backdate)
     seedShowcaseCrds(client)
 
     MockClusterProvider.log.info(
@@ -1196,8 +1312,11 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
  * handful of CR instances per group. Lets the dashboard's "Custom
  * Resources" sidebar section, command palette, and per-CRD list screen
  * have data to render in the demo cluster.
+ *
+ * The Spark objects and their pods get the ages they are built with through [backdate] (see [seedResources]):
+ * a running application, a finished one, a failed one, and a ScheduledSparkApplication with two finished runs.
  */
-internal fun seedSparkAndArgo(client: KubernetesClient) {
+internal fun seedSparkAndArgo(client: KubernetesClient, backdate: (itemPath: String, creationTimestamp: String) -> Unit = { _, _ -> }) {
     val sparkColumns = listOf(
         CustomResourceColumnDefinitionBuilder()
             .withName("Status").withType("string").withJsonPath(".status.applicationState.state").build(),
@@ -1217,52 +1336,46 @@ internal fun seedSparkAndArgo(client: KubernetesClient) {
         namespaced = true,
         columns = sparkColumns,
     )
-    val sparkApps = listOf(
-        sparkInstance("spark-pi-success", "default", "RUNNING", attempts = 1, ageMin = 25),
-        sparkInstance("spark-etl-nightly", "production", "COMPLETED", attempts = 1, ageMin = 720),
-        sparkInstance("spark-failed-job", "production", "FAILED", attempts = 3, ageMin = 60),
-    ).map { (instance, ns) ->
-        seedCrInstance(client, "sparkoperator.k8s.io", "v1beta2", "sparkapplications", ns, instance) to ns
+    fun seedSparkApp(instance: GenericKubernetesResource, ns: String): GenericKubernetesResource {
+        val createdAt = instance.metadata.creationTimestamp
+        val created = seedCrInstance(client, "sparkoperator.k8s.io", "v1beta2", "sparkapplications", ns, instance)
+        backdate("/apis/sparkoperator.k8s.io/v1beta2/namespaces/$ns/sparkapplications/${created.metadata.name}", createdAt)
+        return created
     }
 
-    // Driver/executor pods for the RUNNING SparkApplication exercise the
-    // topology graph's CRD-aware findRoot. The driver pod is owned by the
-    // SparkApplication; the executors are owned by the driver pod, which
-    // matches Spark Operator's real ownerReference chain.
-    val (runningApp, runningAppNs) = sparkApps.first { (sa, _) ->
-        @Suppress("UNCHECKED_CAST")
-        (sa.additionalProperties["status"] as? Map<String, Any>)?.let { st ->
-            (st["applicationState"] as? Map<String, Any>)?.get("state")
-        } == "RUNNING"
-    }
-    val sparkDriver = client.pods().inNamespace(runningAppNs).resource(
-        MockClusterProvider.buildPod(
-            name = "${runningApp.metadata.name}-driver",
-            ns = runningAppNs,
-            app = "spark-driver",
-            image = "spark:3.5.0",
-            nodeName = "mock-node-1",
-            phase = "Running",
-            podIp = "10.244.0.50",
-            creationTimestamp = MockClusterProvider.minutesAgo(20),
-            owner = runningApp,
-        ),
-    ).create()
-    listOf("10.244.0.51", "10.244.0.52").forEachIndexed { i, ip ->
-        client.pods().inNamespace(runningAppNs).resource(
-            MockClusterProvider.buildPod(
-                name = "${runningApp.metadata.name}-exec-${i + 1}",
-                ns = runningAppNs,
-                app = "spark-executor",
-                image = "spark:3.5.0",
-                nodeName = "mock-node-1",
-                phase = "Running",
-                podIp = ip,
-                creationTimestamp = MockClusterProvider.minutesAgo(18),
-                owner = sparkDriver,
-            ),
-        ).create()
-    }
+    // Driver/executor pods exercise the topology graph's CRD-aware findRoot. The driver pod is owned by the
+    // SparkApplication; the executors are owned by the driver pod, which matches Spark Operator's real
+    // ownerReference chain. The running application's pods run; a finished application's pods ended with it.
+    val piExecutors = listOf("spark-pi-success-exec-1", "spark-pi-success-exec-2")
+    val (runningApp, runningAppNs) = sparkInstance("spark-pi-success", "default", "RUNNING", attempts = 1, ageMin = 25, executors = piExecutors)
+    seedSparkPods(
+        client,
+        backdate,
+        seedSparkApp(runningApp, runningAppNs),
+        piExecutors,
+        phase = "Running",
+        driverMinutesAgo = 20,
+        executorsMinutesAgo = 18,
+        podIps = listOf("10.244.0.50", "10.244.0.51", "10.244.0.52"),
+    )
+
+    val etlExecutors = (1..3).map { "spark-etl-nightly-exec-$it" }
+    val (finishedApp, finishedAppNs) = sparkInstance("spark-etl-nightly", "production", "COMPLETED", attempts = 1, ageMin = 180, endedMinAgo = 120, executors = etlExecutors)
+    seedSparkPods(
+        client,
+        backdate,
+        seedSparkApp(finishedApp, finishedAppNs),
+        etlExecutors,
+        phase = "Succeeded",
+        driverMinutesAgo = 178,
+        executorsMinutesAgo = 176,
+        finishedAt = terminationTimeOf(finishedApp),
+    )
+
+    val (failedApp, failedAppNs) = sparkInstance("spark-failed-job", "production", "FAILED", attempts = 3, ageMin = 60, endedMinAgo = 55)
+    seedSparkApp(failedApp, failedAppNs)
+
+    seedScheduledSparkApp(client, backdate)
 
     val workflowColumns = listOf(
         CustomResourceColumnDefinitionBuilder()
@@ -1305,6 +1418,149 @@ internal fun seedSparkAndArgo(client: KubernetesClient) {
                 owner = wf,
             ),
         ).create()
+    }
+}
+
+/**
+ * The driver pod of the stored SparkApplication [app] (named as its status says) and one pod per entry of
+ * [executors], owned the way the operator owns them. [podIps] holds the driver's address first, then the executors'.
+ * [finishedAt] is when the containers ended, for the Succeeded and Failed phases.
+ */
+private fun seedSparkPods(
+    client: KubernetesClient,
+    backdate: (itemPath: String, creationTimestamp: String) -> Unit,
+    app: GenericKubernetesResource,
+    executors: List<String>,
+    phase: String,
+    driverMinutesAgo: Long,
+    executorsMinutesAgo: Long,
+    finishedAt: String? = null,
+    podIps: List<String?> = emptyList(),
+) {
+    val ns = app.metadata.namespace
+    fun createPod(name: String, appLabel: String, role: String, createdMinutesAgo: Long, ip: String?, owner: HasMetadata): Pod {
+        val createdAt = MockClusterProvider.minutesAgo(createdMinutesAgo)
+        val pod = client.pods().inNamespace(ns).resource(
+            MockClusterProvider.buildPod(
+                name = name,
+                ns = ns,
+                app = appLabel,
+                image = "spark:3.5.0",
+                nodeName = "mock-node-1",
+                phase = phase,
+                podIp = ip,
+                creationTimestamp = createdAt,
+                owner = owner,
+                finishedAt = finishedAt,
+                labels = mapOf("spark-role" to role),
+            ),
+        ).create()
+        backdate("/api/v1/namespaces/$ns/pods/$name", createdAt)
+        return pod
+    }
+    val driver = createPod("${app.metadata.name}-driver", "spark-driver", "driver", driverMinutesAgo, podIps.getOrNull(0), app)
+    executors.forEachIndexed { i, name ->
+        createPod(name, "spark-executor", "executor", executorsMinutesAgo, podIps.getOrNull(i + 1), driver)
+    }
+}
+
+// The pods of a finished application end when it does.
+private fun terminationTimeOf(app: GenericKubernetesResource): String? = (app.additionalProperties["status"] as? Map<*, *>)?.get("terminationTime") as? String
+
+/**
+ * The ScheduledSparkApplication CRD and `production/spark-report-hourly`, which has two finished runs. A run is
+ * a SparkApplication the scheduled one owns and the operator labels with its name, with a Succeeded driver and
+ * two executors.
+ */
+private fun seedScheduledSparkApp(client: KubernetesClient, backdate: (itemPath: String, creationTimestamp: String) -> Unit) {
+    val group = "sparkoperator.k8s.io"
+    val apiVersion = "$group/v1beta2"
+    val scheduledName = "spark-report-hourly"
+    val ns = "production"
+    seedCrd(
+        client = client,
+        group = group,
+        version = "v1beta2",
+        kind = "ScheduledSparkApplication",
+        plural = "scheduledsparkapplications",
+        singular = "scheduledsparkapplication",
+        shortNames = listOf("scheduledsparkapp"),
+        namespaced = true,
+        columns = listOf(
+            CustomResourceColumnDefinitionBuilder().withName("Schedule").withType("string").withJsonPath(".spec.schedule").build(),
+            CustomResourceColumnDefinitionBuilder().withName("Last run").withType("date").withJsonPath(".status.lastRun").build(),
+            CustomResourceColumnDefinitionBuilder().withName("Age").withType("date").withJsonPath(".metadata.creationTimestamp").build(),
+        ),
+    )
+
+    // (name, minutes ago it was submitted, minutes ago it ended)
+    val runs = listOf(
+        Triple("$scheduledName-1760000000000000000", 130L, 110L),
+        Triple("$scheduledName-1760003600000000000", 70L, 52L),
+    )
+    val scheduledAt = MockClusterProvider.minutesAgo(1440)
+    val scheduled = seedCrInstance(
+        client,
+        group,
+        "v1beta2",
+        "scheduledsparkapplications",
+        ns,
+        demoCrInstance(
+            apiVersion,
+            "ScheduledSparkApplication",
+            scheduledName,
+            ns,
+            spec = mapOf(
+                "schedule" to "@every 1h",
+                "concurrencyPolicy" to "Forbid",
+                "successfulRunHistoryLimit" to 3,
+                "failedRunHistoryLimit" to 1,
+                "template" to mapOf("type" to "Scala", "mode" to "cluster", "image" to "spark:3.5.0"),
+            ),
+            status = mapOf(
+                "scheduleState" to "Scheduled",
+                "lastRun" to MockClusterProvider.minutesAgo(runs.last().second),
+                "lastRunName" to runs.last().first,
+                "pastSuccessfulRunNames" to runs.map { it.first },
+            ),
+        ),
+    )
+    backdate("/apis/$apiVersion/namespaces/$ns/scheduledsparkapplications/$scheduledName", scheduledAt)
+
+    val ownerRef = OwnerReferenceBuilder()
+        .withApiVersion(apiVersion)
+        .withKind("ScheduledSparkApplication")
+        .withName(scheduledName)
+        .withUid(scheduled.metadata.uid)
+        .withController(true)
+        .withBlockOwnerDeletion(true)
+        .build()
+    runs.forEach { (name, submittedMinutesAgo, endedMinutesAgo) ->
+        val executors = listOf("$name-exec-1", "$name-exec-2")
+        val (instance, _) = sparkInstance(
+            name,
+            ns,
+            "COMPLETED",
+            attempts = 1,
+            ageMin = submittedMinutesAgo,
+            endedMinAgo = endedMinutesAgo,
+            executors = executors,
+            labels = mapOf("app" to "spark", "job" to name, "sparkoperator.k8s.io/scheduled-app-name" to scheduledName),
+            owner = ownerRef,
+        )
+        val createdAt = instance.metadata.creationTimestamp
+        val app = seedCrInstance(client, group, "v1beta2", "sparkapplications", ns, instance)
+        backdate("/apis/$apiVersion/namespaces/$ns/sparkapplications/$name", createdAt)
+        seedSparkPods(
+            client,
+            backdate,
+            app,
+            executors,
+            phase = "Succeeded",
+            driverMinutesAgo = submittedMinutesAgo - 2,
+            executorsMinutesAgo = submittedMinutesAgo - 4,
+            finishedAt = terminationTimeOf(instance),
+        )
     }
 }
 
@@ -1452,31 +1708,47 @@ internal fun seedCrInstance(
     return if (namespace != null) resources.inNamespace(namespace).resource(instance).create() else resources.resource(instance).create()
 }
 
+/**
+ * A SparkApplication as the operator reports one: the last submission, the driver pod and the executors
+ * ([executors], by pod name). [endedMinAgo] is when the run ended; the operator sets `terminationTime` on
+ * COMPLETED and FAILED applications only.
+ */
 internal fun sparkInstance(
     name: String,
     ns: String,
     state: String,
     attempts: Int,
     ageMin: Long,
+    endedMinAgo: Long? = null,
+    executors: List<String> = emptyList(),
+    labels: Map<String, String> = mapOf("app" to "spark", "job" to name),
+    owner: OwnerReference? = null,
 ): Pair<GenericKubernetesResource, String> {
     val r = GenericKubernetesResource()
+    val created = MockClusterProvider.minutesAgo(ageMin)
     r.apiVersion = "sparkoperator.k8s.io/v1beta2"
     r.kind = "SparkApplication"
     r.metadata = ObjectMeta().apply {
         this.name = name
         this.namespace = ns
-        this.creationTimestamp = MockClusterProvider.minutesAgo(ageMin)
-        this.labels = mapOf("app" to "spark", "job" to name)
+        this.creationTimestamp = created
+        this.labels = labels
+        if (owner != null) this.ownerReferences = listOf(owner)
     }
     r.additionalProperties["spec"] = mapOf(
         "type" to "Scala",
         "mode" to "cluster",
         "image" to "spark:3.5.0",
     )
-    r.additionalProperties["status"] = mapOf(
+    val status = mutableMapOf<String, Any>(
         "applicationState" to mapOf("state" to state),
         "executionAttempts" to attempts,
+        "lastSubmissionAttemptTime" to created,
+        "driverInfo" to mapOf("podName" to "$name-driver"),
+        "executorState" to executors.associateWith { if (state == "RUNNING") "RUNNING" else "COMPLETED" },
     )
+    if (endedMinAgo != null && (state == "COMPLETED" || state == "FAILED")) status["terminationTime"] = MockClusterProvider.minutesAgo(endedMinAgo)
+    r.additionalProperties["status"] = status
     return r to ns
 }
 

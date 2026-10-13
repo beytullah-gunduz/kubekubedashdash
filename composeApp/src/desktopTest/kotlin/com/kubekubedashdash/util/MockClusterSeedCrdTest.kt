@@ -101,11 +101,12 @@ class MockClusterSeedCrdTest {
                 "elbv2.k8s.aws/TargetGroupBinding",
                 "widgets.example.io/Widget",
                 "sparkoperator.k8s.io/SparkApplication",
+                "sparkoperator.k8s.io/ScheduledSparkApplication",
                 "argoproj.io/Workflow",
             ),
             crds.map { it.key }.toSet(),
         )
-        assertEquals(18, crds.size)
+        assertEquals(19, crds.size)
         assertEquals(
             setOf("cert-manager.io/ClusterIssuer", "external-secrets.io/ClusterSecretStore", "kyverno.io/ClusterPolicy"),
             crds.filter { it.scope == CrdScope.CLUSTER }.map { it.key }.toSet(),

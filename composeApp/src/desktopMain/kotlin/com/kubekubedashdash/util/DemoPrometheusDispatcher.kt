@@ -17,6 +17,8 @@ import io.fabric8.kubernetes.api.model.PodList
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.apps.ReplicaSet
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetList
+import io.fabric8.kubernetes.api.model.batch.v1.Job
+import io.fabric8.kubernetes.api.model.batch.v1.JobList
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.PodMetricsList
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
 import io.fabric8.kubernetes.client.server.mock.CustomResourceAware
@@ -41,6 +43,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.DateTimeException
 import java.time.Instant
+import java.util.regex.PatternSyntaxException
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -53,7 +56,7 @@ import kotlin.math.sin
  * 200 and its whole contents. Services and ports the demo does not have answer as the API server
  * does (404 and 503 Status objects). The only calls into [delegate] on a proxy path are synthetic
  * GETs that read what [demoSeries] needs: a pod's containers, or for a pod-set query the
- * namespace's ReplicaSets and pods. A scope query reads the PodMetrics the Overview gauges add up.
+ * namespace's ReplicaSets, Jobs and pods. A scope query reads the PodMetrics the Overview gauges add up.
  *
  * Nothing here logs; a path, query or name stays inside the reply to the in-process client.
  */
@@ -206,28 +209,22 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
 
     private class ListedReplicaSet(val name: String, val prefix: String, val createdSec: Long?, val containers: List<ContainerResources>)
 
-    // The pods of the ReplicaSets the query names, in the form PromQl.inClusterPodSetQuery writes. Anything
-    // else is refused, and a bad name is refused before the delegate is asked anything.
+    // The pods of the pod set the query names, in the form PromQl.inClusterPodSetQuery writes. Anything else
+    // is refused, and the delegate is asked nothing until the query has passed every check on its text.
     private fun podSetMatrix(query: String, selector: MatchResult, window: QueryWindow): MockResponse {
-        val (namespace, alternation) = selector.destructured
-        if (!KubernetesNames.isDnsLabel(namespace)) return badData("unsupported query")
-        val prefixes = alternation.split('|').map { decodePrefix(it) ?: return badData("unsupported query") }
-        val inNamespace = lazy(LazyThreadSafetyMode.NONE) { replicaSetsIn(namespace) }
-        val names = prefixes.map { prefix ->
-            // A prefix that ends in "-" is the whole name plus that dash. One cut short by the 58-character limit is found among the listed names.
-            val name = if (prefix.endsWith('-')) {
-                prefix.dropLast(1)
-            } else {
-                inNamespace.value.mapNotNull { it.metadata?.name }.singleOrNull { PromQl.podPrefix(it) == prefix }
-            }
-            name?.takeIf(KubernetesNames::isDnsSubdomain) ?: return badData("unsupported query")
-        }
-        val ref = PodSetRef(namespace, names)
+        val (namespace, literal) = selector.destructured
+        // Only the string-literal layer is undone: what is left is the RE2 pattern the factories wrote.
+        val ref = PodSetRef(namespace, undoStringLiteral(literal))
+        if (!PromQl.isValidPodSet(ref)) return badData("unsupported query")
         val (kind, mode) = PodSeriesKind.entries.flatMap { k -> PodSetMode.entries.map { k to it } }
             .firstOrNull { (k, m) -> PromQl.inClusterPodSetQuery(k, ref, m, window.stepSec) == query }
             ?: return badData("unsupported query")
 
-        val pods = podsOfReplicaSets(namespace, prefixes.toSet(), inNamespace.value)
+        val pods = when {
+            REPLICA_SET_POD_SET.matches(ref.pattern) -> replicaSetAndJobPods(namespace, ref.pattern)
+            BATCH_POD_SETS.any { it.matches(ref.pattern) } -> podsMatching(namespace, ref.pattern)
+            else -> null
+        } ?: return badData("unsupported query")
         val perPod = pods.mapNotNull { pod ->
             val points = clip(podPoints(kind, namespace, pod, window), pod)
             if (points.isEmpty()) null else pod.name to points
@@ -239,13 +236,44 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         return matrix(result)
     }
 
-    // A prefix as PromQl.podSetRegex wrote it: RE2-escaped, then as a string literal. A DNS name has no
-    // metacharacter but the dot, so whatever is left after both decodings must be name characters.
-    private fun decodePrefix(raw: String): String? = raw.replace("\\\\", "\\").replace("\\.", ".").takeIf { PREFIX_CHARACTERS.matches(it) }
+    // The query string is a PromQL string literal: its backslashes are doubled and a quote is escaped.
+    private fun undoStringLiteral(literal: String): String = STRING_LITERAL_ESCAPE.replace(literal) { it.groupValues[1] }
+
+    // `(<rs>-|<rs>-)xxxxx`: the pods of the ReplicaSets it names, or null when the pattern is not the one the
+    // client writes for them. An alternative that is no listed ReplicaSet may name a listed Job: PromQl.ofJob
+    // writes the pods of a Job that is not indexed with the same shape.
+    private fun replicaSetAndJobPods(namespace: String, pattern: String): List<DemoPod>? {
+        // A DNS name has no metacharacter but the dot, so what is left after undoing it is name characters.
+        val prefixes = pattern.removePrefix("(").removeSuffix(")" + POD_SUFFIX_PATTERN).split('|').map { it.replace("\\.", ".") }
+        val replicaSets = lazy(LazyThreadSafetyMode.NONE) { replicaSetsIn(namespace) }
+        val names = prefixes.map { prefix ->
+            // A prefix that ends in "-" is the whole name plus that dash. One cut short by the 58-character limit is found among the listed names.
+            val name = if (prefix.endsWith('-')) {
+                prefix.dropLast(1)
+            } else {
+                replicaSets.value.mapNotNull { it.metadata?.name }.singleOrNull { PromQl.podPrefix(it) == prefix }
+            }
+            name?.takeIf(KubernetesNames::isDnsSubdomain) ?: return null
+        }
+        if (PromQl.ofReplicaSets(namespace, names)?.pattern != pattern) return null
+
+        val pods = lazy(LazyThreadSafetyMode.NONE) { podsIn(namespace) }
+        val ownPrefixes = replicaSets.value.mapNotNull { it.metadata?.name }.map(PromQl::podPrefix).toSet()
+        val jobPrefixes = prefixes.filter { it.endsWith('-') && it !in ownPrefixes }
+        return podsOfReplicaSets(prefixes.toSet(), replicaSets.value, pods) + podsOfJobs(namespace, jobPrefixes, pods)
+    }
+
+    // The pods of the pod sets that are not ReplicaSets' (an indexed Job's, a CronJob's, exact names, Spark executors by stem).
+    // The grammars leave no pattern that fails to compile, so a null here is only a defence. The app's own patterns are
+    // at most 4 000 characters over a loopback server, so java.util.regex backtracking is acceptable.
+    private fun podsMatching(namespace: String, pattern: String): List<DemoPod>? {
+        val regex = compilePattern(pattern) ?: return null
+        return podsIn(namespace).filter { regex.matches(it.name) }
+    }
 
     // The query's ReplicaSets that exist, oldest first, each with the pods it owns. One that has no pod
     // left is drawn as a single virtual pod, so a revision that has rolled out still has a line.
-    private fun podsOfReplicaSets(namespace: String, prefixes: Set<String>, replicaSets: List<ReplicaSet>): List<DemoPod> {
+    private fun podsOfReplicaSets(prefixes: Set<String>, replicaSets: List<ReplicaSet>, pods: Lazy<List<DemoPod>>): List<DemoPod> {
         val listed = replicaSets.mapNotNull { rs ->
             val name = rs.metadata?.name ?: return@mapNotNull null
             val prefix = PromQl.podPrefix(name)
@@ -256,7 +284,7 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         }.sortedWith(compareBy({ it.createdSec ?: Long.MIN_VALUE }, { it.name }))
         if (listed.isEmpty()) return emptyList()
 
-        val live = podsIn(namespace).groupBy { pod -> listed.indexOfFirst { isPodOf(pod.name, it.prefix) } }
+        val live = pods.value.groupBy { pod -> listed.indexOfFirst { isPodOf(pod.name, it.prefix) } }
         return listed.flatMapIndexed { index, rs ->
             // The next revision's creation ends this one's pods.
             val until = listed.getOrNull(index + 1)?.createdSec
@@ -267,6 +295,15 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
                 own.map { it.copy(toSec = until) }
             }
         }
+    }
+
+    // The pods of the listed Jobs [prefixes] name. The Jobs are listed only when a prefix needs them, and the pods only when one is found.
+    private fun podsOfJobs(namespace: String, prefixes: List<String>, pods: Lazy<List<DemoPod>>): List<DemoPod> {
+        if (prefixes.isEmpty()) return emptyList()
+        val listedPrefixes = jobsIn(namespace).mapNotNull { it.metadata?.name }.map(PromQl::podPrefix).toSet()
+        val found = prefixes.filter { it in listedPrefixes }
+        if (found.isEmpty()) return emptyList()
+        return pods.value.filter { pod -> found.any { isPodOf(pod.name, it) } }
     }
 
     private fun isPodOf(podName: String, prefix: String): Boolean = podName.length == prefix.length + POD_SUFFIX_LENGTH &&
@@ -284,12 +321,16 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         .toSortedMap()
         .map { (t, values) -> SeriesPoint(t, if (kind == PodSeriesKind.Throttling) values.average() else values.sum()) }
 
-    // The namespace's ReplicaSets and pods from the CRUD store; an answer that is not a list reads as none.
+    // The namespace's ReplicaSets, Jobs and pods from the CRUD store; an answer that is not a list reads as none.
     private fun replicaSetsIn(namespace: String): List<ReplicaSet> = listFrom("/apis/apps/v1/namespaces/$namespace/replicasets", ReplicaSetList::class.java)?.items.orEmpty()
 
+    private fun jobsIn(namespace: String): List<Job> = listFrom("/apis/batch/v1/namespaces/$namespace/jobs", JobList::class.java)?.items.orEmpty()
+
+    // A pod lives from its creation to the last of its containers' finish times; one with none is still running.
     private fun podsIn(namespace: String): List<DemoPod> = listFrom("/api/v1/namespaces/$namespace/pods", PodList::class.java)?.items.orEmpty().mapNotNull { pod ->
         val name = pod.metadata?.name ?: return@mapNotNull null
-        DemoPod(name, ResourceMappers.containerResources(pod), creationSec(pod.metadata?.creationTimestamp), toSec = null)
+        val finishedSec = pod.status?.containerStatuses.orEmpty().mapNotNull { creationSec(it.state?.terminated?.finishedAt) }.maxOrNull()
+        DemoPod(name, ResourceMappers.containerResources(pod), creationSec(pod.metadata?.creationTimestamp), toSec = finishedSec)
     }
 
     private fun <T> listFrom(path: String, type: Class<T>): T? {
@@ -526,15 +567,41 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         private val POD_SELECTOR = Regex("""namespace="([^"]*)",pod="([^"]*)"""")
         private val DNS_SUBDOMAIN = Regex("[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?")
 
-        // namespace="x",pod=~"(a-|b-)[a-z0-9]{5}": the alternation is captured as written.
-        private val POD_SET_SELECTOR = Regex("""namespace="([^"]*)",pod=~"\(([^"]*)\)\[a-z0-9\]\{5\}"""")
+        // namespace="x",pod=~"<pattern>": the pattern is captured as the string literal was written. Possessive,
+        // so a literal that never closes is refused at once instead of being retried in every way it can be split.
+        private val POD_SET_SELECTOR = Regex("""namespace="([^"]*)",pod=~"((?:[^"\\]++|\\.)*+)"""")
+
+        // A backslash and the character it escapes in a PromQL string literal.
+        private val STRING_LITERAL_ESCAPE = Regex("""\\([\\"])""")
 
         // {container!="",...}, {namespace="x",container!="",...} or {namespace=~"x|y",container!="",...}
         private val SCOPE_SELECTOR = Regex("""\{(?:namespace="([^"]*)",|namespace=~"([^"]*)",)?container!=""""")
 
-        // What is left of a ReplicaSet's pod prefix once its escapes are undone.
-        private val PREFIX_CHARACTERS = Regex("[a-z0-9][-a-z0-9.]*")
         private const val POD_SUFFIX_LENGTH = 5
+        private const val POD_SUFFIX_PATTERN = "[a-z0-9]{5}"
+
+        // The pod-set patterns the app writes, as the text of the pattern once the string literal is undone.
+        // A DNS name as PromQl.regexEscape writes it (the dot is the only escaped character), spelled with a
+        // character class between the dots so that java.util.regex does not recurse once per character.
+        private const val NAME = """[a-z0-9][-a-z0-9]*(?:\\\.[-a-z0-9]*)*"""
+        private const val SUFFIX = """\[a-z0-9\]\{5\}"""
+
+        // PromQl.ofReplicaSets, and ofJob for a Job that is not indexed: (name-|name-)xxxxx
+        private val REPLICA_SET_POD_SET = Regex("""\($NAME(?:\|$NAME)*\)$SUFFIX""")
+
+        // Each of these mirrors one factory; a pattern that is none of them is refused.
+        // ofJob, indexed: (name-[0-9]+-)xxxxx, and for a name too long to keep whole one alternative per index width
+        private val INDEXED_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\+-\)$SUFFIX""")
+        private val CUT_INDEXED_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\{[1-6]\}-(?:\|$NAME-\[0-9\]\{[1-6]\}-)*\)$SUFFIX""")
+
+        // ofCronJob: (name-[0-9]{8}-([0-9]+-)?)xxxxx, plus one |prefix- alternative per run started by hand
+        private val CRON_JOB_POD_SET = Regex("""\($NAME-\[0-9\]\{8\}-\(\[0-9\]\+-\)\?(?:\|$NAME)*\)$SUFFIX""")
+
+        // ofExactPods, and ofSparkPods past its exact-name limit: (driver|exec-1|stem-exec-[0-9]+)
+        private const val STEM = """$NAME-exec-\[0-9\]\+"""
+        private val EXACT_POD_SET = Regex("""\((?:$NAME|$STEM)(?:\|(?:$NAME|$STEM))*\)""")
+
+        private val BATCH_POD_SETS = listOf(INDEXED_JOB_POD_SET, CUT_INDEXED_JOB_POD_SET, CRON_JOB_POD_SET, EXACT_POD_SET)
 
         // The pod that stands for a ReplicaSet whose pods are gone; it fits the [a-z0-9]{5} of the pattern.
         private const val VIRTUAL_POD_SUFFIX = "old01"
@@ -544,6 +611,13 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
          * follows it. A name that merely starts with it (`proxy-config`) is not one.
          */
         private fun isProxyPath(bare: String): Boolean = bare.split('/').any { it == "proxy" }
+
+        /** [pattern] as a regex, or null when java.util.regex cannot compile it. */
+        internal fun compilePattern(pattern: String): Regex? = try {
+            Regex(pattern)
+        } catch (_: PatternSyntaxException) {
+            null
+        }
 
         /** The query parameters, form-decoded the way fabric8's HttpRequest.formURLEncode encodes them (space is `+`). */
         private fun queryParams(rawQuery: String): Map<String, String> = rawQuery.split('&').filter { it.isNotEmpty() }.associate { pair ->

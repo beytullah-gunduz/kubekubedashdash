@@ -9,13 +9,13 @@ import java.time.Instant
 data class Rollout(val revision: Long, val replicaSet: String, val createdEpochSec: Long)
 
 /**
- * The pods a Deployment has had: [ref] names its ReplicaSets, current and old (Kubernetes keeps up to
- * `revisionHistoryLimit` of them), [currentReplicaSet] is the newest revision and [rollouts] are the
- * ReplicaSets' creation instants in time order.
+ * The pods a Deployment has had: [ref] selects the pods of its [replicaSets], current and old (Kubernetes
+ * keeps up to `revisionHistoryLimit` of them), [currentReplicaSet] is the newest revision and [rollouts]
+ * are the ReplicaSets' creation instants in time order.
  */
-data class DeploymentPodSet(val ref: PodSetRef, val currentReplicaSet: String?, val rollouts: List<Rollout>) {
+data class DeploymentPodSet(val ref: PodSetRef, val replicaSets: List<String>, val currentReplicaSet: String?, val rollouts: List<Rollout>) {
     /** True when a pod name cannot hold some ReplicaSet's whole name: the name pattern is then not exact. */
-    val podNamesCut: Boolean get() = ref.replicaSets.any { PromQl.podPrefix(it) != "$it-" }
+    val podNamesCut: Boolean get() = replicaSets.any { PromQl.podPrefix(it) != "$it-" }
 }
 
 private const val REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
@@ -24,9 +24,10 @@ private class Candidate(val name: String, val revision: Long, val createdEpochSe
 
 /**
  * The ReplicaSets of the Deployment [deploymentUid] in [namespace], found by owner uid as
- * `RelatedResolver` does; null when it has none. A ReplicaSet whose creation time is missing or
- * unreadable keeps its pods in [DeploymentPodSet.ref] but marks no rollout, and counts as the oldest
- * when two share a revision. Pods of a ReplicaSet that was deleted are not selected.
+ * `RelatedResolver` does; null when it has none (or when [namespace] is not a DNS label). A ReplicaSet
+ * whose creation time is missing or unreadable keeps its pods in [DeploymentPodSet.ref] but marks no
+ * rollout, and counts as the oldest when two share a revision. Pods of a ReplicaSet that was deleted
+ * are not selected.
  *
  * Pods are matched by name, and a pod's name keeps only the first 58 characters of
  * `<replicaset>-` ([PromQl.podPrefix]). When that cuts into a ReplicaSet's name (a Deployment name
@@ -53,7 +54,9 @@ fun deploymentPodSet(deploymentUid: String, namespace: String, replicaSets: List
     val rollouts = owned
         .mapNotNull { c -> c.createdEpochSec?.let { Rollout(c.revision, c.name, it) } }
         .sortedWith(compareBy<Rollout>({ it.createdEpochSec }, { it.revision }, { it.replicaSet }))
-    return DeploymentPodSet(PodSetRef(namespace, owned.map { it.name }.sorted()), current?.name, rollouts)
+    val names = owned.map { it.name }.sorted()
+    val ref = PromQl.ofReplicaSets(namespace, names) ?: return null
+    return DeploymentPodSet(ref, names, current?.name, rollouts)
 }
 
 private fun revisionOf(rs: GenericResourceInfo): Long = rs.annotations[REVISION_ANNOTATION]?.trim()?.toLongOrNull() ?: 0L
