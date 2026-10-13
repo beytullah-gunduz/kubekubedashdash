@@ -2034,7 +2034,8 @@ class ReactiveKubeClient(
         log.debug("Fetching ResourceQuota usage name={} namespace={}", name, namespace)
         val rq = k8s.resourceQuotas().inNamespace(namespace).withName(name).get()
             ?: return@runCatching emptyList()
-        val hard = rq.status?.hard ?: rq.spec?.hard ?: emptyMap()
+        // fabric8 gives an unreconciled status an empty `hard`, not null, so `?:` alone would never reach the spec.
+        val hard = rq.status?.hard?.takeIf { it.isNotEmpty() } ?: rq.spec?.hard.orEmpty()
         val used = rq.status?.used ?: emptyMap()
         hard.keys.sorted().map { key ->
             val hardQ = hard[key]!!

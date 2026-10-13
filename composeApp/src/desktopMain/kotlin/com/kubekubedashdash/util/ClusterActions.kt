@@ -530,16 +530,20 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
     // ── On-demand: CronJob Trigger / Suspend ─────────────────────────────────────
 
     /**
-     * Trigger a CronJob immediately by creating a one-off Job from its
-     * [spec.jobTemplate], exactly as `kubectl create job --from=cronjob/<name>`.
-     * No ownerReference is added so the CronJob controller does not adopt or
-     * garbage-collect the job when the next schedule runs.
+     * Trigger a CronJob immediately by creating a one-off Job from its [spec.jobTemplate]; our
+     * `instantiate=manual` annotation wins over the template's (kubectl lets the template win).
+     * Like `kubectl create job --from=cronjob/<name>`, the Job is owned by the CronJob (controller, no
+     * blockOwnerDeletion): the controller warns `UnexpectedJob` while it runs, counts it toward the history
+     * limits once finished, and deletes it with the CronJob.
      */
     fun triggerCronJob(name: String, namespace: String): Result<Unit> = runCatching {
-        log.info("Triggering CronJob name={} namespace={}", name, namespace)
+        log.info("Triggering a CronJob")
+        log.debug("Triggering CronJob name={} namespace={}", name, namespace)
         val cj = k8s.batch().v1().cronjobs().inNamespace(namespace).withName(name).get()
             ?: error("CronJob $name not found in namespace $namespace")
         val template = cj.spec?.jobTemplate ?: error("CronJob $name has no jobTemplate")
+        // An ownerReference needs a uid; fail before creating anything.
+        val cronJobUid = cj.metadata?.uid?.takeIf { it.isNotBlank() } ?: error("CronJob has no uid")
         // Job name must be <= 63 chars: truncate the base so "-manual-<epoch-ms>" fits.
         // Use millis (not seconds) so rapid re-triggers don't collide on the name.
         val suffix = "-manual-${System.currentTimeMillis()}"
@@ -553,11 +557,20 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
             .addToLabels(templateLabels)
             .addToAnnotations(templateAnnotations)
             .addToAnnotations("cronjob.kubernetes.io/instantiate", "manual")
+            // No blockOwnerDeletion, as kubectl: setting it needs the cronjobs/finalizers permission.
+            .addNewOwnerReference()
+            .withApiVersion("batch/v1")
+            .withKind("CronJob")
+            .withName(cj.metadata.name)
+            .withUid(cronJobUid)
+            .withController(true)
+            .endOwnerReference()
             .endMetadata()
             .withSpec(template.spec)
             .build()
         k8s.batch().v1().jobs().inNamespace(namespace).resource(job).create()
-        log.info("Triggered CronJob name={}: created job={}", name, base + suffix)
+        log.info("Triggered a CronJob: created a Job")
+        log.debug("Triggered CronJob name={}: created job={}", name, base + suffix)
     }.map { }
 
     /**
