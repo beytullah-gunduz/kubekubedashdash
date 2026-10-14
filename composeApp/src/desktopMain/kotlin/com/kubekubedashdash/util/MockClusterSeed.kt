@@ -1460,7 +1460,7 @@ private fun seedSparkPods(
                 creationTimestamp = createdAt,
                 owner = owner,
                 finishedAt = finishedAt,
-                labels = mapOf("spark-role" to role),
+                labels = mapOf("spark-role" to role, "sparkoperator.k8s.io/app-name" to app.metadata.name),
             ),
         ).create()
         backdate("/api/v1/namespaces/$ns/pods/$name", createdAt)

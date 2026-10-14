@@ -68,6 +68,7 @@ import com.kubekubedashdash.ui.components.ConfirmActionDialog
 import com.kubekubedashdash.ui.components.DeleteConfirmDialog
 import com.kubekubedashdash.ui.components.DetailHost
 import com.kubekubedashdash.ui.components.EmptyState
+import com.kubekubedashdash.ui.components.KpiStrip
 import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceCountHeader
@@ -213,6 +214,7 @@ fun GenericResourceScreen(
     var statusFilter by rememberSaveable(kind) { mutableStateOf<Set<String>?>(null) }
 
     val client = LocalReactiveKubeClient.current
+    val sparkKind = isSparkApplicationKind(kind, apiGroup)
     val feedback = LocalActionFeedback.current
     var pendingDelete by remember(kind) { mutableStateOf<GenericResourceInfo?>(null) }
     val delete = rememberConfirmableAction()
@@ -244,6 +246,8 @@ fun GenericResourceScreen(
         )
 
         is ResourceState.Success -> {
+            // Conditional on the kind: one call site serves every CRD, so the state is simply disposed when the kind changes.
+            val sparkUsage = if (sparkKind) rememberSparkUsage(client, s.data) else null
             val availableStatuses = remember(s.data) {
                 s.data.mapNotNull { it.status }.filter { it.isNotBlank() }.toSortedSet()
             }
@@ -306,6 +310,7 @@ fun GenericResourceScreen(
                     modifier = Modifier.fillMaxSize(),
                     list = {
                         Column(modifier = Modifier.fillMaxSize()) {
+                            sparkUsage?.let { KpiStrip(kpis = it.kpis, activeId = null, clickableIds = emptySet(), onClick = {}) }
                             ResourceCountHeader(
                                 count = filtered.size,
                                 kind = pluralizeKind(kind),
@@ -414,6 +419,7 @@ fun GenericResourceScreen(
                                     onSelectionChange = if (bulkEnabled) viewModel.selection::set else null,
                                     pinnedIds = pinnedIds,
                                     onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
+                                    sparkUsages = sparkUsage?.byApp,
                                 )
                             }
                         }

@@ -30,10 +30,15 @@ internal class GenericColumn(
 
 /**
  * The columns of a generic resource table, in order: the name, the namespace, the status, the CRD printer
- * columns, a SparkApplication's run time, then the age. Each column shows once the table is [GenericColumn.minTableWidth] wide.
+ * columns, a SparkApplication's run time and (given [sparkUsages]) its live CPU and Memory, then the age. Each column shows once the table is [GenericColumn.minTableWidth] wide.
  * A printer value that is a UTC timestamp of [now]'s day shows its time only.
  */
-internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind: Boolean, now: Instant = Instant.now()): List<GenericColumn> {
+internal fun genericColumns(
+    resources: List<GenericResourceInfo>,
+    namespacedKind: Boolean,
+    now: Instant = Instant.now(),
+    sparkUsages: Map<String, SparkAppUsage>? = null,
+): List<GenericColumn> {
     // CRD printer columns almost always include their own "Age"; the table
     // appends a built-in Age column below, so drop the duplicate here. Assumes
     // the printer Age tracks metadata.creationTimestamp (the kubectl
@@ -47,7 +52,9 @@ internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind
         .filterNot {
             it.equals("Age", ignoreCase = true) ||
                 (hasStatus && it.equals("Status", ignoreCase = true)) ||
-                (hasSparkRuns && it.equals("Duration", ignoreCase = true))
+                (hasSparkRuns && it.equals("Duration", ignoreCase = true)) ||
+                // The built-in live CPU and Memory columns (given sparkUsages) would repeat a printer column of that name.
+                (hasSparkRuns && sparkUsages != null && (it.equals("CPU", ignoreCase = true) || it.equals("Memory", ignoreCase = true)))
         }
 
     return buildList {
@@ -99,6 +106,10 @@ internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind
                 },
             )
         }
+        if (hasSparkRuns && sparkUsages != null) {
+            add(GenericColumn("CPU", 0.7f, 0.dp) { r -> sparkCpuCell(sparkUsages[sparkUsageKey(r)]) })
+            add(GenericColumn("Memory", 0.8f, 0.dp) { r -> sparkMemoryCell(sparkUsages[sparkUsageKey(r)]) })
+        }
         add(GenericColumn("Age", 0.7f, 0.dp) { CellData(it.age) })
     }
 }
@@ -116,8 +127,9 @@ internal fun GenericTable(
     onSelectionChange: ((Set<String>) -> Unit)? = null,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
+    sparkUsages: Map<String, SparkAppUsage>? = null,
 ) {
-    val columns = genericColumns(resources, namespacedKind)
+    val columns = genericColumns(resources, namespacedKind, sparkUsages = sparkUsages)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = columns.filter { maxWidth >= it.minTableWidth }

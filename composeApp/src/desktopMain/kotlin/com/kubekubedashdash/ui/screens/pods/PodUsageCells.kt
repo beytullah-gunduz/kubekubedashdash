@@ -123,7 +123,7 @@ internal fun memoryCell(pod: PodInfo, usage: PodUsage?): CellData {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UsageCellContent(text: String, title: String, tooltip: () -> String, level: UsageLevel) {
+internal fun UsageCellContent(text: String, title: String, tooltip: () -> String, level: UsageLevel) {
     val color = when (level) {
         UsageLevel.CRITICAL -> KdError
         UsageLevel.WARNING -> KdWarning

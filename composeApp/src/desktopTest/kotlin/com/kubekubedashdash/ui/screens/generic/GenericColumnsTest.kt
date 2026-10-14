@@ -2,6 +2,9 @@ package com.kubekubedashdash.ui.screens.generic
 
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.models.SparkRun
+import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
+import com.kubekubedashdash.util.formatCpuCores
+import com.kubekubedashdash.util.formatMemorySize
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -122,5 +125,50 @@ class GenericColumnsTest {
         assertEquals(2.4f, weight("2026-01-05T00:00:00Z", "Start"), 0.001f)
         val tiny = app("tiny", "COMPLETED", "", mapOf("X" to "1")).copy(spark = null)
         assertEquals(0.6f, genericColumns(listOf(tiny), namespacedKind = false).single { it.header == "X" }.weight, 0.001f)
+    }
+
+    private fun usage(cpu: Long?, memory: Long?) = SparkAppUsage(livePods = 3, cpuUsedMillis = cpu, memoryUsedBytes = memory, cpuRequestMillis = 2000, memoryRequestBytes = 4L shl 30)
+
+    @Test
+    fun `live usage adds CPU and Memory between Duration and Age`() {
+        val running = app("running", "RUNNING", "")
+        val idle = app("idle", "COMPLETED", "2026-01-01T10:12:30Z")
+        val usages = mapOf(sparkUsageKey(running) to usage(1500, 3L shl 30), sparkUsageKey(idle) to usage(null, null))
+        val columns = genericColumns(listOf(running, idle), namespacedKind = true, sparkUsages = usages)
+        assertEquals(
+            listOf("Name", "Namespace", "Suspend", "Status", "Attempts", "Start", "Finish", "Duration", "CPU", "Memory", "Age"),
+            columns.headers(),
+        )
+        assertEquals(formatCpuCores(1500), columns.cell("CPU", running).text)
+        assertEquals(1500.0, columns.cell("CPU", running).sortNumber)
+        assertEquals(formatMemorySize(3L shl 30), columns.cell("Memory", running).text)
+        assertEquals((3L shl 30).toDouble(), columns.cell("Memory", running).sortNumber)
+        assertEquals(NONE_PLACEHOLDER, columns.cell("CPU", idle).text)
+        assertNull(columns.cell("CPU", idle).sortNumber)
+        assertEquals(NONE_PLACEHOLDER, columns.cell("Memory", idle).text)
+        assertNull(columns.cell("Memory", idle).sortNumber)
+    }
+
+    @Test
+    fun `without live usage there are no CPU and Memory columns`() {
+        val running = app("running", "RUNNING", "")
+        assertEquals(
+            listOf("Name", "Namespace", "Suspend", "Status", "Attempts", "Start", "Finish", "Duration", "Age"),
+            genericColumns(listOf(running), namespacedKind = true).headers(),
+        )
+    }
+
+    @Test
+    fun `a printer CPU column gives way to the built-in one only when it is added`() {
+        val running = app("running", "RUNNING", "", sparkPrinterColumns + mapOf("CPU" to "printer", "Memory" to "printer"))
+        val usages = mapOf(sparkUsageKey(running) to usage(1000, 1L shl 30))
+        val withUsage = genericColumns(listOf(running), namespacedKind = true, sparkUsages = usages)
+        assertEquals(1, withUsage.count { it.header == "CPU" })
+        assertEquals(1, withUsage.count { it.header == "Memory" })
+        assertEquals(formatCpuCores(1000), withUsage.cell("CPU", running).text)
+
+        val without = genericColumns(listOf(running), namespacedKind = true)
+        assertEquals("printer", without.cell("CPU", running).text)
+        assertEquals("printer", without.cell("Memory", running).text)
     }
 }
