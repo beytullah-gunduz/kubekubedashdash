@@ -40,6 +40,7 @@ object PreferenceRepository {
     const val STATS_PANEL_CLUSTER = "cluster"
     const val STATS_PANEL_ALL_CLUSTERS = "all_clusters"
     const val STATS_PANEL_USAGE_HISTORY = "usage_history"
+    const val STATS_PANEL_SPARK_USAGE_HISTORY = "spark_usage_history"
 
     private val dataStore: DataStore<Preferences> by lazy { dataStorePreferencesInstance }
 

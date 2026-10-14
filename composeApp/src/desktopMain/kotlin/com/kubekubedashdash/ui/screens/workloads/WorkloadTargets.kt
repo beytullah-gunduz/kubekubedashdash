@@ -38,12 +38,12 @@ internal const val SPARK_NO_CPU_LIMIT_NOTE = "No pod of this application has a C
 internal const val SCHEDULED_SPARK_NO_CPU_LIMIT_NOTE = "No pod of these runs has a CPU limit — CFS throttling does not apply."
 
 internal const val BATCH_GMP_STALENESS_NOTE =
-    "Each point averages at least the last 5 minutes, so a pod's line can run past the end of its run. A pod sampled only once has memory but no CPU."
+    "Each point averages several minutes, so a pod's line can run past the end of its run. A pod sampled only once has memory but no CPU."
 
 internal const val NAMESPACE_MISSING_NOTE = "This namespace name cannot be used in a query."
 
 internal const val NAMESPACE_GMP_STALENESS_NOTE =
-    "Each point averages at least the last 5 minutes, so Total can count a replaced pod twice for that long. A pod sampled only once has memory but no CPU."
+    "Each point averages several minutes, so Total can count a replaced pod twice for that long. A pod sampled only once has memory but no CPU."
 
 internal const val NAMESPACE_HOST_NETWORK_NOTE =
     "Some pods of this namespace use the host network: their counters are their node's, so the namespace's network is not charted."

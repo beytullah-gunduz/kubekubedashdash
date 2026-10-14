@@ -77,7 +77,7 @@ import kotlinx.coroutines.delay
 internal const val NO_CURRENT_CPU_LIMIT_NOTE = "No current pod has a CPU limit — CFS throttling does not apply."
 
 internal const val GMP_STALENESS_NOTE =
-    "Each point averages at least the last 5 minutes, so a deleted pod's line runs on for that long: earlier pods' lines can run past a rollout marker, and Total counts them twice there."
+    "Each point averages several minutes, so a deleted pod's line runs on for that long: earlier pods' lines can run past a rollout marker, and Total counts them twice there."
 
 internal const val TOTAL_SERIES_NAME = "All pods"
 
@@ -131,7 +131,7 @@ internal sealed interface UsageGrouping {
  * @property runLabel the menu entry and button label of a [UsageWindow.Run] or [UsageWindow.Runs] default.
  * @property perPodDescription the "Per pod" toggle's tooltip.
  * @property noCpuLimitNote what the CPU throttling chart says when no pod can be throttled.
- * @property stalenessNote the note under the charts on Managed Prometheus.
+ * @property stalenessNote the note under the charts (either backend).
  * @property throttlingWithoutLivePods whether CPU throttling is charted while no live pod is known: the pods
  * of a finished run are gone, though their limits applied.
  * @property defaultMode the mode shown first; the section's choice starts over when [key] changes.
@@ -317,7 +317,7 @@ private fun inClusterFailureText(choice: SourceChoice.InCluster, failed: SeriesR
  * can run past the marker of the rollout that replaced them and Total counts those pods twice there. An
  * in-cluster Prometheus marks a vanished series stale, which ends an instant query at once; the windowed
  * queries here still average the samples before the marker, so their lines linger for the window there too
- * (4 minutes at least). The section says so under the charts on Managed Prometheus.
+ * (4 minutes at least). The section says so under the charts on either backend.
  */
 @Composable
 internal fun WorkloadUsageHistorySection(
@@ -723,7 +723,7 @@ private fun WorkloadHistoryCharts(
         }
         target.notes.forEach { NoteLine(it) }
         if (shortRun != null) NoteLine(shortRun)
-        if (choice is SourceChoice.Gmp) NoteLine(target.stalenessNote)
+        NoteLine(target.stalenessNote)
     }
 }
 

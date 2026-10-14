@@ -53,6 +53,7 @@ import kotlin.math.roundToLong
 
 internal const val HISTORY_REFRESH_MS = 30_000L
 internal const val HOST_NETWORK_NOTE = "Host network — these counters are the node's, not the pod's."
+internal const val POD_HISTORY_AVERAGE_NOTE = "CPU and memory are averages over several minutes, so a short peak, such as one just before an OOM kill, does not show."
 internal const val NO_CPU_LIMIT_NOTE = "No CPU limit set — CFS throttling does not apply."
 internal const val NO_THROTTLING_DATA_NOTE = "No throttling data in this range."
 internal const val LOADING_HISTORY_NOTE = "Loading history…"
@@ -343,7 +344,10 @@ internal fun PodMetricsHistorySection(
                     if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                 }
 
-                is HistoryView.Charts -> HistoryCharts(pod, kinds, view.loaded)
+                is HistoryView.Charts -> {
+                    HistoryCharts(pod, kinds, view.loaded)
+                    Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                }
 
                 is HistoryView.LiveOnly -> Unit
             }

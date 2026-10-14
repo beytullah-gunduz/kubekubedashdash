@@ -695,7 +695,7 @@ class DeploymentUsageHistorySectionUiTest {
     }
 
     @Test
-    fun `the staleness note is absent for an in-cluster Prometheus, which marks vanished series stale`() = runComposeUiTest {
+    fun `the staleness note shows for an in-cluster Prometheus too`() = runComposeUiTest {
         val body = """{"status":"success","data":{"resultType":"matrix","result":[""" +
             """{"metric":{"pod":"${podName(CURRENT, "x7k2p")}"},"values":[[${NOW - 60},"1"],[$NOW,"2"]]}]}}"""
         stub.proxy = { jsonResponse(200, body) }
@@ -705,7 +705,7 @@ class DeploymentUsageHistorySectionUiTest {
         onNodeWithText("Prometheus · monitoring/frontend").assertExists()
         onAllNodesWithText(podName(CURRENT, "x7k2p")).assertCountEquals(3)
         onAllNodesWithText("Managed Prometheus", substring = true).assertCountEquals(0)
-        onNodeWithText(GMP_STALENESS_NOTE).assertDoesNotExist()
+        onNodeWithText(GMP_STALENESS_NOTE).assertExists()
         onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
     }
 

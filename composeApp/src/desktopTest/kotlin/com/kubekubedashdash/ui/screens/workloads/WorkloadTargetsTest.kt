@@ -566,7 +566,7 @@ class WorkloadTargetsTest {
             assertTrue(it.throttlingWithoutLivePods)
         }
         assertEquals(
-            "Each point averages at least the last 5 minutes, so a pod's line can run past the end of its run. A pod sampled only once has memory but no CPU.",
+            "Each point averages several minutes, so a pod's line can run past the end of its run. A pod sampled only once has memory but no CPU.",
             BATCH_GMP_STALENESS_NOTE,
         )
     }
@@ -622,7 +622,7 @@ class WorkloadTargetsTest {
         val target = namespaceTarget(teamA, QuotaCeilings())
 
         assertEquals(
-            "Each point averages at least the last 5 minutes, so Total can count a replaced pod twice for that long. A pod sampled only once has memory but no CPU.",
+            "Each point averages several minutes, so Total can count a replaced pod twice for that long. A pod sampled only once has memory but no CPU.",
             target.stalenessNote,
         )
         assertNotEquals(GMP_STALENESS_NOTE, target.stalenessNote)

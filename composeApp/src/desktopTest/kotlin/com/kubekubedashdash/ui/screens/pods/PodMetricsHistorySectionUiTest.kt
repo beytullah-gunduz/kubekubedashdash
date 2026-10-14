@@ -221,6 +221,7 @@ class PodMetricsHistorySectionUiTest {
         onAllNodesWithText("sidecar").assertCountEquals(3)
         onNodeWithText("Received").assertExists()
         onNodeWithText("Sent").assertExists()
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
         assertEquals(PodSeriesKind.entries.toSet(), source.calls.map { it.kind }.toSet())
     }
 

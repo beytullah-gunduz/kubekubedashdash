@@ -311,6 +311,20 @@ fun GenericResourceScreen(
                     list = {
                         Column(modifier = Modifier.fillMaxSize()) {
                             sparkUsage?.let { KpiStrip(kpis = it.kpis, activeId = null, clickableIds = emptySet(), onClick = {}) }
+                            if (sparkKind) {
+                                val statsPanelsExpanded by PreferenceRepository.statsPanelsExpanded.collectAsState()
+                                val sparkHistoryExpanded = statsPanelsExpanded[PreferenceRepository.STATS_PANEL_SPARK_USAGE_HISTORY] ?: true
+                                val namespaceScope by client.namespaceScope.collectAsState()
+                                // The padding goes in through the modifier, so a cluster without history keeps no empty band.
+                                SparkUsageHistoryCard(
+                                    service = client.metricsHistory,
+                                    namespaceScope = namespaceScope,
+                                    apps = s.data,
+                                    expanded = sparkHistoryExpanded,
+                                    onToggle = { PreferenceRepository.setStatsPanelExpanded(PreferenceRepository.STATS_PANEL_SPARK_USAGE_HISTORY, !sparkHistoryExpanded) },
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                )
+                            }
                             ResourceCountHeader(
                                 count = filtered.size,
                                 kind = pluralizeKind(kind),
