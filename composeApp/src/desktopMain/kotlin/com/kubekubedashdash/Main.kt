@@ -28,6 +28,7 @@ import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
 import com.kubekubedashdash.util.ShellEnvironment
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.describeFailureShape
+import com.kubekubedashdash.util.describeStack
 import com.kubekubedashdash.util.toGeometry
 import com.kubekubedashdash.yamledit.session.QuitGuard
 import com.kubekubedashdash.yamledit.session.YamlEditRegistry
@@ -49,11 +50,12 @@ fun main() {
     // workers, the AWT EDT, coroutine workers) into logback. Without this
     // they go to System.err, which is /dev/null when the .app bundle is
     // launched from Finder, and the app silently hangs instead of telling
-    // us what blew up. The logger sits under com.kubekubedashdash because only that subtree logs at
-    // DEBUG (drawer and console), where the trace goes: app.log never carries it.
+    // us what blew up. The logger sits under com.kubekubedashdash because only that subtree reaches
+    // app.log and logs at DEBUG (drawer and console), where the full trace with its messages goes:
+    // app.log carries the classes and frames only (describeStack).
     val crashLogger = LoggerFactory.getLogger("com.kubekubedashdash.UncaughtException")
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-        crashLogger.error("Uncaught exception: {}", describeFailureShape(throwable))
+        crashLogger.error("Uncaught exception: {}", describeStack(throwable))
         crashLogger.debug("Uncaught exception in thread {}", thread.name, throwable)
     }
 

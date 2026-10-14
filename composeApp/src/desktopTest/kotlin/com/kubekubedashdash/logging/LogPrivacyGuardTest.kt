@@ -111,6 +111,7 @@ class LogPrivacyGuardTest {
         assertEquals(emptyList(), hits("log.warn(\"f {}\", e.messageCount)"))
         assertEquals(emptyList(), hits("log.warn(\"f {}\", messages.size)"))
         assertEquals(emptyList(), hits("log.warn(\"f {}\", describeFailureShape(e))"))
+        assertEquals(emptyList(), hits("crashLogger.error(\"Uncaught exception: {}\", describeStack(throwable))"))
     }
 
     @Test
@@ -204,6 +205,7 @@ class LogPrivacyGuardTest {
         assertEquals(emptyList(), hits("log.warn(\"x {}\", errorCount)"))
         assertEquals(emptyList(), hits("log.warn(\"x {}\", e.javaClass.simpleName)"))
         assertEquals(emptyList(), hits("log.warn(\"x {}\", describeFailureShape(e))"))
+        assertEquals(emptyList(), hits("log.error(\"x {}\", describeStack(t))"))
     }
 
     @Test
