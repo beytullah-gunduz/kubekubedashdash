@@ -18,6 +18,8 @@ import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.util.formatElapsed
 import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 
 internal class GenericColumn(
     val header: String,
@@ -29,8 +31,9 @@ internal class GenericColumn(
 /**
  * The columns of a generic resource table, in order: the name, the namespace, the status, the CRD printer
  * columns, a SparkApplication's run time, then the age. Each column shows once the table is [GenericColumn.minTableWidth] wide.
+ * A printer value that is a UTC timestamp of [now]'s day shows its time only.
  */
-internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind: Boolean): List<GenericColumn> {
+internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind: Boolean, now: Instant = Instant.now()): List<GenericColumn> {
     // CRD printer columns almost always include their own "Age"; the table
     // appends a built-in Age column below, so drop the duplicate here. Assumes
     // the printer Age tracks metadata.creationTimestamp (the kubectl
@@ -70,13 +73,19 @@ internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind
             // built-in status column (Running / Completed / Failed …); give it the
             // icon + colour treatment when the row has no real status column.
             val isStatusKey = !hasStatus && key.equals("Status", ignoreCase = true)
+            // As wide as its longest header or value (a status icon counts two characters), so a dash-only column does not take a timestamp's room.
+            val longest = maxOf(
+                key.length,
+                resources.maxOfOrNull { r -> printerText(r.extraColumns[key].orEmpty(), now).length + if (isStatusKey) 2 else 0 } ?: 0,
+            )
             add(
-                GenericColumn(key, 1f, minW) { r ->
+                GenericColumn(key, (longest * PRINTER_WEIGHT_PER_CHAR).coerceIn(PRINTER_WEIGHT_MIN, PRINTER_WEIGHT_MAX), minW) { r ->
                     val v = r.extraColumns[key] ?: ""
                     if (isStatusKey && v.isNotBlank() && v != NONE_PLACEHOLDER) {
                         CellData(text = v, sortValue = v, content = { StatusCell(v) })
                     } else {
-                        CellData(v)
+                        // The raw value stays the sort key, so a shortened timestamp still sorts in time order.
+                        CellData(text = shortenTodayTimestamp(v, now), sortValue = v)
                     }
                 },
             )
@@ -143,4 +152,22 @@ internal fun GenericTable(
             onSelectionChange = onSelectionChange,
         )
     }
+}
+
+// A printer column's weight per character of its longest text, and its bounds: Age (0.7) holds about five characters.
+private const val PRINTER_WEIGHT_PER_CHAR = 0.12f
+private const val PRINTER_WEIGHT_MIN = 0.6f
+private const val PRINTER_WEIGHT_MAX = 2.4f
+
+// The text a printer value shows: a dash for none, a timestamp of today without its date.
+private fun printerText(value: String, now: Instant): String = if (value == NONE_PLACEHOLDER) "-" else shortenTodayTimestamp(value, now)
+
+// A whole RFC 3339 UTC timestamp, as the API server writes metav1.Time and metav1.MicroTime.
+private val UTC_TIMESTAMP = Regex("""(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)""")
+
+/** [value] without its date when it is a UTC timestamp on [now]'s UTC day ("09:02:46Z"); any other value as it is. */
+internal fun shortenTodayTimestamp(value: String, now: Instant): String {
+    val match = UTC_TIMESTAMP.matchEntire(value) ?: return value
+    val today = now.atOffset(ZoneOffset.UTC).toLocalDate().toString()
+    return if (match.groupValues[1] == today) match.groupValues[2] else value
 }
