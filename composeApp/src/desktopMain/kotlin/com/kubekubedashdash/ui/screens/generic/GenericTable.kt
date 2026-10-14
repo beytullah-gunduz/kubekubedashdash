@@ -16,28 +16,21 @@ import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.RowIdentity
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
+import com.kubekubedashdash.util.formatElapsed
+import java.time.Duration
 
-private class GenericColumn(
+internal class GenericColumn(
     val header: String,
     val weight: Float,
     val minTableWidth: Dp,
     val cell: (GenericResourceInfo) -> CellData,
 )
 
-@Composable
-internal fun GenericTable(
-    resources: List<GenericResourceInfo>,
-    kind: String,
-    namespacedKind: Boolean,
-    selectedUid: String?,
-    onClick: (GenericResourceInfo) -> Unit,
-    onDelete: ((GenericResourceInfo) -> Unit)? = null,
-    extraActions: ((GenericResourceInfo) -> List<RowAction>)? = null,
-    selectedUids: Set<String> = emptySet(),
-    onSelectionChange: ((Set<String>) -> Unit)? = null,
-    pinnedIds: Set<String> = emptySet(),
-    onTogglePin: ((String) -> Unit)? = null,
-) {
+/**
+ * The columns of a generic resource table, in order: the name, the namespace, the status, the CRD printer
+ * columns, a SparkApplication's run time, then the age. Each column shows once the table is [GenericColumn.minTableWidth] wide.
+ */
+internal fun genericColumns(resources: List<GenericResourceInfo>, namespacedKind: Boolean): List<GenericColumn> {
     // CRD printer columns almost always include their own "Age"; the table
     // appends a built-in Age column below, so drop the duplicate here. Assumes
     // the printer Age tracks metadata.creationTimestamp (the kubectl
@@ -45,10 +38,16 @@ internal fun GenericTable(
     val hasStatus = resources.any { it.status != null }
     // A printer "Status" likewise duplicates the built-in status column when the
     // kind already carries one (Jobs); keep it only when it is the sole status.
+    // SparkApplication rows (the ones with spark data) get a built-in Duration column, like Age, so a printer "Duration" would repeat it.
+    val hasSparkRuns = resources.any { it.spark != null }
     val extraKeys = resources.flatMap { it.extraColumns.keys }.distinct()
-        .filterNot { it.equals("Age", ignoreCase = true) || (hasStatus && it.equals("Status", ignoreCase = true)) }
+        .filterNot {
+            it.equals("Age", ignoreCase = true) ||
+                (hasStatus && it.equals("Status", ignoreCase = true)) ||
+                (hasSparkRuns && it.equals("Duration", ignoreCase = true))
+        }
 
-    val columns = buildList<GenericColumn> {
+    return buildList {
         add(GenericColumn("Name", 2.5f, 0.dp) { CellData(it.name, KdPrimary) })
         if (namespacedKind) {
             add(GenericColumn("Namespace", 1.2f, 400.dp) { CellData(it.namespace ?: "") })
@@ -82,8 +81,34 @@ internal fun GenericTable(
                 },
             )
         }
+        if (hasSparkRuns) {
+            // Blank until the application finished; sorted by seconds, so the blank rows go last.
+            add(
+                GenericColumn("Duration", 0.7f, 0.dp) { r ->
+                    val seconds = r.spark?.runSeconds
+                    CellData(text = seconds?.let { formatElapsed(Duration.ofSeconds(it)) }.orEmpty(), sortNumber = seconds?.toDouble())
+                },
+            )
+        }
         add(GenericColumn("Age", 0.7f, 0.dp) { CellData(it.age) })
     }
+}
+
+@Composable
+internal fun GenericTable(
+    resources: List<GenericResourceInfo>,
+    kind: String,
+    namespacedKind: Boolean,
+    selectedUid: String?,
+    onClick: (GenericResourceInfo) -> Unit,
+    onDelete: ((GenericResourceInfo) -> Unit)? = null,
+    extraActions: ((GenericResourceInfo) -> List<RowAction>)? = null,
+    selectedUids: Set<String> = emptySet(),
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: ((String) -> Unit)? = null,
+) {
+    val columns = genericColumns(resources, namespacedKind)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = columns.filter { maxWidth >= it.minTableWidth }
