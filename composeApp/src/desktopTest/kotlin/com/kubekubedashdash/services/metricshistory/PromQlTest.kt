@@ -53,7 +53,7 @@ class PromQlTest {
     @Test
     fun `memory takes the max per container`() {
         assertEquals(
-            """max by (container) (container_memory_working_set_bytes{cluster="example-cluster",location="us-central1",namespace="team-a",pod="web-0",container!="",container!="POD"})""",
+            """max by (container) (avg_over_time(container_memory_working_set_bytes{cluster="example-cluster",location="us-central1",namespace="team-a",pod="web-0",container!="",container!="POD"}[300s]))""",
             PromQl.gmpPodQuery(PodSeriesKind.Memory, target, pod, stepSec = 30),
         )
     }
@@ -132,7 +132,7 @@ class PromQlTest {
     @Test
     fun `in-cluster memory takes the max per container`() {
         assertEquals(
-            """max by (container) (container_memory_working_set_bytes{namespace="team-a",pod="web-0",container!="",container!="POD"})""",
+            """max by (container) (avg_over_time(container_memory_working_set_bytes{namespace="team-a",pod="web-0",container!="",container!="POD"}[240s]))""",
             PromQl.inClusterPodQuery(PodSeriesKind.Memory, pod, stepSec = 30),
         )
     }
@@ -309,7 +309,7 @@ class PromQlTest {
         fun query(kind: PodSeriesKind, stepSec: Long = 30) = PromQl.gmpPodSetQuery(kind, target, podSet, PodSetMode.PerPod, stepSec)
 
         assertEquals("sum by (pod) (rate(container_cpu_usage_seconds_total$c[300s]))", query(PodSeriesKind.Cpu))
-        assertEquals("sum by (pod) (max by (pod, container) (container_memory_working_set_bytes$c))", query(PodSeriesKind.Memory))
+        assertEquals("sum by (pod) (max by (pod, container) (avg_over_time(container_memory_working_set_bytes$c[300s])))", query(PodSeriesKind.Memory))
         assertEquals("sum by (pod) (max by (pod, interface) (rate(container_network_receive_bytes_total{$gmpSelector}[300s])))", query(PodSeriesKind.NetworkRx))
         assertEquals("sum by (pod) (max by (pod, interface) (rate(container_network_transmit_bytes_total{$gmpSelector}[300s])))", query(PodSeriesKind.NetworkTx))
         assertEquals(
@@ -325,7 +325,7 @@ class PromQlTest {
         fun query(kind: PodSeriesKind, stepSec: Long = 30) = PromQl.gmpPodSetQuery(kind, target, podSet, PodSetMode.Total, stepSec)
 
         assertEquals("sum(rate(container_cpu_usage_seconds_total$c[300s]))", query(PodSeriesKind.Cpu))
-        assertEquals("sum(max by (pod, container) (container_memory_working_set_bytes$c))", query(PodSeriesKind.Memory))
+        assertEquals("sum(max by (pod, container) (avg_over_time(container_memory_working_set_bytes$c[300s])))", query(PodSeriesKind.Memory))
         assertEquals("sum(max by (pod, interface) (rate(container_network_receive_bytes_total{$gmpSelector}[300s])))", query(PodSeriesKind.NetworkRx))
         assertEquals("sum(max by (pod, interface) (rate(container_network_transmit_bytes_total{$gmpSelector}[300s])))", query(PodSeriesKind.NetworkTx))
         assertEquals(
@@ -341,7 +341,7 @@ class PromQlTest {
         fun query(kind: PodSeriesKind, stepSec: Long = 30) = PromQl.inClusterPodSetQuery(kind, podSet, PodSetMode.PerPod, stepSec)
 
         assertEquals("sum by (pod) (rate(container_cpu_usage_seconds_total$c[240s]))", query(PodSeriesKind.Cpu))
-        assertEquals("sum by (pod) (max by (pod, container) (container_memory_working_set_bytes$c))", query(PodSeriesKind.Memory))
+        assertEquals("sum by (pod) (max by (pod, container) (avg_over_time(container_memory_working_set_bytes$c[240s])))", query(PodSeriesKind.Memory))
         assertEquals("sum by (pod) (max by (pod, interface) (rate(container_network_receive_bytes_total{$inClusterSelector}[240s])))", query(PodSeriesKind.NetworkRx))
         assertEquals("sum by (pod) (max by (pod, interface) (rate(container_network_transmit_bytes_total{$inClusterSelector}[240s])))", query(PodSeriesKind.NetworkTx))
         assertEquals(
@@ -357,7 +357,7 @@ class PromQlTest {
         fun query(kind: PodSeriesKind, stepSec: Long = 30) = PromQl.inClusterPodSetQuery(kind, podSet, PodSetMode.Total, stepSec)
 
         assertEquals("sum(rate(container_cpu_usage_seconds_total$c[240s]))", query(PodSeriesKind.Cpu))
-        assertEquals("sum(max by (pod, container) (container_memory_working_set_bytes$c))", query(PodSeriesKind.Memory))
+        assertEquals("sum(max by (pod, container) (avg_over_time(container_memory_working_set_bytes$c[240s])))", query(PodSeriesKind.Memory))
         assertEquals("sum(max by (pod, interface) (rate(container_network_receive_bytes_total{$inClusterSelector}[240s])))", query(PodSeriesKind.NetworkRx))
         assertEquals("sum(max by (pod, interface) (rate(container_network_transmit_bytes_total{$inClusterSelector}[240s])))", query(PodSeriesKind.NetworkTx))
         assertEquals(
@@ -831,7 +831,7 @@ class PromQlTest {
             PromQl.gmpScopeQuery(ScopeKind.CpuCores, target, scope, stepSec = 30),
         )
         assertEquals(
-            "sum(max by (namespace, pod, container) (container_memory_working_set_bytes{$gmpScope$containerFilters}))",
+            "sum(max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$gmpScope$containerFilters}[300s])))",
             PromQl.gmpScopeQuery(ScopeKind.MemoryBytes, target, scope, stepSec = 30),
         )
     }
@@ -843,7 +843,7 @@ class PromQlTest {
             PromQl.gmpScopeQuery(ScopeKind.CpuCores, target, ScopeRef(setOf("team-a")), stepSec = 30),
         )
         assertEquals(
-            "sum(max by (namespace, pod, container) (container_memory_working_set_bytes{${gmpScope}namespace=~\"team-a|team-b\",$containerFilters}))",
+            "sum(max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{${gmpScope}namespace=~\"team-a|team-b\",$containerFilters}[300s])))",
             PromQl.gmpScopeQuery(ScopeKind.MemoryBytes, target, ScopeRef(linkedSetOf("team-b", "team-a")), stepSec = 30),
         )
         assertEquals(
@@ -859,7 +859,7 @@ class PromQlTest {
             PromQl.inClusterScopeQuery(ScopeKind.CpuCores, ScopeRef(emptySet()), stepSec = 30),
         )
         assertEquals(
-            "sum(max by (namespace, pod, container) (container_memory_working_set_bytes{$containerFilters}))",
+            "sum(max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$containerFilters}[240s])))",
             PromQl.inClusterScopeQuery(ScopeKind.MemoryBytes, ScopeRef(emptySet()), stepSec = 30),
         )
         assertEquals(
@@ -867,13 +867,52 @@ class PromQlTest {
             PromQl.inClusterScopeQuery(ScopeKind.CpuCores, ScopeRef(setOf("team-a")), stepSec = 30),
         )
         assertEquals(
-            "sum(max by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"team-a|team-b\",$containerFilters}))",
+            "sum(max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{namespace=~\"team-a|team-b\",$containerFilters}[240s])))",
             PromQl.inClusterScopeQuery(ScopeKind.MemoryBytes, ScopeRef(linkedSetOf("team-b", "team-a")), stepSec = 30),
         )
         assertEquals(
             "sum(rate(container_cpu_usage_seconds_total{namespace=\"team-a\",$containerFilters}[720s]))",
             PromQl.inClusterScopeQuery(ScopeKind.CpuCores, ScopeRef(setOf("team-a")), stepSec = 720),
         )
+    }
+
+    @Test
+    fun `memory and CPU of one query average over the same window`() {
+        val windowRegex = Regex("""\[(\d+)s\]""")
+        fun windows(vararg queries: String) = queries.flatMap { q -> windowRegex.findAll(q).map { it.groupValues[1].toLong() } }.toSet()
+
+        for (step in listOf(30L, 720L)) {
+            val gmp = maxOf(step, 300L)
+            val inCluster = maxOf(step, 240L)
+            assertEquals(
+                setOf(gmp),
+                windows(
+                    PromQl.gmpPodQuery(PodSeriesKind.Cpu, target, pod, step),
+                    PromQl.gmpPodQuery(PodSeriesKind.Memory, target, pod, step),
+                ),
+            )
+            assertEquals(
+                setOf(inCluster),
+                windows(
+                    PromQl.inClusterPodQuery(PodSeriesKind.Cpu, pod, step),
+                    PromQl.inClusterPodQuery(PodSeriesKind.Memory, pod, step),
+                ),
+            )
+            assertEquals(
+                setOf(gmp),
+                windows(
+                    PromQl.gmpPodSetQuery(PodSeriesKind.Cpu, target, podSet, PodSetMode.PerPod, step),
+                    PromQl.gmpPodSetQuery(PodSeriesKind.Memory, target, podSet, PodSetMode.PerPod, step),
+                ),
+            )
+            assertEquals(
+                setOf(gmp),
+                windows(
+                    PromQl.gmpScopeQuery(ScopeKind.CpuCores, target, ScopeRef(emptySet()), step),
+                    PromQl.gmpScopeQuery(ScopeKind.MemoryBytes, target, ScopeRef(emptySet()), step),
+                ),
+            )
+        }
     }
 
     @Test

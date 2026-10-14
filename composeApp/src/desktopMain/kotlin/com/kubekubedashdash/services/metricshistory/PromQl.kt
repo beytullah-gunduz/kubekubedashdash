@@ -31,8 +31,9 @@ internal object PromQl {
         return when (kind) {
             PodSeriesKind.Cpu -> "sum by (container) (rate(container_cpu_usage_seconds_total{$c}[$w]))"
 
+            // Averaged over the window: an instant value at each step misses a pod alive only between two steps.
             // max, not sum: Managed Prometheus has no staleness, so a restarted container's last value lingers.
-            PodSeriesKind.Memory -> "max by (container) (container_memory_working_set_bytes{$c})"
+            PodSeriesKind.Memory -> "max by (container) (avg_over_time(container_memory_working_set_bytes{$c}[$w]))"
 
             // Network counters belong to the pod's network namespace; max per interface drops duplicate reporters.
             PodSeriesKind.NetworkRx -> "sum(max by (interface) (rate(container_network_receive_bytes_total{$s}[$w])))"
@@ -57,7 +58,7 @@ internal object PromQl {
         return when (kind) {
             PodSeriesKind.Cpu -> "sum by (container) (rate(container_cpu_usage_seconds_total{$c}[$w]))"
 
-            PodSeriesKind.Memory -> "max by (container) (container_memory_working_set_bytes{$c})"
+            PodSeriesKind.Memory -> "max by (container) (avg_over_time(container_memory_working_set_bytes{$c}[$w]))"
 
             // The network counters sit on the sandbox series, which carry an empty or POD container label: no container filter.
             PodSeriesKind.NetworkRx -> "sum(max by (interface) (rate(container_network_receive_bytes_total{$s}[$w])))"
@@ -248,7 +249,8 @@ internal object PromQl {
     fun inClusterPodSetQuery(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, stepSec: Long): String = podSetQuery(kind, inClusterPodSetSelector(pods.namespace, pods.pattern), mode, inClusterRateWindowSec(stepSec))
 
     // The shapes of the per-pod queries, grouped by pod instead of by container. Memory keeps the max per
-    // (pod, container) so a restarted container's lingering series is not counted twice.
+    // (pod, container) so a restarted container's lingering series is not counted twice. Memory is averaged
+    // over the window, as CPU's rate is.
     private fun podSetQuery(kind: PodSeriesKind, selector: String, mode: PodSetMode, windowSec: Long): String {
         val c = "$selector,container!=\"\",container!=\"POD\""
         val w = "${windowSec}s"
@@ -256,7 +258,7 @@ internal object PromQl {
         return when (kind) {
             PodSeriesKind.Cpu -> aggregate("rate(container_cpu_usage_seconds_total{$c}[$w])")
 
-            PodSeriesKind.Memory -> aggregate("max by (pod, container) (container_memory_working_set_bytes{$c})")
+            PodSeriesKind.Memory -> aggregate("max by (pod, container) (avg_over_time(container_memory_working_set_bytes{$c}[$w]))")
 
             // The network counters sit on the sandbox series: no container filter.
             PodSeriesKind.NetworkRx -> aggregate("max by (pod, interface) (rate(container_network_receive_bytes_total{$selector}[$w]))")
@@ -290,7 +292,7 @@ internal object PromQl {
         val selector = (matchers + listOf("container!=\"\"", "container!=\"POD\"")).joinToString(",")
         return when (kind) {
             ScopeKind.CpuCores -> "sum(rate(container_cpu_usage_seconds_total{$selector}[${windowSec}s]))"
-            ScopeKind.MemoryBytes -> "sum(max by (namespace, pod, container) (container_memory_working_set_bytes{$selector}))"
+            ScopeKind.MemoryBytes -> "sum(max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$selector}[${windowSec}s])))"
         }
     }
 }

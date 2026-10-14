@@ -81,10 +81,10 @@ class ClusterUsageHistoryCardTest {
     }
 
     @Test
-    fun `the note names the source and says CPU lags the gauge`() {
+    fun `the note names the source and says CPU and memory lag the gauges`() {
         assertEquals(
-            "From Prometheus · monitoring/prometheus-server. CPU is a trailing average over several minutes, " +
-                "so it lags the live gauge and can differ from it.",
+            "From Prometheus · monitoring/prometheus-server. CPU and memory are trailing averages over several minutes, " +
+                "so they lag the live gauges and can differ from them.",
             usageHistoryNote("Prometheus · monitoring/prometheus-server"),
         )
     }

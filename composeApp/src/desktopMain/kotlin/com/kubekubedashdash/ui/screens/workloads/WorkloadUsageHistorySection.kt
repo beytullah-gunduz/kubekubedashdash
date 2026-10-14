@@ -77,7 +77,7 @@ import kotlinx.coroutines.delay
 internal const val NO_CURRENT_CPU_LIMIT_NOTE = "No current pod has a CPU limit — CFS throttling does not apply."
 
 internal const val GMP_STALENESS_NOTE =
-    "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so earlier pods' lines can run past a rollout marker, and Total counts them twice there."
+    "Each point averages at least the last 5 minutes, so a deleted pod's line runs on for that long: earlier pods' lines can run past a rollout marker, and Total counts them twice there."
 
 internal const val TOTAL_SERIES_NAME = "All pods"
 
@@ -313,10 +313,11 @@ private fun inClusterFailureText(choice: SourceChoice.InCluster, failed: SeriesR
  * points, where a sliding window asks again for as long as it has nothing to draw.
  *
  * Staleness differs by backend. Managed Prometheus writes no staleness markers, so a deleted pod's
- * memory line lingers up to 5 minutes and its CPU line up to the rate window (5 minutes at least); lines
+ * memory and CPU lines linger for their window (5 minutes at least); lines
  * can run past the marker of the rollout that replaced them and Total counts those pods twice there. An
- * in-cluster Prometheus marks a vanished series stale, so its lines end with the pod. The section says so
- * under the charts on Managed Prometheus.
+ * in-cluster Prometheus marks a vanished series stale, which ends an instant query at once; the windowed
+ * queries here still average the samples before the marker, so their lines linger for the window there too
+ * (4 minutes at least). The section says so under the charts on Managed Prometheus.
  */
 @Composable
 internal fun WorkloadUsageHistorySection(
