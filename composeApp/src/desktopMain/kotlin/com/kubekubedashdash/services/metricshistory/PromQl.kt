@@ -97,6 +97,11 @@ internal object PromQl {
     // A Spark app past this many pods is selected by executor stem instead of by exact name.
     private const val SPARK_EXACT_NAMES_MAX = 60
 
+    /** The container names Spark gives its pods (apache/spark Constants.scala); a pod template can rename them. */
+    const val SPARK_CONTAINERS = "spark-kubernetes-(driver|executor)"
+    const val SPARK_DRIVER_CONTAINER = "spark-kubernetes-driver"
+    const val SPARK_EXECUTOR_CONTAINER = "spark-kubernetes-executor"
+
     // The operator names executors `<app>-<hash>-exec-<n>`.
     private const val EXECUTOR_MARKER = "-exec-"
 
@@ -277,6 +282,23 @@ internal object PromQl {
     }
 
     fun inClusterScopeQuery(kind: ScopeKind, scope: ScopeRef, stepSec: Long): String = scopeQuery(kind, scopeMatchers(scope), inClusterRateWindowSec(stepSec))
+
+    fun gmpSparkQuery(kind: ScopeKind, target: GmpTarget, scope: ScopeRef, grouping: SparkGrouping, stepSec: Long): String {
+        val cluster = "cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\""
+        return sparkQuery(kind, listOf(cluster) + scopeMatchers(scope), grouping, rateWindowSec(stepSec))
+    }
+
+    fun inClusterSparkQuery(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, stepSec: Long): String = sparkQuery(kind, scopeMatchers(scope), grouping, inClusterRateWindowSec(stepSec))
+
+    // One Spark container per pod; memory keeps the max per (namespace, pod, container) so a restarted container's earlier series is not counted twice.
+    private fun sparkQuery(kind: ScopeKind, matchers: List<String>, grouping: SparkGrouping, windowSec: Long): String {
+        val selector = (matchers + "container=~\"$SPARK_CONTAINERS\"").joinToString(",")
+        val by = if (grouping == SparkGrouping.ByPod) "namespace, pod" else "container"
+        return when (kind) {
+            ScopeKind.CpuCores -> "sum by ($by) (rate(container_cpu_usage_seconds_total{$selector}[${windowSec}s]))"
+            ScopeKind.MemoryBytes -> "sum by ($by) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$selector}[${windowSec}s])))"
+        }
+    }
 
     // Namespace names are DNS labels, so the regex form needs no escaping in practice; it is applied anyway.
     private fun scopeMatchers(scope: ScopeRef): List<String> {

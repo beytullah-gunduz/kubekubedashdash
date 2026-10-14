@@ -18,6 +18,9 @@ data class ScopeRef(val namespaces: Set<String>)
 
 enum class ScopeKind { CpuCores, MemoryBytes }
 
+/** How Spark series are grouped: one per pod, or one per role (driver, executor). */
+enum class SparkGrouping { ByPod, ByRole }
+
 /** One sample: unix seconds and the value (cores, bytes, bytes per second, or a 0..1 fraction). */
 data class SeriesPoint(val epochSec: Long, val value: Double)
 
@@ -109,4 +112,10 @@ interface MetricsHistorySource {
 
     /** One series named "": the sum over every pod of [scope]. */
     suspend fun scopeSeries(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
+
+    /**
+     * The Spark driver and executor pods of [scope], told by their container's name: one series per pod named
+     * "<namespace>/<pod>" for [SparkGrouping.ByPod], one per role named by its container for [SparkGrouping.ByRole].
+     */
+    suspend fun sparkSeries(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): SeriesResult = SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported")
 }

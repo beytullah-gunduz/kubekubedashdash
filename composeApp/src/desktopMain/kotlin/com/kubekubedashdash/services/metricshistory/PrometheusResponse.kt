@@ -29,14 +29,18 @@ internal object PrometheusResponse {
     }
 
     /** [nameLabel] = the metric label naming each series (null → ""). Non-finite samples are dropped; series sort by name. */
-    fun parseMatrix(body: String, nameLabel: String?): Parsed = parse {
+    fun parseMatrix(body: String, nameLabel: String?): Parsed = parseMatrix(body, listOfNotNull(nameLabel))
+
+    /** As above, a series named by the values of [nameLabels] that are present, joined with "/". */
+    fun parseMatrix(body: String, nameLabels: List<String>): Parsed = parse {
         when (val opened = open(body, "matrix")) {
             is Opened.Stop -> opened.parsed
 
             is Opened.Result -> Parsed.Matrix(
                 opened.items.mapNotNull { item ->
                     val entry = item.jsonObject
-                    val name = nameLabel?.let { entry["metric"]?.jsonObject?.get(it)?.jsonPrimitive?.contentOrNull }.orEmpty()
+                    val metric = entry["metric"]?.jsonObject
+                    val name = nameLabels.mapNotNull { metric?.get(it)?.jsonPrimitive?.contentOrNull }.joinToString("/")
                     val points = entry["values"]?.jsonArray.orEmpty().mapNotNull { samplePoint(it.jsonArray) }
                     if (points.isEmpty()) null else Series(name, points)
                 }.sortedBy { it.name },

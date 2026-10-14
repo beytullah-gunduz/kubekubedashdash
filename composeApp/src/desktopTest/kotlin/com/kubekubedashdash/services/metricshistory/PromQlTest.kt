@@ -923,4 +923,58 @@ class PromQlTest {
         assertFalse(PromQl.isValidScope(ScopeRef(setOf("team-a\"b"))))
         assertFalse(PromQl.isValidScope(ScopeRef(setOf("team-a|team-b"))))
     }
+
+    // ── Spark ───────────────────────────────────────────────────────────────────
+
+    private val sparkContainer = """container=~"spark-kubernetes-(driver|executor)""""
+
+    @Test
+    fun `gmp Spark queries group per pod or per role and select by container name`() {
+        val every = ScopeRef(emptySet())
+        val two = ScopeRef(linkedSetOf("team-b", "team-a"))
+        assertEquals(
+            "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{$gmpScope$sparkContainer}[300s]))",
+            PromQl.gmpSparkQuery(ScopeKind.CpuCores, target, every, SparkGrouping.ByPod, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (container) (rate(container_cpu_usage_seconds_total{$gmpScope$sparkContainer}[300s]))",
+            PromQl.gmpSparkQuery(ScopeKind.CpuCores, target, every, SparkGrouping.ByRole, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (namespace, pod) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$gmpScope$sparkContainer}[300s])))",
+            PromQl.gmpSparkQuery(ScopeKind.MemoryBytes, target, every, SparkGrouping.ByPod, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (container) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$gmpScope$sparkContainer}[300s])))",
+            PromQl.gmpSparkQuery(ScopeKind.MemoryBytes, target, every, SparkGrouping.ByRole, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{${gmpScope}namespace=~\"team-a|team-b\",$sparkContainer}[300s]))",
+            PromQl.gmpSparkQuery(ScopeKind.CpuCores, target, two, SparkGrouping.ByPod, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (container) (rate(container_cpu_usage_seconds_total{${gmpScope}namespace=~\"team-a|team-b\",$sparkContainer}[300s]))",
+            PromQl.gmpSparkQuery(ScopeKind.CpuCores, target, two, SparkGrouping.ByRole, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (namespace, pod) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{${gmpScope}namespace=~\"team-a|team-b\",$sparkContainer}[300s])))",
+            PromQl.gmpSparkQuery(ScopeKind.MemoryBytes, target, two, SparkGrouping.ByPod, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (container) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{${gmpScope}namespace=~\"team-a|team-b\",$sparkContainer}[300s])))",
+            PromQl.gmpSparkQuery(ScopeKind.MemoryBytes, target, two, SparkGrouping.ByRole, stepSec = 30),
+        )
+    }
+
+    @Test
+    fun `in-cluster Spark queries carry no cluster matcher and use the four minute window`() {
+        assertEquals(
+            "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=\"team-a\",$sparkContainer}[240s]))",
+            PromQl.inClusterSparkQuery(ScopeKind.CpuCores, ScopeRef(setOf("team-a")), SparkGrouping.ByPod, stepSec = 30),
+        )
+        assertEquals(
+            "sum by (container) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$sparkContainer}[240s])))",
+            PromQl.inClusterSparkQuery(ScopeKind.MemoryBytes, ScopeRef(emptySet()), SparkGrouping.ByRole, stepSec = 30),
+        )
+    }
 }

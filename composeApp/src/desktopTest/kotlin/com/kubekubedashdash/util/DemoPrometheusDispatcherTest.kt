@@ -19,6 +19,7 @@ import com.kubekubedashdash.services.metricshistory.Series
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.ServiceProxyAccessReview
 import com.kubekubedashdash.services.metricshistory.ServiceProxyHttp
+import com.kubekubedashdash.services.metricshistory.SparkGrouping
 import com.kubekubedashdash.services.metricshistory.demoSeries
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -116,6 +117,9 @@ class DemoPrometheusDispatcherTest {
 
                 request.method == "GET" && replicaSetsNamespace != null && replicaSets != null ->
                     MockResponse().setResponseCode(200).setBody(Serialization.asJson(ReplicaSetListBuilder().withItems(replicaSets.orEmpty().filter { it.metadata.namespace == replicaSetsNamespace }).build()))
+
+                request.method == "GET" && path == ALL_PODS_PATH && pods != null ->
+                    MockResponse().setResponseCode(200).setBody(Serialization.asJson(PodListBuilder().withItems(pods.orEmpty()).build()))
 
                 request.method == "GET" && podsNamespace != null && pods != null ->
                     MockResponse().setResponseCode(200).setBody(Serialization.asJson(PodListBuilder().withItems(pods.orEmpty().filter { it.metadata.namespace == podsNamespace }).build()))
@@ -316,7 +320,7 @@ class DemoPrometheusDispatcherTest {
     }
 
     @Test
-    fun `a range query that is none of the five forms is bad_data`() {
+    fun `a range query that is none of the six forms is bad_data`() {
         val cpu = PromQl.inClusterPodQuery(PodSeriesKind.Cpu, pod, window.stepSec)
         val queries = listOf(
             "up",
@@ -1325,6 +1329,108 @@ class DemoPrometheusDispatcherTest {
         assertEquals("detection answered NothingFound", failure.message)
     }
 
+    // ── Spark ───────────────────────────────────────────────────────────────
+
+    private fun sparkPath(kind: ScopeKind, grouping: SparkGrouping, namespaces: Set<String> = setOf("team-a")) = rangeQueryPath(PromQl.inClusterSparkQuery(kind, ScopeRef(namespaces), grouping, window.stepSec))
+
+    private fun sparkSeriesOf(response: MockResponse, nameLabels: List<String>): List<Series> {
+        assertEquals(200, response.code(), response.text())
+        return assertIs<PrometheusResponse.Parsed.Matrix>(PrometheusResponse.parseMatrix(response.text(), nameLabels)).series
+    }
+
+    // What the dispatcher draws for a Spark pod created at [from]: its containers' series added up, from its creation on.
+    private fun expectedSpark(kind: ScopeKind, pod: Pod, from: Long): List<SeriesPoint> {
+        val podKind = if (kind == ScopeKind.CpuCores) PodSeriesKind.Cpu else PodSeriesKind.Memory
+        val containers = ResourceMappers.containerResources(pod)
+        return combine(podKind, demoSeries(podKind, PodRef("team-a", pod.metadata.name, containers), window).map { s -> s.points.filter { it.epochSec >= from } })
+    }
+
+    @Test
+    fun `Spark pods are told by their container and answered one series per pod`() {
+        val driver = sparkPod("nightly-driver", PromQl.SPARK_DRIVER_CONTAINER, 1_100)
+        val executor = sparkPod("nightly-exec-1", PromQl.SPARK_EXECUTOR_CONTAINER, 1_200)
+        delegate.pods = listOf(executor, driver, livePod("web-0", 1_100))
+
+        for (kind in ScopeKind.entries) {
+            val response = get(sparkPath(kind, SparkGrouping.ByPod))
+
+            val labels = resultOf(response).map { it.jsonObject.getValue("metric").jsonObject.mapValues { (_, v) -> v.jsonPrimitive.content } }
+            assertEquals(
+                listOf(mapOf("namespace" to "team-a", "pod" to "nightly-driver"), mapOf("namespace" to "team-a", "pod" to "nightly-exec-1")),
+                labels,
+                "$kind",
+            )
+            val series = sparkSeriesOf(response, listOf("namespace", "pod"))
+            assertEquals(listOf("team-a/nightly-driver", "team-a/nightly-exec-1"), series.map { it.name }, "$kind")
+            assertEquals(expectedSpark(kind, driver, 1_100), series[0].points, "$kind")
+            assertEquals(expectedSpark(kind, executor, 1_200), series[1].points, "$kind")
+        }
+        assertEquals(listOf("GET /api/v1/namespaces/team-a/pods"), delegate.seen.distinct())
+    }
+
+    @Test
+    fun `an every-namespace Spark query lists every pod once and answers each namespace's Spark pods`() {
+        val driverA = sparkPod("nightly-driver", PromQl.SPARK_DRIVER_CONTAINER, 1_100)
+        val driverB = sparkPod("report-driver", PromQl.SPARK_DRIVER_CONTAINER, 1_200, namespace = "team-b")
+        delegate.pods = listOf(driverA, driverB, livePod("web-0", 1_100, namespace = "team-b"))
+
+        val series = sparkSeriesOf(get(sparkPath(ScopeKind.MemoryBytes, SparkGrouping.ByPod, namespaces = emptySet())), listOf("namespace", "pod"))
+
+        assertEquals(listOf("team-a/nightly-driver", "team-b/report-driver"), series.map { it.name })
+        assertEquals(listOf("GET $ALL_PODS_PATH"), delegate.seen.distinct())
+    }
+
+    @Test
+    fun `Spark pods are answered one series per role, labelled by the container`() {
+        val driver = sparkPod("nightly-driver", PromQl.SPARK_DRIVER_CONTAINER, 1_100)
+        val executors = listOf(sparkPod("nightly-exec-1", PromQl.SPARK_EXECUTOR_CONTAINER, 1_200), sparkPod("nightly-exec-2", PromQl.SPARK_EXECUTOR_CONTAINER, 1_300))
+        delegate.pods = listOf(driver) + executors
+
+        for (kind in ScopeKind.entries) {
+            val response = get(sparkPath(kind, SparkGrouping.ByRole))
+
+            val labels = resultOf(response).map { it.jsonObject.getValue("metric").jsonObject.mapValues { (_, v) -> v.jsonPrimitive.content } }
+            assertEquals(
+                listOf(mapOf("container" to PromQl.SPARK_DRIVER_CONTAINER), mapOf("container" to PromQl.SPARK_EXECUTOR_CONTAINER)),
+                labels,
+                "$kind",
+            )
+            val series = sparkSeriesOf(response, listOf("container"))
+            assertEquals(expectedSpark(kind, driver, 1_100), series[0].points, "$kind")
+            val podKind = if (kind == ScopeKind.CpuCores) PodSeriesKind.Cpu else PodSeriesKind.Memory
+            assertEquals(combine(podKind, listOf(expectedSpark(kind, executors[0], 1_200), expectedSpark(kind, executors[1], 1_300))), series[1].points, "$kind")
+        }
+    }
+
+    @Test
+    fun `a pod whose containers are not Spark's is ignored, and no Spark pod answers an empty matrix`() {
+        delegate.pods = listOf(livePod("web-0", 1_100), livePod("web-1", 1_100))
+
+        for (grouping in SparkGrouping.entries) {
+            assertEquals(0, resultOf(get(sparkPath(ScopeKind.CpuCores, grouping))).size, "$grouping")
+        }
+    }
+
+    @Test
+    fun `a Spark query the factories never write is bad_data and asks the delegate nothing`() {
+        val cpu = PromQl.inClusterSparkQuery(ScopeKind.CpuCores, ScopeRef(setOf("team-a")), SparkGrouping.ByPod, window.stepSec)
+        val queries = listOf(
+            cpu.replace("sum by (namespace, pod)", "max by (namespace, pod)"),
+            cpu.replace("spark-kubernetes-(driver|executor)", "spark-kubernetes-(driver)"),
+            cpu.replace("team-a", "Team_A"),
+            // The right form with the wrong rate window for this step.
+            PromQl.inClusterSparkQuery(ScopeKind.CpuCores, ScopeRef(setOf("team-a")), SparkGrouping.ByPod, 600),
+            "$cpu or vector(1)",
+        )
+        for (query in queries) {
+            val response = get(rangeQueryPath(query))
+
+            assertEquals(400, response.code(), query)
+            assertEquals("bad_data", errorType(response), query)
+        }
+        assertEquals(emptyList(), delegate.seen.toList())
+    }
+
     private companion object {
         const val MASTER = "http://127.0.0.1:1"
         const val POD_PATH = "/api/v1/namespaces/team-a/pods/web-0"
@@ -1332,6 +1438,7 @@ class DemoPrometheusDispatcherTest {
         val PODS_PATH = Regex("/api/v1/namespaces/([^/]+)/pods")
         val JOBS_PATH = Regex("/apis/batch/v1/namespaces/([^/]+)/jobs")
         const val ALL_POD_METRICS_PATH = "/apis/metrics.k8s.io/v1beta1/pods"
+        const val ALL_PODS_PATH = "/api/v1/pods"
         val POD_METRICS_PATH = Regex("/apis/metrics.k8s.io/v1beta1/namespaces/([^/]+)/pods")
         const val ACCESS_REVIEW_PATH = "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
 
@@ -1366,6 +1473,17 @@ class DemoPrometheusDispatcherTest {
         fun livePod(name: String, createdSec: Long, namespace: String = "team-a"): Pod = PodBuilder()
             .withNewMetadata().withNamespace(namespace).withName(name).withCreationTimestamp(Instant.ofEpochSecond(createdSec).toString()).endMetadata()
             .withSpec(rolloutSpec())
+            .build()
+
+        // A Spark pod: one container, named as Spark names it.
+        fun sparkPod(name: String, container: String, createdSec: Long, namespace: String = "team-a"): Pod = PodBuilder()
+            .withNewMetadata().withNamespace(namespace).withName(name).withCreationTimestamp(Instant.ofEpochSecond(createdSec).toString()).endMetadata()
+            .withNewSpec()
+            .addNewContainer()
+            .withName(container).withImage("example/spark:1")
+            .withNewResources().addToRequests("cpu", Quantity("1")).addToLimits("cpu", Quantity("2")).addToLimits("memory", Quantity("2Gi")).endResources()
+            .endContainer()
+            .endSpec()
             .build()
 
         fun jobNamed(name: String, namespace: String = "team-a"): Job = JobBuilder()

@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.services.metricshistory.PromQl
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.EndpointAddressBuilder
@@ -1466,9 +1467,9 @@ private fun seedSparkPods(
         backdate("/api/v1/namespaces/$ns/pods/$name", createdAt)
         return pod
     }
-    val driver = createPod("${app.metadata.name}-driver", "spark-driver", "driver", driverMinutesAgo, podIps.getOrNull(0), app)
+    val driver = createPod("${app.metadata.name}-driver", PromQl.SPARK_DRIVER_CONTAINER, "driver", driverMinutesAgo, podIps.getOrNull(0), app)
     executors.forEachIndexed { i, name ->
-        createPod(name, "spark-executor", "executor", executorsMinutesAgo, podIps.getOrNull(i + 1), driver)
+        createPod(name, PromQl.SPARK_EXECUTOR_CONTAINER, "executor", executorsMinutesAgo, podIps.getOrNull(i + 1), driver)
     }
 }
 

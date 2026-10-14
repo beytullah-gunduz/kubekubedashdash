@@ -30,7 +30,7 @@ class GmpMetricsSource internal constructor(
         return rangeQuery(
             PromQl.gmpPodQuery(kind, target, pod, window.stepSec),
             window,
-            nameLabel,
+            listOfNotNull(nameLabel),
             probeWhenEmpty = kind == PodSeriesKind.Cpu || kind == PodSeriesKind.Memory,
         )
     }
@@ -39,15 +39,21 @@ class GmpMetricsSource internal constructor(
     override suspend fun podSetSeries(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, window: QueryWindow): SeriesResult {
         if (!PromQl.isValidPodSet(pods)) return failed(HistoryFailure.BadQuery, "invalid pod set")
         val nameLabel = if (mode == PodSetMode.PerPod) "pod" else null
-        return rangeQuery(PromQl.gmpPodSetQuery(kind, target, pods, mode, window.stepSec), window, nameLabel, probeWhenEmpty = false)
+        return rangeQuery(PromQl.gmpPodSetQuery(kind, target, pods, mode, window.stepSec), window, listOfNotNull(nameLabel), probeWhenEmpty = false)
     }
 
     override suspend fun scopeSeries(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): SeriesResult {
         if (!PromQl.isValidScope(scope)) return failed(HistoryFailure.BadQuery, "invalid scope")
-        return rangeQuery(PromQl.gmpScopeQuery(kind, target, scope, window.stepSec), window, nameLabel = null, probeWhenEmpty = false)
+        return rangeQuery(PromQl.gmpScopeQuery(kind, target, scope, window.stepSec), window, nameLabels = emptyList(), probeWhenEmpty = false)
     }
 
-    private suspend fun rangeQuery(query: String, window: QueryWindow, nameLabel: String?, probeWhenEmpty: Boolean): SeriesResult {
+    override suspend fun sparkSeries(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): SeriesResult {
+        if (!PromQl.isValidScope(scope)) return failed(HistoryFailure.BadQuery, "invalid scope")
+        val names = if (grouping == SparkGrouping.ByPod) listOf("namespace", "pod") else listOf("container")
+        return rangeQuery(PromQl.gmpSparkQuery(kind, target, scope, grouping, window.stepSec), window, names, probeWhenEmpty = false)
+    }
+
+    private suspend fun rangeQuery(query: String, window: QueryWindow, nameLabels: List<String>, probeWhenEmpty: Boolean): SeriesResult {
         val form = listOf(
             "query" to query,
             "start" to window.startEpochSec.toString(),
@@ -58,7 +64,7 @@ class GmpMetricsSource internal constructor(
             is PostResult.Failed -> return sent.result
             is PostResult.Ok -> sent.body
         }
-        return when (val parsed = PrometheusResponse.parseMatrix(body, nameLabel)) {
+        return when (val parsed = PrometheusResponse.parseMatrix(body, nameLabels)) {
             is PrometheusResponse.Parsed.Matrix ->
                 if (parsed.series.isEmpty() && probeWhenEmpty && probeSaysNoData()) {
                     failed(HistoryFailure.NoContainerMetrics)
