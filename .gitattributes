@@ -1,0 +1,17 @@
+# Line endings. Text files are stored with LF in the repository and checked
+# out with LF on every platform, whatever core.autocrlf says. Windows scripts
+# are the exception: they are still stored with LF, but checked out with CRLF,
+# because cmd.exe can misparse labels and `goto` in LF-only batch files.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never touch their bytes.
+*.icns binary
+*.ico binary
+*.jar binary
+*.otf binary
+*.png binary
+*.ttf binary
+*.webp binary
