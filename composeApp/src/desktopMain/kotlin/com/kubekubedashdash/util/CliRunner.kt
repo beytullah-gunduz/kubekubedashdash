@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
  * Shared subprocess runner for CLI-backed cluster discovery (`aws`, `gcloud`, …).
@@ -29,10 +30,11 @@ object CliRunner {
      * text into stdout corrupts the JSON payload we need to parse.
      *
      * Cancellation: this is a suspend function. Cancelling the calling coroutine
-     * interrupts the blocked [Process.waitFor] via [runInterruptible]; the child is
-     * then terminated (SIGTERM, then SIGKILL after a short grace period) so a
-     * cancelled operation cannot keep running — or keep mutating files — behind the
-     * caller's back. Callers that must let an in-flight child finish (e.g. a
+     * interrupts the blocked [Process.waitFor] via [runInterruptible]; the child and
+     * every process it started are then terminated (SIGTERM, then SIGKILL after a short
+     * grace period; Windows has no SIGTERM, so there at once) so a cancelled operation
+     * cannot keep running — or keep mutating files — behind the caller's back. A timeout
+     * kills the same tree at once. Callers that must let an in-flight child finish (e.g. a
      * kubeconfig-writing import step) should invoke this under
      * `withContext(NonCancellable)`; the interrupt then never fires.
      */
@@ -94,7 +96,7 @@ object CliRunner {
             throw ie
         }
         return if (!finished) {
-            process.destroyForcibly()
+            killTree(process, descendantsOf(process))
             drainer.join(1_000)
             Result.failure(CliInvocationFailure(-1, "", "Timed out after ${timeoutSeconds}s: ${safeCmd(originalArgs)}"))
         } else {
@@ -152,7 +154,7 @@ object CliRunner {
             throw ie
         }
         return if (!finished) {
-            process.destroyForcibly()
+            killTree(process, descendantsOf(process))
             stdoutDrainer.join(1_000)
             stderrDrainer.join(1_000)
             Result.failure(CliInvocationFailure(-1, "", "Timed out after ${timeoutSeconds}s: ${safeCmd(originalArgs)}"))
@@ -176,22 +178,40 @@ object CliRunner {
     private const val TERMINATE_GRACE_MILLIS = 2_000L
 
     /**
-     * Terminates [process] because the calling coroutine was cancelled: SIGTERM first so
-     * the CLI (gcloud/aws are Python) can run cleanup handlers and reap its own children,
-     * SIGKILL after a short grace period. Catching InterruptedException cleared the
-     * thread's interrupt flag, so the graceful waitFor below can block; a second
-     * interrupt during the grace wait escalates to SIGKILL immediately.
+     * Terminates [process] and every process it started, because the calling coroutine was
+     * cancelled: SIGTERM first so the CLI (gcloud/aws are Python) can run cleanup handlers,
+     * SIGKILL after a short grace period. The whole tree, because the direct child is not
+     * always the CLI: on Windows `gcloud` is `gcloud.cmd`, a cmd.exe whose python.exe child
+     * Process.destroy() alone would leave running — and there destroy() is already a
+     * TerminateProcess, so the grace period only matters on POSIX. Catching
+     * InterruptedException cleared the thread's interrupt flag, so the graceful wait below
+     * can block; a second interrupt during it escalates to SIGKILL immediately.
      */
     private fun terminateOnCancel(process: Process) {
+        val descendants = descendantsOf(process)
         process.destroy()
+        descendants.forEach { it.destroy() }
         try {
-            if (!process.waitFor(TERMINATE_GRACE_MILLIS, TimeUnit.MILLISECONDS)) {
-                process.destroyForcibly()
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(TERMINATE_GRACE_MILLIS)
+            process.waitFor(deadline - System.nanoTime(), TimeUnit.NANOSECONDS)
+            for (descendant in descendants) {
+                descendant.onExit().get(maxOf(0L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS)
             }
+        } catch (_: TimeoutException) {
+            // Grace period over: killTree below.
         } catch (_: InterruptedException) {
-            process.destroyForcibly()
             Thread.currentThread().interrupt()
+        } finally {
+            killTree(process, descendants)
         }
+    }
+
+    // Taken before anything is killed: an orphan can no longer be found from its dead parent.
+    private fun descendantsOf(process: Process): List<ProcessHandle> = runCatching { process.descendants().toList() }.getOrDefault(emptyList())
+
+    private fun killTree(process: Process, descendants: List<ProcessHandle>) {
+        if (process.isAlive) process.destroyForcibly()
+        descendants.forEach { if (it.isAlive) it.destroyForcibly() }
     }
 
     private fun safeCmd(args: List<String>): String = "${args.firstOrNull() ?: "?"} ${args.getOrNull(1).orEmpty()} ${args.getOrNull(2).orEmpty()}".trim()
