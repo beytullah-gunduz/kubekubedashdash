@@ -1,5 +1,6 @@
 package com.kubekubedashdash.util
 
+import com.kubekubedashdash.services.metricshistory.PromQl
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.EndpointAddressBuilder
@@ -56,6 +57,7 @@ import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 
 /**
@@ -1317,11 +1319,18 @@ internal fun seedResources(client: KubernetesClient, backdate: (itemPath: String
  * a running application, a finished one, a failed one, and a ScheduledSparkApplication with two finished runs.
  */
 internal fun seedSparkAndArgo(client: KubernetesClient, backdate: (itemPath: String, creationTimestamp: String) -> Unit = { _, _ -> }) {
+    // The Spark operator's own printer columns (v1beta2), so the demo table reads like a real cluster's.
     val sparkColumns = listOf(
+        CustomResourceColumnDefinitionBuilder()
+            .withName("Suspend").withType("boolean").withJsonPath(".spec.suspend").build(),
         CustomResourceColumnDefinitionBuilder()
             .withName("Status").withType("string").withJsonPath(".status.applicationState.state").build(),
         CustomResourceColumnDefinitionBuilder()
-            .withName("Attempts").withType("integer").withJsonPath(".status.executionAttempts").build(),
+            .withName("Attempts").withType("string").withJsonPath(".status.executionAttempts").build(),
+        CustomResourceColumnDefinitionBuilder()
+            .withName("Start").withType("string").withJsonPath(".status.lastSubmissionAttemptTime").build(),
+        CustomResourceColumnDefinitionBuilder()
+            .withName("Finish").withType("string").withJsonPath(".status.terminationTime").build(),
         CustomResourceColumnDefinitionBuilder()
             .withName("Age").withType("date").withJsonPath(".metadata.creationTimestamp").build(),
     )
@@ -1452,15 +1461,15 @@ private fun seedSparkPods(
                 creationTimestamp = createdAt,
                 owner = owner,
                 finishedAt = finishedAt,
-                labels = mapOf("spark-role" to role),
+                labels = mapOf("spark-role" to role, "sparkoperator.k8s.io/app-name" to app.metadata.name),
             ),
         ).create()
         backdate("/api/v1/namespaces/$ns/pods/$name", createdAt)
         return pod
     }
-    val driver = createPod("${app.metadata.name}-driver", "spark-driver", "driver", driverMinutesAgo, podIps.getOrNull(0), app)
+    val driver = createPod("${app.metadata.name}-driver", PromQl.SPARK_DRIVER_CONTAINER, "driver", driverMinutesAgo, podIps.getOrNull(0), app)
     executors.forEachIndexed { i, name ->
-        createPod(name, "spark-executor", "executor", executorsMinutesAgo, podIps.getOrNull(i + 1), driver)
+        createPod(name, PromQl.SPARK_EXECUTOR_CONTAINER, "executor", executorsMinutesAgo, podIps.getOrNull(i + 1), driver)
     }
 }
 
@@ -1708,6 +1717,9 @@ internal fun seedCrInstance(
     return if (namespace != null) resources.inNamespace(namespace).resource(instance).create() else resources.resource(instance).create()
 }
 
+// The API server keeps metav1.Time to the second; the demo's status times do too.
+private fun toTheSecond(timestamp: String): String = Instant.parse(timestamp).truncatedTo(ChronoUnit.SECONDS).toString()
+
 /**
  * A SparkApplication as the operator reports one: the last submission, the driver pod and the executors
  * ([executors], by pod name). [endedMinAgo] is when the run ended; the operator sets `terminationTime` on
@@ -1743,11 +1755,11 @@ internal fun sparkInstance(
     val status = mutableMapOf<String, Any>(
         "applicationState" to mapOf("state" to state),
         "executionAttempts" to attempts,
-        "lastSubmissionAttemptTime" to created,
+        "lastSubmissionAttemptTime" to toTheSecond(created),
         "driverInfo" to mapOf("podName" to "$name-driver"),
         "executorState" to executors.associateWith { if (state == "RUNNING") "RUNNING" else "COMPLETED" },
     )
-    if (endedMinAgo != null && (state == "COMPLETED" || state == "FAILED")) status["terminationTime"] = MockClusterProvider.minutesAgo(endedMinAgo)
+    if (endedMinAgo != null && (state == "COMPLETED" || state == "FAILED")) status["terminationTime"] = toTheSecond(MockClusterProvider.minutesAgo(endedMinAgo))
     r.additionalProperties["status"] = status
     return r to ns
 }

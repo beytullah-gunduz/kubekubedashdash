@@ -90,10 +90,10 @@ class HomeRelativeLogPathsTest {
 
         assertEquals(CheckStatus.FAILED, check.status)
         assertEquals("Not found at ~${File.separator}.kube${File.separator}missing", check.detail)
-        val warned = messages(checkerEvents).filter { it.second.startsWith("Kubeconfig not found at") }
-        assertEquals(1, warned.size, "one WARN line, got: ${messages(checkerEvents)}")
-        assertEquals(Level.WARN, warned.single().first)
-        assertTrue(warned.single().second.contains("~${File.separator}.kube${File.separator}missing"), "got: ${warned.single().second}")
+        val reported = messages(checkerEvents).filter { it.second.startsWith("Kubeconfig not found") }
+        assertEquals(listOf(Level.WARN, Level.DEBUG), reported.map { it.first }, "one WARN line, then one DEBUG line, got: ${messages(checkerEvents)}")
+        assertEquals("Kubeconfig not found", reported[0].second, "the WARN reaches app.log and names no path")
+        assertTrue(reported[1].second.contains("~${File.separator}.kube${File.separator}missing"), "got: ${reported[1].second}")
         assertFalse(messages(checkerEvents).any { it.second.contains(home.absolutePath) }, "the absolute home path must not be logged: ${messages(checkerEvents)}")
     }
 
@@ -105,6 +105,12 @@ class HomeRelativeLogPathsTest {
 
         assertTrue(config.parentFile.isDirectory, "the parent directory is created")
         val created = messages(locatorEvents).filter { it.second.startsWith("Creating kubeconfig parent directory") }
-        assertEquals(listOf(Level.INFO to "Creating kubeconfig parent directory ~${File.separator}.kube"), created)
+        assertEquals(
+            listOf(
+                Level.INFO to "Creating kubeconfig parent directory",
+                Level.DEBUG to "Creating kubeconfig parent directory ~${File.separator}.kube",
+            ),
+            created,
+        )
     }
 }

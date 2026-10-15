@@ -78,12 +78,13 @@ object ShellEnvironment {
             val valOf = valClass.getDeclaredMethod("valueOf", String::class.java).apply { isAccessible = true }
             @Suppress("UNCHECKED_CAST")
             (env as MutableMap<Any, Any>)[varOf.invoke(null, "PATH")] = valOf.invoke(null, path)
-            log.info("Injected augmented PATH into JVM process env ({} chars)", path.length)
+            log.info("Injected augmented PATH into JVM process env ({} chars)", path.length) // log-safe: the length only
         } catch (t: Throwable) {
             log.warn(
                 "Could not inject PATH into JVM process env: {}. Exec credential plugins (aws/gcloud/kubelogin) may fail in packaged .app bundles.",
-                t.message,
+                describeFailureShape(t),
             )
+            log.debug("Could not inject PATH into JVM process env", t)
         }
     }
 
@@ -121,9 +122,10 @@ object ShellEnvironment {
         val found = scanForExecutable(command)
         commandCache[command] = Optional.ofNullable(found)
         if (found != null) {
-            // INFO, so app.log (INFO and up) shows which binary a support report is about.
-            // Cached, so once per command until the next invalidate().
-            log.info("Resolved '{}' -> {}", command, displayPath(found))
+            // INFO, so app.log (INFO and up) shows which CLI a support report found; the path stays at
+            // DEBUG, as app.log carries no paths. Cached, so once per command until the next invalidate().
+            log.info("Resolved '{}'", command)
+            log.debug("Resolved '{}' -> {}", command, displayPath(found))
         } else {
             log.debug("Command '{}' not found on augmented PATH", command)
         }

@@ -531,14 +531,16 @@ class KubeClient(
         plural: String? = null,
     ): String = try {
         fetchResourceYaml(kind, name, namespace, group, version, plural) ?: run {
-            log.warn("Resource not found kind={} name={} namespace={}", kind, name, namespace)
+            log.warn("Resource not found kind={}", kind)
+            log.debug("Resource not found kind={} name={} namespace={}", kind, name, namespace)
             "# Resource not found"
         }
     } catch (e: Exception) {
         if (isInterruption(e)) {
             log.debug("YAML fetch interrupted kind={} name={} namespace={}", kind, name, namespace)
         } else {
-            log.error("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+            log.error("Failed to fetch YAML kind={}: {}", kind, describeFailureShape(e))
+            log.debug("Failed to fetch YAML kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         }
         "# Error: ${e.message}"
     }
@@ -643,7 +645,8 @@ class KubeClient(
         if (isInterruption(e)) {
             log.debug("Pod log fetch interrupted pod={} namespace={}", name, namespace)
         } else {
-            log.error("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
+            log.error("Failed to fetch pod logs: {}", describeFailureShape(e))
+            log.debug("Failed to fetch pod logs pod={} namespace={}: {}", name, namespace, e.message)
         }
         "Error fetching logs: ${e.message}"
     }
@@ -691,7 +694,8 @@ class KubeClient(
                     client.top().pods().metrics().items ?: emptyList()
                 }
             } catch (e: Exception) {
-                log.warn("Metrics server unavailable: {}", e.message)
+                log.warn("Metrics server unavailable: {}", describeFailureShape(e))
+                log.debug("Metrics server unavailable: {}", e.message)
                 return ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
             }
 
@@ -720,7 +724,8 @@ class KubeClient(
             log.debug("Resource usage: cpu={}m/{}m mem={}/{}", cpuUsed, cpuCap, memUsed, memCap)
             return ResourceUsageSummary(cpuUsed, cpuCap, memUsed, memCap, metricsAvailable = true)
         } catch (e: Exception) {
-            log.warn("Failed to compute resource usage: {}", e.message)
+            log.warn("Failed to compute resource usage: {}", describeFailureShape(e))
+            log.debug("Failed to compute resource usage: {}", e.message)
             return ResourceUsageSummary(0, 0, 0, 0, metricsAvailable = false)
         }
     }
@@ -828,15 +833,18 @@ fun formatAge(timestamp: String?, now: Instant = Instant.now()): String {
             ageLog.debug("Negative age duration: now={} created={} (clock skew?)", now, created)
             return "0s"
         }
-        when {
-            dur.toDays() > 365 -> "${dur.toDays() / 365}y${(dur.toDays() % 365) / 30}mo"
-            dur.toDays() > 30 -> "${dur.toDays() / 30}mo${dur.toDays() % 30}d"
-            dur.toDays() > 0 -> "${dur.toDays()}d${dur.toHours() % 24}h"
-            dur.toHours() > 0 -> "${dur.toHours()}h${dur.toMinutes() % 60}m"
-            dur.toMinutes() > 0 -> "${dur.toMinutes()}m"
-            else -> "${dur.seconds}s"
-        }
+        formatElapsed(dur)
     } catch (_: Exception) {
         timestamp
     }
+}
+
+/** [dur] in the Age column's units: "45s", "12m", "1h5m", "2d3h", "2mo5d", "1y2mo" (365-day years, 30-day months). */
+fun formatElapsed(dur: Duration): String = when {
+    dur.toDays() > 365 -> "${dur.toDays() / 365}y${(dur.toDays() % 365) / 30}mo"
+    dur.toDays() > 30 -> "${dur.toDays() / 30}mo${dur.toDays() % 30}d"
+    dur.toDays() > 0 -> "${dur.toDays()}d${dur.toHours() % 24}h"
+    dur.toHours() > 0 -> "${dur.toHours()}h${dur.toMinutes() % 60}m"
+    dur.toMinutes() > 0 -> "${dur.toMinutes()}m"
+    else -> "${dur.seconds}s"
 }

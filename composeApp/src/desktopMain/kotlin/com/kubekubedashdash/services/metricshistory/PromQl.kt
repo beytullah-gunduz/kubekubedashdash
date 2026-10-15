@@ -31,8 +31,9 @@ internal object PromQl {
         return when (kind) {
             PodSeriesKind.Cpu -> "sum by (container) (rate(container_cpu_usage_seconds_total{$c}[$w]))"
 
+            // Averaged over the window: an instant value at each step misses a pod alive only between two steps.
             // max, not sum: Managed Prometheus has no staleness, so a restarted container's last value lingers.
-            PodSeriesKind.Memory -> "max by (container) (container_memory_working_set_bytes{$c})"
+            PodSeriesKind.Memory -> "max by (container) (avg_over_time(container_memory_working_set_bytes{$c}[$w]))"
 
             // Network counters belong to the pod's network namespace; max per interface drops duplicate reporters.
             PodSeriesKind.NetworkRx -> "sum(max by (interface) (rate(container_network_receive_bytes_total{$s}[$w])))"
@@ -57,7 +58,7 @@ internal object PromQl {
         return when (kind) {
             PodSeriesKind.Cpu -> "sum by (container) (rate(container_cpu_usage_seconds_total{$c}[$w]))"
 
-            PodSeriesKind.Memory -> "max by (container) (container_memory_working_set_bytes{$c})"
+            PodSeriesKind.Memory -> "max by (container) (avg_over_time(container_memory_working_set_bytes{$c}[$w]))"
 
             // The network counters sit on the sandbox series, which carry an empty or POD container label: no container filter.
             PodSeriesKind.NetworkRx -> "sum(max by (interface) (rate(container_network_receive_bytes_total{$s}[$w])))"
@@ -95,6 +96,11 @@ internal object PromQl {
 
     // A Spark app past this many pods is selected by executor stem instead of by exact name.
     private const val SPARK_EXACT_NAMES_MAX = 60
+
+    /** The container names Spark gives its pods (apache/spark Constants.scala); a pod template can rename them. */
+    const val SPARK_CONTAINERS = "spark-kubernetes-(driver|executor)"
+    const val SPARK_DRIVER_CONTAINER = "spark-kubernetes-driver"
+    const val SPARK_EXECUTOR_CONTAINER = "spark-kubernetes-executor"
 
     // The operator names executors `<app>-<hash>-exec-<n>`.
     private const val EXECUTOR_MARKER = "-exec-"
@@ -215,14 +221,28 @@ internal object PromQl {
     fun ofSparkPods(namespace: String, driverPods: List<String>, executorPods: List<String>): PodSetRef? {
         if (driverPods.size + executorPods.size <= SPARK_EXACT_NAMES_MAX) return ofExactPods(namespace, driverPods + executorPods)
         if (!KubernetesNames.isDnsLabel(namespace) || !(driverPods + executorPods).all(KubernetesNames::isDnsSubdomain)) return null
-        val executors = executorPods.map { name ->
-            val stem = name.substringBeforeLast(EXECUTOR_MARKER, missingDelimiterValue = "")
-            val index = name.substringAfterLast(EXECUTOR_MARKER, missingDelimiterValue = "")
-            if (stem.isNotEmpty() && index.isNotEmpty() && index.all { it in '0'..'9' }) "${regexEscape(stem)}${EXECUTOR_MARKER}[0-9]+" else regexEscape(name)
-        }.distinct().sorted()
         val drivers = driverPods.distinct().sorted().map { regexEscape(it) }
-        return PodSetRef(namespace, (drivers + executors).joinToString("|", prefix = "(", postfix = ")"))
+        return PodSetRef(namespace, (drivers + sparkExecutorAlternatives(executorPods)).joinToString("|", prefix = "(", postfix = ")"))
     }
+
+    /**
+     * The executor pods of Spark applications alone, for a line of their own beside the drivers'. Its
+     * threshold counts executors only (the drivers form another set); past it the executors are selected
+     * by stem as in [ofSparkPods]. Null when [executorPods] is empty, the namespace is not a DNS label or a
+     * name is not valid.
+     */
+    fun ofSparkExecutors(namespace: String, executorPods: List<String>): PodSetRef? {
+        if (executorPods.size <= SPARK_EXACT_NAMES_MAX) return ofExactPods(namespace, executorPods)
+        if (!KubernetesNames.isDnsLabel(namespace) || !executorPods.all(KubernetesNames::isDnsSubdomain)) return null
+        return PodSetRef(namespace, sparkExecutorAlternatives(executorPods).joinToString("|", prefix = "(", postfix = ")"))
+    }
+
+    // An executor named `<stem>-exec-<n>` is selected by its stem, one named otherwise by its exact name.
+    private fun sparkExecutorAlternatives(executorPods: List<String>): List<String> = executorPods.map { name ->
+        val stem = name.substringBeforeLast(EXECUTOR_MARKER, missingDelimiterValue = "")
+        val index = name.substringAfterLast(EXECUTOR_MARKER, missingDelimiterValue = "")
+        if (stem.isNotEmpty() && index.isNotEmpty() && index.all { it in '0'..'9' }) "${regexEscape(stem)}${EXECUTOR_MARKER}[0-9]+" else regexEscape(name)
+    }.distinct().sorted()
 
     fun gmpPodSetSelector(target: GmpTarget, namespace: String, regex: String): String = "cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\"," +
         inClusterPodSetSelector(namespace, regex)
@@ -234,7 +254,8 @@ internal object PromQl {
     fun inClusterPodSetQuery(kind: PodSeriesKind, pods: PodSetRef, mode: PodSetMode, stepSec: Long): String = podSetQuery(kind, inClusterPodSetSelector(pods.namespace, pods.pattern), mode, inClusterRateWindowSec(stepSec))
 
     // The shapes of the per-pod queries, grouped by pod instead of by container. Memory keeps the max per
-    // (pod, container) so a restarted container's lingering series is not counted twice.
+    // (pod, container) so a restarted container's lingering series is not counted twice. Memory is averaged
+    // over the window, as CPU's rate is.
     private fun podSetQuery(kind: PodSeriesKind, selector: String, mode: PodSetMode, windowSec: Long): String {
         val c = "$selector,container!=\"\",container!=\"POD\""
         val w = "${windowSec}s"
@@ -242,7 +263,7 @@ internal object PromQl {
         return when (kind) {
             PodSeriesKind.Cpu -> aggregate("rate(container_cpu_usage_seconds_total{$c}[$w])")
 
-            PodSeriesKind.Memory -> aggregate("max by (pod, container) (container_memory_working_set_bytes{$c})")
+            PodSeriesKind.Memory -> aggregate("max by (pod, container) (avg_over_time(container_memory_working_set_bytes{$c}[$w]))")
 
             // The network counters sit on the sandbox series: no container filter.
             PodSeriesKind.NetworkRx -> aggregate("max by (pod, interface) (rate(container_network_receive_bytes_total{$selector}[$w]))")
@@ -262,6 +283,23 @@ internal object PromQl {
 
     fun inClusterScopeQuery(kind: ScopeKind, scope: ScopeRef, stepSec: Long): String = scopeQuery(kind, scopeMatchers(scope), inClusterRateWindowSec(stepSec))
 
+    fun gmpSparkQuery(kind: ScopeKind, target: GmpTarget, scope: ScopeRef, grouping: SparkGrouping, stepSec: Long): String {
+        val cluster = "cluster=\"${escape(target.cluster)}\",location=\"${escape(target.location)}\""
+        return sparkQuery(kind, listOf(cluster) + scopeMatchers(scope), grouping, rateWindowSec(stepSec))
+    }
+
+    fun inClusterSparkQuery(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, stepSec: Long): String = sparkQuery(kind, scopeMatchers(scope), grouping, inClusterRateWindowSec(stepSec))
+
+    // One Spark container per pod; memory keeps the max per (namespace, pod, container) so a restarted container's earlier series is not counted twice.
+    private fun sparkQuery(kind: ScopeKind, matchers: List<String>, grouping: SparkGrouping, windowSec: Long): String {
+        val selector = (matchers + "container=~\"$SPARK_CONTAINERS\"").joinToString(",")
+        val by = if (grouping == SparkGrouping.ByPod) "namespace, pod" else "container"
+        return when (kind) {
+            ScopeKind.CpuCores -> "sum by ($by) (rate(container_cpu_usage_seconds_total{$selector}[${windowSec}s]))"
+            ScopeKind.MemoryBytes -> "sum by ($by) (max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$selector}[${windowSec}s])))"
+        }
+    }
+
     // Namespace names are DNS labels, so the regex form needs no escaping in practice; it is applied anyway.
     private fun scopeMatchers(scope: ScopeRef): List<String> {
         val names = scope.namespaces.sorted()
@@ -276,7 +314,7 @@ internal object PromQl {
         val selector = (matchers + listOf("container!=\"\"", "container!=\"POD\"")).joinToString(",")
         return when (kind) {
             ScopeKind.CpuCores -> "sum(rate(container_cpu_usage_seconds_total{$selector}[${windowSec}s]))"
-            ScopeKind.MemoryBytes -> "sum(max by (namespace, pod, container) (container_memory_working_set_bytes{$selector}))"
+            ScopeKind.MemoryBytes -> "sum(max by (namespace, pod, container) (avg_over_time(container_memory_working_set_bytes{$selector}[${windowSec}s])))"
         }
     }
 }

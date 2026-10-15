@@ -38,9 +38,11 @@ private class Candidate(val name: String, val revision: Long, val createdEpochSe
  * time stays, so the rollback marks no rollout and that revision's marker sits at its first rollout.
  *
  * Staleness differs by backend. Managed Prometheus writes no staleness markers, so a deleted pod's
- * memory line lingers up to 5 minutes and its CPU line up to the rate window (5 minutes at least):
+ * memory and CPU lines linger for their window (5 minutes at least):
  * lines can run past the marker of the rollout that replaced them, and a total double-counts there.
- * An in-cluster Prometheus marks a vanished series stale, so its lines end with the pod.
+ * An in-cluster Prometheus marks a vanished series stale, which ends an instant query at once; the
+ * windowed queries here still average the samples before the marker, so their lines linger for the
+ * window there too (4 minutes at least).
  */
 fun deploymentPodSet(deploymentUid: String, namespace: String, replicaSets: List<GenericResourceInfo>): DeploymentPodSet? {
     if (deploymentUid.isBlank()) return null

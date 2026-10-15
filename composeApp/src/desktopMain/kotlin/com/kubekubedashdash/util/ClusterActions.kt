@@ -74,12 +74,15 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
         plural: String? = null,
         propagationPolicy: DeletionPropagation? = null,
     ): Result<Unit> = try {
-        log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
+        log.info("Deleting resource kind={}", kind)
+        log.debug("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
         performDelete(kind, name, namespace, group, version, plural, propagationPolicy)
-        log.info("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
+        log.info("Deleted resource kind={}", kind)
+        log.debug("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
         Result.success(Unit)
     } catch (e: Exception) {
-        log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+        log.error("Failed to delete resource kind={}: {}", kind, describeFailureShape(e))
+        log.debug("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         Result.failure(e)
     }
 
@@ -101,7 +104,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
         plural: String? = null,
         propagationPolicy: DeletionPropagation? = null,
     ): Result<DeleteOutcome> = try {
-        log.info("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
+        log.info("Deleting resource kind={}", kind)
+        log.debug("Deleting resource kind={} name={} namespace={}", kind, name, namespace)
         val handle = performDelete(kind, name, namespace, group, version, plural, propagationPolicy)
         var waitingOn = lookAgain(handle, kind, name, namespace)
         var looks = 1
@@ -112,10 +116,15 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
         }
         val outcome = if (waitingOn.isEmpty()) DeleteOutcome.Gone else DeleteOutcome.Terminating(waitingOn)
         // Finalizer names are domain-qualified by rule, so the log gets a count, not the names.
-        log.info("Deleted resource kind={} name={} namespace={} outcome={}", kind, name, namespace, if (outcome is DeleteOutcome.Terminating) "Terminating(${outcome.finalizers.size})" else "Gone")
+        log.debug("Deleted resource kind={} name={} namespace={}", kind, name, namespace)
+        when (outcome) {
+            is DeleteOutcome.Terminating -> log.info("Deleted resource kind={} outcome=Terminating({})", kind, outcome.finalizers.size)
+            DeleteOutcome.Gone -> log.info("Deleted resource kind={} outcome=Gone", kind)
+        }
         Result.success(outcome)
     } catch (e: Exception) {
-        log.error("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
+        log.error("Failed to delete resource kind={}: {}", kind, describeFailureShape(e))
+        log.debug("Failed to delete resource kind={} name={} namespace={}: {}", kind, name, namespace, e.message)
         Result.failure(e)
     }
 
@@ -315,7 +324,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      */
     fun scaleWorkload(kind: String, name: String, namespace: String, replicas: Int): Result<Unit> = runCatching {
         require(replicas >= 0) { "replicas must be >= 0, was $replicas" }
-        log.info("Scaling {} name={} namespace={} replicas={}", kind, name, namespace, replicas)
+        log.info("Scaling {} replicas={}", kind, replicas)
+        log.debug("Scaling {} name={} namespace={} replicas={}", kind, name, namespace, replicas)
         when (kind.lowercase()) {
             "deployment" -> k8s.apps().deployments().inNamespace(namespace).withName(name)
                 .edit { d -> DeploymentBuilder(d).editSpec().withReplicas(replicas).endSpec().build() }
@@ -336,7 +346,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * Supported kinds: Deployment, StatefulSet, DaemonSet.
      */
     fun restartWorkload(kind: String, name: String, namespace: String): Result<Unit> = runCatching {
-        log.info("Restarting {} name={} namespace={}", kind, name, namespace)
+        log.info("Restarting {}", kind)
+        log.debug("Restarting {} name={} namespace={}", kind, name, namespace)
         val ts = java.time.Instant.now().toString()
         when (kind.lowercase()) {
             "deployment" -> k8s.apps().deployments().inNamespace(namespace).withName(name)
@@ -385,7 +396,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
     // ── On-demand: CSR Approve / Deny ───────────────────────────────────────────
 
     fun approveCsr(name: String, message: String = "Approved by kubekubedashdash"): Result<Unit> = runCatching {
-        log.info("Approving CSR name={}", name)
+        log.info("Approving a CSR")
+        log.debug("Approving CSR name={}", name)
         k8s.certificates().v1().certificateSigningRequests().withName(name).approve(
             CertificateSigningRequestConditionBuilder()
                 .withType("Approved")
@@ -397,7 +409,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
     }
 
     fun denyCsr(name: String, message: String = "Denied by kubekubedashdash"): Result<Unit> = runCatching {
-        log.info("Denying CSR name={}", name)
+        log.info("Denying a CSR")
+        log.debug("Denying CSR name={}", name)
         k8s.certificates().v1().certificateSigningRequests().withName(name).deny(
             CertificateSigningRequestConditionBuilder()
                 .withType("Denied")
@@ -415,7 +428,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * patching `spec.unschedulable` in-place via the fabric8 fluent builder.
      */
     fun cordonNode(name: String, unschedulable: Boolean): Result<Unit> = runCatching {
-        log.info("Setting node={} unschedulable={}", name, unschedulable)
+        log.info("Setting a node unschedulable={}", unschedulable)
+        log.debug("Setting node={} unschedulable={}", name, unschedulable)
         k8s.nodes().withName(name).edit { n ->
             NodeBuilder(n).editOrNewSpec().withUnschedulable(unschedulable).endSpec().build()
         }
@@ -434,7 +448,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      */
     fun drainNode(name: String): Result<DrainResult> = runCatching {
         // 1. Cordon first — fail the whole drain if this throws.
-        log.info("Draining node={}: cordoning", name)
+        log.info("Draining a node: cordoning")
+        log.debug("Draining node={}: cordoning", name)
         k8s.nodes().withName(name).edit { n ->
             NodeBuilder(n).editOrNewSpec().withUnschedulable(true).endSpec().build()
         }
@@ -448,7 +463,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
                 // for eviction — that pod isn't on this node.
                 .filter { it.spec?.nodeName == name }
         } catch (e: Exception) {
-            log.warn("Drain node={}: could not list pods: {}", name, e.message)
+            log.warn("Drain: could not list pods: {}", describeFailureShape(e))
+            log.debug("Drain node={}: could not list pods: {}", name, e.message)
             emptyList()
         }
 
@@ -492,16 +508,19 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
                     log.trace("Drain node={}: evicted pod={}/{}", name, ns, podName)
                     evicted++
                 } else {
-                    log.warn("Drain node={}: eviction blocked (PDB?) pod={}/{}", name, ns, podName)
+                    log.warn("Drain: eviction blocked (PDB?)")
+                    log.debug("Drain node={}: eviction blocked (PDB?) pod={}/{}", name, ns, podName)
                     failed++
                 }
             } catch (e: Exception) {
-                log.warn("Drain node={}: eviction error pod={}/{}: {}", name, ns, podName, e.message)
+                log.warn("Drain: eviction error: {}", describeFailureShape(e))
+                log.debug("Drain node={}: eviction error pod={}/{}: {}", name, ns, podName, e.message)
                 failed++
             }
         }
 
-        log.info("Drain node={}: evicted={} skipped={} failed={}", name, evicted, skipped, failed)
+        log.info("Drain: evicted={} skipped={} failed={}", evicted, skipped, failed)
+        log.debug("Drain node={}: finished", name)
         DrainResult(evicted = evicted, skipped = skipped, failed = failed)
     }
 
@@ -513,7 +532,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * (e.g. blocked by a PDB) so the UI can surface the reason.
      */
     fun evictPod(name: String, namespace: String): Result<Unit> = runCatching {
-        log.info("Evicting pod name={} namespace={}", name, namespace)
+        log.info("Evicting a pod")
+        log.debug("Evicting pod name={} namespace={}", name, namespace)
         val ok = k8s.pods().inNamespace(namespace).withName(name).evict()
         if (!ok) error("Eviction was rejected (it may be blocked by a PodDisruptionBudget)")
     }
@@ -523,23 +543,28 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * Use only for pods stuck in Terminating/unresponsive; can orphan resources.
      */
     fun forceDeletePod(name: String, namespace: String): Result<Unit> = runCatching {
-        log.info("Force-deleting pod name={} namespace={}", name, namespace)
+        log.info("Force-deleting a pod")
+        log.debug("Force-deleting pod name={} namespace={}", name, namespace)
         k8s.pods().inNamespace(namespace).withName(name).withGracePeriod(0L).delete()
     }.map { }
 
     // ── On-demand: CronJob Trigger / Suspend ─────────────────────────────────────
 
     /**
-     * Trigger a CronJob immediately by creating a one-off Job from its
-     * [spec.jobTemplate], exactly as `kubectl create job --from=cronjob/<name>`.
-     * No ownerReference is added so the CronJob controller does not adopt or
-     * garbage-collect the job when the next schedule runs.
+     * Trigger a CronJob immediately by creating a one-off Job from its [spec.jobTemplate]; our
+     * `instantiate=manual` annotation wins over the template's (kubectl lets the template win).
+     * Like `kubectl create job --from=cronjob/<name>`, the Job is owned by the CronJob (controller, no
+     * blockOwnerDeletion): the controller warns `UnexpectedJob` while it runs, counts it toward the history
+     * limits once finished, and the garbage collector deletes it with the CronJob.
      */
     fun triggerCronJob(name: String, namespace: String): Result<Unit> = runCatching {
-        log.info("Triggering CronJob name={} namespace={}", name, namespace)
+        log.info("Triggering a CronJob")
+        log.debug("Triggering CronJob name={} namespace={}", name, namespace)
         val cj = k8s.batch().v1().cronjobs().inNamespace(namespace).withName(name).get()
             ?: error("CronJob $name not found in namespace $namespace")
         val template = cj.spec?.jobTemplate ?: error("CronJob $name has no jobTemplate")
+        // An ownerReference needs a uid; fail before creating anything.
+        val cronJobUid = cj.metadata?.uid?.takeIf { it.isNotBlank() } ?: error("CronJob has no uid")
         // Job name must be <= 63 chars: truncate the base so "-manual-<epoch-ms>" fits.
         // Use millis (not seconds) so rapid re-triggers don't collide on the name.
         val suffix = "-manual-${System.currentTimeMillis()}"
@@ -553,11 +578,20 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
             .addToLabels(templateLabels)
             .addToAnnotations(templateAnnotations)
             .addToAnnotations("cronjob.kubernetes.io/instantiate", "manual")
+            // No blockOwnerDeletion, as kubectl: setting it needs the cronjobs/finalizers permission.
+            .addNewOwnerReference()
+            .withApiVersion("batch/v1")
+            .withKind("CronJob")
+            .withName(cj.metadata.name)
+            .withUid(cronJobUid)
+            .withController(true)
+            .endOwnerReference()
             .endMetadata()
             .withSpec(template.spec)
             .build()
         k8s.batch().v1().jobs().inNamespace(namespace).resource(job).create()
-        log.info("Triggered CronJob name={}: created job={}", name, base + suffix)
+        log.info("Triggered a CronJob: created a Job")
+        log.debug("Triggered CronJob name={}: created job={}", name, base + suffix)
     }.map { }
 
     /**
@@ -566,7 +600,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * Running Jobs are not affected.
      */
     fun setCronJobSuspend(name: String, namespace: String, suspend: Boolean): Result<Unit> = runCatching {
-        log.info("Setting CronJob name={} namespace={} suspend={}", name, namespace, suspend)
+        log.info("Setting a CronJob suspend={}", suspend)
+        log.debug("Setting CronJob name={} namespace={} suspend={}", name, namespace, suspend)
         k8s.batch().v1().cronjobs().inNamespace(namespace).withName(name)
             .edit { cj -> CronJobBuilder(cj).editSpec().withSuspend(suspend).endSpec().build() }
     }.map { }

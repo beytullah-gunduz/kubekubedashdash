@@ -1,5 +1,6 @@
 package com.kubekubedashdash.services.logcapture
 
+import com.kubekubedashdash.util.describeFailureShape
 import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -100,7 +101,8 @@ object NamespaceLogCaptureEngine {
                 try {
                     val pods =
                         gateway.listPods(namespace).getOrElse { e ->
-                            log.warn("Failed to list pods namespace={}: {}", namespace, e.message)
+                            log.warn("Failed to list pods: {}", describeFailureShape(e))
+                            log.debug("Failed to list pods namespace={}: {}", namespace, e.message)
                             state.update {
                                 it.copy(
                                     phase = CapturePhase.Failed(e.message ?: "Failed to list pods", summary = null),
@@ -114,7 +116,8 @@ object NamespaceLogCaptureEngine {
                     outputDirRef = dir
                     val created = dir.mkdirs()
                     if (!created && !dir.exists()) {
-                        log.warn("Failed to create capture output directory {}", displayPath(dir.absolutePath))
+                        log.warn("Failed to create the capture output directory")
+                        log.debug("Failed to create capture output directory {}", displayPath(dir.absolutePath))
                         state.update {
                             it.copy(
                                 outputDir = dir.absolutePath,
@@ -125,13 +128,8 @@ object NamespaceLogCaptureEngine {
                     }
 
                     val totalContainers = pods.sumOf { it.containers.size }
-                    log.info(
-                        "Starting namespace log capture namespace={} pods={} containers={} dir={}",
-                        namespace,
-                        pods.size,
-                        totalContainers,
-                        displayPath(dir.absolutePath),
-                    )
+                    log.info("Starting namespace log capture pods={} containers={}", pods.size, totalContainers)
+                    log.debug("Starting namespace log capture namespace={} dir={}", namespace, displayPath(dir.absolutePath))
                     state.update {
                         it.copy(
                             outputDir = dir.absolutePath,
@@ -174,7 +172,8 @@ object NamespaceLogCaptureEngine {
                         }
                     } catch (e: AbortCapture) {
                         // Internal abort (fast-fail / disk error) — fall through to the terminal block.
-                        log.warn("Capture aborted internally namespace={}: {}", namespace, abortPhase.get()?.message)
+                        log.warn("Capture aborted internally")
+                        log.debug("Capture aborted internally namespace={}: {}", namespace, abortPhase.get()?.message)
                     }
                 } finally {
                     withContext(NonCancellable) {
@@ -182,7 +181,8 @@ object NamespaceLogCaptureEngine {
                         val isPreflightFailure =
                             abortPhase.get() == null && currentPhase is CapturePhase.Failed && currentPhase.summary == null
                         if (isPreflightFailure) {
-                            log.warn("Capture ended before any output was produced namespace={}", namespace)
+                            log.warn("Capture ended before any output was produced")
+                            log.debug("Capture ended before any output was produced namespace={}", namespace)
                         } else {
                             val kind =
                                 when {
@@ -198,7 +198,8 @@ object NamespaceLogCaptureEngine {
                                 runCatching {
                                     writeSummaryFile(dir, receipt, namespace, options, snapshot, notesSnapshot)
                                 }.onFailure { e ->
-                                    log.warn("Failed to write capture-summary.txt namespace={}: {}", namespace, e.message)
+                                    log.warn("Failed to write capture-summary.txt: {}", describeFailureShape(e))
+                                    log.debug("Failed to write capture-summary.txt namespace={}: {}", namespace, e.message)
                                 }
                             }
                             val terminal =
@@ -207,7 +208,8 @@ object NamespaceLogCaptureEngine {
                                     ReceiptKind.CANCELLED -> CapturePhase.Cancelled(receipt)
                                     ReceiptKind.COMPLETED -> CapturePhase.Completed(receipt)
                                 }
-                            log.info("Capture finished namespace={} phase={}", namespace, terminal::class.simpleName)
+                            log.info("Capture finished phase={}", terminal::class.simpleName)
+                            log.debug("Capture finished namespace={}", namespace)
                             state.update { it.copy(phase = terminal) }
                         }
                     }
@@ -289,7 +291,8 @@ object NamespaceLogCaptureEngine {
                 } else {
                     "Couldn't write to disk — capture stopped after $completedSoFar of $totalPods pods. Partial capture kept."
                 }
-            log.error("Disk write failure during capture namespace={}: {}", namespace, message)
+            log.error("Disk write failure during capture: {}", message) // log-safe: kkdd's own text, built from pod counts only
+            log.debug("Disk write failure during capture namespace={}", namespace)
             abort(CapturePhase.Failed(message, summary = null))
         }
     }

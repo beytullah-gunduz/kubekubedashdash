@@ -120,6 +120,12 @@ data class ColumnDef(
     val headerExtra: (@Composable () -> Unit)? = null,
 )
 
+// Room after every cell, header and rows alike, so a value that fills its column does not run into the next one.
+private val CELL_GUTTER = 12.dp
+
+// A column's slot in a header or body row: its weight, or its fixed width plus the gutter, so a fixed column keeps its content width.
+private fun RowScope.cellSlot(col: ColumnDef): Modifier = (if (col.width != null) Modifier.width(col.width + CELL_GUTTER) else Modifier.weight(col.weight ?: 1f)).padding(end = CELL_GUTTER)
+
 data class CellData(
     val text: String,
     val color: Color? = null,
@@ -316,7 +322,7 @@ fun ResourceTable(
                 val col = columns[index]
                 Row(
                     modifier = Modifier
-                        .then(if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f))
+                        .then(cellSlot(col))
                         .clickable {
                             // Read the sort at click time, not the composed shownSort: two
                             // clicks handled before the next frame would both see the old one.
@@ -798,7 +804,7 @@ private fun TableRowItem(
         visibleIndices.forEach { index ->
             val col = columns[index]
             val cell = row.cells.getOrNull(index)
-            Box(modifier = if (col.width != null) Modifier.width(col.width) else Modifier.weight(col.weight ?: 1f)) {
+            Box(modifier = cellSlot(col)) {
                 if (cell?.content != null) {
                     cell.content.invoke()
                 } else {

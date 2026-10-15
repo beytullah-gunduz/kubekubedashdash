@@ -101,7 +101,8 @@ object EksClusterDiscoverer {
     fun isAwsCliAvailable(): Boolean = ShellEnvironment.resolveCommand("aws") != null
 
     suspend fun listEnabledRegions(profile: String): Result<List<String>> = withContext(Dispatchers.IO) {
-        log.info("Listing enabled regions for profile={}", profile)
+        log.info("Listing enabled regions")
+        log.debug("Listing enabled regions for profile={}", profile)
         val args = listOf(
             "aws", "ec2", "describe-regions",
             "--all-regions",
@@ -119,7 +120,8 @@ object EksClusterDiscoverer {
                         ?: emptyList()
                     Result.success(regions)
                 } catch (e: Exception) {
-                    log.warn("Failed to parse describe-regions output: {}", e.message)
+                    log.warn("Failed to parse describe-regions output: {}", describeFailureShape(e))
+                    log.debug("Failed to parse describe-regions output: {}", e.message)
                     Result.failure(e)
                 }
             },
@@ -147,7 +149,8 @@ object EksClusterDiscoverer {
                     log.debug("Found {} clusters in {}", names.size, region)
                     Result.success(names.map { EksCluster(name = it, region = region, profile = profile) })
                 } catch (e: Exception) {
-                    log.warn("Failed to parse list-clusters output for region={}: {}", region, e.message)
+                    log.warn("Failed to parse list-clusters output for region={}: {}", region, describeFailureShape(e))
+                    log.debug("Failed to parse list-clusters output for region={}: {}", region, e.message)
                     Result.failure(e)
                 }
             },
@@ -162,11 +165,13 @@ object EksClusterDiscoverer {
         kubeconfigPath: String,
     ): Result<String> = withContext(Dispatchers.IO) {
         validate(region, clusterName)?.let { return@withContext Result.failure(it) }
-        log.info("Importing cluster name={} region={} profile={}", clusterName, region, profile)
+        log.info("Importing cluster region={}", region)
+        log.debug("Importing cluster name={} region={} profile={}", clusterName, region, profile)
         try {
             KubeconfigLocator.ensureParentDirectory(kubeconfigPath)
         } catch (e: Exception) {
-            log.error("Failed to create kubeconfig parent dir: {}", e.message)
+            log.error("Failed to create kubeconfig parent dir: {}", describeFailureShape(e))
+            log.debug("Failed to create kubeconfig parent dir: {}", e.message)
             return@withContext Result.failure(e)
         }
         val args = listOf(
@@ -178,7 +183,8 @@ object EksClusterDiscoverer {
             "--output", "json",
         )
         CliRunner.run(args, timeoutSeconds = 30).map { stdout ->
-            log.info("Imported cluster {} (region={}, profile={})", clusterName, region, profile)
+            log.info("Imported cluster (region={})", region)
+            log.debug("Imported cluster {} (region={}, profile={})", clusterName, region, profile)
             stdout.ifBlank { clusterName }
         }
     }
@@ -203,11 +209,13 @@ object EksClusterDiscoverer {
                 // leave a full copy of the kubeconfig — every cluster's endpoint and exec-auth
                 // config — world-readable even though the original is 0600. Tighten it to match.
                 restrictToOwner(backup)
-                log.info("Backed up kubeconfig to {}", displayPath(backup.absolutePath))
+                log.info("Backed up kubeconfig")
+                log.debug("Backed up kubeconfig to {}", displayPath(backup.absolutePath))
             }
         }
     } catch (e: Exception) {
-        log.warn("Could not back up kubeconfig before import: {}", e.message)
+        log.warn("Could not back up kubeconfig before import: {}", describeFailureShape(e))
+        log.debug("Could not back up kubeconfig before import: {}", e.message)
         null
     }
 
@@ -221,7 +229,8 @@ object EksClusterDiscoverer {
                 Files.setPosixFilePermissions(file.toPath(), PosixFilePermissions.fromString("rw-------"))
             }
         } catch (e: Exception) {
-            log.warn("Could not restrict permissions on {}: {}", file.name, e.message)
+            log.warn("Could not restrict permissions on the kubeconfig backup: {}", describeFailureShape(e))
+            log.debug("Could not restrict permissions on {}: {}", file.name, e.message)
         }
     }
 }

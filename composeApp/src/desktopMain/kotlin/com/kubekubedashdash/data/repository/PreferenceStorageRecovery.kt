@@ -93,5 +93,9 @@ private fun reportWriteFailure(owner: String, health: PreferenceStorageHealth, c
  * handler used to print for it.
  */
 private fun warn(cause: Throwable, message: String, vararg args: Any?) {
-    if (cause is IOException) log.warn(message, *args) else log.warn(message, *args, cause)
+    if (cause is IOException) {
+        log.warn(message, *args) // log-safe: kkdd's own text with the owner and the class name only
+    } else {
+        log.warn(message, *args, cause) // log-safe: trace of kkdd's own exception, not a client message
+    }
 }

@@ -35,8 +35,6 @@ private val RUNS_LOOKBACK_SEC = HistoryRange.D7.seconds
 
 private const val SPARK_OPERATOR_SCHEDULED_LABEL = "sparkoperator.k8s.io/scheduled-app-name"
 
-private val SPARK_FINAL_STATES = setOf("COMPLETED", "FAILED")
-
 /** A Job's pods, with its start and end as markers; null only when [job] has no namespace. */
 fun jobUsage(job: GenericResourceInfo): BatchUsage? {
     val namespace = job.namespace ?: return null
@@ -82,7 +80,7 @@ fun sparkUsage(app: GenericResourceInfo): BatchUsage? {
     val spark = app.spark
     val submittedAt = spark?.let { epochSecOf(it.submittedAt) }
     // The termination time of an application that is running again is from an earlier attempt.
-    val endedAt = spark?.takeIf { it.state in SPARK_FINAL_STATES }?.let { epochSecOf(it.terminatedAt) }
+    val endedAt = spark?.takeIf { it.finished }?.let { epochSecOf(it.terminatedAt) }
     return BatchUsage(
         ref = spark?.let { PromQl.ofSparkPods(namespace, listOf(it.driverPod), it.executorPods) },
         currentPrefixes = null,

@@ -6,6 +6,7 @@ import com.kubekubedashdash.util.ClusterReferenceParser
 import com.kubekubedashdash.util.GcpProject
 import com.kubekubedashdash.util.GkeCluster
 import com.kubekubedashdash.util.GkeClusterDiscoverer
+import com.kubekubedashdash.util.describeFailureShape
 import com.kubekubedashdash.util.displayPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -274,7 +275,8 @@ class GkeDiscoveryViewModel(
                 },
                 onFailure = { e ->
                     val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
-                    log.warn("Failed to resolve active gcloud account: {}", msg)
+                    log.warn("Failed to resolve active gcloud account: {}", describeFailureShape(e))
+                    log.debug("Failed to resolve active gcloud account: {}", msg)
                     _projectLoadState.value = ProjectLoadState.Failed(msg, signIn = true)
                 },
             )
@@ -291,7 +293,8 @@ class GkeDiscoveryViewModel(
             },
             onFailure = { e ->
                 val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
-                log.warn("Failed to list GCP projects: {}", msg)
+                log.warn("Failed to list GCP projects: {}", describeFailureShape(e))
+                log.debug("Failed to list GCP projects: {}", msg)
                 _projectLoadState.value = ProjectLoadState.Failed(msg)
             },
         )

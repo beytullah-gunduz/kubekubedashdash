@@ -63,7 +63,8 @@ class TerminalSession(
         val watch = watchRef.getAndSet(null)
         connector = null
         widget = null
-        val threadName = "terminal-close-${id.value}"
+        // A fixed name: app.log prints the thread of every line, and the id names the namespace, pod and container.
+        val threadName = "terminal-close"
         Thread {
             runCatching { c?.close() }
             runCatching { w?.close() }

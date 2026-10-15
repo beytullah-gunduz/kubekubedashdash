@@ -157,13 +157,20 @@ fun activeKpiId(filter: Set<String>?, statusesFor: (String) -> Set<String>, ids:
  */
 fun usagePercentLabel(prefix: String, used: Long, capacity: Long, available: Boolean): String {
     if (!available || capacity <= 0) return "$prefix —"
+    return "$prefix ${percentNumber(used, capacity)} %"
+}
+
+/**
+ * The number of [usagePercentLabel]: [used] over [capacity] clamped to 0..100, `"0"` at zero, one decimal below 0.1 of
+ * the capacity, otherwise truncated. Requires [capacity] > 0; callers guard.
+ */
+internal fun percentNumber(used: Long, capacity: Long): String {
     val clamped = (used.toFloat() / capacity.toFloat()).coerceIn(0f, 1f)
-    val number = when {
+    return when {
         clamped == 0f -> "0"
         clamped < 0.1f -> String.format(Locale.ROOT, "%.1f", clamped * 100)
         else -> "${(clamped * 100).toInt()}"
     }
-    return "$prefix $number %"
 }
 
 /**

@@ -206,6 +206,14 @@ class KpiStripTest {
     }
 
     @Test
+    fun `percentNumber clamps and rounds like the label`() {
+        assertEquals("100", percentNumber(200, 100))
+        assertEquals("0", percentNumber(0, 100))
+        assertEquals("0.5", percentNumber(5, 1000))
+        assertEquals("12", percentNumber(125, 1000))
+    }
+
+    @Test
     fun `podKpis tags cpu and mem Muted when usage is null`() {
         val kpis = podKpis(mixedPods, usage = null)
 

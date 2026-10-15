@@ -3,6 +3,7 @@ package com.kubekubedashdash.services.logtail
 import com.kubekubedashdash.services.logcapture.CaptureContainerKind
 import com.kubekubedashdash.services.logcapture.CaptureContainerSpec
 import com.kubekubedashdash.services.logcapture.CapturePodSpec
+import com.kubekubedashdash.util.describeFailureShape
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -144,7 +145,8 @@ object NamespaceTailEngine {
                             throw e
                         } catch (e: Exception) {
                             currentCoroutineContext().ensureActive()
-                            log.warn("Tail pod discovery failed namespaces={}: {}", target.namespaces, e.message)
+                            log.warn("Tail pod discovery failed: {}", describeFailureShape(e))
+                            log.debug("Tail pod discovery failed namespaces={}: {}", target.namespaces, e.message)
                             state.update { it.copy(error = e.message ?: "Failed to discover pods") }
                             delay(retryDelayMs)
                         }
@@ -428,7 +430,8 @@ object NamespaceTailEngine {
             throw e
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
-            log.warn(
+            log.warn("Previous-run read failed: {}", describeFailureShape(e))
+            log.debug(
                 "Previous-run read failed pod={} namespace={} container={}: {}",
                 request.podName,
                 request.namespace,
@@ -461,7 +464,8 @@ object NamespaceTailEngine {
             throw e
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
-            log.warn("Log stream ended pod={} namespace={} container={}: {}", podName, namespace, containerName, e.message)
+            log.warn("Log stream ended: {}", describeFailureShape(e))
+            log.debug("Log stream ended pod={} namespace={} container={}: {}", podName, namespace, containerName, e.message)
             onContainerStreamEnded(ctx, podKey, containerName)
         }
     }

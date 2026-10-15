@@ -77,15 +77,13 @@ import kotlinx.coroutines.delay
 internal const val NO_CURRENT_CPU_LIMIT_NOTE = "No current pod has a CPU limit — CFS throttling does not apply."
 
 internal const val GMP_STALENESS_NOTE =
-    "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so earlier pods' lines can run past a rollout marker, and Total counts them twice there."
+    "Each point averages several minutes, so a deleted pod's line runs on for that long: earlier pods' lines can run past a rollout marker, and Total counts them twice there."
 
 internal const val TOTAL_SERIES_NAME = "All pods"
 
 internal const val DRIVER_SERIES_NAME = "Driver"
 
 internal const val EXECUTORS_SERIES_NAME = "Executors"
-
-internal const val EXECUTORS_MEAN_SERIES_NAME = "Executors (mean)"
 
 // Every pod name is its ReplicaSet's prefix plus 5 generated characters.
 private const val POD_SUFFIX_LENGTH = 5
@@ -112,8 +110,8 @@ internal sealed interface UsageGrouping {
         fun isCurrent(podName: String): Boolean = currentPrefixes == null || currentPrefixes.any { podName.startsWith(it) }
     }
 
-    /** Two lines: the sum over the [driverPods] and the sum (the mean, for throttling) over the other pods. */
-    data class DriverExecutors(val driverPods: Set<String>) : UsageGrouping
+    /** Two lines, each a Total query: the sum over [driverPods] and the sum over [executorPods]; a null ref asks nothing for that line. */
+    data class DriverExecutors(val driverPods: PodSetRef?, val executorPods: PodSetRef?) : UsageGrouping
 }
 
 /**
@@ -133,7 +131,7 @@ internal sealed interface UsageGrouping {
  * @property runLabel the menu entry and button label of a [UsageWindow.Run] or [UsageWindow.Runs] default.
  * @property perPodDescription the "Per pod" toggle's tooltip.
  * @property noCpuLimitNote what the CPU throttling chart says when no pod can be throttled.
- * @property stalenessNote the note under the charts on Managed Prometheus.
+ * @property stalenessNote the note under the charts (either backend).
  * @property throttlingWithoutLivePods whether CPU throttling is charted while no live pod is known: the pods
  * of a finished run are gone, though their limits applied.
  * @property defaultMode the mode shown first; the section's choice starts over when [key] changes.
@@ -315,10 +313,11 @@ private fun inClusterFailureText(choice: SourceChoice.InCluster, failed: SeriesR
  * points, where a sliding window asks again for as long as it has nothing to draw.
  *
  * Staleness differs by backend. Managed Prometheus writes no staleness markers, so a deleted pod's
- * memory line lingers up to 5 minutes and its CPU line up to the rate window (5 minutes at least); lines
+ * memory and CPU lines linger for their window (5 minutes at least); lines
  * can run past the marker of the rollout that replaced them and Total counts those pods twice there. An
- * in-cluster Prometheus marks a vanished series stale, so its lines end with the pod. The section says so
- * under the charts on Managed Prometheus.
+ * in-cluster Prometheus marks a vanished series stale, which ends an instant query at once; the windowed
+ * queries here still average the samples before the marker, so their lines linger for the window there too
+ * (4 minutes at least). The section says so under the charts on either backend.
  */
 @Composable
 internal fun WorkloadUsageHistorySection(
@@ -350,16 +349,17 @@ internal fun WorkloadUsageHistorySection(
         if (target.networkExcludedNote != null) all - PodSeriesKind.NetworkRx - PodSeriesKind.NetworkTx else all
     }
     val podSet = target.podSet
+    val grouping = target.grouping
     // Keyed on what the user picks and on the workload's identity, not on the pod set, the kinds or the run
     // window: those move while a workload runs (an executor or a run appears, a Job gains its end), and the
     // charts keep the last answer while the next one is fetched.
     var loaded by remember(target.key, mode, choice, selected) { mutableStateOf<LoadedHistory?>(null) }
-    // What [loaded] answered, so a changed pod set or kinds ask again even when the window did not move.
-    var answeredFor by remember(target.key, mode, choice, selected) { mutableStateOf<Pair<PodSetRef, List<PodSeriesKind>>?>(null) }
+    // What [loaded] answered, so a changed pod set, grouping or kinds ask again even when the window did not move.
+    var answeredFor by remember(target.key, mode, choice, selected) { mutableStateOf<Triple<PodSetRef, UsageGrouping, List<PodSeriesKind>>?>(null) }
 
     if (source != null && podSet != null) {
         // [selected] is a key too: [loaded] starts over with it, so the effect has to restart onto the new state even when the window is the same.
-        LaunchedEffect(target.key, selected, window, mode, choice, podSet, kinds) {
+        LaunchedEffect(target.key, selected, window, mode, choice, podSet, grouping, kinds) {
             while (true) {
                 val now = nowEpochSec()
                 val queryWindow = queryWindowOf(window, now)
@@ -367,15 +367,15 @@ internal fun WorkloadUsageHistorySection(
                 // repeat an answer, an empty one included. A sliding window asks again while it has nothing to draw.
                 val finalWhenAnswered = window !is UsageWindow.Sliding && queryWindow.endEpochSec <= now
                 // A 24 h window moves only every 720 s: refetching an identical, fully answered one wastes quota.
-                if (answeredFor != (podSet to kinds) || needsFetch(loaded, queryWindow, finalWhenAnswered)) {
+                if (answeredFor != Triple(podSet, grouping, kinds) || needsFetch(loaded, queryWindow, finalWhenAnswered)) {
                     loaded = LoadedHistory(
                         queryWindow,
                         coroutineScope {
-                            kinds.map { k -> k to async { podSetSeriesOrFailed(source, k, podSet, modeFor(k, mode), queryWindow) } }
+                            kinds.map { k -> k to async { usageSeriesOrFailed(source, k, podSet, grouping, mode, queryWindow) } }
                                 .associate { (k, deferred) -> k to deferred.await() }
                         },
                     )
-                    answeredFor = podSet to kinds
+                    answeredFor = Triple(podSet, grouping, kinds)
                 }
                 delay(refreshMs)
             }
@@ -445,7 +445,7 @@ internal fun WorkloadUsageHistorySection(
                 mode = mode,
                 // The kinds the shown answer was fetched for: while the next one loads, a kind just added
                 // would otherwise draw an empty chart.
-                kinds = answeredFor?.second ?: kinds,
+                kinds = answeredFor?.third ?: kinds,
                 loaded = answer,
                 shortRun = shortRunNote(choice, target.defaultWindow, nowEpochSec(), answer.window.stepSec),
             )
@@ -491,6 +491,45 @@ private suspend fun podSetSeriesOrFailed(
     SeriesResult.Failed(HistoryFailure.Unavailable, "error")
 }
 
+// A Spark application's per-pod view is two Total queries, one per group, so Prometheus does the summing whatever the
+// executor count. A Total answer's single series is unnamed, so each is named for its group here; a failure wins, the driver's first.
+private suspend fun driverExecutorsSeriesOrFailed(
+    source: MetricsHistorySource,
+    kind: PodSeriesKind,
+    grouping: UsageGrouping.DriverExecutors,
+    window: QueryWindow,
+): SeriesResult = coroutineScope {
+    val driver = grouping.driverPods?.let { async { podSetSeriesOrFailed(source, kind, it, PodSetMode.Total, window) } }
+    val executors = grouping.executorPods?.let { async { podSetSeriesOrFailed(source, kind, it, PodSetMode.Total, window) } }
+    val driverAnswer = driver?.await()
+    val executorsAnswer = executors?.await()
+    (driverAnswer as? SeriesResult.Failed)
+        ?: (executorsAnswer as? SeriesResult.Failed)
+        ?: SeriesResult.Ok(
+            listOfNotNull(
+                (driverAnswer as? SeriesResult.Ok)?.series?.firstOrNull()?.let { Series(DRIVER_SERIES_NAME, it.points) },
+                (executorsAnswer as? SeriesResult.Ok)?.series?.firstOrNull()?.let { Series(EXECUTORS_SERIES_NAME, it.points) },
+            ),
+        )
+}
+
+// Network and the Total mode query the whole pod set; only the per-pod view of a Spark application splits it.
+private suspend fun usageSeriesOrFailed(
+    source: MetricsHistorySource,
+    kind: PodSeriesKind,
+    pods: PodSetRef,
+    grouping: UsageGrouping,
+    mode: PodSetMode,
+    window: QueryWindow,
+): SeriesResult {
+    val kindMode = modeFor(kind, mode)
+    return if (kindMode == PodSetMode.PerPod && grouping is UsageGrouping.DriverExecutors) {
+        driverExecutorsSeriesOrFailed(source, kind, grouping, window)
+    } else {
+        podSetSeriesOrFailed(source, kind, pods, kindMode, window)
+    }
+}
+
 private val MutedLine get() = KdTextSecondary.copy(alpha = 0.5f)
 
 private fun prefixMatcher(currentPrefix: String?): (String) -> Boolean = { name -> currentPrefix != null && name.startsWith(currentPrefix) }
@@ -519,25 +558,18 @@ internal fun perPodChartSeries(result: SeriesResult?, isCurrent: (String) -> Boo
 internal fun perPodChartSeries(result: SeriesResult?, currentPrefix: String?, colorIndex: Map<String, Int>): List<ChartSeries> = perPodChartSeries(result, prefixMatcher(currentPrefix), colorIndex)
 
 /**
- * Two lines for a Spark application: the sum over the series named in [driverPods] and the sum over the
- * others, the mean for throttling, which is a ratio. A line is left out when no series feeds it.
+ * Two lines for a Spark application, Driver then Executors: the series [driverExecutorsSeriesOrFailed] named
+ * [DRIVER_SERIES_NAME] and [EXECUTORS_SERIES_NAME], each already a sum computed by Prometheus (for
+ * throttling, the group's ratio). A line is left out when its series is absent or has no point.
  */
-internal fun driverExecutorsChartSeries(result: SeriesResult?, driverPods: Set<String>, kind: PodSeriesKind): List<ChartSeries> {
-    val (driver, executors) = (result as? SeriesResult.Ok)?.series.orEmpty().partition { it.name in driverPods }
-    val executorsName = if (kind == PodSeriesKind.Throttling) EXECUTORS_MEAN_SERIES_NAME else EXECUTORS_SERIES_NAME
-    return listOfNotNull(
-        driver.takeIf { it.isNotEmpty() }
-            ?.let { ChartSeries(DRIVER_SERIES_NAME, ClusterColor(hue = podSetHue(0)).composeColor, pointwise(it, mean = false)) },
-        executors.takeIf { it.isNotEmpty() }
-            ?.let { ChartSeries(executorsName, ClusterColor(hue = podSetHue(1)).composeColor, pointwise(it, mean = kind == PodSeriesKind.Throttling)) },
-    )
-}
+internal fun driverExecutorsChartSeries(result: SeriesResult?): List<ChartSeries> {
+    val series = (result as? SeriesResult.Ok)?.series.orEmpty()
 
-// Combines series that share their timestamps, adding what is present at each one (or averaging it).
-private fun pointwise(series: List<Series>, mean: Boolean): List<SeriesPoint> = series.flatMap { it.points }
-    .groupBy({ it.epochSec }, { it.value })
-    .toSortedMap()
-    .map { (epochSec, values) -> SeriesPoint(epochSec, if (mean) values.average() else values.sum()) }
+    fun line(name: String, colorIndex: Int): ChartSeries? = series.firstOrNull { it.name == name }
+        ?.takeIf { it.points.isNotEmpty() }
+        ?.let { ChartSeries(name, ClusterColor(hue = podSetHue(colorIndex)).composeColor, it.points) }
+    return listOfNotNull(line(DRIVER_SERIES_NAME, 0), line(EXECUTORS_SERIES_NAME, 1))
+}
 
 /**
  * The sum over every pod as one line; none when the answer has no series. Named, because the rollout
@@ -604,7 +636,7 @@ private fun WorkloadHistoryCharts(
 
     fun usage(kind: PodSeriesKind): List<ChartSeries> = when {
         mode == PodSetMode.Total -> totalChartSeries(results[kind])
-        grouping is UsageGrouping.DriverExecutors -> driverExecutorsChartSeries(results[kind], grouping.driverPods, kind)
+        grouping is UsageGrouping.DriverExecutors -> driverExecutorsChartSeries(results[kind])
         else -> perPodChartSeries(results[kind], isCurrent, colorIndex)
     }
 
@@ -691,7 +723,7 @@ private fun WorkloadHistoryCharts(
         }
         target.notes.forEach { NoteLine(it) }
         if (shortRun != null) NoteLine(shortRun)
-        if (choice is SourceChoice.Gmp) NoteLine(target.stalenessNote)
+        NoteLine(target.stalenessNote)
     }
 }
 

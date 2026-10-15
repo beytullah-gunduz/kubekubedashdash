@@ -35,7 +35,8 @@ object KubeconfigLocator {
     fun ensureParentDirectory(path: String) {
         val parent = File(path).parentFile ?: return
         if (parent.exists()) return
-        log.info("Creating kubeconfig parent directory {}", displayPath(parent.absolutePath))
+        log.info("Creating kubeconfig parent directory")
+        log.debug("Creating kubeconfig parent directory {}", displayPath(parent.absolutePath))
         if (isPosix()) {
             val perms = PosixFilePermissions.fromString("rwx------")
             Files.createDirectories(parent.toPath(), PosixFilePermissions.asFileAttribute(perms))

@@ -10,6 +10,7 @@ import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.ScopeKind
 import com.kubekubedashdash.services.metricshistory.ScopeRef
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
+import com.kubekubedashdash.services.metricshistory.SparkGrouping
 import com.kubekubedashdash.services.metricshistory.demoSeries
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -156,6 +157,7 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
 
         val window = QueryWindow(start, end, step)
         POD_SET_SELECTOR.find(query)?.let { return podSetMatrix(query, it, window) }
+        sparkOf(query, step)?.let { (kind, scope, grouping) -> return sparkMatrix(kind, scope, grouping, window) }
         scopeOf(query, step)?.let { (kind, scope) -> return scopeMatrix(kind, scope, window) }
 
         val selector = POD_SELECTOR.find(query) ?: return badData("unsupported query")
@@ -327,10 +329,12 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
     private fun jobsIn(namespace: String): List<Job> = listFrom("/apis/batch/v1/namespaces/$namespace/jobs", JobList::class.java)?.items.orEmpty()
 
     // A pod lives from its creation to the last of its containers' finish times; one with none is still running.
-    private fun podsIn(namespace: String): List<DemoPod> = listFrom("/api/v1/namespaces/$namespace/pods", PodList::class.java)?.items.orEmpty().mapNotNull { pod ->
-        val name = pod.metadata?.name ?: return@mapNotNull null
+    private fun podsIn(namespace: String): List<DemoPod> = listFrom("/api/v1/namespaces/$namespace/pods", PodList::class.java)?.items.orEmpty().mapNotNull(::demoPodOf)
+
+    private fun demoPodOf(pod: Pod): DemoPod? {
+        val name = pod.metadata?.name ?: return null
         val finishedSec = pod.status?.containerStatuses.orEmpty().mapNotNull { creationSec(it.state?.terminated?.finishedAt) }.maxOrNull()
-        DemoPod(name, ResourceMappers.containerResources(pod), creationSec(pod.metadata?.creationTimestamp), toSec = finishedSec)
+        return DemoPod(name, ResourceMappers.containerResources(pod), creationSec(pod.metadata?.creationTimestamp), toSec = finishedSec)
     }
 
     private fun <T> listFrom(path: String, type: Class<T>): T? {
@@ -366,6 +370,50 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
         val scope = ScopeRef(names.toSet())
         val kind = ScopeKind.entries.firstOrNull { PromQl.inClusterScopeQuery(it, scope, step) == query } ?: return null
         return kind to scope
+    }
+
+    // ── Spark ───────────────────────────────────────────────────────────────
+
+    // The kind, namespaces and grouping a Spark query names, in the form PromQl.inClusterSparkQuery writes.
+    private fun sparkOf(query: String, step: Long): Triple<ScopeKind, ScopeRef, SparkGrouping>? {
+        val selector = SPARK_SELECTOR.find(query) ?: return null
+        val one = selector.groups[1]?.value
+        val many = selector.groups[2]?.value
+        val names = when {
+            one != null -> listOf(one)
+            many != null -> many.split('|')
+            else -> emptyList()
+        }
+        if (!names.all(KubernetesNames::isDnsLabel)) return null
+        val scope = ScopeRef(names.toSet())
+        return ScopeKind.entries.flatMap { k -> SparkGrouping.entries.map { g -> Triple(k, scope, g) } }
+            .firstOrNull { (k, s, g) -> PromQl.inClusterSparkQuery(k, s, g, step) == query }
+    }
+
+    // The scope's pods whose container is a Spark driver or executor, each drawn like any pod; that container's
+    // name is also the pod's role.
+    private fun sparkMatrix(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): MockResponse {
+        val listed = if (scope.namespaces.isEmpty()) {
+            listFrom("/api/v1/pods", PodList::class.java)?.items.orEmpty().mapNotNull { pod -> pod.metadata?.namespace?.let { it to pod } }
+        } else {
+            scope.namespaces.sorted().flatMap { ns -> listFrom("/api/v1/namespaces/$ns/pods", PodList::class.java)?.items.orEmpty().map { ns to it } }
+        }
+        val podKind = if (kind == ScopeKind.CpuCores) PodSeriesKind.Cpu else PodSeriesKind.Memory
+        val spark = listed.mapNotNull { (namespace, pod) ->
+            val role = pod.spec?.containers.orEmpty().firstNotNullOfOrNull { c -> c.name.takeIf { it == PromQl.SPARK_DRIVER_CONTAINER || it == PromQl.SPARK_EXECUTOR_CONTAINER } }
+                ?: return@mapNotNull null
+            val demo = demoPodOf(pod) ?: return@mapNotNull null
+            val points = clip(podPoints(podKind, namespace, demo, window), demo)
+            if (points.isEmpty()) null else Triple(namespace, demo.name, role) to points
+        }
+        val series = when (grouping) {
+            SparkGrouping.ByPod -> spark.sortedBy { (id, _) -> "${id.first}/${id.second}" }
+                .map { (id, points) -> mapOf("namespace" to id.first, "pod" to id.second) to points }
+
+            SparkGrouping.ByRole -> spark.groupBy({ it.first.third }, { it.second }).toSortedMap()
+                .map { (role, points) -> mapOf("container" to role) to pointwise(podKind, points) }
+        }
+        return labelledMatrix(series)
     }
 
     // One line for the whole scope that ends on the scope's usage right now, the sum the Overview gauges
@@ -432,6 +480,23 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
                     add(
                         buildJsonObject {
                             putJsonObject("metric") { if (pod != null) put("pod", pod) }
+                            put("values", samples(points))
+                        },
+                    )
+                }
+            }
+        },
+    )
+
+    // As matrix, with every label written to the series' metric.
+    private fun labelledMatrix(series: List<Pair<Map<String, String>, List<SeriesPoint>>>) = success(
+        buildJsonObject {
+            put("resultType", "matrix")
+            putJsonArray("result") {
+                for ((labels, points) in series) {
+                    add(
+                        buildJsonObject {
+                            putJsonObject("metric") { for ((name, value) in labels) put(name, value) }
                             put("values", samples(points))
                         },
                     )
@@ -576,6 +641,9 @@ internal class DemoPrometheusDispatcher(private val delegate: Dispatcher) :
 
         // {container!="",...}, {namespace="x",container!="",...} or {namespace=~"x|y",container!="",...}
         private val SCOPE_SELECTOR = Regex("""\{(?:namespace="([^"]*)",|namespace=~"([^"]*)",)?container!=""""")
+
+        // {container=~"spark-kubernetes-(driver|executor)",...}, optionally after a namespace matcher
+        private val SPARK_SELECTOR = Regex("""\{(?:namespace="([^"]*)",|namespace=~"([^"]*)",)?container=~"spark-kubernetes-\(driver\|executor\)"""")
 
         private const val POD_SUFFIX_LENGTH = 5
         private const val POD_SUFFIX_PATTERN = "[a-z0-9]{5}"

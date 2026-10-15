@@ -98,9 +98,10 @@ class KubeconfigReader(
         try {
             KubeConfigUtils.parseConfig(file)
         } catch (e: Exception) {
-            // The file name and the exception class only: the directory is
-            // usually the user's home, and fabric8's messages can repeat the path.
-            log.warn("Skipping unreadable kubeconfig {} ({})", file.name, e::class.simpleName)
+            // The exception class only: a file name can carry an organisation or
+            // cluster name, and fabric8's messages can repeat the path.
+            log.warn("Skipping an unreadable kubeconfig ({})", e::class.simpleName)
+            log.debug("Skipping unreadable kubeconfig {} ({})", file.name, e::class.simpleName)
             null
         }
     }

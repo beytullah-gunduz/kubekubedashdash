@@ -76,8 +76,8 @@ import org.jetbrains.compose.resources.painterResource
 
 internal const val USAGE_HISTORY_TITLE = "Usage over time"
 
-/** The line under the charts; the CPU sentence is why the card and the live gauge above it can disagree. */
-internal fun usageHistoryNote(sourceLabel: String): String = "From $sourceLabel. CPU is a trailing average over several minutes, so it lags the live gauge and can differ from it."
+/** The line under the charts; the trailing averages are why the card and the live gauges above it can disagree. */
+internal fun usageHistoryNote(sourceLabel: String): String = "From $sourceLabel. CPU and memory are trailing averages over several minutes, so they lag the live gauges and can differ from them."
 
 /** The namespaces the history sums over; every namespace for [NamespaceScope.All]. */
 internal fun scopeRefOf(scope: NamespaceScope): ScopeRef = ScopeRef(if (scope is NamespaceScope.Only) scope.namespaces else emptySet())

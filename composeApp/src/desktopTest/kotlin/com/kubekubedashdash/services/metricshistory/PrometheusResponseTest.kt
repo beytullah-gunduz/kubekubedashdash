@@ -56,6 +56,35 @@ class PrometheusResponseTest {
     }
 
     @Test
+    fun `several name labels are joined with a slash and a missing one is skipped`() {
+        val body = matrix(
+            """{"metric":{"namespace":"team-b","pod":"job-driver"},"values":[[1000,"1"]]}""",
+            """{"metric":{"namespace":"team-a","pod":"job-exec-1"},"values":[[1000,"2"]]}""",
+            """{"metric":{"pod":"orphan"},"values":[[1000,"3"]]}""",
+        )
+
+        val parsed = PrometheusResponse.parseMatrix(body, nameLabels = listOf("namespace", "pod"))
+
+        assertEquals(
+            Parsed.Matrix(
+                listOf(
+                    Series("orphan", listOf(SeriesPoint(1000, 3.0))),
+                    Series("team-a/job-exec-1", listOf(SeriesPoint(1000, 2.0))),
+                    Series("team-b/job-driver", listOf(SeriesPoint(1000, 1.0))),
+                ),
+            ),
+            parsed,
+        )
+    }
+
+    @Test
+    fun `no name labels name every series empty`() {
+        val body = matrix("""{"metric":{"pod":"a"},"values":[[1000,"1"]]}""")
+
+        assertEquals(Parsed.Matrix(listOf(Series("", listOf(SeriesPoint(1000, 1.0))))), PrometheusResponse.parseMatrix(body, nameLabels = emptyList()))
+    }
+
+    @Test
     fun `a series left with no finite sample is dropped`() {
         val body = matrix(
             """{"metric":{"container":"gone"},"values":[[1000,"NaN"],[1030,"+Inf"]]}""",

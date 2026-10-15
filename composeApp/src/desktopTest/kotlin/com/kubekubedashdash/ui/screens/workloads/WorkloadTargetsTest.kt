@@ -315,7 +315,7 @@ class WorkloadTargetsTest {
 
         assertEquals("uid-spark-etl-nightly", target.key)
         assertEquals(PromQl.ofExactPods(NAMESPACE, listOf(driver) + executors), target.podSet)
-        assertEquals(UsageGrouping.DriverExecutors(setOf(driver)), target.grouping)
+        assertEquals(UsageGrouping.DriverExecutors(PromQl.ofExactPods(NAMESPACE, listOf(driver)), PromQl.ofSparkExecutors(NAMESPACE, executors)), target.grouping)
         assertEquals(UsageWindow.Run(T0, T0 + 1_200), target.defaultWindow)
         assertEquals(listOf(ChartMarker(T0, "submitted"), ChartMarker(T0 + 1_200, "ended")), target.markers)
         assertEquals("Run", target.runLabel)
@@ -343,7 +343,10 @@ class WorkloadTargetsTest {
     fun `the driver line follows the driver pod the status names`() {
         val target = assertNotNull(sparkTarget(sparkApp(driverPod = "spark-etl-nightly-custom-driver"), emptyList()))
 
-        assertEquals(UsageGrouping.DriverExecutors(setOf("spark-etl-nightly-custom-driver")), target.grouping)
+        assertEquals(
+            UsageGrouping.DriverExecutors(PromQl.ofExactPods(NAMESPACE, listOf("spark-etl-nightly-custom-driver")), PromQl.ofSparkExecutors(NAMESPACE, executors)),
+            target.grouping,
+        )
     }
 
     @Test
@@ -352,7 +355,7 @@ class WorkloadTargetsTest {
 
         assertNull(target.podSet)
         assertEquals("This application's status names no pods yet.", target.missingNote)
-        assertEquals(UsageGrouping.DriverExecutors(emptySet()), target.grouping)
+        assertEquals(UsageGrouping.DriverExecutors(null, null), target.grouping)
         assertEquals(UsageWindow.Run(T0 - 60, null), target.defaultWindow)
         assertEquals(emptyList(), target.markers)
         assertEquals(emptyList(), target.currentPods)
@@ -439,7 +442,13 @@ class WorkloadTargetsTest {
             PromQl.ofExactPods(NAMESPACE, listOf(runDriver("1760252400"), runExecutor("1760252400"), runDriver("1760256000"), runExecutor("1760256000"))),
             target.podSet,
         )
-        assertEquals(UsageGrouping.DriverExecutors(setOf(runDriver("1760252400"), runDriver("1760256000"))), target.grouping)
+        assertEquals(
+            UsageGrouping.DriverExecutors(
+                PromQl.ofExactPods(NAMESPACE, listOf(runDriver("1760252400"), runDriver("1760256000"))),
+                PromQl.ofSparkExecutors(NAMESPACE, listOf(runExecutor("1760252400"), runExecutor("1760256000"))),
+            ),
+            target.grouping,
+        )
         assertEquals(UsageWindow.Runs(T0), target.defaultWindow)
         assertEquals(listOf(ChartMarker(T0, "08:00"), ChartMarker(T0 + 3_600, "09:00")), target.markers)
         assertEquals("Runs", target.runLabel)
@@ -470,7 +479,14 @@ class WorkloadTargetsTest {
         val target = assertNotNull(scheduledSparkTarget(scheduled, runs, emptyList(), ZoneOffset.UTC))
 
         assertEquals(listOf("08:00", "09:00", "10:00"), target.markers.map { it.label })
-        assertEquals(UsageGrouping.DriverExecutors(setOf("1760252400", "1760256000", "1760259600").map(::runDriver).toSet()), target.grouping)
+        val counted = listOf("1760252400", "1760256000", "1760259600")
+        assertEquals(
+            UsageGrouping.DriverExecutors(
+                PromQl.ofExactPods(NAMESPACE, counted.map(::runDriver)),
+                PromQl.ofSparkExecutors(NAMESPACE, counted.map(::runExecutor)),
+            ),
+            target.grouping,
+        )
     }
 
     @Test
@@ -479,7 +495,13 @@ class WorkloadTargetsTest {
 
         val target = assertNotNull(scheduledSparkTarget(scheduled, listOf(firstRun, withoutSpark), emptyList(), ZoneOffset.UTC))
 
-        assertEquals(UsageGrouping.DriverExecutors(setOf(runDriver("1760252400"))), target.grouping)
+        assertEquals(
+            UsageGrouping.DriverExecutors(
+                PromQl.ofExactPods(NAMESPACE, listOf(runDriver("1760252400"))),
+                PromQl.ofSparkExecutors(NAMESPACE, listOf(runExecutor("1760252400"))),
+            ),
+            target.grouping,
+        )
         assertEquals(listOf("08:00", "09:00"), target.markers.map { it.label })
     }
 
@@ -505,7 +527,7 @@ class WorkloadTargetsTest {
 
         assertNull(target.podSet)
         assertEquals("No run of this application is loaded.", target.missingNote)
-        assertEquals(UsageGrouping.DriverExecutors(emptySet()), target.grouping)
+        assertEquals(UsageGrouping.DriverExecutors(null, null), target.grouping)
         assertEquals(UsageWindow.Sliding(HistoryRange.H24), target.defaultWindow)
         assertEquals(emptyList(), target.markers)
         assertEquals(emptyList(), target.currentPods)
@@ -544,7 +566,7 @@ class WorkloadTargetsTest {
             assertTrue(it.throttlingWithoutLivePods)
         }
         assertEquals(
-            "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so a pod's line can run past the end of its run.",
+            "Each point averages several minutes, so a pod's line can run past the end of its run. A pod sampled only once has memory but no CPU.",
             BATCH_GMP_STALENESS_NOTE,
         )
     }
@@ -600,7 +622,7 @@ class WorkloadTargetsTest {
         val target = namespaceTarget(teamA, QuotaCeilings())
 
         assertEquals(
-            "Managed Prometheus keeps reporting a deleted pod for a few minutes (memory up to 5, CPU for its rate window, at least 5), so Total can count a replaced pod twice for that long.",
+            "Each point averages several minutes, so Total can count a replaced pod twice for that long. A pod sampled only once has memory but no CPU.",
             target.stalenessNote,
         )
         assertNotEquals(GMP_STALENESS_NOTE, target.stalenessNote)

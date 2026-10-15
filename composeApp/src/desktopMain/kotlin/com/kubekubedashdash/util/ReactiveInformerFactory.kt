@@ -173,7 +173,8 @@ internal class ReactiveInformerFactory(
                                     } catch (e: CancellationException) {
                                         throw e
                                     } catch (e: Exception) {
-                                        log.warn("Informer failed to map store contents: {}", e.message)
+                                        log.warn("Informer failed to map store contents: {}", describeFailureShape(e))
+                                        log.debug("Informer failed to map store contents: {}", e.message)
                                         reportFailure(e)
                                     }
                                 }
@@ -191,7 +192,10 @@ internal class ReactiveInformerFactory(
                         // for a plain one would miss the catch below and be
                         // reported as a connection failure.
                         runCatching { informer.close() }
-                            .onFailure { log.warn("Failed to close cluster-scoped informer: {}", it.message) }
+                            .onFailure {
+                                log.warn("Failed to close cluster-scoped informer: {}", describeFailureShape(it))
+                                log.debug("Failed to close cluster-scoped informer: {}", it.message)
+                            }
                     }
                 } catch (e: CancellationException) {
                     // flatMapLatest cancels the previous inner flow on every
@@ -202,7 +206,8 @@ internal class ReactiveInformerFactory(
                     // more cancellations → infinite loop.
                     throw e
                 } catch (e: Exception) {
-                    log.error("Cluster-scoped informer failed: {}", e.message)
+                    log.error("Cluster-scoped informer failed: {}", describeFailureShape(e))
+                    log.debug("Cluster-scoped informer failed: {}", e.message)
                     reportFailure(e)
                     send(ResourceState.Error(e.message ?: "Unknown error"))
                 }
@@ -289,7 +294,8 @@ internal class ReactiveInformerFactory(
                                     } catch (e: CancellationException) {
                                         throw e
                                     } catch (e: Exception) {
-                                        log.warn("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
+                                        log.warn("Namespaced informer failed to map store contents: {}", describeFailureShape(e))
+                                        log.debug("Namespaced informer failed to map store contents for namespace={}: {}", nsLabel, e.message)
                                         reportFailure(e)
                                     }
                                 }
@@ -320,12 +326,16 @@ internal class ReactiveInformerFactory(
                         // Same guard as the cluster-scoped builder: never let a
                         // close() failure replace the propagating exception.
                         runCatching { informer.close() }
-                            .onFailure { log.warn("Failed to close namespaced informer for namespace={}: {}", nsLabel, it.message) }
+                            .onFailure {
+                                log.warn("Failed to close namespaced informer: {}", describeFailureShape(it))
+                                log.debug("Failed to close namespaced informer for namespace={}: {}", nsLabel, it.message)
+                            }
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    log.error("Namespaced informer failed for namespace={}: {}", ns ?: "<all>", e.message)
+                    log.error("Namespaced informer failed: {}", describeFailureShape(e))
+                    log.debug("Namespaced informer failed for namespace={}: {}", ns ?: "<all>", e.message)
                     reportFailure(e)
                     send(ResourceState.Error(e.message ?: "Unknown error"))
                 }
@@ -374,7 +384,8 @@ internal class ReactiveInformerFactory(
                             loaded = true
                         }
                     } catch (e: Exception) {
-                        log.warn("Polling fetch failed for scope={}: {}", s, e.message)
+                        log.warn("Polling fetch failed: {}", describeFailureShape(e))
+                        log.debug("Polling fetch failed for scope={}: {}", s, e.message)
                         reportFailure(e)
                         if (!loaded) emit(ResourceState.Error(e.message ?: "Unknown error"))
                     }
