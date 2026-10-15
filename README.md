@@ -399,8 +399,8 @@ rootless Docker or Docker-in-Docker.
 | Component | Library / Version |
 |-----------|-------------------|
 | Language | Kotlin 2.4.20 |
-| UI framework | Compose Multiplatform 1.12.1 |
-| Material 3 | compose-material3 1.12.0-alpha03, material3-adaptive 1.3.0-rc01 (ListDetailPaneScaffold) |
+| UI framework | Compose Multiplatform 1.12.2 |
+| Material 3 | compose-material3 1.12.0-alpha03, material3-adaptive 1.3.0 (ListDetailPaneScaffold) |
 | ViewModel / lifecycle | androidx.lifecycle 2.11.0 (multiplatform) |
 | Persistence | androidx.datastore-preferences 1.2.1 |
 | Kubernetes client | fabric8 kubernetes-client + kubernetes-server-mock 7.7.0 |
