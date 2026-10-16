@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,9 +59,11 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.SparkGrouping
+import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
-import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.ChartSeries
+import com.kubekubedashdash.ui.components.HistoryLoadingLine
+import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
@@ -68,7 +71,6 @@ import com.kubekubedashdash.ui.components.podSetHue
 import com.kubekubedashdash.ui.screens.cluster.scopeRefOf
 import com.kubekubedashdash.ui.screens.cluster.usageSectionsSideBySide
 import com.kubekubedashdash.ui.screens.pods.HISTORY_REFRESH_MS
-import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.ui.screens.pods.shortFailure
@@ -200,10 +202,13 @@ internal fun SparkUsageHistoryCard(
     var view by remember { mutableStateOf(SparkHistoryView.Applications) }
     val scopeRef = remember(namespaceScope) { scopeRefOf(namespaceScope) }
     // Outlives a collapse: expanding again finds the last answer instead of a loading line.
-    var loaded by remember(namespaceScope, range, choice, view) { mutableStateOf<LoadedSpark?>(null) }
+    // Retry bumps [retry], a key of both this state and the fetch below: the key change cancels the
+    // fetch in flight and starts a fresh one, with no imperative reset.
+    var retry by remember { mutableIntStateOf(0) }
+    var loaded by remember(namespaceScope, range, choice, view, retry) { mutableStateOf<LoadedSpark?>(null) }
 
     if (expanded && source != null) {
-        LaunchedEffect(namespaceScope, range, choice, view) {
+        LaunchedEffect(namespaceScope, range, choice, view, retry) {
             while (true) {
                 val window = range.window(nowEpochSec())
                 if (needsSparkFetch(loaded, window, view)) {
@@ -295,17 +300,25 @@ internal fun SparkUsageHistoryCard(
                 ) {
                     val answer = loaded
                     val failed = answer?.let(::sparkHeadlineFailure)
+                    // The list re-emits often; recomputing the lines here never refetches.
+                    val charts = remember(answer, apps) { answer?.let { sparkChartSeries(it, apps) } ?: SparkCharts(emptyList(), emptyList()) }
+                    // A structural failure collapses to its message. Anything else keeps the charts, a skeleton
+                    // while loading and a failure note in place after a transient one, so the card never resizes.
                     when {
-                        answer == null -> LoadingLine()
-
-                        failed != null -> NoteLine(deploymentFailureMessage(choice, failed))
+                        failed != null && !failed.isTransient() -> NoteLine(deploymentFailureMessage(choice, failed))
 
                         else -> {
-                            // The list re-emits often; recomputing the lines here never refetches.
-                            val charts = remember(answer, apps) { sparkChartSeries(answer, apps) }
-                            SparkHistoryCharts(answer, charts)
-                            NoteLine(SPARK_HISTORY_NOTE)
-                            NoteLine("From ${source.label}.")
+                            SparkHistoryCharts(answer, charts, range.window(nowEpochSec()), reserveLegend = view != SparkHistoryView.Total)
+                            when {
+                                answer == null -> HistoryLoadingLine()
+
+                                failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, failed)) { retry++ }
+
+                                else -> {
+                                    NoteLine(SPARK_HISTORY_NOTE)
+                                    NoteLine("From ${source.label}.")
+                                }
+                            }
                         }
                     }
                 }
@@ -366,34 +379,28 @@ private suspend fun sparkSeriesOrFailed(source: MetricsHistorySource, kind: Scop
 }
 
 @Composable
-private fun LoadingLine() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        BusyIndicator(modifier = Modifier.size(12.dp), color = KdTextSecondary, strokeWidth = 1.5.dp)
-        Text(LOADING_HISTORY_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-    }
-}
-
-@Composable
 private fun NoteLine(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
 }
 
 @Composable
-private fun SparkHistoryCharts(loaded: LoadedSpark, charts: SparkCharts) {
+private fun SparkHistoryCharts(loaded: LoadedSpark?, charts: SparkCharts, fallbackWindow: QueryWindow, reserveLegend: Boolean) {
     @Composable
     fun Chart(title: String, series: List<ChartSeries>, result: SeriesResult?, formatValue: (Double) -> String, modifier: Modifier) {
         TimeSeriesChart(
             title = title,
             series = series,
-            window = loaded.window,
+            window = loaded?.window ?: fallbackWindow,
             formatValue = formatValue,
             modifier = modifier,
             note = (result as? SeriesResult.Failed)?.let(::shortFailure),
+            loading = loaded == null,
+            reserveLegend = reserveLegend,
         )
     }
 
-    val cpu = loaded.results[ScopeKind.CpuCores]
-    val memory = loaded.results[ScopeKind.MemoryBytes]
+    val cpu = loaded?.results?.get(ScopeKind.CpuCores)
+    val memory = loaded?.results?.get(ScopeKind.MemoryBytes)
     // The same split as the Overview card: side by side from the usage sections' minimum width.
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         if (usageSectionsSideBySide(maxWidth)) {

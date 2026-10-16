@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,11 +45,13 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.ceilDiv
+import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
-import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.ChartMarker
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
+import com.kubekubedashdash.ui.components.HistoryLoadingLine
+import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.LogToolbarToggle
@@ -57,7 +60,6 @@ import com.kubekubedashdash.ui.components.TimeSeriesChart
 import com.kubekubedashdash.ui.components.podSetHue
 import com.kubekubedashdash.ui.screens.pods.HISTORY_REFRESH_MS
 import com.kubekubedashdash.ui.screens.pods.HOST_NETWORK_NOTE
-import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.LoadedHistory
 import com.kubekubedashdash.ui.screens.pods.NO_THROTTLING_DATA_NOTE
 import com.kubekubedashdash.ui.screens.pods.SectionLabel
@@ -353,13 +355,16 @@ internal fun WorkloadUsageHistorySection(
     // Keyed on what the user picks and on the workload's identity, not on the pod set, the kinds or the run
     // window: those move while a workload runs (an executor or a run appears, a Job gains its end), and the
     // charts keep the last answer while the next one is fetched.
-    var loaded by remember(target.key, mode, choice, selected) { mutableStateOf<LoadedHistory?>(null) }
+    // Retry bumps [retry], a key of both states and of the fetch below: the key change cancels the fetch
+    // in flight and starts a fresh one, with no imperative reset.
+    var retry by remember { mutableIntStateOf(0) }
+    var loaded by remember(target.key, mode, choice, selected, retry) { mutableStateOf<LoadedHistory?>(null) }
     // What [loaded] answered, so a changed pod set, grouping or kinds ask again even when the window did not move.
-    var answeredFor by remember(target.key, mode, choice, selected) { mutableStateOf<Triple<PodSetRef, UsageGrouping, List<PodSeriesKind>>?>(null) }
+    var answeredFor by remember(target.key, mode, choice, selected, retry) { mutableStateOf<Triple<PodSetRef, UsageGrouping, List<PodSeriesKind>>?>(null) }
 
     if (source != null && podSet != null) {
         // [selected] is a key too: [loaded] starts over with it, so the effect has to restart onto the new state even when the window is the same.
-        LaunchedEffect(target.key, selected, window, mode, choice, podSet, grouping, kinds) {
+        LaunchedEffect(target.key, selected, window, mode, choice, podSet, grouping, kinds, retry) {
             while (true) {
                 val now = nowEpochSec()
                 val queryWindow = queryWindowOf(window, now)
@@ -430,14 +435,13 @@ internal fun WorkloadUsageHistorySection(
         }
         val answer = loaded
         val failed = answer?.let(::headlineFailure)
+        // A missing pod set and a structural failure collapse to their message. Anything else keeps the charts: a
+        // skeleton while detecting or loading (the same call site as the loaded charts, so a Retro reveal can play),
+        // and each chart's own failure note in place after a transient failure, so the section never resizes.
         when {
-            choice is SourceChoice.Detecting -> LoadingLine()
+            choice !is SourceChoice.Detecting && podSet == null -> NoteLine(target.missingNote)
 
-            podSet == null -> NoteLine(target.missingNote)
-
-            answer == null -> LoadingLine()
-
-            failed != null -> NoteLine(deploymentFailureMessage(choice, failed))
+            failed != null && !failed.isTransient() -> NoteLine(deploymentFailureMessage(choice, failed))
 
             else -> WorkloadHistoryCharts(
                 choice = choice,
@@ -447,7 +451,10 @@ internal fun WorkloadUsageHistorySection(
                 // would otherwise draw an empty chart.
                 kinds = answeredFor?.third ?: kinds,
                 loaded = answer,
-                shortRun = shortRunNote(choice, target.defaultWindow, nowEpochSec(), answer.window.stepSec),
+                fallbackWindow = queryWindowOf(window, nowEpochSec()),
+                failed = failed,
+                shortRun = answer?.let { shortRunNote(choice, target.defaultWindow, nowEpochSec(), it.window.stepSec) },
+                onRetry = { retry++ },
             )
         }
     }
@@ -460,14 +467,6 @@ internal fun WorkloadUsageHistorySection(
 internal fun headlineFailure(loaded: LoadedHistory): SeriesResult.Failed? {
     if (loaded.hasCpuOrMemoryPoints) return null
     return loaded.results[PodSeriesKind.Cpu] as? SeriesResult.Failed ?: loaded.results[PodSeriesKind.Memory] as? SeriesResult.Failed
-}
-
-@Composable
-private fun LoadingLine() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        BusyIndicator(modifier = Modifier.size(12.dp), color = KdTextSecondary, strokeWidth = 1.5.dp)
-        Text(LOADING_HISTORY_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-    }
 }
 
 @Composable
@@ -621,10 +620,18 @@ private fun WorkloadHistoryCharts(
     target: UsageTarget,
     mode: PodSetMode,
     kinds: List<PodSeriesKind>,
-    loaded: LoadedHistory,
+    // Null while the first answer is awaited: the charts are skeletons of the right size.
+    loaded: LoadedHistory?,
+    // The window the skeletons' axes show until [loaded] brings its own.
+    fallbackWindow: QueryWindow,
+    // A transient headline failure: the grid stays, and a Retry line replaces the trailing notes.
+    failed: SeriesResult.Failed?,
     shortRun: String?,
+    onRetry: () -> Unit,
 ) {
-    val results = loaded.results
+    val results = loaded?.results.orEmpty()
+    val window = loaded?.window ?: fallbackWindow
+    val loading = loaded == null
     val grouping = target.grouping
     val perPod = grouping as? UsageGrouping.PerPod
     val isCurrent: (String) -> Boolean = { name -> perPod?.isCurrent(name) ?: true }
@@ -678,52 +685,68 @@ private fun WorkloadHistoryCharts(
             TimeSeriesChart(
                 title = "CPU",
                 series = usage(PodSeriesKind.Cpu),
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatCoresValue,
                 modifier = Modifier.weight(1f),
                 references = references(PodSeriesKind.Cpu),
                 note = noteOf(results[PodSeriesKind.Cpu]),
                 markers = markers,
+                loading = loading,
+                reserveLegend = markers.isNotEmpty() || references(PodSeriesKind.Cpu).isNotEmpty() || mode == PodSetMode.PerPod,
             )
             TimeSeriesChart(
                 title = "Memory",
                 series = usage(PodSeriesKind.Memory),
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatBytesValue,
                 modifier = Modifier.weight(1f),
                 references = references(PodSeriesKind.Memory),
                 note = noteOf(results[PodSeriesKind.Memory]),
                 markers = markers,
+                loading = loading,
+                reserveLegend = markers.isNotEmpty() || references(PodSeriesKind.Memory).isNotEmpty() || mode == PodSetMode.PerPod,
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TimeSeriesChart(
                 title = "Network",
                 series = network,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatRateValue,
                 modifier = Modifier.weight(1f),
                 note = networkNote,
                 markers = markers,
+                loading = loading,
+                reserveLegend = true,
             )
             TimeSeriesChart(
                 title = "CPU throttling",
                 series = if (throttlingNote == null) usage(PodSeriesKind.Throttling) else emptyList(),
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatFractionValue,
                 modifier = Modifier.weight(1f),
                 note = throttlingNote,
                 markers = markers,
+                loading = loading,
+                reserveLegend = markers.isNotEmpty() || mode == PodSetMode.PerPod,
             )
         }
-        val notDrawn = if (perPod != null && mode == PodSetMode.PerPod) notDrawnCurrentPods(results, isCurrent) else 0
-        if (notDrawn > 0) {
-            val pods = if (notDrawn == 1) "1 more pod is" else "$notDrawn more pods are"
-            NoteLine("$pods not drawn — switch to Total.")
+        when {
+            loading -> HistoryLoadingLine()
+
+            failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, failed), onRetry)
+
+            else -> {
+                val notDrawn = if (perPod != null && mode == PodSetMode.PerPod) notDrawnCurrentPods(results, isCurrent) else 0
+                if (notDrawn > 0) {
+                    val pods = if (notDrawn == 1) "1 more pod is" else "$notDrawn more pods are"
+                    NoteLine("$pods not drawn — switch to Total.")
+                }
+                target.notes.forEach { NoteLine(it) }
+                if (shortRun != null) NoteLine(shortRun)
+                NoteLine(target.stalenessNote)
+            }
         }
-        target.notes.forEach { NoteLine(it) }
-        if (shortRun != null) NoteLine(shortRun)
-        NoteLine(target.stalenessNote)
     }
 }
 

@@ -39,6 +39,7 @@ import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
+import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
@@ -56,7 +57,6 @@ internal const val HOST_NETWORK_NOTE = "Host network — these counters are the 
 internal const val POD_HISTORY_AVERAGE_NOTE = "CPU and memory are averages over several minutes, so a short peak, such as one just before an OOM kill, does not show."
 internal const val NO_CPU_LIMIT_NOTE = "No CPU limit set — CFS throttling does not apply."
 internal const val NO_THROTTLING_DATA_NOTE = "No throttling data in this range."
-internal const val LOADING_HISTORY_NOTE = "Loading history…"
 internal const val NO_HISTORY_NOTE = "No history for this pod in this range. Retrying every 30 s; showing live metrics-server data."
 
 /** What the section asks the source for: network is the node's on a host-network pod, throttling needs a CPU limit. */

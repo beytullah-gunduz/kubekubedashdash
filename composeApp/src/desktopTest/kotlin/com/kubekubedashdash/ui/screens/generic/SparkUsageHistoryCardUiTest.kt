@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -41,6 +42,8 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SparkGrouping
 import com.kubekubedashdash.services.metricshistory.dummyClient
+import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
+import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.ui.screens.workloads.DRIVER_SERIES_NAME
 import com.kubekubedashdash.ui.screens.workloads.EXECUTORS_SERIES_NAME
@@ -51,6 +54,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -186,6 +190,25 @@ class SparkUsageHistoryCardUiTest {
         assertEquals(setOf(ScopeKind.CpuCores, ScopeKind.MemoryBytes), source.calls.map { it.kind }.toSet())
         assertEquals(setOf(SparkGrouping.ByPod), source.calls.map { it.grouping }.toSet())
         assertEquals(setOf(ScopeRef(setOf("team-a"))), source.calls.map { it.scope }.toSet())
+    }
+
+    @Test
+    fun `while the first fetch is out two skeleton charts show under a loading line`() = runComposeUiTest {
+        val hanging = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = awaitCancellation()
+
+            override suspend fun sparkSeries(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): SeriesResult = awaitCancellation()
+        }
+        showCard(serviceOver(GmpSetting, hanging))
+        waitForIdle()
+
+        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        listOf("CPU", "Memory").forEach { onNodeWithText(it).assertExists() }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(2)
+        onNodeWithText(SPARK_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("Applications ▾").assertExists()
     }
 
     @Test

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -55,9 +56,10 @@ import com.kubekubedashdash.services.metricshistory.deploymentPodSet
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.services.metricshistory.jsonResponse
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
+import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.components.MAX_CHART_SERIES
 import com.kubekubedashdash.ui.components.podSetHue
-import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.LoadedHistory
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.ui.screens.workloads.GMP_STALENESS_NOTE
@@ -628,11 +630,13 @@ class DeploymentUsageHistorySectionUiTest {
         onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
         onNodeWithText("6h ▾").assertExists()
         onNodeWithText("Per pod").assertExists()
-        onNodeWithText("CPU throttling").assertDoesNotExist()
+        // The charts are skeletons of their final size, so the titles show.
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
     }
 
     @Test
-    fun `when CPU and memory both fail the reason replaces the charts and never mentions live data`() = runComposeUiTest {
+    fun `when CPU and memory both fail transiently the charts stay with the reason under them and never mention live data`() = runComposeUiTest {
         val source = FakeSource(
             failure = SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503"),
             failKinds = setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory),
@@ -641,7 +645,9 @@ class DeploymentUsageHistorySectionUiTest {
 
         onNodeWithText("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s.").assertExists()
         onAllNodesWithText("metrics-server", substring = true).assertCountEquals(0)
-        onNodeWithText("CPU throttling").assertDoesNotExist()
+        // A transient failure keeps the frames and offers a Retry.
+        onNodeWithText("CPU throttling").assertExists()
+        onNodeWithText("Retry").assertExists()
         // The header stays, so a range or a mode that keeps failing can still be changed.
         onNodeWithText("Fake source").assertExists()
         onNodeWithText("6h ▾").assertExists()
@@ -700,7 +706,8 @@ class DeploymentUsageHistorySectionUiTest {
             """{"metric":{"pod":"${podName(CURRENT, "x7k2p")}"},"values":[[${NOW - 60},"1"],[$NOW,"2"]]}]}}"""
         stub.proxy = { jsonResponse(200, body) }
         show(serviceOver(settingsOf(InClusterSetting), FakeSource(), clientFor = { stubClient }))
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("CPU throttling").fetchSemanticsNodes().isNotEmpty() }
+        // The skeleton already shows the chart titles, so wait for the loading line to go instead.
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(LOADING_HISTORY_NOTE).fetchSemanticsNodes().isEmpty() }
 
         onNodeWithText("Prometheus · monitoring/frontend").assertExists()
         onAllNodesWithText(podName(CURRENT, "x7k2p")).assertCountEquals(3)
