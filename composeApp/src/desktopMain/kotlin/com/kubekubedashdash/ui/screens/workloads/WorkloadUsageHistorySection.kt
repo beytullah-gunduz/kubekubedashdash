@@ -439,7 +439,7 @@ internal fun WorkloadUsageHistorySection(
         // skeleton while detecting or loading (the same call site as the loaded charts, so a Retro reveal can play),
         // and each chart's own failure note in place after a transient failure, so the section never resizes.
         when {
-            choice !is SourceChoice.Detecting && podSet == null -> NoteLine(target.missingNote)
+            podSet == null -> NoteLine(target.missingNote)
 
             failed != null && !failed.isTransient() -> NoteLine(deploymentFailureMessage(choice, failed))
 
@@ -657,6 +657,8 @@ private fun WorkloadHistoryCharts(
     }
 
     val markers = target.markers
+    // The loaded chart lists only the markers inside its window, so only those reserve the legend line.
+    val markersInWindow = markers.any { it.epochSec in window.startEpochSec..window.endEpochSec }
 
     val rx = results[PodSeriesKind.NetworkRx]
     val tx = results[PodSeriesKind.NetworkTx]
@@ -692,7 +694,7 @@ private fun WorkloadHistoryCharts(
                 note = noteOf(results[PodSeriesKind.Cpu]),
                 markers = markers,
                 loading = loading,
-                reserveLegend = markers.isNotEmpty() || references(PodSeriesKind.Cpu).isNotEmpty() || mode == PodSetMode.PerPod,
+                reserveLegend = markersInWindow || references(PodSeriesKind.Cpu).isNotEmpty() || mode == PodSetMode.PerPod,
             )
             TimeSeriesChart(
                 title = "Memory",
@@ -704,7 +706,7 @@ private fun WorkloadHistoryCharts(
                 note = noteOf(results[PodSeriesKind.Memory]),
                 markers = markers,
                 loading = loading,
-                reserveLegend = markers.isNotEmpty() || references(PodSeriesKind.Memory).isNotEmpty() || mode == PodSetMode.PerPod,
+                reserveLegend = markersInWindow || references(PodSeriesKind.Memory).isNotEmpty() || mode == PodSetMode.PerPod,
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -728,7 +730,7 @@ private fun WorkloadHistoryCharts(
                 note = throttlingNote,
                 markers = markers,
                 loading = loading,
-                reserveLegend = markers.isNotEmpty() || mode == PodSetMode.PerPod,
+                reserveLegend = markersInWindow || mode == PodSetMode.PerPod,
             )
         }
         when {

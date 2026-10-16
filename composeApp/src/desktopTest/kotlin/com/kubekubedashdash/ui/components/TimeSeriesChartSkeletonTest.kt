@@ -254,6 +254,29 @@ class TimeSeriesChartSkeletonTest {
         }
     }
 
+    @Test
+    fun `Default does not clip a flat zero line to the plot box`() = runChart {
+        // A series at value 0 sits on the plot's bottom edge, so its 2 px stroke is half inside and half
+        // below the 96 dp box. The pre-reveal chart drew unclipped; the reveal's clipRect must not
+        // trim that overhang (nor the round caps at x = 0 and x = width) outside Retro.
+        val zero = listOf(ChartSeries("", Color.Red, (0L..180L step 30).map { SeriesPoint(it, 0.0) }))
+        show(startLoading = false, series = zero)
+        val img = image()
+
+        // Rows holding a full-width run of series colour. The header's value text is red too, but it is
+        // short and sits above the plot, so only the line itself reaches 100 pixels in a row.
+        val lineRows = (0 until img.height).filter { y ->
+            (0 until img.width).count { x ->
+                val c = img[x, y]
+                c.red > 0.9f && c.green < 0.1f && c.blue < 0.1f
+            } > 100
+        }
+        // At density 1 the stroke is 2 px thick and centred on the plot's bottom edge; clipped to the
+        // plot box it would be 1 px thick.
+        assertEquals(2, lineRows.size, "the 2 px stroke keeps both halves, rows were $lineRows")
+        assertEquals(lineRows.first() + 1, lineRows.last(), "the two rows are adjacent")
+    }
+
     // ── Retro: reveal on data ───────────────────────────────────────────────────
 
     @Test

@@ -318,7 +318,7 @@ fun TimeSeriesChart(
 
                         val strokeJoin = if (ThemeManager.isRetro) StrokeJoin.Miter else StrokeJoin.Round
                         val mutedStyle = Stroke(width = 1.dp.toPx(), cap = kdStrokeCap, join = strokeJoin)
-                        clipRect(right = traceRight) {
+                        fun drawMutedSeries() {
                             mutedDrawn.forEachIndexed { index, s ->
                                 mutedSegments[index].forEach { segment ->
                                     if (segment.size == 1) {
@@ -332,7 +332,7 @@ fun TimeSeriesChart(
 
                         val filled = series.size == 1 && !ThemeManager.isRetro
                         val lineStyle = Stroke(width = 2.dp.toPx(), cap = kdStrokeCap, join = strokeJoin)
-                        clipRect(right = traceRight) {
+                        fun drawColouredSeries() {
                             drawn.forEachIndexed { index, s ->
                                 segments[index].forEach { segment ->
                                     if (segment.size == 1) {
@@ -357,6 +357,18 @@ fun TimeSeriesChart(
                                     drawPath(line, color = s.color, style = lineStyle)
                                 }
                             }
+                        }
+
+                        // Clipping only while the beam traces: outside the reveal the lines overhang the plot box (a flat line
+                        // at 0 sits on its bottom edge, round caps at both ends), exactly as before the reveal existed.
+                        if (revealing) {
+                            clipRect(right = traceRight) {
+                                drawMutedSeries()
+                                drawColouredSeries()
+                            }
+                        } else {
+                            drawMutedSeries()
+                            drawColouredSeries()
                         }
 
                         if (hoverTimestamp != null && !revealing) {

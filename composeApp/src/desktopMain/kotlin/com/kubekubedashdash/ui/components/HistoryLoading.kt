@@ -1,19 +1,19 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.kdRoundShape
 
 internal const val LOADING_HISTORY_NOTE = "Loading history…"
 
@@ -26,18 +26,17 @@ internal fun HistoryLoadingLine() {
     }
 }
 
-/** A transient failure caption with a Retry button beside it; the line stays close to a one-line note's height. */
+/** A transient failure caption with a Retry link beside it; the line is as tall as a one-line note. */
 @Composable
 internal fun HistoryRetryLine(message: String, onRetry: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary, modifier = Modifier.weight(1f, fill = false))
-        TextButton(
-            onClick = onRetry,
-            shape = kdRoundShape,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            modifier = Modifier.height(20.dp),
-        ) {
-            Text("Retry", style = MaterialTheme.typography.labelMedium)
-        }
+        Text(
+            "Retry",
+            style = MaterialTheme.typography.bodySmall,
+            color = KdPrimary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Retry", onClick = onRetry),
+        )
     }
 }
