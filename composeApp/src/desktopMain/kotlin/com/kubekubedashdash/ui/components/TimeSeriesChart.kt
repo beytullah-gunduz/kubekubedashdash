@@ -1,5 +1,12 @@
 package com.kubekubedashdash.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,12 +26,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -32,8 +41,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -44,6 +55,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdError
+import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSurfaceVariant
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KdWarning
@@ -51,13 +63,19 @@ import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.drawKdDot
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdStrokeCap
+import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
+import com.kubekubedashdash.ui.crt.CrtScale
+import com.kubekubedashdash.ui.crt.crtFrameFor
+import com.kubekubedashdash.ui.crt.crtLook
+import com.kubekubedashdash.ui.crt.drawCrtFrame
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.ceil
 
 /**
  * One line of a [TimeSeriesChart]; [name] is empty for a pod-level series. A [muted] series is
@@ -81,6 +99,18 @@ private const val NO_DATA_TEXT = "No data in this range"
 
 private val PlotHeight = 96.dp
 
+/** Tag on the plot while [TimeSeriesChart] is `loading`: the grid-only skeleton. */
+internal const val CHART_SKELETON_TAG = "chart-skeleton"
+
+/** Retro only: the whole reveal on data — the CRT power-on followed by the beam trace. */
+private const val REVEAL_MS = 670
+
+/** Share of the reveal the power-on takes (370 ms of 670 ms); the rest is the beam trace. Float division on purpose. */
+private const val POWER_ON_FRACTION = 370f / 670f
+
+/** The beam trace advances in this many steps (Retro motion is stepped). */
+private const val BEAM_STEPS = 10
+
 private val ReadoutTime = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT)
 private val ReadoutDayTime = DateTimeFormatter.ofPattern("EEE HH:mm:ss", Locale.ROOT)
 private val AxisTime = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
@@ -96,6 +126,11 @@ private const val DAY_SEC = 86_400L
  * series are drawn beneath them (at most [MAX_MUTED_SERIES], highest peak first) and share one
  * legend entry that counts every muted series handed in. Markers outside [window] are neither
  * drawn nor listed.
+ *
+ * While [loading] (and with no [note], which wins) the plot is a skeleton: only the grid, pulsing,
+ * at the same height as the loaded chart; [reserveLegend] keeps one legend line's height so the
+ * card does not grow when a legend arrives. In Retro the data then lights up with a CRT power-on
+ * and a stepped beam trace; a chart first composed with `loading = false` never plays it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -108,6 +143,8 @@ fun TimeSeriesChart(
     references: List<ChartReference> = emptyList(),
     note: String? = null,
     markers: List<ChartMarker> = emptyList(),
+    loading: Boolean = false,
+    reserveLegend: Boolean = false,
 ) {
     val colored = remember(series) { series.filterNot { it.muted } }
     val muted = remember(series) { series.filter { it.muted } }
@@ -127,7 +164,19 @@ fun TimeSeriesChart(
     // stays out of the axis and is only listed, marked off scale, in the legend.
     val onScale = references.filter { isOnScale(it.value, seriesMax) }
     val yMax = chartYMax(seriesMax, onScale.maxOfOrNull { it.value } ?: 0.0)
-    val message = note ?: if (drawn.all { it.points.isEmpty() } && mutedDrawn.all { it.points.isEmpty() }) NO_DATA_TEXT else null
+    val message = note ?: if (!loading && drawn.all { it.points.isEmpty() } && mutedDrawn.all { it.points.isEmpty() }) NO_DATA_TEXT else null
+    val skeleton = loading && message == null
+    val skeletonAlpha = if (skeleton) rememberSkeletonAlpha() else null
+
+    // Born at 0 while loading, so the first frame after the data lands is already in the reveal.
+    val reveal = remember { Animatable(if (loading) 0f else 1f) }
+    LaunchedEffect(loading) {
+        when {
+            loading -> reveal.snapTo(0f)
+            ThemeManager.isRetro -> reveal.animateTo(1f, tween(REVEAL_MS * ScreenshotHooks.crtTimeScale.value, easing = LinearEasing))
+            else -> reveal.snapTo(1f)
+        }
+    }
 
     // The pointer's position, not a sample index: a refresh moves the window under a still pointer,
     // and the nearest sample is looked up again against the data on screen.
@@ -149,19 +198,36 @@ fun TimeSeriesChart(
                 // A muted line counts here: one coloured line among grey ones has no value of its own to show.
                 val only = series.singleOrNull()?.takeUnless { it.muted }
                 val last = only?.points?.lastOrNull()
-                if (only != null && last != null) {
-                    Text(
-                        formatValue(last.value),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = only.color,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                // Always emitted, empty when there is nothing to show: the row is then as tall in every state.
+                Text(
+                    if (!skeleton && only != null && last != null) formatValue(last.value) else "",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = only?.color ?: KdTextSecondary,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             Spacer(Modifier.height(6.dp))
 
-            Box(modifier = Modifier.fillMaxWidth().height(PlotHeight)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PlotHeight)
+                    .then(if (skeleton) Modifier.testTag(CHART_SKELETON_TAG) else Modifier)
+                    .drawWithContent {
+                        val progress = reveal.value
+                        if (ThemeManager.isRetro && !loading && progress < 1f) {
+                            val (ignite, open, glow) = crtFrameFor(
+                                progress / POWER_ON_FRACTION,
+                                entering = true,
+                                igniteFraction = 120f / 370f,
+                            )
+                            drawCrtFrame(ignite, open, glow, crtLook(CrtScale.CARD, ThemeManager.isDarkTheme, KdPrimary))
+                        } else {
+                            drawContent()
+                        }
+                    },
+            ) {
                 if (message != null) {
                     Text(
                         message,
@@ -170,6 +236,14 @@ fun TimeSeriesChart(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.align(Alignment.Center).padding(horizontal = 4.dp),
                     )
+                } else if (skeleton) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val alpha = skeletonAlpha?.invoke() ?: 0.4f
+                        for (i in 1..3) {
+                            val y = size.height * i / 4f
+                            drawLine(KdBorder.copy(alpha = alpha), Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5f)
+                        }
+                    }
                 } else {
                     Canvas(
                         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
@@ -232,46 +306,60 @@ fun TimeSeriesChart(
                             )
                         }
 
+                        // Retro reveal: the power-on lights the grid, then the beam draws the lines left to right.
+                        val progress = reveal.value
+                        val revealing = ThemeManager.isRetro && progress < 1f
+                        val traceRight = if (revealing) {
+                            val q = ((progress - POWER_ON_FRACTION) / (1f - POWER_ON_FRACTION)).coerceIn(0f, 1f)
+                            size.width * ceil(q * BEAM_STEPS) / BEAM_STEPS
+                        } else {
+                            size.width
+                        }
+
                         val strokeJoin = if (ThemeManager.isRetro) StrokeJoin.Miter else StrokeJoin.Round
                         val mutedStyle = Stroke(width = 1.dp.toPx(), cap = kdStrokeCap, join = strokeJoin)
-                        mutedDrawn.forEachIndexed { index, s ->
-                            mutedSegments[index].forEach { segment ->
-                                if (segment.size == 1) {
-                                    drawKdDot(s.color, 1.dp.toPx(), Offset(xOf(segment[0].epochSec), yOf(segment[0].value)))
-                                    return@forEach
+                        clipRect(right = traceRight) {
+                            mutedDrawn.forEachIndexed { index, s ->
+                                mutedSegments[index].forEach { segment ->
+                                    if (segment.size == 1) {
+                                        drawKdDot(s.color, 1.dp.toPx(), Offset(xOf(segment[0].epochSec), yOf(segment[0].value)))
+                                        return@forEach
+                                    }
+                                    drawPath(linePath(segment), color = s.color, style = mutedStyle)
                                 }
-                                drawPath(linePath(segment), color = s.color, style = mutedStyle)
                             }
                         }
 
                         val filled = series.size == 1 && !ThemeManager.isRetro
                         val lineStyle = Stroke(width = 2.dp.toPx(), cap = kdStrokeCap, join = strokeJoin)
-                        drawn.forEachIndexed { index, s ->
-                            segments[index].forEach { segment ->
-                                if (segment.size == 1) {
-                                    // A lone sample between gaps has no line to carry it.
-                                    drawKdDot(s.color, 2.dp.toPx(), Offset(xOf(segment[0].epochSec), yOf(segment[0].value)))
-                                    return@forEach
+                        clipRect(right = traceRight) {
+                            drawn.forEachIndexed { index, s ->
+                                segments[index].forEach { segment ->
+                                    if (segment.size == 1) {
+                                        // A lone sample between gaps has no line to carry it.
+                                        drawKdDot(s.color, 2.dp.toPx(), Offset(xOf(segment[0].epochSec), yOf(segment[0].value)))
+                                        return@forEach
+                                    }
+                                    val line = linePath(segment)
+                                    if (filled) {
+                                        val fill = Path()
+                                        fill.moveTo(xOf(segment.first().epochSec), size.height)
+                                        segment.forEach { p -> fill.lineTo(xOf(p.epochSec), yOf(p.value)) }
+                                        fill.lineTo(xOf(segment.last().epochSec), size.height)
+                                        fill.close()
+                                        drawPath(
+                                            fill,
+                                            brush = Brush.verticalGradient(
+                                                listOf(s.color.copy(alpha = 0.25f), s.color.copy(alpha = 0.02f)),
+                                            ),
+                                        )
+                                    }
+                                    drawPath(line, color = s.color, style = lineStyle)
                                 }
-                                val line = linePath(segment)
-                                if (filled) {
-                                    val fill = Path()
-                                    fill.moveTo(xOf(segment.first().epochSec), size.height)
-                                    segment.forEach { p -> fill.lineTo(xOf(p.epochSec), yOf(p.value)) }
-                                    fill.lineTo(xOf(segment.last().epochSec), size.height)
-                                    fill.close()
-                                    drawPath(
-                                        fill,
-                                        brush = Brush.verticalGradient(
-                                            listOf(s.color.copy(alpha = 0.25f), s.color.copy(alpha = 0.02f)),
-                                        ),
-                                    )
-                                }
-                                drawPath(line, color = s.color, style = lineStyle)
                             }
                         }
 
-                        if (hoverTimestamp != null) {
+                        if (hoverTimestamp != null && !revealing) {
                             val x = xOf(hoverTimestamp)
                             drawLine(KdBorder, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
                             drawn.forEach { s ->
@@ -299,7 +387,11 @@ fun TimeSeriesChart(
 
             // minLines keeps the row's height when the readout is empty, so a hover never resizes the card.
             Text(
-                readoutText(message, hoverTimestamp, window.endEpochSec - window.startEpochSec > DAY_SEC, drawn, formatValue, dim),
+                if (skeleton) {
+                    AnnotatedString("")
+                } else {
+                    readoutText(message, hoverTimestamp, window.endEpochSec - window.startEpochSec > DAY_SEC, drawn, formatValue, dim)
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = dim,
                 maxLines = 2,
@@ -307,7 +399,12 @@ fun TimeSeriesChart(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            if (drawn.size > 1 || references.isNotEmpty() || markersShown.isNotEmpty() || muted.isNotEmpty()) {
+            if (skeleton) {
+                if (reserveLegend) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("", style = MaterialTheme.typography.labelSmall)
+                }
+            } else if (drawn.size > 1 || references.isNotEmpty() || markersShown.isNotEmpty() || muted.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -358,6 +455,22 @@ fun TimeSeriesChart(
             }
         }
     }
+}
+
+/** The skeleton grid's opacity, read in the draw phase: Default pulses 0.4 to 0.8 like `SkeletonRows`; Retro steps between 0.8 and 0.4. */
+@Composable
+private fun rememberSkeletonAlpha(): () -> Float {
+    if (ThemeManager.isRetro) {
+        val step = rememberFrameStep(180, 2)
+        return { 0.8f * retroPulseAlpha(step.intValue, 0.5f) }
+    }
+    val alpha = rememberInfiniteTransition(label = "chartSkeleton").animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "alpha",
+    )
+    return { alpha.value }
 }
 
 private fun ChartSeries.peak(): Double = points.maxOfOrNull { it.value } ?: 0.0
