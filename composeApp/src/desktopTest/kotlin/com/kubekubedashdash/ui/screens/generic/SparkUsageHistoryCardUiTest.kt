@@ -77,9 +77,10 @@ private data class Call(val kind: ScopeKind, val scope: ScopeRef, val grouping: 
 
 /**
  * Answers a Spark query with fixed series of two points: per pod for [SparkGrouping.ByPod] (two listed apps' pods
- * and one unlisted pod), per role for [SparkGrouping.ByRole]; records what it was asked.
+ * and one unlisted pod), per role for [SparkGrouping.ByRole]; records what it was asked. A set [failure] answers
+ * every query with it instead.
  */
-private class FakeSparkSource : MetricsHistorySource {
+private class FakeSparkSource(@Volatile var failure: SeriesResult.Failed? = null) : MetricsHistorySource {
     override val label = "Fake source"
     val calls = CopyOnWriteArrayList<Call>()
 
@@ -87,6 +88,7 @@ private class FakeSparkSource : MetricsHistorySource {
 
     override suspend fun sparkSeries(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): SeriesResult {
         calls += Call(kind, scope, grouping, window)
+        failure?.let { return it }
 
         fun series(name: String, scale: Double) = Series(name, listOf(SeriesPoint(window.startEpochSec, scale), SeriesPoint(window.endEpochSec, scale * 2)))
         return SeriesResult.Ok(
@@ -275,5 +277,22 @@ class SparkUsageHistoryCardUiTest {
 
         onNodeWithText(SPARK_HISTORY_TITLE).assertDoesNotExist()
         assertTrue(source.calls.isEmpty(), "no source may be asked: ${source.calls}")
+    }
+
+    @Test
+    fun `a structural failure collapses the charts to the reason with no Retry`() = runComposeUiTest {
+        val source = FakeSparkSource(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        showCard(serviceOver(GmpSetting, source))
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        onAllNodesWithText("CPU").assertCountEquals(0)
+        onAllNodesWithText("Memory").assertCountEquals(0)
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("Retry").assertDoesNotExist()
+        onNodeWithText(SPARK_HISTORY_NOTE).assertDoesNotExist()
+        // The header stays, so a range that keeps failing can still be changed.
+        onNodeWithText("6h ▾").assertExists()
     }
 }

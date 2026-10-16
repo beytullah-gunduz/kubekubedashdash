@@ -47,6 +47,7 @@ import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.ceilDiv
 import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartMarker
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
@@ -438,26 +439,46 @@ internal fun WorkloadUsageHistorySection(
         // A missing pod set and a structural failure collapse to their message. Anything else keeps the charts: a
         // skeleton while detecting or loading (the same call site as the loaded charts, so a Retro reveal can play),
         // and each chart's own failure note in place after a transient failure, so the section never resizes.
-        when {
-            podSet == null -> NoteLine(target.missingNote)
+        // The values travel in the state: the outgoing content is still drawn after `loaded` moved on.
+        val area = when {
+            podSet == null -> WorkloadArea.Note(target.missingNote)
 
-            failed != null && !failed.isTransient() -> NoteLine(deploymentFailureMessage(choice, failed))
+            failed != null && !failed.isTransient() -> WorkloadArea.Note(deploymentFailureMessage(choice, failed))
 
-            else -> WorkloadHistoryCharts(
-                choice = choice,
-                target = target,
-                mode = mode,
-                // The kinds the shown answer was fetched for: while the next one loads, a kind just added
-                // would otherwise draw an empty chart.
-                kinds = answeredFor?.third ?: kinds,
-                loaded = answer,
-                fallbackWindow = queryWindowOf(window, nowEpochSec()),
-                failed = failed,
-                shortRun = answer?.let { shortRunNote(choice, target.defaultWindow, nowEpochSec(), it.window.stepSec) },
-                onRetry = { retry++ },
+            else -> WorkloadArea.Charts(
+                answer,
+                failed,
+                answer?.let { shortRunNote(choice, target.defaultWindow, nowEpochSec(), it.window.stepSec) },
             )
         }
+        ChartAreaTransition(area, contentKey = { it::class }) { a ->
+            when (a) {
+                is WorkloadArea.Note -> NoteLine(a.text)
+
+                // WorkloadHistoryCharts is one Column, so the section's spacing around it is unchanged.
+                is WorkloadArea.Charts -> WorkloadHistoryCharts(
+                    choice = choice,
+                    target = target,
+                    mode = mode,
+                    // The kinds the shown answer was fetched for: while the next one loads, a kind just added
+                    // would otherwise draw an empty chart.
+                    kinds = answeredFor?.third ?: kinds,
+                    loaded = a.answer,
+                    fallbackWindow = queryWindowOf(window, nowEpochSec()),
+                    failed = a.failed,
+                    shortRun = a.shortRun,
+                    onRetry = { retry++ },
+                )
+            }
+        }
     }
+}
+
+/** What the section's chart area shows, and the state [ChartAreaTransition] swaps on. */
+private sealed interface WorkloadArea {
+    data class Charts(val answer: LoadedHistory?, val failed: SeriesResult.Failed?, val shortRun: String?) : WorkloadArea
+
+    data class Note(val text: String) : WorkloadArea
 }
 
 /**

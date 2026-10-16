@@ -655,6 +655,21 @@ class DeploymentUsageHistorySectionUiTest {
     }
 
     @Test
+    fun `a structural failure collapses the charts to the reason with no Retry`() = runComposeUiTest {
+        val source = FakeSource(seriesNames, failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        show(serviceOver(settingsOf(GmpSetting), source))
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onAllNodesWithText(it).assertCountEquals(0) }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("Retry").assertDoesNotExist()
+        // The header stays, so a range or a mode that keeps failing can still be changed.
+        onNodeWithText("Fake source").assertExists()
+        onNodeWithText("6h ▾").assertExists()
+    }
+
+    @Test
     fun `when only the network fails its own chart says so and the others still draw`() = runComposeUiTest {
         val source = FakeSource(
             podNames = seriesNames,

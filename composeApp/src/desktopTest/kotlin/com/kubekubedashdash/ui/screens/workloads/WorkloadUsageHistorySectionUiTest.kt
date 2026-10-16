@@ -930,6 +930,32 @@ class WorkloadUsageHistorySectionUiTest {
     }
 
     @Test
+    fun `a structural first answer swaps the loading charts for the reason, and a recovery swaps the charts back`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = FakeSource(JobPods, failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        show(source, targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600)), REFRESH_MS)
+        // Past the fade-through (90 ms out, 220 ms in), so only the new content is left.
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onAllNodesWithText(it).assertCountEquals(0) }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("Retry").assertDoesNotExist()
+
+        source.failure = null
+        refresh()
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertDoesNotExist()
+        listOf("CPU", "Memory", "Network").forEach { onAllNodesWithText(it).assertCountEquals(1) }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
+    }
+
+    @Test
     fun `a failed executors query fails the kind, not the network`() = runComposeUiTest {
         // CPU stays answered: a section whose CPU and memory both failed shows one message instead of the charts.
         val source = FakeSource(failFor = ExecutorsRef, failForKinds = setOf(PodSeriesKind.Memory, PodSeriesKind.Throttling))

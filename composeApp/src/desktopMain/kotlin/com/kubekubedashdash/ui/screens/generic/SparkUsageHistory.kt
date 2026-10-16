@@ -61,6 +61,7 @@ import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.SparkGrouping
 import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartSeries
 import com.kubekubedashdash.ui.components.HistoryLoadingLine
 import com.kubekubedashdash.ui.components.HistoryRetryLine
@@ -300,23 +301,35 @@ internal fun SparkUsageHistoryCard(
                 ) {
                     val answer = loaded
                     val failed = answer?.let(::sparkHeadlineFailure)
-                    // The list re-emits often; recomputing the lines here never refetches.
-                    val charts = remember(answer, apps) { answer?.let { sparkChartSeries(it, apps) } ?: SparkCharts(emptyList(), emptyList()) }
                     // A structural failure collapses to its message. Anything else keeps the charts, a skeleton
                     // while loading and a failure note in place after a transient one, so the card never resizes.
-                    when {
-                        failed != null && !failed.isTransient() -> NoteLine(deploymentFailureMessage(choice, failed))
+                    // The values travel in the state: the outgoing content is still drawn after `loaded` moved on.
+                    val area = if (failed != null && !failed.isTransient()) {
+                        SparkArea.Note(deploymentFailureMessage(choice, failed))
+                    } else {
+                        SparkArea.Charts(answer, failed)
+                    }
+                    ChartAreaTransition(area, contentKey = { it::class }) { a ->
+                        when (a) {
+                            is SparkArea.Note -> NoteLine(a.text)
 
-                        else -> {
-                            SparkHistoryCharts(answer, charts, range.window(nowEpochSec()), reserveLegend = view != SparkHistoryView.Total)
-                            when {
-                                answer == null -> HistoryLoadingLine()
+                            is SparkArea.Charts -> {
+                                // The list re-emits often; recomputing the lines here never refetches.
+                                val charts = remember(a.answer, apps) {
+                                    a.answer?.let { sparkChartSeries(it, apps) } ?: SparkCharts(emptyList(), emptyList())
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    SparkHistoryCharts(a.answer, charts, range.window(nowEpochSec()), reserveLegend = view != SparkHistoryView.Total)
+                                    when {
+                                        a.answer == null -> HistoryLoadingLine()
 
-                                failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, failed)) { retry++ }
+                                        a.failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, a.failed)) { retry++ }
 
-                                else -> {
-                                    NoteLine(SPARK_HISTORY_NOTE)
-                                    NoteLine("From ${source.label}.")
+                                        else -> {
+                                            NoteLine(SPARK_HISTORY_NOTE)
+                                            NoteLine("From ${source.label}.")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -325,6 +338,13 @@ internal fun SparkUsageHistoryCard(
             }
         }
     }
+}
+
+/** What the card's chart area shows, and the state [ChartAreaTransition] swaps on. */
+private sealed interface SparkArea {
+    data class Charts(val answer: LoadedSpark?, val failed: SeriesResult.Failed?) : SparkArea
+
+    data class Note(val text: String) : SparkArea
 }
 
 /** What the two charts draw, already coloured. */

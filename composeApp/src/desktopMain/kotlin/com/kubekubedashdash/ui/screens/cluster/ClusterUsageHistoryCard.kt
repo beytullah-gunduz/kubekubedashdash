@@ -59,6 +59,7 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.isTransient
+import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartSeries
 import com.kubekubedashdash.ui.components.HistoryLoadingLine
 import com.kubekubedashdash.ui.components.HistoryRetryLine
@@ -236,15 +237,23 @@ internal fun ClusterUsageHistoryCard(
                     val failed = answer?.let(::scopeHeadlineFailure)
                     // A structural failure collapses to its message. Anything else keeps the charts, a skeleton
                     // while loading and a failure note in place after a transient one, so the card never resizes.
-                    when {
-                        failed != null && !failed.isTransient() -> NoteLine(deploymentFailureMessage(choice, failed))
+                    // The values travel in the state: the outgoing content is still drawn after `loaded` moved on.
+                    val area = if (failed != null && !failed.isTransient()) {
+                        UsageArea.Note(deploymentFailureMessage(choice, failed))
+                    } else {
+                        UsageArea.Charts(answer, failed)
+                    }
+                    ChartAreaTransition(area, contentKey = { it::class }) { a ->
+                        when (a) {
+                            is UsageArea.Note -> NoteLine(a.text)
 
-                        else -> {
-                            UsageHistoryCharts(answer, range.window(nowEpochSec()))
-                            when {
-                                answer == null -> HistoryLoadingLine()
-                                failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, failed)) { retry++ }
-                                else -> NoteLine(usageHistoryNote(source.label))
+                            is UsageArea.Charts -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                UsageHistoryCharts(a.answer, range.window(nowEpochSec()))
+                                when {
+                                    a.answer == null -> HistoryLoadingLine()
+                                    a.failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, a.failed)) { retry++ }
+                                    else -> NoteLine(usageHistoryNote(source.label))
+                                }
                             }
                         }
                     }
@@ -262,6 +271,13 @@ private suspend fun scopeSeriesOrFailed(source: MetricsHistorySource, kind: Scop
     throw e
 } catch (_: Exception) {
     SeriesResult.Failed(HistoryFailure.Unavailable, "error")
+}
+
+/** What the card's chart area shows, and the state [ChartAreaTransition] swaps on. */
+private sealed interface UsageArea {
+    data class Charts(val answer: LoadedScope?, val failed: SeriesResult.Failed?) : UsageArea
+
+    data class Note(val text: String) : UsageArea
 }
 
 @Composable

@@ -80,11 +80,11 @@ private data class Call(val kind: ScopeKind, val scope: ScopeRef, val window: Qu
 /**
  * Answers a scope query with one unnamed series of two points (CPU ends at half a core, memory at
  * [PEAK_MEMORY_BYTES]); records what it was asked. [failure] answers every kind (or [failKinds]) with
- * that failure instead, and [emptyKinds] answer with no series, as Managed Prometheus does when it has
+ * that failure instead (it can be cleared between refreshes), and [emptyKinds] answer with no series, as Managed Prometheus does when it has
  * no samples.
  */
 private class FakeSource(
-    private val failure: SeriesResult.Failed? = null,
+    @Volatile var failure: SeriesResult.Failed? = null,
     private val failKinds: Set<ScopeKind> = emptySet(),
     private val emptyKinds: Set<ScopeKind> = emptySet(),
 ) : MetricsHistorySource {
@@ -95,7 +95,7 @@ private class FakeSource(
 
     override suspend fun scopeSeries(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): SeriesResult {
         calls += Call(kind, scope, window)
-        if (failure != null && (failKinds.isEmpty() || kind in failKinds)) return failure
+        failure?.let { if (failKinds.isEmpty() || kind in failKinds) return it }
         if (kind in emptyKinds) return SeriesResult.Ok(emptyList())
         val peak = if (kind == ScopeKind.CpuCores) 0.5 else PEAK_MEMORY_BYTES
         return SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(window.startEpochSec, peak / 2), SeriesPoint(window.endEpochSec, peak)))))
@@ -272,6 +272,74 @@ class ClusterUsageHistoryCardUiTest {
         mainClock.advanceTimeBy(30_001)
         waitForIdle()
         assertEquals(2, source.calls.size, "the same window, all answered: nothing to refetch")
+    }
+
+    /** Frames enough for a composition, the fetch its effect starts and the recomposition with the answer. */
+    private fun ComposeUiTest.settle() {
+        repeat(3) {
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+        }
+    }
+
+    @Test
+    fun `a structural first answer swaps the loading charts for the reason, and a recovery swaps the charts back`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = FakeSource(failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        showCard(serviceOver(settingsOf(GmpSetting), source), refreshMs = 30_000L)
+        settle()
+        // Past the fade-through (90 ms out, 220 ms in), so only the new content is left.
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        onAllNodesWithText("CPU").assertCountEquals(0)
+        onAllNodesWithText("Memory").assertCountEquals(0)
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("Retry").assertDoesNotExist()
+
+        source.failure = null
+        mainClock.advanceTimeBy(30_001)
+        settle()
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        onNodeWithText("500m").assertExists()
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertDoesNotExist()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(usageHistoryNote("Fake source")).assertExists()
+    }
+
+    @Test
+    fun `a refresh that keeps the charts updates them in place, with no second copy fading out`() = runComposeUiTest {
+        // Proxy for "the charts are not recreated": a swap (a new content key) fades the old content out while the
+        // new one fades in, so two "CPU" titles would coexist for a few frames. A same-key refresh must never show
+        // two, and never bring a skeleton back.
+        mainClock.autoAdvance = false
+        val source = FakeSource()
+        val nowSec = AtomicLong(NOW)
+        showCard(serviceOver(settingsOf(GmpSetting), source), now = nowSec::get, refreshMs = 30_000L)
+        settle()
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        assertEquals(2, source.calls.size)
+
+        // The six-hour window moves every 180 s, so the next round asks again and answers with a new window.
+        nowSec.addAndGet(200)
+        mainClock.advanceTimeBy(29_000)
+        waitForIdle()
+        repeat(150) {
+            mainClock.advanceTimeBy(16)
+            waitForIdle()
+            onAllNodesWithText("CPU").assertCountEquals(1)
+            onAllNodesWithText("Memory").assertCountEquals(1)
+            onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        }
+        assertEquals(4, source.calls.size, "the refresh asked again and its answer landed while the charts were sampled")
+        onNodeWithText("500m").assertExists()
     }
 
     @Test
