@@ -123,7 +123,23 @@ class PodMetricsHistoryViewTest {
     @Test
     fun `CPU and memory both failing is a source failure`() {
         val view = historyView(gmp, loaded(PodSeriesKind.Cpu to failed, PodSeriesKind.Memory to failed, PodSeriesKind.NetworkRx to ok))
-        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."), view)
+        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data.", transient = true), view)
+    }
+
+    @Test
+    fun `a fallback is transient only when the failure behind it is`() {
+        fun fallback(cpu: SeriesResult, memory: SeriesResult) = assertIs<HistoryView.LiveFallback>(historyView(gmp, loaded(PodSeriesKind.Cpu to cpu, PodSeriesKind.Memory to memory)))
+
+        assertTrue(fallback(failed, failed).transient)
+        // Memory's failure explains when CPU merely has no point.
+        assertTrue(fallback(empty, failed).transient)
+        assertFalse(fallback(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"), failed).transient)
+        assertFalse(fallback(SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported"), failed).transient)
+        assertFalse(fallback(SeriesResult.Failed(HistoryFailure.Unavailable, "bad request"), failed).transient)
+        // No failure behind "no history": nothing for Retry to fix.
+        val none = fallback(empty, pointless)
+        assertEquals(NO_HISTORY_NOTE, none.message)
+        assertFalse(none.transient)
     }
 
     @Test
@@ -137,7 +153,7 @@ class PodMetricsHistoryViewTest {
     @Test
     fun `with no point to draw a failure explains instead of the no-history line`() {
         assertEquals(
-            HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."),
+            HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data.", transient = true),
             historyView(gmp, loaded(PodSeriesKind.Cpu to empty, PodSeriesKind.Memory to failed)),
         )
     }

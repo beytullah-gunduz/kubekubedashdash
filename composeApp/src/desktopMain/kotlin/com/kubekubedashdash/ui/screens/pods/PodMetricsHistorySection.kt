@@ -1,11 +1,13 @@
 package com.kubekubedashdash.ui.screens.pods
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -22,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSeriesMemory
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.services.metricshistory.GmpTarget
@@ -35,11 +39,12 @@ import com.kubekubedashdash.services.metricshistory.PodSeriesKind
 import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
+import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
-import com.kubekubedashdash.ui.components.BusyIndicator
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
-import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
+import com.kubekubedashdash.ui.components.HistoryLoadingLine
+import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
@@ -103,8 +108,11 @@ internal sealed interface HistoryView {
     /** The first fetch for this pod and range is still out: the metrics-server charts stand in meanwhile. */
     data object Loading : HistoryView
 
-    /** Neither CPU nor memory has a point to draw (both failed, or nothing recorded): [message] explains, the metrics-server charts follow. */
-    data class LiveFallback(val message: String) : HistoryView
+    /**
+     * Neither CPU nor memory has a point to draw (both failed, or nothing recorded): [message] explains, the metrics-server charts follow.
+     * [transient] marks a failure a retry can fix, which gets a Retry button.
+     */
+    data class LiveFallback(val message: String, val transient: Boolean = false) : HistoryView
 
     data class Charts(val loaded: LoadedHistory) : HistoryView
 }
@@ -133,7 +141,7 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
     // A failure explains better than "no history": it is what kept the points away.
     val failed = loaded.results[PodSeriesKind.Cpu] as? SeriesResult.Failed
         ?: loaded.results[PodSeriesKind.Memory] as? SeriesResult.Failed
-    return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE)
+    return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE, transient = failed?.isTransient() == true)
 }
 
 /**
@@ -287,10 +295,13 @@ internal fun PodMetricsHistorySection(
     val podRef = remember(pod.namespace, pod.name, pod.resources) { PodRef(pod.namespace, pod.name, pod.resources) }
     val kinds = remember(pod.hostNetwork, pod.resources) { historyKinds(pod) }
     // Keyed on the name and namespace too: demo pods can have a blank uid.
-    var loaded by remember(pod.uid, pod.namespace, pod.name, range, choice) { mutableStateOf<LoadedHistory?>(null) }
+    // Retry bumps [retry], a key of both this state and the fetch below: the key change cancels the
+    // fetch in flight and starts a fresh one, with no imperative reset.
+    var retry by remember { mutableIntStateOf(0) }
+    var loaded by remember(pod.uid, pod.namespace, pod.name, range, choice, retry) { mutableStateOf<LoadedHistory?>(null) }
 
     if (source != null) {
-        LaunchedEffect(pod.uid, pod.namespace, pod.name, range, choice) {
+        LaunchedEffect(pod.uid, pod.namespace, pod.name, range, choice, retry) {
             while (true) {
                 val window = range.window(nowEpochSec())
                 val current = loaded
@@ -327,29 +338,42 @@ internal fun PodMetricsHistorySection(
                     description = "Time window of the charts.",
                 )
             }
-            when (view) {
-                // A slow or hanging source (gcloud, the network) must not hide the live charts.
-                HistoryView.Loading -> {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BusyIndicator(modifier = Modifier.size(12.dp), color = KdTextSecondary, strokeWidth = 1.5.dp)
-                        Text(LOADING_HISTORY_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+            // The live charts (one row) give way to the history (two rows): animate the growth, snap in Retro.
+            Column(
+                Modifier.animateContentSize(animationSpec = if (ThemeManager.isRetro) snap() else spring()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // One call site for "loading without live charts" and "loaded", so the chart state survives the switch.
+                val gridLoaded = (view as? HistoryView.Charts)?.loaded
+                if (view is HistoryView.Charts || (view == HistoryView.Loading && liveHistory.isEmpty())) {
+                    HistoryCharts(pod, kinds, gridLoaded, range.window(nowEpochSec()))
+                    if (gridLoaded == null) {
+                        HistoryLoadingLine()
+                    } else {
+                        Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                     }
-                    if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
-                }
+                } else {
+                    when (view) {
+                        // A slow or hanging source (gcloud, the network) must not hide the live charts.
+                        HistoryView.Loading -> {
+                            HistoryLoadingLine()
+                            PodMetricsSection(liveHistory, showTitle = false)
+                        }
 
-                // The header stays, so a range that keeps failing can still be changed; the live
-                // charts follow without their own title.
-                is HistoryView.LiveFallback -> {
-                    Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                    if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
-                }
+                        // The header stays, so a range that keeps failing can still be changed; the live
+                        // charts follow without their own title.
+                        is HistoryView.LiveFallback -> {
+                            if (view.transient) {
+                                HistoryRetryLine(view.message) { retry++ }
+                            } else {
+                                Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                            }
+                            if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
+                        }
 
-                is HistoryView.Charts -> {
-                    HistoryCharts(pod, kinds, view.loaded)
-                    Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                        is HistoryView.Charts, is HistoryView.LiveOnly -> Unit
+                    }
                 }
-
-                is HistoryView.LiveOnly -> Unit
             }
         }
     }
@@ -366,8 +390,9 @@ private suspend fun podSeriesOrFailed(source: MetricsHistorySource, kind: PodSer
 }
 
 @Composable
-private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: LoadedHistory) {
-    val results = loaded.results
+private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: LoadedHistory?, fallbackWindow: QueryWindow) {
+    val results = loaded?.results.orEmpty()
+    val window = loaded?.window ?: fallbackWindow
     val colorIndex = containerColorIndex(
         pod.resources.map { it.name } +
             listOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling)
@@ -382,6 +407,15 @@ private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: Load
 
     val cpu = containerSeries(results[PodSeriesKind.Cpu])
     val memory = containerSeries(results[PodSeriesKind.Memory])
+
+    // While loading no series exist yet, so the legend line is reserved from the pod spec: several
+    // containers, or a request or limit guide on any of them. usageReferences cannot be used for this:
+    // it needs a single series to name its container, so with no series it returns nothing.
+    val severalContainers = pod.resources.size > 1
+    val cpuLegend = severalContainers ||
+        pod.resources.any { it.cpuRequestMillis != null || it.cpuLimitMillis != null }
+    val memoryLegend = severalContainers ||
+        pod.resources.any { it.memoryRequestBytes != null || it.memoryLimitBytes != null }
 
     // Hands the network chart its two lines, or the note that stands in for them.
     val rx = results[PodSeriesKind.NetworkRx]
@@ -411,38 +445,46 @@ private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: Load
             TimeSeriesChart(
                 title = "CPU",
                 series = cpu,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatCoresValue,
                 modifier = Modifier.weight(1f),
                 references = usageReferences(pod, cpu, PodSeriesKind.Cpu),
                 note = noteOf(results[PodSeriesKind.Cpu]),
+                loading = loaded == null,
+                reserveLegend = cpuLegend,
             )
             TimeSeriesChart(
                 title = "Memory",
                 series = memory,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatBytesValue,
                 modifier = Modifier.weight(1f),
                 references = usageReferences(pod, memory, PodSeriesKind.Memory),
                 note = noteOf(results[PodSeriesKind.Memory]),
+                loading = loaded == null,
+                reserveLegend = memoryLegend,
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TimeSeriesChart(
                 title = "Network",
                 series = network,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatRateValue,
                 modifier = Modifier.weight(1f),
                 note = networkNote,
+                loading = loaded == null,
+                reserveLegend = true,
             )
             TimeSeriesChart(
                 title = "CPU throttling",
                 series = if (throttlingNote == null) containerSeries(throttling) else emptyList(),
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatFractionValue,
                 modifier = Modifier.weight(1f),
                 note = throttlingNote,
+                loading = loaded == null,
+                reserveLegend = severalContainers,
             )
         }
     }
