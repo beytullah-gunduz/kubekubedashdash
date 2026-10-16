@@ -13,9 +13,9 @@ fabric8 = "7.7.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 lifecycle = "2.11.0"
-logback = "1.6.3"
+logback = "1.6.5"
 compose-material3-adaptive = "1.3.0"
-spotless = "8.10.2"
+spotless = "8.10.4"
 mcp = "0.15.0"
 ktor = "3.6.0"
 jna = "5.19.1"
@@ -24,7 +24,7 @@ jediterm = "3.76"
 rsyntaxtextarea = "4.0.1"
 # Build-time only: the release-jar bytecode scan (composeApp verifyReleaseBuild).
 # Must parse every class-file version on the runtime classpath.
-asm = "9.10.1"
+asm = "9.11"
 
 [libraries]
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version = "1.2.1" }
