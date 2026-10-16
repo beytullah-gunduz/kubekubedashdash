@@ -412,8 +412,8 @@ rootless Docker or Docker-in-Docker.
 | MCP server | modelcontextprotocol kotlin-sdk 0.15.0 |
 | Embedded HTTP server | Ktor 3.6.0 (CIO + SSE + content negotiation) |
 | Native interop | JNA 5.19.1 (macOS shell `PATH` resolution) |
-| Logging | Logback Classic 1.6.3 (via SLF4J) |
-| Code formatting | Spotless 8.10.2 + ktlint |
+| Logging | Logback Classic 1.6.5 (via SLF4J) |
+| Code formatting | Spotless 8.10.4 + ktlint |
 | Build tool | Gradle 9.7.1, Temurin 21 (daemon JVM criteria) |
 | Screenshot generation | `./gradlew generateScreenshots` — drives the live app against the demo cluster via `WorkspaceManager` and captures each window's own Skia frame in-process (no Screen Recording permission); `scripts/site_images.py` then crops and converts the captures for the site and this README |
 
