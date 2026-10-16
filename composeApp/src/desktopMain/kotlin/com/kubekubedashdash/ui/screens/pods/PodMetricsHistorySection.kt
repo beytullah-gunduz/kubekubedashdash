@@ -338,26 +338,29 @@ internal fun PodMetricsHistorySection(
                     description = "Time window of the charts.",
                 )
             }
-            // The live charts (one row) give way to the history (two rows): animate the growth, snap in Retro.
+            // The live charts under the skeleton grid leave once the history lands: animate the change, snap in Retro.
             Column(
                 Modifier.animateContentSize(animationSpec = if (ThemeManager.isRetro) snap() else spring()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                // One call site for "loading without live charts" and "loaded", so the chart state survives the switch.
+                // One call site for "loading" and "loaded", so the chart state survives the switch and Retro can reveal it.
+                // Only once a source is known: Auto still searching may find none, and a grid would then collapse.
                 val gridLoaded = (view as? HistoryView.Charts)?.loaded
-                if (view is HistoryView.Charts || (view == HistoryView.Loading && liveHistory.isEmpty())) {
+                if (view is HistoryView.Charts || (view == HistoryView.Loading && source != null)) {
                     HistoryCharts(pod, kinds, gridLoaded, range.window(nowEpochSec()))
                     if (gridLoaded == null) {
                         HistoryLoadingLine()
+                        // A slow or hanging source (gcloud, the network) must not hide the live charts.
+                        if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                     } else {
                         Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                     }
                 } else {
                     when (view) {
-                        // A slow or hanging source (gcloud, the network) must not hide the live charts.
+                        // Auto is still searching: the live charts under the loading line, as before metrics history.
                         HistoryView.Loading -> {
                             HistoryLoadingLine()
-                            PodMetricsSection(liveHistory, showTitle = false)
+                            if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                         }
 
                         // The header stays, so a range that keeps failing can still be changed; the live

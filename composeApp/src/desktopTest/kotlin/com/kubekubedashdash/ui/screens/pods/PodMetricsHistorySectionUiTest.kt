@@ -622,12 +622,14 @@ class PodMetricsHistorySectionUiTest {
         assertTrue(stub.proxyRequests.isEmpty(), "nothing is asked of a Prometheus before one is found")
 
         gate.complete(DetectionState.Found(DetectedTarget))
-        // Waiting on "CPU throttling" is only sound because the live snapshots above are non-empty: with
-        // none, the skeleton grid already shows that title while the search is out.
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("CPU throttling").fetchSemanticsNodes().isNotEmpty() }
+        // Not on a chart title: once the source is known, the skeleton grid shows every title before the history lands.
+        waitUntil(timeoutMillis = 10_000) {
+            stub.proxyRequests.isNotEmpty() && onAllNodesWithText(LOADING_HISTORY_NOTE).fetchSemanticsNodes().isEmpty()
+        }
 
         onNodeWithText("Prometheus · monitoring/prometheus-server").assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
         val request = stub.proxyRequests.first()
         assertEquals("/api/v1/namespaces/monitoring/services/prometheus-server:80/proxy/api/v1/query_range", request.path.substringBefore('?'))
     }
@@ -655,8 +657,8 @@ class PodMetricsHistorySectionUiTest {
     }
 
     @Test
-    fun `while the first fetch is out the live charts show under a loading line`() = runComposeUiTest {
-        // With live snapshots the slow source must not hide them: no skeleton grid, the live charts instead.
+    fun `while the first fetch is out the skeleton grid shows with the live charts under the loading line`() = runComposeUiTest {
+        // With live snapshots the slow source must not hide them: they follow the skeleton grid until the history lands.
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -675,8 +677,46 @@ class PodMetricsHistorySectionUiTest {
         onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
         // The range can still be changed while it loads.
         onNodeWithText("1h ▾").assertExists()
-        onNodeWithText("CPU throttling").assertDoesNotExist()
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        // The skeleton's title and the live chart's label.
+        onAllNodesWithText("CPU").assertCountEquals(2)
+    }
+
+    @Test
+    fun `live snapshots arriving during the first fetch keep the skeleton grid, and the history replaces the live charts`() = runComposeUiTest {
+        val gate = CompletableDeferred<Unit>()
+        val source = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
+                gate.await()
+                return SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, 2.0)))))
+            }
+        }
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        // The panel starts every pod with no live snapshot; the first one lands before a slow history source answers.
+        var live by mutableStateOf(emptyList<PodMetricsSnapshot>())
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, live, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        onAllNodesWithText("CPU").assertCountEquals(1)
+
+        live = liveSnapshots
+        waitForIdle()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        onAllNodesWithText("CPU").assertCountEquals(2)
+
+        gate.complete(Unit)
+        waitForIdle()
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
     }
 
     @Test
