@@ -1,8 +1,5 @@
 package com.kubekubedashdash.ui.screens.pods
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdPrimary
 import com.kubekubedashdash.KdSeriesMemory
 import com.kubekubedashdash.KdTextSecondary
-import com.kubekubedashdash.ThemeManager
 import com.kubekubedashdash.models.PodInfo
 import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.services.metricshistory.GmpTarget
@@ -41,6 +37,7 @@ import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
 import com.kubekubedashdash.ui.components.HistoryLoadingLine
@@ -142,6 +139,28 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
     val failed = loaded.results[PodSeriesKind.Cpu] as? SeriesResult.Failed
         ?: loaded.results[PodSeriesKind.Memory] as? SeriesResult.Failed
     return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE, transient = failed?.isTransient() == true)
+}
+
+/**
+ * What the pod chart area shows, and the state [ChartAreaTransition] swaps on: the 2×2 history grid
+ * (skeleton while [loaded] is null, with the latest metrics-server value in the CPU and Memory
+ * headers) or the metrics-server charts that stand in without a source, while Auto searches, or
+ * when the history fails. Everything the area renders travels in the state.
+ */
+internal sealed interface PodArea {
+    data class Grid(val loaded: LoadedHistory?, val live: PodMetricsSnapshot?) : PodArea
+
+    data class Live(val view: HistoryView, val live: List<PodMetricsSnapshot>) : PodArea
+}
+
+/** Maps the view to the area to show; [sourceKnown] is false while Auto still searches (the grid would collapse if none is found). */
+internal fun podArea(view: HistoryView, sourceKnown: Boolean, live: List<PodMetricsSnapshot>): PodArea = when {
+    // Loaded charts ignore the live value, so none is carried: a snapshot every 5 s would only recompose them.
+    view is HistoryView.Charts -> PodArea.Grid(view.loaded, null)
+
+    view == HistoryView.Loading && sourceKnown -> PodArea.Grid(null, live.lastOrNull())
+
+    else -> PodArea.Live(view, live)
 }
 
 /**
@@ -338,43 +357,44 @@ internal fun PodMetricsHistorySection(
                     description = "Time window of the charts.",
                 )
             }
-            // The live charts under the skeleton grid leave once the history lands: animate the change, snap in Retro.
-            Column(
-                Modifier.animateContentSize(animationSpec = if (ThemeManager.isRetro) snap() else spring()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // One call site for "loading" and "loaded", so the chart state survives the switch and Retro can reveal it.
-                // Only once a source is known: Auto still searching may find none, and a grid would then collapse.
-                val gridLoaded = (view as? HistoryView.Charts)?.loaded
-                if (view is HistoryView.Charts || (view == HistoryView.Loading && source != null)) {
-                    HistoryCharts(pod, kinds, gridLoaded, range.window(nowEpochSec()))
-                    if (gridLoaded == null) {
-                        HistoryLoadingLine()
-                        // A slow or hanging source (gcloud, the network) must not hide the live charts.
-                        if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
-                    } else {
-                        Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                    }
-                } else {
-                    when (view) {
-                        // Auto is still searching: the live charts under the loading line, as before metrics history.
-                        HistoryView.Loading -> {
-                            HistoryLoadingLine()
-                            if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
-                        }
-
-                        // The header stays, so a range that keeps failing can still be changed; the live
-                        // charts follow without their own title.
-                        is HistoryView.LiveFallback -> {
-                            if (view.transient) {
-                                HistoryRetryLine(view.message) { retry++ }
+            // The grid gives way to the live charts when the history fails, and back on recovery. With a
+            // source known the grid shows the live values in its CPU and Memory headers while it loads,
+            // so a slow or hanging source (gcloud, the network) still shows current usage.
+            ChartAreaTransition(podArea(view, source != null, liveHistory), contentKey = { it::class }) { a ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    when (a) {
+                        // One call site for "loading" and "loaded", so the chart state survives the switch and Retro can reveal it.
+                        // Only once a source is known: Auto still searching may find none, and a grid would then collapse.
+                        is PodArea.Grid -> {
+                            HistoryCharts(pod, kinds, a.loaded, range.window(nowEpochSec()), a.live)
+                            if (a.loaded == null) {
+                                HistoryLoadingLine()
                             } else {
-                                Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                                Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                             }
-                            if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                         }
 
-                        is HistoryView.Charts, is HistoryView.LiveOnly -> Unit
+                        is PodArea.Live -> when (val v = a.view) {
+                            // Auto is still searching: the live charts under the loading line, as before metrics history.
+                            HistoryView.Loading -> {
+                                HistoryLoadingLine()
+                                if (a.live.isNotEmpty()) PodMetricsSection(a.live, showTitle = false)
+                            }
+
+                            // The header stays, so a range that keeps failing can still be changed; the live
+                            // charts follow without their own title, even before the first snapshot (their
+                            // own "Collecting data…"), so the swap never lands on nothing.
+                            is HistoryView.LiveFallback -> {
+                                if (v.transient) {
+                                    HistoryRetryLine(v.message) { retry++ }
+                                } else {
+                                    Text(v.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                                }
+                                PodMetricsSection(a.live, showTitle = false)
+                            }
+
+                            is HistoryView.Charts, is HistoryView.LiveOnly -> Unit // unreachable, keeps the when exhaustive
+                        }
                     }
                 }
             }
@@ -393,7 +413,13 @@ private suspend fun podSeriesOrFailed(source: MetricsHistorySource, kind: PodSer
 }
 
 @Composable
-private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: LoadedHistory?, fallbackWindow: QueryWindow) {
+private fun HistoryCharts(
+    pod: PodInfo,
+    kinds: List<PodSeriesKind>,
+    loaded: LoadedHistory?,
+    fallbackWindow: QueryWindow,
+    live: PodMetricsSnapshot?,
+) {
     val results = loaded?.results.orEmpty()
     val window = loaded?.window ?: fallbackWindow
     val colorIndex = containerColorIndex(
@@ -455,6 +481,7 @@ private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: Load
                 note = noteOf(results[PodSeriesKind.Cpu]),
                 loading = loaded == null,
                 reserveLegend = cpuLegend,
+                headerValue = live?.let { formatCoresValue(it.cpuMillis / 1000.0) },
             )
             TimeSeriesChart(
                 title = "Memory",
@@ -466,6 +493,7 @@ private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: Load
                 note = noteOf(results[PodSeriesKind.Memory]),
                 loading = loaded == null,
                 reserveLegend = memoryLegend,
+                headerValue = live?.let { formatBytesValue(it.memoryBytes.toDouble()) },
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

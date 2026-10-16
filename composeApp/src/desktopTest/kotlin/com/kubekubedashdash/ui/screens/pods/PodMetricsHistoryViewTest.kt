@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.pods
 import androidx.compose.ui.graphics.Color
 import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.services.metricshistory.GmpTarget
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
 import com.kubekubedashdash.services.metricshistory.InClusterTarget
@@ -118,6 +119,32 @@ class PodMetricsHistoryViewTest {
             val results = loaded(PodSeriesKind.Cpu to ok, PodSeriesKind.Memory to ok)
             assertEquals(HistoryView.Charts(results), historyView(choice, results))
         }
+    }
+
+    private val liveRow = listOf(PodMetricsSnapshot(1_000, 100, 1_048_576), PodMetricsSnapshot(2_000, 200, 2_097_152))
+
+    @Test
+    fun `with history points the area is the grid, carrying the latest live snapshot`() {
+        val results = loaded(PodSeriesKind.Cpu to ok)
+        assertEquals(PodArea.Grid(results, null), podArea(HistoryView.Charts(results), sourceKnown = true, live = liveRow))
+        assertEquals(PodArea.Grid(results, null), podArea(HistoryView.Charts(results), sourceKnown = true, live = emptyList()))
+    }
+
+    @Test
+    fun `loading with a source known is the skeleton grid with the latest live snapshot`() {
+        assertEquals(PodArea.Grid(null, liveRow.last()), podArea(HistoryView.Loading, sourceKnown = true, live = liveRow))
+    }
+
+    @Test
+    fun `loading without a source yet is the live row`() {
+        assertEquals(PodArea.Live(HistoryView.Loading, liveRow), podArea(HistoryView.Loading, sourceKnown = false, live = liveRow))
+    }
+
+    @Test
+    fun `a live fallback is the live row whatever the source`() {
+        val fallback = HistoryView.LiveFallback("down", transient = true)
+        assertEquals(PodArea.Live(fallback, liveRow), podArea(fallback, sourceKnown = true, live = liveRow))
+        assertEquals(PodArea.Live(fallback, emptyList()), podArea(fallback, sourceKnown = true, live = emptyList()))
     }
 
     @Test
