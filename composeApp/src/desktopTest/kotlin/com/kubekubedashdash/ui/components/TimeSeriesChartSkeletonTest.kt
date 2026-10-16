@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -91,6 +92,9 @@ class TimeSeriesChartSkeletonTest {
 
     private val loadedOne = listOf(ChartSeries("", Color.Red, (0L..180L step 30).map { SeriesPoint(it, 1.0 + it / 60.0) }))
 
+    /** One series ending on 7: its header value "v7" is unlike the "v8" axis label. */
+    private val loadedSeven = listOf(ChartSeries("", Color.Red, (0L..180L step 30).map { SeriesPoint(it, 1.0 + it / 30.0) }))
+
     private val loadedTwo = listOf(
         ChartSeries("alpha", Color.Red, (0L..180L step 30).map { SeriesPoint(it, 1.0 + it / 60.0) }),
         ChartSeries("beta", Color.Blue, (0L..180L step 30).map { SeriesPoint(it, 2.0 + it / 90.0) }),
@@ -104,21 +108,26 @@ class TimeSeriesChartSkeletonTest {
         series: List<ChartSeries>,
         note: String? = null,
         reserveLegend: Boolean = false,
+        headerValue: String? = null,
+        poweredOn: Boolean = false,
     ): Handle {
         val handle = Handle(mutableStateOf(startLoading), mutableStateOf(series))
         setContent {
             MaterialTheme(typography = kdTypography()) {
                 Box(Modifier.size(CHART_W.dp, CHART_H.dp).background(Color.White)) {
-                    TimeSeriesChart(
-                        title = "CPU",
-                        series = handle.series.value,
-                        window = window,
-                        formatValue = { "v${it.toInt()}" },
-                        modifier = Modifier.fillMaxWidth().testTag(CHART_TAG),
-                        note = note,
-                        loading = handle.loading.value,
-                        reserveLegend = reserveLegend,
-                    )
+                    CompositionLocalProvider(LocalChartAreaPoweredOn provides poweredOn) {
+                        TimeSeriesChart(
+                            title = "CPU",
+                            series = handle.series.value,
+                            window = window,
+                            formatValue = { "v${it.toInt()}" },
+                            modifier = Modifier.fillMaxWidth().testTag(CHART_TAG),
+                            note = note,
+                            loading = handle.loading.value,
+                            reserveLegend = reserveLegend,
+                            headerValue = headerValue,
+                        )
+                    }
                 }
             }
         }
@@ -275,6 +284,113 @@ class TimeSeriesChartSkeletonTest {
         // plot box it would be 1 px thick.
         assertEquals(2, lineRows.size, "the 2 px stroke keeps both halves, rows were $lineRows")
         assertEquals(lineRows.first() + 1, lineRows.last(), "the two rows are adjacent")
+    }
+
+    // ── Header value ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a header value shows while loading and gives way to the series value, at the same height`() = runChart {
+        val handle = show(startLoading = true, series = emptyList(), headerValue = "live-1")
+        onNodeWithText("live-1").assertExists()
+        val skeleton = chartHeight()
+        handle.series.value = loadedSeven
+        handle.loading.value = false
+        waitForIdle()
+        onNodeWithText("live-1").assertDoesNotExist()
+        onNodeWithText("v7").assertExists()
+        assertEquals(skeleton, chartHeight(), "the header slot is always emitted, so nothing moves")
+    }
+
+    @Test
+    fun `a header value is ignored when not loading`() = runChart {
+        val handle = show(startLoading = false, series = loadedSeven, headerValue = "ignored")
+        onNodeWithText("ignored").assertDoesNotExist()
+        onNodeWithText("v7").assertExists()
+        handle.series.value = emptyList()
+        waitForIdle()
+        onNodeWithText("ignored").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a header value is ignored when a note wins over loading`() = runChart {
+        show(startLoading = true, series = emptyList(), note = "No access", headerValue = "ignored")
+        onNodeWithText("No access").assertExists()
+        onNodeWithText("ignored").assertDoesNotExist()
+    }
+
+    // ── Retro: a chart lit by its area only traces ──────────────────────────────
+
+    @Test
+    fun `Retro chart born in a powered-on area only traces the first time, then plays the full reveal`() {
+        ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+        var settledImage: PixelMap? = null
+        var fullAt50Image: PixelMap? = null
+        var fullAt100Image: PixelMap? = null
+        runChart {
+            show(startLoading = false, series = loadedOne)
+            settledImage = image()
+        }
+        val settled = settledImage!!
+        // The control: a chart born outside a powered-on area, 50 ms and 100 ms after its data lands.
+        runChart {
+            mainClock.autoAdvance = false
+            val handle = show(startLoading = true, series = emptyList(), poweredOn = false)
+            mainClock.advanceTimeByFrame()
+            handle.series.value = loadedOne
+            handle.loading.value = false
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            mainClock.advanceTimeBy(50)
+            waitForIdle()
+            fullAt50Image = image()
+            mainClock.advanceTimeBy(50)
+            waitForIdle()
+            fullAt100Image = image()
+        }
+        val fullAt50 = fullAt50Image!!
+        val fullAt100 = fullAt100Image!!
+        runChart {
+            mainClock.autoAdvance = false
+            val handle = show(startLoading = true, series = emptyList(), poweredOn = true)
+            mainClock.advanceTimeByFrame()
+            handle.series.value = loadedOne
+            handle.loading.value = false
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            mainClock.advanceTimeBy(50)
+            waitForIdle()
+            val traced = image()
+            assertFalse(traced.sameAs(fullAt50), "no CRT power-on frame: the area already lit the screen")
+            // The power-on frame hides the whole plot, so only the header value is red there; the trace draws the line.
+            assertTrue(traced.redCount() > fullAt50.redCount(), "the beam is already drawing the line")
+            assertTrue(traced.redCount() < settled.redCount(), "the beam has not reached the right edge")
+
+            mainClock.advanceTimeBy(1000)
+            waitForIdle()
+            assertTrue(image().sameAs(settled), "after the trace the chart is the settled one")
+
+            // A later loading -> loaded flip of the same chart (a range change) plays the full reveal.
+            handle.series.value = emptyList()
+            handle.loading.value = true
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            onNodeWithTag("chart-skeleton").assertExists()
+            handle.series.value = loadedOne
+            handle.loading.value = false
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+            // In the same 50 + 50 ms steps as the control: the clock's frame boundaries depend on the stepping.
+            mainClock.advanceTimeBy(50)
+            waitForIdle()
+            mainClock.advanceTimeBy(50)
+            waitForIdle()
+            val second = image()
+            assertFalse(second.sameAs(settled), "the second reveal is still running")
+            assertTrue(second.sameAs(fullAt100), "the second reveal is the full power-on, as for a chart outside an area")
+            mainClock.advanceTimeBy(1000)
+            waitForIdle()
+            assertTrue(image().sameAs(settled))
+        }
     }
 
     // ── Retro: reveal on data ───────────────────────────────────────────────────

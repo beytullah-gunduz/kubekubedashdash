@@ -130,7 +130,10 @@ private const val DAY_SEC = 86_400L
  * While [loading] (and with no [note], which wins) the plot is a skeleton: only the grid, pulsing,
  * at the same height as the loaded chart; [reserveLegend] keeps one legend line's height so the
  * card does not grow when a legend arrives. In Retro the data then lights up with a CRT power-on
- * and a stepped beam trace; a chart first composed with `loading = false` never plays it.
+ * and a stepped beam trace; a chart first composed with `loading = false` never plays it. A chart
+ * born inside content that a Retro [ChartAreaTransition] has just powered on skips the power-on the
+ * first time its data lands and only traces the beam. [headerValue], if any, fills the header's
+ * value slot while the chart is [loading] (a provisional figure); it is ignored otherwise.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -145,6 +148,7 @@ fun TimeSeriesChart(
     markers: List<ChartMarker> = emptyList(),
     loading: Boolean = false,
     reserveLegend: Boolean = false,
+    headerValue: String? = null,
 ) {
     val colored = remember(series) { series.filterNot { it.muted } }
     val muted = remember(series) { series.filter { it.muted } }
@@ -170,10 +174,22 @@ fun TimeSeriesChart(
 
     // Born at 0 while loading, so the first frame after the data lands is already in the reveal.
     val reveal = remember { Animatable(if (loading) 0f else 1f) }
+    // Read once at birth: inside content a Retro area swap has just powered on, the first reveal is the trace alone.
+    // Only a chart born loading has a reveal to shorten; one born loaded is unaffected.
+    val inPoweredOnArea = LocalChartAreaPoweredOn.current
+    var skipPowerOn by remember { mutableStateOf(loading && inPoweredOnArea) }
     LaunchedEffect(loading) {
         when {
             loading -> reveal.snapTo(0f)
+
+            ThemeManager.isRetro && skipPowerOn -> {
+                skipPowerOn = false
+                reveal.snapTo(POWER_ON_FRACTION)
+                reveal.animateTo(1f, tween((REVEAL_MS - 370) * ScreenshotHooks.crtTimeScale.value, easing = LinearEasing))
+            }
+
             ThemeManager.isRetro -> reveal.animateTo(1f, tween(REVEAL_MS * ScreenshotHooks.crtTimeScale.value, easing = LinearEasing))
+
             else -> reveal.snapTo(1f)
         }
     }
@@ -200,9 +216,15 @@ fun TimeSeriesChart(
                 val last = only?.points?.lastOrNull()
                 // Always emitted, empty when there is nothing to show: the row is then as tall in every state.
                 Text(
-                    if (!skeleton && only != null && last != null) formatValue(last.value) else "",
+                    if (!skeleton && only != null && last != null) {
+                        formatValue(last.value)
+                    } else if (skeleton) {
+                        headerValue.orEmpty()
+                    } else {
+                        ""
+                    },
                     style = MaterialTheme.typography.labelLarge,
-                    color = only?.color ?: KdTextSecondary,
+                    color = if (skeleton) KdTextSecondary else only?.color ?: KdTextSecondary,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
