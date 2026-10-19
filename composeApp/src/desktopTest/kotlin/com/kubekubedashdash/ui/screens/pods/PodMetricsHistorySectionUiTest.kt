@@ -187,6 +187,7 @@ class PodMetricsHistorySectionUiTest {
         resources: List<ContainerResources> = listOf(ContainerResources("app", cpuLimitMillis = 500), ContainerResources("sidecar")),
         hostNetwork: Boolean = false,
         uid: String = "uid-$name",
+        phase: String = "Running",
     ) = PodInfo(
         uid = uid,
         name = name,
@@ -202,6 +203,7 @@ class PodMetricsHistorySectionUiTest {
         containers = emptyList(),
         resources = resources,
         hostNetwork = hostNetwork,
+        phase = phase,
     )
 
     private val withoutLimit = listOf(ContainerResources("app"), ContainerResources("sidecar"))
@@ -948,6 +950,39 @@ class PodMetricsHistorySectionUiTest {
         onNodeWithText("CPU throttling").assertDoesNotExist()
         onNodeWithText("No data in this range").assertDoesNotExist()
         onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `a finished pod with no history says so and shows no live charts that would never fill`() = runComposeUiTest {
+        // metrics-server never reports a pod that has run to its end, so "Collecting data…" would stay forever.
+        val service = serviceOver(settingsOf(GmpSetting), FakeSource(empty = true))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(phase = "Succeeded"), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(FINISHED_POD_NO_HISTORY_NOTE).assertExists()
+        onNodeWithText(NO_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText("Collecting data…").assertCountEquals(0)
+        onAllNodesWithText("showing live metrics-server data", substring = true).assertCountEquals(0)
+        // The range can still be widened to cover the pod's run.
+        onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `a running pod with no history still shows the live charts`() = runComposeUiTest {
+        val service = serviceOver(settingsOf(GmpSetting), FakeSource(empty = true))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(phase = "Running"), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(NO_HISTORY_NOTE).assertExists()
+        onAllNodesWithText("Collecting data…").assertCountEquals(2)
     }
 
     @Test

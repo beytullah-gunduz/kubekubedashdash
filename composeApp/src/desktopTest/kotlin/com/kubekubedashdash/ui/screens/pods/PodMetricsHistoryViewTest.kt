@@ -154,6 +154,22 @@ class PodMetricsHistoryViewTest {
     }
 
     @Test
+    fun `a finished pod's fallback drops the live charts and the live-data clause`() {
+        val noHistory = historyView(gmp, loaded(PodSeriesKind.Cpu to SeriesResult.Ok(emptyList()), PodSeriesKind.Memory to SeriesResult.Ok(emptyList())), finished = true)
+        assertEquals(HistoryView.LiveFallback(FINISHED_POD_NO_HISTORY_NOTE, transient = false, liveCharts = false), noHistory)
+        val failing = historyView(gmp, loaded(PodSeriesKind.Cpu to failed, PodSeriesKind.Memory to failed), finished = true)
+        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s.", transient = true, liveCharts = false), failing)
+    }
+
+    @Test
+    fun `only a pod that has run to its end counts as finished`() {
+        fun phase(p: String) = podFinished(pod().copy(phase = p))
+        assertTrue(phase("Succeeded"))
+        assertTrue(phase("Failed"))
+        listOf("Running", "Pending", "Unknown", "").forEach { assertFalse(phase(it), it) }
+    }
+
+    @Test
     fun `a fallback is transient only when the failure behind it is`() {
         fun fallback(cpu: SeriesResult, memory: SeriesResult) = assertIs<HistoryView.LiveFallback>(historyView(gmp, loaded(PodSeriesKind.Cpu to cpu, PodSeriesKind.Memory to memory)))
 

@@ -63,6 +63,14 @@ internal const val NO_THROTTLING_DATA_NOTE = "No throttling data in this range."
 /** Appended to the live value shown in a header while the history loads, so it does not read as the chart's value. */
 internal const val LIVE_VALUE_SUFFIX = " · live"
 internal const val NO_HISTORY_NOTE = "No history for this pod in this range. Retrying every 30 s; showing live metrics-server data."
+internal const val FINISHED_POD_NO_HISTORY_NOTE =
+    "No history for this pod in this range. It has finished, so metrics-server no longer measures it: pick a range that covers its run."
+
+/** The live-data clause the fallback messages end with; dropped for a finished pod, which metrics-server never measures again. */
+private const val LIVE_DATA_CLAUSE = "; showing live metrics-server data."
+
+/** True for a pod that has run to its end (phase Succeeded or Failed): metrics-server no longer reports it. */
+internal fun podFinished(pod: PodInfo): Boolean = pod.phase == "Succeeded" || pod.phase == "Failed"
 
 /** What the section asks the source for: network is the node's on a host-network pod, throttling needs a CPU limit. */
 internal fun historyKinds(pod: PodInfo): List<PodSeriesKind> = buildList {
@@ -110,14 +118,15 @@ internal sealed interface HistoryView {
 
     /**
      * Neither CPU nor memory has a point to draw (both failed, or nothing recorded): [message] explains, the metrics-server charts follow.
-     * [transient] marks a failure a retry can fix, which gets a Retry button.
+     * [transient] marks a failure a retry can fix, which gets a Retry button. [liveCharts] is false for a finished pod:
+     * metrics-server will never report it, so the charts would only ever say "Collecting data…".
      */
-    data class LiveFallback(val message: String, val transient: Boolean = false) : HistoryView
+    data class LiveFallback(val message: String, val transient: Boolean = false, val liveCharts: Boolean = true) : HistoryView
 
     data class Charts(val loaded: LoadedHistory) : HistoryView
 }
 
-internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryView {
+internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?, finished: Boolean = false): HistoryView {
     // Auto is still searching: the live charts stand in under the loading line.
     if (choice is SourceChoice.Detecting) return HistoryView.Loading
     if (choice is SourceChoice.None) {
@@ -141,6 +150,10 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
     // A failure explains better than "no history": it is what kept the points away.
     val failed = loaded.results[PodSeriesKind.Cpu] as? SeriesResult.Failed
         ?: loaded.results[PodSeriesKind.Memory] as? SeriesResult.Failed
+    if (finished) {
+        val message = failed?.let { failureMessage(choice, it).replace(LIVE_DATA_CLAUSE, ".") } ?: FINISHED_POD_NO_HISTORY_NOTE
+        return HistoryView.LiveFallback(message, transient = failed?.isTransient() == true, liveCharts = false)
+    }
     return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE, transient = failed?.isTransient() == true)
 }
 
@@ -342,7 +355,7 @@ internal fun PodMetricsHistorySection(
         }
     }
 
-    when (val view = historyView(choice, loaded)) {
+    when (val view = historyView(choice, loaded, finished = podFinished(pod))) {
         // The live charts carry their own "Resource Usage" title, so the hint goes under it.
         is HistoryView.LiveOnly -> if (liveHistory.isNotEmpty()) {
             PodMetricsSection(liveHistory, note = view.hint.ifBlank { null })
@@ -382,14 +395,15 @@ internal fun PodMetricsHistorySection(
 
                             // The header stays, so a range that keeps failing can still be changed; the live
                             // charts follow without their own title, even before the first snapshot (their
-                            // own "Collecting data…"), so the swap never lands on nothing.
+                            // own "Collecting data…"), so the swap never lands on nothing. Not for a finished
+                            // pod: no snapshot will ever come, and the message says so.
                             is HistoryView.LiveFallback -> {
                                 if (v.transient) {
                                     HistoryRetryLine(v.message) { retry++ }
                                 } else {
                                     Text(v.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                                 }
-                                PodMetricsSection(a.live, showTitle = false)
+                                if (v.liveCharts) PodMetricsSection(a.live, showTitle = false)
                             }
 
                             is HistoryView.Charts, is HistoryView.LiveOnly -> Unit // unreachable, keeps the when exhaustive
