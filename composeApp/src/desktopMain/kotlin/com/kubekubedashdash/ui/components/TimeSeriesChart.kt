@@ -1,11 +1,8 @@
 package com.kubekubedashdash.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -42,6 +39,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -111,6 +109,12 @@ private const val POWER_ON_FRACTION = 370f / 670f
 /** The beam trace advances in this many steps (Retro motion is stepped). */
 private const val BEAM_STEPS = 10
 
+/** Default only: how long the curve takes to trace left to right when the data lands. */
+private const val DEFAULT_TRACE_MS = 700
+
+/** Decelerating, continuous: the Default trace starts fast and settles. */
+private val DefaultTraceEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
 private val ReadoutTime = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT)
 private val ReadoutDayTime = DateTimeFormatter.ofPattern("EEE HH:mm:ss", Locale.ROOT)
 private val AxisTime = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
@@ -127,10 +131,12 @@ private const val DAY_SEC = 86_400L
  * legend entry that counts every muted series handed in. Markers outside [window] are neither
  * drawn nor listed.
  *
- * While [loading] (and with no [note], which wins) the plot is a skeleton: only the grid, pulsing,
- * at the same height as the loaded chart; [reserveLegend] keeps one legend line's height so the
- * card does not grow when a legend arrives. In Retro the data then lights up with a CRT power-on
- * and a stepped beam trace; a chart first composed with `loading = false` never plays it. A chart
+ * While [loading] (and with no [note], which wins) the plot is a skeleton, at the same height as the
+ * loaded chart: the grid plus the in-plot loading look of [ChartLoadingPlot] (a ghost curve, a sweeping
+ * band and a "Loading…" caption; Retro: a stepping beam and "ACQUIRING SIGNAL"). [reserveLegend] keeps
+ * one legend line's height so the card does not grow when a legend arrives. The data then traces in
+ * left to right (Default: continuous, with the header value fading in; Retro: a CRT power-on and a
+ * stepped beam trace); a chart first composed with `loading = false` never plays it. A chart
  * born inside content that a Retro [ChartAreaTransition] has just powered on skips the power-on the
  * first time its data lands and only traces the beam. [headerValue], if any, fills the header's
  * value slot while the chart is [loading] (a provisional figure); it is ignored otherwise.
@@ -170,7 +176,6 @@ fun TimeSeriesChart(
     val yMax = chartYMax(seriesMax, onScale.maxOfOrNull { it.value } ?: 0.0)
     val message = note ?: if (!loading && drawn.all { it.points.isEmpty() } && mutedDrawn.all { it.points.isEmpty() }) NO_DATA_TEXT else null
     val skeleton = loading && message == null
-    val skeletonAlpha = if (skeleton) rememberSkeletonAlpha() else null
 
     // Born at 0 while loading, so the first frame after the data lands is already in the reveal.
     val reveal = remember { Animatable(if (loading) 0f else 1f) }
@@ -190,7 +195,7 @@ fun TimeSeriesChart(
 
             ThemeManager.isRetro -> reveal.animateTo(1f, tween(REVEAL_MS * ScreenshotHooks.crtTimeScale.value, easing = LinearEasing))
 
-            else -> reveal.snapTo(1f)
+            else -> if (reveal.value < 1f) reveal.animateTo(1f, tween(DEFAULT_TRACE_MS, easing = DefaultTraceEasing)) else reveal.snapTo(1f)
         }
     }
 
@@ -226,6 +231,11 @@ fun TimeSeriesChart(
                     style = MaterialTheme.typography.labelLarge,
                     color = if (skeleton) KdTextSecondary else only?.color ?: KdTextSecondary,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // Default fades the value in alongside the trace; the layer is always there so the traced and the
+                    // born-loaded chart draw identically once the trace is over. Draw-phase read.
+                    modifier = Modifier.graphicsLayer { alpha = if (skeleton || ThemeManager.isRetro) 1f else reveal.value },
                 )
             }
 
@@ -259,13 +269,7 @@ fun TimeSeriesChart(
                         modifier = Modifier.align(Alignment.Center).padding(horizontal = 4.dp),
                     )
                 } else if (skeleton) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val alpha = skeletonAlpha?.invoke() ?: 0.4f
-                        for (i in 1..3) {
-                            val y = size.height * i / 4f
-                            drawLine(KdBorder.copy(alpha = alpha), Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5f)
-                        }
-                    }
+                    ChartLoadingPlot(CHART_LOADING_TEXT, CHART_ACQUIRING_TEXT)
                 } else {
                     Canvas(
                         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
@@ -328,14 +332,19 @@ fun TimeSeriesChart(
                             )
                         }
 
-                        // Retro reveal: the power-on lights the grid, then the beam draws the lines left to right.
+                        // Reveal: Retro's power-on lights the grid, then the beam draws the lines left to right in steps;
+                        // Default traces them continuously (the easing is in the tween).
                         val progress = reveal.value
-                        val revealing = ThemeManager.isRetro && progress < 1f
-                        val traceRight = if (revealing) {
-                            val q = ((progress - POWER_ON_FRACTION) / (1f - POWER_ON_FRACTION)).coerceIn(0f, 1f)
-                            size.width * ceil(q * BEAM_STEPS) / BEAM_STEPS
-                        } else {
-                            size.width
+                        val revealing = progress < 1f
+                        val traceRight = when {
+                            !revealing -> size.width
+
+                            ThemeManager.isRetro -> {
+                                val q = ((progress - POWER_ON_FRACTION) / (1f - POWER_ON_FRACTION)).coerceIn(0f, 1f)
+                                size.width * ceil(q * BEAM_STEPS) / BEAM_STEPS
+                            }
+
+                            else -> size.width * progress
                         }
 
                         val strokeJoin = if (ThemeManager.isRetro) StrokeJoin.Miter else StrokeJoin.Round
@@ -381,10 +390,14 @@ fun TimeSeriesChart(
                             }
                         }
 
-                        // Clipping only while the beam traces: outside the reveal the lines overhang the plot box (a flat line
+                        // Clipping only while the trace runs: outside the reveal the lines overhang the plot box (a flat line
                         // at 0 sits on its bottom edge, round caps at both ends), exactly as before the reveal existed.
+                        // The padding keeps that overhang while tracing (both edges, and the end caps in Default),
+                        // so nothing pops when the trace ends.
                         if (revealing) {
-                            clipRect(right = traceRight) {
+                            val pad = 2.dp.toPx()
+                            val right = if (ThemeManager.isRetro) traceRight else (size.width + pad) * progress
+                            clipRect(left = -pad, top = -pad, right = right, bottom = size.height + pad) {
                                 drawMutedSeries()
                                 drawColouredSeries()
                             }
@@ -407,7 +420,7 @@ fun TimeSeriesChart(
                         formatValue(yMax),
                         style = MaterialTheme.typography.labelSmall,
                         color = dim,
-                        modifier = Modifier.align(Alignment.TopStart),
+                        modifier = Modifier.align(Alignment.TopStart).graphicsLayer { alpha = if (ThemeManager.isRetro) 1f else reveal.value },
                     )
                 }
             }
@@ -489,22 +502,6 @@ fun TimeSeriesChart(
             }
         }
     }
-}
-
-/** The skeleton grid's opacity, read in the draw phase: Default pulses 0.4 to 0.8 like `SkeletonRows`; Retro steps between 0.8 and 0.4. */
-@Composable
-private fun rememberSkeletonAlpha(): () -> Float {
-    if (ThemeManager.isRetro) {
-        val step = rememberFrameStep(180, 2)
-        return { 0.8f * retroPulseAlpha(step.intValue, 0.5f) }
-    }
-    val alpha = rememberInfiniteTransition(label = "chartSkeleton").animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-        label = "alpha",
-    )
-    return { alpha.value }
 }
 
 private fun ChartSeries.peak(): Double = points.maxOfOrNull { it.value } ?: 0.0

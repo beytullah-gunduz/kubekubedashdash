@@ -44,9 +44,10 @@ private const val CHART_H = 300
 private const val CHART_TAG = "chart"
 
 /**
- * [TimeSeriesChart]'s loading skeleton and its Retro reveal. The skeleton keeps the loaded chart's
- * height (so nothing below it moves when the data lands), a note beats it, and a Default chart that
- * went loading -> loaded is pixel-identical to one first composed loaded. In Retro the data lights up
+ * [TimeSeriesChart]'s loading skeleton and its reveal. The skeleton keeps the loaded chart's height
+ * (so nothing below it moves when the data lands), carries an in-plot caption and a moving band (Default)
+ * or beam (Retro), and a note beats it. A Default chart that went loading -> loaded traces its curve in
+ * over 700 ms and is then pixel-identical to one first composed loaded. In Retro the data lights up
  * with a CRT power-on and a beam trace, which a chart first composed loaded never plays. Every theme
  * switch goes through `sync*`, never a `set*`, so nothing here ever persists; the manager's prior
  * mode, style and palette are restored after each case and the test runs only against the Gradle
@@ -229,38 +230,71 @@ class TimeSeriesChartSkeletonTest {
         assertTrue(image().redCount() > 200)
     }
 
-    // ── Default: loading -> loaded is the same picture as first composed loaded ──
+    // ── Default: loading -> loaded traces in, then is the picture of a chart first composed loaded ──
+
+    /**
+     * Plays loading -> loaded on a manual clock: 200 ms in the trace is under way (some of the line, but not
+     * all of it), and after the trace the chart is pixel-identical to [settled]. Returns the mid-trace image.
+     */
+    private fun SkikoComposeUiTest.traceTo(settled: PixelMap, series: List<ChartSeries>, reserveLegend: Boolean): PixelMap {
+        mainClock.autoAdvance = false
+        val handle = show(startLoading = true, series = emptyList(), reserveLegend = reserveLegend)
+        mainClock.advanceTimeByFrame()
+        handle.series.value = series
+        handle.loading.value = false
+        mainClock.advanceTimeByFrame()
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        mainClock.advanceTimeBy(200)
+        waitForIdle()
+        val tracing = image()
+        assertFalse(tracing.sameAs(settled), "200 ms in, the Default trace is still running")
+        assertTrue(tracing.redCount() in 1 until settled.redCount(), "part of the line is drawn, not all of it")
+
+        mainClock.advanceTimeBy(1000)
+        waitForIdle()
+        assertTrue(image().sameAs(settled), "after the trace the chart is the one that was never loading")
+        return tracing
+    }
 
     @Test
-    fun `Default loading to loaded is pixel-identical to first composed loaded`() {
+    fun `Default traces the curve in after loading and then is pixel-identical to first composed loaded`() {
         var settled: PixelMap? = null
         runChart {
             show(startLoading = false, series = loadedOne)
             settled = image()
         }
         runChart {
-            val handle = show(startLoading = true, series = emptyList())
-            handle.series.value = loadedOne
-            handle.loading.value = false
-            waitForIdle()
-            assertTrue(image().sameAs(settled!!), "Default has no reveal: the pixels are those of a chart that was never loading")
+            val tracing = traceTo(settled!!, loadedOne, reserveLegend = false)
+            // The header value fades in with the trace: the header rows (above the plot) are not yet the settled ones.
+            val headerRows = 0 until 30
+            val faded = headerRows.any { y -> (0 until tracing.width).any { x -> tracing[x, y] != settled[x, y] } }
+            assertTrue(faded, "the header value is still fading in mid-trace")
         }
     }
 
     @Test
-    fun `Default two-series loading to loaded is pixel-identical to first composed loaded`() {
+    fun `Default two-series loading to loaded traces in and then is pixel-identical to first composed loaded`() {
         var settled: PixelMap? = null
         runChart {
             show(startLoading = false, series = loadedTwo, reserveLegend = true)
             settled = image()
         }
-        runChart {
-            val handle = show(startLoading = true, series = emptyList(), reserveLegend = true)
-            handle.series.value = loadedTwo
-            handle.loading.value = false
-            waitForIdle()
-            assertTrue(image().sameAs(settled!!))
-        }
+        runChart { traceTo(settled!!, loadedTwo, reserveLegend = true) }
+    }
+
+    @Test
+    fun `a Default refresh of loaded data does not trace again`() = runChart {
+        mainClock.autoAdvance = false
+        val handle = show(startLoading = false, series = loadedOne)
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        val first = image()
+        // A periodic refresh hands in new points with loading still false: nothing replays.
+        handle.series.value = loadedOne.map { it.copy(points = it.points.toList()) }
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        assertTrue(image().sameAs(first), "no trace on a refresh")
     }
 
     @Test
@@ -448,20 +482,80 @@ class TimeSeriesChartSkeletonTest {
     }
 
     @Test
-    fun `Retro skeleton pulses between two looks`() {
+    fun `Retro beam steps across the plot while loading`() {
         ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
         runChart {
             mainClock.autoAdvance = false
             show(startLoading = true, series = emptyList())
             mainClock.advanceTimeByFrame()
             waitForIdle()
-            val seen = HashSet<Int>()
-            repeat(60) {
-                mainClock.advanceTimeByFrame()
-                waitForIdle()
-                seen += image().buffer.contentHashCode()
-            }
-            assertEquals(2, seen.size, "a Retro square wave: two looks")
+            onNodeWithText("ACQUIRING SIGNAL").assertExists()
+            val before = image()
+            mainClock.advanceTimeBy(160)
+            waitForIdle()
+            assertFalse(image().sameAs(before), "one beam step later the picture differs")
         }
+    }
+
+    // ── Loading look: band, captions ────────────────────────────────────────────
+
+    @Test
+    fun `Default band moves while loading`() = runChart {
+        mainClock.autoAdvance = false
+        show(startLoading = true, series = emptyList())
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        val before = image()
+        mainClock.advanceTimeBy(300)
+        waitForIdle()
+        val after = image()
+        // The left quarter of the plot, above the centred caption: only the band moves there (the spinner
+        // turns in the caption, so a whole-image comparison would pass with a static band).
+        val xs = 12 until 12 + (before.width - 24) / 4
+        val ys = 40 until 60
+        val moved = xs.any { x -> ys.any { y -> before[x, y] != after[x, y] } }
+        assertTrue(moved, "300 ms later the band has moved across the left of the plot")
+    }
+
+    @Test
+    fun `Default band is clipped to the plot at its first frame`() = runChart {
+        mainClock.autoAdvance = false
+        show(startLoading = true, series = emptyList())
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        val img = image()
+        // The band starts 30 % left of the plot, i.e. over the card's 10 dp padding: that padding must stay
+        // the card colour on the plot's rows, exactly as on a header row.
+        assertEquals(img[2, 15], img[2, 80], "the band does not paint outside the plot box")
+    }
+
+    @Test
+    fun `Default caption shows while loading and is gone after`() = runChart {
+        val handle = show(startLoading = true, series = emptyList())
+        onNodeWithText(CHART_LOADING_TEXT).assertExists()
+        handle.series.value = loadedOne
+        handle.loading.value = false
+        waitForIdle()
+        onNodeWithText(CHART_LOADING_TEXT).assertDoesNotExist()
+    }
+
+    @Test
+    fun `Retro caption shows while loading and is gone after`() {
+        ThemeManager.syncStyleFromPreferences(ThemeStyle.RETRO)
+        runChart {
+            val handle = show(startLoading = true, series = emptyList())
+            onNodeWithText("ACQUIRING SIGNAL").assertExists()
+            onNodeWithText(CHART_LOADING_TEXT).assertDoesNotExist()
+            handle.series.value = loadedOne
+            handle.loading.value = false
+            waitForIdle()
+            onNodeWithText("ACQUIRING SIGNAL").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun `a note wins over the loading caption`() = runChart {
+        show(startLoading = true, series = emptyList(), note = "No access")
+        onNodeWithText(CHART_LOADING_TEXT).assertDoesNotExist()
     }
 }

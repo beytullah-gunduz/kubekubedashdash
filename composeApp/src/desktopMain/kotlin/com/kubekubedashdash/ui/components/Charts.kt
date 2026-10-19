@@ -341,34 +341,31 @@ fun MetricsLineChart(
                     drawKdDot(lineColor, 3.dp.toPx(), Offset(lastX, lastY))
                     drawKdDot(KdSurfaceVariant, 1.5.dp.toPx(), Offset(lastX, lastY))
                 }
-
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        "Min: ${formatValue(values.min())}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary.copy(alpha = 0.7f),
-                    )
-                    Text(
-                        "Max: ${formatValue(values.max())}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary.copy(alpha = 0.7f),
-                    )
-                }
             } else {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(80.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "Collecting data\u2026",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KdTextSecondary,
-                    )
+                Box(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+                    ChartLoadingPlot("Collecting data\u2026")
                 }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            // Always one line (empty before the second sample) so the card does not grow when it arrives.
+            val ready = values.size >= 2
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    if (ready) "Min: ${formatValue(values.min())}" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary.copy(alpha = 0.7f),
+                    minLines = 1,
+                )
+                Text(
+                    if (ready) "Max: ${formatValue(values.max())}" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KdTextSecondary.copy(alpha = 0.7f),
+                    minLines = 1,
+                )
             }
         }
     }
