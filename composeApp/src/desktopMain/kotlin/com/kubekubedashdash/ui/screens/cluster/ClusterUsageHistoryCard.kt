@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,13 +58,14 @@ import com.kubekubedashdash.services.metricshistory.ScopeRef
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
-import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.services.metricshistory.isTransient
+import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartSeries
+import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
 import com.kubekubedashdash.ui.screens.pods.HISTORY_REFRESH_MS
-import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.ui.screens.pods.shortFailure
@@ -142,10 +144,13 @@ internal fun ClusterUsageHistoryCard(
     var range by remember { mutableStateOf(HistoryRange.H6) }
     val scopeRef = remember(namespaceScope) { scopeRefOf(namespaceScope) }
     // Outlives a collapse: expanding again finds the last answer instead of a loading line.
-    var loaded by remember(namespaceScope, range, choice) { mutableStateOf<LoadedScope?>(null) }
+    // Retry bumps [retry], a key of both this state and the fetch below: the key change cancels the
+    // fetch in flight and starts a fresh one, with no imperative reset.
+    var retry by remember { mutableIntStateOf(0) }
+    var loaded by remember(namespaceScope, range, choice, retry) { mutableStateOf<LoadedScope?>(null) }
 
     if (expanded && source != null) {
-        LaunchedEffect(namespaceScope, range, choice) {
+        LaunchedEffect(namespaceScope, range, choice, retry) {
             while (true) {
                 val window = range.window(nowEpochSec())
                 // A 24 h window moves only every 720 s: refetching an identical, fully answered one wastes quota.
@@ -229,14 +234,25 @@ internal fun ClusterUsageHistoryCard(
                 ) {
                     val answer = loaded
                     val failed = answer?.let(::scopeHeadlineFailure)
-                    when {
-                        answer == null -> LoadingLine()
+                    // A structural failure collapses to its message. Anything else keeps the charts, a skeleton
+                    // while loading and a failure note in place after a transient one, so the card never resizes.
+                    // The values travel in the state: the outgoing content is still drawn after `loaded` moved on.
+                    val area = if (failed != null && !failed.isTransient()) {
+                        UsageArea.Note(deploymentFailureMessage(choice, failed))
+                    } else {
+                        UsageArea.Charts(answer, failed)
+                    }
+                    ChartAreaTransition(area, contentKey = { it::class }) { a ->
+                        when (a) {
+                            is UsageArea.Note -> NoteLine(a.text)
 
-                        failed != null -> NoteLine(deploymentFailureMessage(choice, failed))
-
-                        else -> {
-                            UsageHistoryCharts(answer)
-                            NoteLine(usageHistoryNote(source.label))
+                            is UsageArea.Charts -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                UsageHistoryCharts(a.answer, range.window(nowEpochSec()))
+                                when {
+                                    a.failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, a.failed)) { retry++ }
+                                    else -> NoteLine(usageHistoryNote(source.label))
+                                }
+                            }
                         }
                     }
                 }
@@ -255,12 +271,11 @@ private suspend fun scopeSeriesOrFailed(source: MetricsHistorySource, kind: Scop
     SeriesResult.Failed(HistoryFailure.Unavailable, "error")
 }
 
-@Composable
-private fun LoadingLine() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        BusyIndicator(modifier = Modifier.size(12.dp), color = KdTextSecondary, strokeWidth = 1.5.dp)
-        Text(LOADING_HISTORY_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-    }
+/** What the card's chart area shows, and the state [ChartAreaTransition] swaps on. */
+private sealed interface UsageArea {
+    data class Charts(val answer: LoadedScope?, val failed: SeriesResult.Failed?) : UsageArea
+
+    data class Note(val text: String) : UsageArea
 }
 
 @Composable
@@ -269,9 +284,9 @@ private fun NoteLine(text: String) {
 }
 
 @Composable
-private fun UsageHistoryCharts(loaded: LoadedScope) {
-    val cpu = loaded.results[ScopeKind.CpuCores]
-    val memory = loaded.results[ScopeKind.MemoryBytes]
+private fun UsageHistoryCharts(loaded: LoadedScope?, fallbackWindow: QueryWindow) {
+    val cpu = loaded?.results?.get(ScopeKind.CpuCores)
+    val memory = loaded?.results?.get(ScopeKind.MemoryBytes)
 
     @Composable
     fun Chart(title: String, result: SeriesResult?, color: Color, formatValue: (Double) -> String, modifier: Modifier) {
@@ -279,10 +294,11 @@ private fun UsageHistoryCharts(loaded: LoadedScope) {
         TimeSeriesChart(
             title = title,
             series = if (points.isEmpty()) emptyList() else listOf(ChartSeries("", color, points)),
-            window = loaded.window,
+            window = loaded?.window ?: fallbackWindow,
             formatValue = formatValue,
             modifier = modifier,
             note = (result as? SeriesResult.Failed)?.let(::shortFailure),
+            loading = loaded == null,
         )
     }
 

@@ -3,6 +3,7 @@ package com.kubekubedashdash.ui.screens.pods
 import androidx.compose.ui.graphics.Color
 import com.kubekubedashdash.models.ContainerResources
 import com.kubekubedashdash.models.PodInfo
+import com.kubekubedashdash.models.PodMetricsSnapshot
 import com.kubekubedashdash.services.metricshistory.GmpTarget
 import com.kubekubedashdash.services.metricshistory.HistoryFailure
 import com.kubekubedashdash.services.metricshistory.InClusterTarget
@@ -120,10 +121,68 @@ class PodMetricsHistoryViewTest {
         }
     }
 
+    private val liveRow = listOf(PodMetricsSnapshot(1_000, 100, 1_048_576), PodMetricsSnapshot(2_000, 200, 2_097_152))
+
+    @Test
+    fun `with history points the area is the grid, carrying the latest live snapshot`() {
+        val results = loaded(PodSeriesKind.Cpu to ok)
+        assertEquals(PodArea.Grid(results, null), podArea(HistoryView.Charts(results), sourceKnown = true, live = liveRow))
+        assertEquals(PodArea.Grid(results, null), podArea(HistoryView.Charts(results), sourceKnown = true, live = emptyList()))
+    }
+
+    @Test
+    fun `loading with a source known is the skeleton grid with the latest live snapshot`() {
+        assertEquals(PodArea.Grid(null, liveRow.last()), podArea(HistoryView.Loading, sourceKnown = true, live = liveRow))
+    }
+
+    @Test
+    fun `loading without a source yet is the live row`() {
+        assertEquals(PodArea.Live(HistoryView.Loading, liveRow), podArea(HistoryView.Loading, sourceKnown = false, live = liveRow))
+    }
+
+    @Test
+    fun `a live fallback is the live row whatever the source`() {
+        val fallback = HistoryView.LiveFallback("down", transient = true)
+        assertEquals(PodArea.Live(fallback, liveRow), podArea(fallback, sourceKnown = true, live = liveRow))
+        assertEquals(PodArea.Live(fallback, emptyList()), podArea(fallback, sourceKnown = true, live = emptyList()))
+    }
+
     @Test
     fun `CPU and memory both failing is a source failure`() {
         val view = historyView(gmp, loaded(PodSeriesKind.Cpu to failed, PodSeriesKind.Memory to failed, PodSeriesKind.NetworkRx to ok))
-        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."), view)
+        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data.", transient = true), view)
+    }
+
+    @Test
+    fun `a finished pod's fallback drops the live charts and the live-data clause`() {
+        val noHistory = historyView(gmp, loaded(PodSeriesKind.Cpu to SeriesResult.Ok(emptyList()), PodSeriesKind.Memory to SeriesResult.Ok(emptyList())), finished = true)
+        assertEquals(HistoryView.LiveFallback(FINISHED_POD_NO_HISTORY_NOTE, transient = false, liveCharts = false), noHistory)
+        val failing = historyView(gmp, loaded(PodSeriesKind.Cpu to failed, PodSeriesKind.Memory to failed), finished = true)
+        assertEquals(HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s.", transient = true, liveCharts = false), failing)
+    }
+
+    @Test
+    fun `only a pod that has run to its end counts as finished`() {
+        fun phase(p: String) = podFinished(pod().copy(phase = p))
+        assertTrue(phase("Succeeded"))
+        assertTrue(phase("Failed"))
+        listOf("Running", "Pending", "Unknown", "").forEach { assertFalse(phase(it), it) }
+    }
+
+    @Test
+    fun `a fallback is transient only when the failure behind it is`() {
+        fun fallback(cpu: SeriesResult, memory: SeriesResult) = assertIs<HistoryView.LiveFallback>(historyView(gmp, loaded(PodSeriesKind.Cpu to cpu, PodSeriesKind.Memory to memory)))
+
+        assertTrue(fallback(failed, failed).transient)
+        // Memory's failure explains when CPU merely has no point.
+        assertTrue(fallback(empty, failed).transient)
+        assertFalse(fallback(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"), failed).transient)
+        assertFalse(fallback(SeriesResult.Failed(HistoryFailure.Unavailable, "unsupported"), failed).transient)
+        assertFalse(fallback(SeriesResult.Failed(HistoryFailure.Unavailable, "bad request"), failed).transient)
+        // No failure behind "no history": nothing for Retry to fix.
+        val none = fallback(empty, pointless)
+        assertEquals(NO_HISTORY_NOTE, none.message)
+        assertFalse(none.transient)
     }
 
     @Test
@@ -137,7 +196,7 @@ class PodMetricsHistoryViewTest {
     @Test
     fun `with no point to draw a failure explains instead of the no-history line`() {
         assertEquals(
-            HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data."),
+            HistoryView.LiveFallback("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s; showing live metrics-server data.", transient = true),
             historyView(gmp, loaded(PodSeriesKind.Cpu to empty, PodSeriesKind.Memory to failed)),
         )
     }

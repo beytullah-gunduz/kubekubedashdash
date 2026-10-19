@@ -101,6 +101,13 @@ sealed interface SeriesResult {
     data class Failed(val failure: HistoryFailure, val detail: String = "") : SeriesResult
 }
 
+/**
+ * A failure a retry can fix by itself: the source was reachable before or may be soon. Every [HistoryFailure.Unavailable]
+ * is transient except "unsupported" (the source has no such query; interface defaults) and "bad request" (a deterministic
+ * malformed request). Every other [HistoryFailure] is structural: only a change of setup, permission or source fixes it.
+ */
+fun SeriesResult.Failed.isTransient(): Boolean = failure == HistoryFailure.Unavailable && detail != "unsupported" && detail != "bad request"
+
 interface MetricsHistorySource {
     /** Shown beside the charts: where the data comes from. */
     val label: String

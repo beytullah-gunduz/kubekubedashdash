@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -46,6 +47,9 @@ import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.services.metricshistory.jsonResponse
 import com.kubekubedashdash.services.metricshistory.matrixBody
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
+import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
+import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
 import com.kubekubedashdash.util.shutdownCleanly
@@ -57,6 +61,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.AfterTest
@@ -182,6 +187,7 @@ class PodMetricsHistorySectionUiTest {
         resources: List<ContainerResources> = listOf(ContainerResources("app", cpuLimitMillis = 500), ContainerResources("sidecar")),
         hostNetwork: Boolean = false,
         uid: String = "uid-$name",
+        phase: String = "Running",
     ) = PodInfo(
         uid = uid,
         name = name,
@@ -197,6 +203,7 @@ class PodMetricsHistorySectionUiTest {
         containers = emptyList(),
         resources = resources,
         hostNetwork = hostNetwork,
+        phase = phase,
     )
 
     private val withoutLimit = listOf(ContainerResources("app"), ContainerResources("sidecar"))
@@ -619,10 +626,16 @@ class PodMetricsHistorySectionUiTest {
         assertTrue(stub.proxyRequests.isEmpty(), "nothing is asked of a Prometheus before one is found")
 
         gate.complete(DetectionState.Found(DetectedTarget))
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("CPU throttling").fetchSemanticsNodes().isNotEmpty() }
+        // Not on a chart title: once the source is known, the skeleton grid shows every title before the history lands.
+        waitUntil(timeoutMillis = 10_000) {
+            stub.proxyRequests.isNotEmpty() &&
+                onAllNodesWithText(LOADING_HISTORY_NOTE).fetchSemanticsNodes().isEmpty() &&
+                onAllNodesWithText(CHART_LOADING_TEXT).fetchSemanticsNodes().isEmpty()
+        }
 
         onNodeWithText("Prometheus · monitoring/prometheus-server").assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
         val request = stub.proxyRequests.first()
         assertEquals("/api/v1/namespaces/monitoring/services/prometheus-server:80/proxy/api/v1/query_range", request.path.substringBefore('?'))
     }
@@ -650,7 +663,8 @@ class PodMetricsHistorySectionUiTest {
     }
 
     @Test
-    fun `while the first fetch is out the live charts show under a loading line`() = runComposeUiTest {
+    fun `while the first fetch is out the skeleton grid shows alone with the live values in its headers`() = runComposeUiTest {
+        // With live snapshots the slow source must not hide them: the grid's CPU and Memory headers show the latest ones, with no live charts under it.
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -664,12 +678,261 @@ class PodMetricsHistorySectionUiTest {
         }
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
-        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
+        // The average note shows from the first frame, so the line under the grid never changes.
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
         onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
         // The range can still be changed while it loads.
         onNodeWithText("1h ▾").assertExists()
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        // Only the skeleton's title: no live chart under the grid.
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        // The latest live values stand in the CPU and Memory headers.
+        onNodeWithText("200m · live").assertExists()
+        onNodeWithText("2 MiB · live").assertExists()
+    }
+
+    @Test
+    fun `live snapshots arriving during the first fetch update the grid headers, and the history replaces them`() = runComposeUiTest {
+        val gate = CompletableDeferred<Unit>()
+        val source = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
+                gate.await()
+                return SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, 2.0)))))
+            }
+        }
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        // The panel starts every pod with no live snapshot; the first one lands before a slow history source answers.
+        var live by mutableStateOf(emptyList<PodMetricsSnapshot>())
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, live, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        onAllNodesWithText("CPU").assertCountEquals(1)
+
+        live = liveSnapshots
+        waitForIdle()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        onNodeWithText("200m · live").assertExists()
+
+        // The next snapshot replaces the header value.
+        live = liveSnapshots + PodMetricsSnapshot(3_000, 300, 3_145_728)
+        waitForIdle()
+        onNodeWithText("300m · live").assertExists()
+        onNodeWithText("200m · live").assertDoesNotExist()
+
+        gate.complete(Unit)
+        waitForIdle()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        onNodeWithText("300m · live").assertDoesNotExist()
+        // The source answers a single "app" series, so the header shows its last value: 2.00 cores.
+        onNodeWithText("2.00 cores").assertExists()
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
+    }
+
+    @Test
+    fun `while the first fetch is out and there are no live snapshots four skeleton charts show their loading text`() = runComposeUiTest {
+        val hanging = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = awaitCancellation()
+        }
+        val service = serviceOver(settingsOf(GmpSetting), hanging)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
+        listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onNodeWithText(it).assertExists() }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
+        onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `an up-front note wins over the skeleton in its chart`() = runComposeUiTest {
+        val hanging = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = awaitCancellation()
+        }
+        val service = serviceOver(settingsOf(GmpSetting), hanging)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) {
+                    PodMetricsHistorySection(podNamed(resources = withoutLimit, hostNetwork = true), service, emptyList(), { NOW }, Long.MAX_VALUE)
+                }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(HOST_NETWORK_NOTE).assertExists()
+        onNodeWithText(NO_CPU_LIMIT_NOTE).assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(2)
+    }
+
+    @Test
+    fun `the skeleton grid becomes the charts without a second Loading line, and the average note stays put`() = runComposeUiTest {
+        val gate = CompletableDeferred<Unit>()
+        val source = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
+                gate.await()
+                return SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, 2.0)))))
+            }
+        }
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+
+        gate.complete(Unit)
+        waitForIdle()
+
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
+    }
+
+    @Test
+    fun `a transient failure shows Retry beside the reason and Retry asks the source again`() = runComposeUiTest {
+        val source = FakeSource(
+            failure = SeriesResult.Failed(HistoryFailure.Unavailable, "timeout"),
+            failKinds = setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory),
+        )
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText("Managed Prometheus didn't answer (timeout)", substring = true).assertExists()
+        onNodeWithText("Retry").assertExists()
+        // The live charts still stand in.
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+        val asked = source.calls.size
+
+        onNodeWithText("Retry").performClick()
+        waitForIdle()
+
+        assertEquals(asked * 2, source.calls.size, "Retry asks every kind again, once")
+        onNodeWithText("Retry").assertExists()
+    }
+
+    @Test
+    fun `a structural failure shows the reason without Retry`() = runComposeUiTest {
+        val source = FakeSource(
+            failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"),
+            failKinds = setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory),
+        )
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, liveSnapshots, { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus data", substring = true).assertExists()
+        onNodeWithText("Retry").assertDoesNotExist()
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(2)
+    }
+
+    @Test
+    fun `a transient failure with no live snapshot yet still shows the live row's placeholders and Retry`() = runComposeUiTest {
+        val source = FakeSource(
+            failure = SeriesResult.Failed(HistoryFailure.Unavailable, "timeout"),
+            failKinds = setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory),
+        )
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText("Retry").assertExists()
+        onAllNodesWithText("Collecting data…").assertCountEquals(2)
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a structural failure with no live snapshot yet shows the placeholders and no Retry`() = runComposeUiTest {
+        val source = FakeSource(
+            failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"),
+            failKinds = setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory),
+        )
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus data", substring = true).assertExists()
+        onNodeWithText("Retry").assertDoesNotExist()
+        onAllNodesWithText("Collecting data…").assertCountEquals(2)
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `Retry that finds the history brings the grid back in place of the live row`() = runComposeUiTest {
+        // Fails CPU and memory on the first round, answers every kind from the second on.
+        val failing = AtomicBoolean(true)
+        val source = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult {
+                if (failing.get() && (kind == PodSeriesKind.Cpu || kind == PodSeriesKind.Memory)) {
+                    return SeriesResult.Failed(HistoryFailure.Unavailable, "timeout")
+                }
+                return SeriesResult.Ok(listOf(Series("app", listOf(SeriesPoint(window.startEpochSec, 1.0), SeriesPoint(window.endEpochSec, 2.0)))))
+            }
+        }
+        val service = serviceOver(settingsOf(GmpSetting), source)
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+        onNodeWithText("Retry").assertExists()
+        onAllNodesWithText("Collecting data…").assertCountEquals(2)
         onNodeWithText("CPU throttling").assertDoesNotExist()
+
+        failing.set(false)
+        onNodeWithText("Retry").performClick()
+        waitForIdle()
+
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithText("Collecting data…").assertCountEquals(0)
+        onNodeWithText("Retry").assertDoesNotExist()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
     }
 
     @Test
@@ -687,6 +950,39 @@ class PodMetricsHistorySectionUiTest {
         onNodeWithText("CPU throttling").assertDoesNotExist()
         onNodeWithText("No data in this range").assertDoesNotExist()
         onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `a finished pod with no history says so and shows no live charts that would never fill`() = runComposeUiTest {
+        // metrics-server never reports a pod that has run to its end, so "Collecting data…" would stay forever.
+        val service = serviceOver(settingsOf(GmpSetting), FakeSource(empty = true))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(phase = "Succeeded"), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(FINISHED_POD_NO_HISTORY_NOTE).assertExists()
+        onNodeWithText(NO_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText("Collecting data…").assertCountEquals(0)
+        onAllNodesWithText("showing live metrics-server data", substring = true).assertCountEquals(0)
+        // The range can still be widened to cover the pod's run.
+        onNodeWithText("1h ▾").assertExists()
+    }
+
+    @Test
+    fun `a running pod with no history still shows the live charts`() = runComposeUiTest {
+        val service = serviceOver(settingsOf(GmpSetting), FakeSource(empty = true))
+        setContent {
+            MaterialTheme(typography = kdTypography()) {
+                Column(Modifier.width(640.dp)) { PodMetricsHistorySection(podNamed(phase = "Running"), service, emptyList(), { NOW }, Long.MAX_VALUE) }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithText(NO_HISTORY_NOTE).assertExists()
+        onAllNodesWithText("Collecting data…").assertCountEquals(2)
     }
 
     @Test

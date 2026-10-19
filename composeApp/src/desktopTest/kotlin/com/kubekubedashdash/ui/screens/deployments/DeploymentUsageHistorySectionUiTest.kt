@@ -13,6 +13,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -55,9 +56,10 @@ import com.kubekubedashdash.services.metricshistory.deploymentPodSet
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.services.metricshistory.jsonResponse
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
+import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
 import com.kubekubedashdash.ui.components.MAX_CHART_SERIES
 import com.kubekubedashdash.ui.components.podSetHue
-import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.LoadedHistory
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.ui.screens.workloads.GMP_STALENESS_NOTE
@@ -587,7 +589,7 @@ class DeploymentUsageHistorySectionUiTest {
         onNodeWithText("Resource usage", ignoreCase = true).assertExists()
         onNodeWithText("Fake source").assertExists()
         onNodeWithText("CPU").assertDoesNotExist()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         assertTrue(source.calls.isEmpty(), "no query without a pod set: ${source.calls}")
     }
 
@@ -603,19 +605,19 @@ class DeploymentUsageHistorySectionUiTest {
     }
 
     @Test
-    fun `while Auto is still searching the header shows over the loading line and nothing is asked`() = runComposeUiTest {
+    fun `while Auto is still searching the header shows over the skeleton charts and nothing is asked`() = runComposeUiTest {
         val source = FakeSource(seriesNames)
         val gate = CompletableDeferred<DetectionState>()
         show(serviceOver(MutableStateFlow(emptyMap()), source, detectionOf { gate.await() }))
 
         onNodeWithText("Resource usage", ignoreCase = true).assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
         onNodeWithText("6h ▾").assertExists()
         assertTrue(source.calls.isEmpty(), "no source is asked while Auto searches: ${source.calls}")
     }
 
     @Test
-    fun `while the first fetch is out a loading line shows and the range can still be changed`() = runComposeUiTest {
+    fun `while the first fetch is out the loading text shows and the range can still be changed`() = runComposeUiTest {
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -625,14 +627,16 @@ class DeploymentUsageHistorySectionUiTest {
         }
         show(serviceOver(settingsOf(GmpSetting), hanging))
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
         onNodeWithText("6h ▾").assertExists()
         onNodeWithText("Per pod").assertExists()
-        onNodeWithText("CPU throttling").assertDoesNotExist()
+        // The charts are skeletons of their final size, so the titles show.
+        onNodeWithText("CPU throttling").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
     }
 
     @Test
-    fun `when CPU and memory both fail the reason replaces the charts and never mentions live data`() = runComposeUiTest {
+    fun `when CPU and memory both fail transiently the charts stay with the reason under them and never mention live data`() = runComposeUiTest {
         val source = FakeSource(
             failure = SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503"),
             failKinds = setOf(PodSeriesKind.Cpu, PodSeriesKind.Memory),
@@ -641,11 +645,28 @@ class DeploymentUsageHistorySectionUiTest {
 
         onNodeWithText("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s.").assertExists()
         onAllNodesWithText("metrics-server", substring = true).assertCountEquals(0)
-        onNodeWithText("CPU throttling").assertDoesNotExist()
+        // A transient failure keeps the frames and offers a Retry.
+        onNodeWithText("CPU throttling").assertExists()
+        onNodeWithText("Retry").assertExists()
         // The header stays, so a range or a mode that keeps failing can still be changed.
         onNodeWithText("Fake source").assertExists()
         onNodeWithText("6h ▾").assertExists()
         onNodeWithText("Total").assertExists()
+    }
+
+    @Test
+    fun `a structural failure collapses the charts to the reason with no Retry`() = runComposeUiTest {
+        val source = FakeSource(seriesNames, failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        show(serviceOver(settingsOf(GmpSetting), source))
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onAllNodesWithText(it).assertCountEquals(0) }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        onNodeWithText("Retry").assertDoesNotExist()
+        // The header stays, so a range or a mode that keeps failing can still be changed.
+        onNodeWithText("Fake source").assertExists()
+        onNodeWithText("6h ▾").assertExists()
     }
 
     @Test
@@ -700,13 +721,14 @@ class DeploymentUsageHistorySectionUiTest {
             """{"metric":{"pod":"${podName(CURRENT, "x7k2p")}"},"values":[[${NOW - 60},"1"],[$NOW,"2"]]}]}}"""
         stub.proxy = { jsonResponse(200, body) }
         show(serviceOver(settingsOf(InClusterSetting), FakeSource(), clientFor = { stubClient }))
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("CPU throttling").fetchSemanticsNodes().isNotEmpty() }
+        // The skeleton already shows the chart titles, so wait for the loading text to go instead.
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(CHART_LOADING_TEXT).fetchSemanticsNodes().isEmpty() }
 
         onNodeWithText("Prometheus · monitoring/frontend").assertExists()
         onAllNodesWithText(podName(CURRENT, "x7k2p")).assertCountEquals(3)
         onAllNodesWithText("Managed Prometheus", substring = true).assertCountEquals(0)
         onNodeWithText(GMP_STALENESS_NOTE).assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
     }
 
     // ── pure pieces ─────────────────────────────────────────────────────────

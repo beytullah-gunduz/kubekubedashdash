@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,10 +35,13 @@ import com.kubekubedashdash.services.metricshistory.PodSeriesKind
 import com.kubekubedashdash.services.metricshistory.QueryWindow
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
+import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
-import com.kubekubedashdash.ui.components.BusyIndicator
+import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
+import com.kubekubedashdash.ui.components.HistoryLoadingLine
+import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
 import com.kubekubedashdash.ui.components.TimeSeriesChart
@@ -56,8 +59,18 @@ internal const val HOST_NETWORK_NOTE = "Host network — these counters are the 
 internal const val POD_HISTORY_AVERAGE_NOTE = "CPU and memory are averages over several minutes, so a short peak, such as one just before an OOM kill, does not show."
 internal const val NO_CPU_LIMIT_NOTE = "No CPU limit set — CFS throttling does not apply."
 internal const val NO_THROTTLING_DATA_NOTE = "No throttling data in this range."
-internal const val LOADING_HISTORY_NOTE = "Loading history…"
+
+/** Appended to the live value shown in a header while the history loads, so it does not read as the chart's value. */
+internal const val LIVE_VALUE_SUFFIX = " · live"
 internal const val NO_HISTORY_NOTE = "No history for this pod in this range. Retrying every 30 s; showing live metrics-server data."
+internal const val FINISHED_POD_NO_HISTORY_NOTE =
+    "No history for this pod in this range. It has finished, so metrics-server no longer measures it: pick a range that covers its run."
+
+/** The live-data clause the fallback messages end with; dropped for a finished pod, which metrics-server never measures again. */
+private const val LIVE_DATA_CLAUSE = "; showing live metrics-server data."
+
+/** True for a pod that has run to its end (phase Succeeded or Failed): metrics-server no longer reports it. */
+internal fun podFinished(pod: PodInfo): Boolean = pod.phase == "Succeeded" || pod.phase == "Failed"
 
 /** What the section asks the source for: network is the node's on a host-network pod, throttling needs a CPU limit. */
 internal fun historyKinds(pod: PodInfo): List<PodSeriesKind> = buildList {
@@ -103,13 +116,17 @@ internal sealed interface HistoryView {
     /** The first fetch for this pod and range is still out: the metrics-server charts stand in meanwhile. */
     data object Loading : HistoryView
 
-    /** Neither CPU nor memory has a point to draw (both failed, or nothing recorded): [message] explains, the metrics-server charts follow. */
-    data class LiveFallback(val message: String) : HistoryView
+    /**
+     * Neither CPU nor memory has a point to draw (both failed, or nothing recorded): [message] explains, the metrics-server charts follow.
+     * [transient] marks a failure a retry can fix, which gets a Retry button. [liveCharts] is false for a finished pod:
+     * metrics-server will never report it, so the charts would only ever say "Collecting data…".
+     */
+    data class LiveFallback(val message: String, val transient: Boolean = false, val liveCharts: Boolean = true) : HistoryView
 
     data class Charts(val loaded: LoadedHistory) : HistoryView
 }
 
-internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryView {
+internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?, finished: Boolean = false): HistoryView {
     // Auto is still searching: the live charts stand in under the loading line.
     if (choice is SourceChoice.Detecting) return HistoryView.Loading
     if (choice is SourceChoice.None) {
@@ -133,7 +150,33 @@ internal fun historyView(choice: SourceChoice, loaded: LoadedHistory?): HistoryV
     // A failure explains better than "no history": it is what kept the points away.
     val failed = loaded.results[PodSeriesKind.Cpu] as? SeriesResult.Failed
         ?: loaded.results[PodSeriesKind.Memory] as? SeriesResult.Failed
-    return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE)
+    if (finished) {
+        val message = failed?.let { failureMessage(choice, it).replace(LIVE_DATA_CLAUSE, ".") } ?: FINISHED_POD_NO_HISTORY_NOTE
+        return HistoryView.LiveFallback(message, transient = failed?.isTransient() == true, liveCharts = false)
+    }
+    return HistoryView.LiveFallback(failed?.let { failureMessage(choice, it) } ?: NO_HISTORY_NOTE, transient = failed?.isTransient() == true)
+}
+
+/**
+ * What the pod chart area shows, and the state [ChartAreaTransition] swaps on: the 2×2 history grid
+ * (skeleton while [loaded] is null, with the latest metrics-server value in the CPU and Memory
+ * headers) or the metrics-server charts that stand in without a source, while Auto searches, or
+ * when the history fails. Everything the area renders travels in the state.
+ */
+internal sealed interface PodArea {
+    data class Grid(val loaded: LoadedHistory?, val live: PodMetricsSnapshot?) : PodArea
+
+    data class Live(val view: HistoryView, val live: List<PodMetricsSnapshot>) : PodArea
+}
+
+/** Maps the view to the area to show; [sourceKnown] is false while Auto still searches (the grid would collapse if none is found). */
+internal fun podArea(view: HistoryView, sourceKnown: Boolean, live: List<PodMetricsSnapshot>): PodArea = when {
+    // Loaded charts ignore the live value, so none is carried: a snapshot every 5 s would only recompose them.
+    view is HistoryView.Charts -> PodArea.Grid(view.loaded, null)
+
+    view == HistoryView.Loading && sourceKnown -> PodArea.Grid(null, live.lastOrNull())
+
+    else -> PodArea.Live(view, live)
 }
 
 /**
@@ -287,10 +330,13 @@ internal fun PodMetricsHistorySection(
     val podRef = remember(pod.namespace, pod.name, pod.resources) { PodRef(pod.namespace, pod.name, pod.resources) }
     val kinds = remember(pod.hostNetwork, pod.resources) { historyKinds(pod) }
     // Keyed on the name and namespace too: demo pods can have a blank uid.
-    var loaded by remember(pod.uid, pod.namespace, pod.name, range, choice) { mutableStateOf<LoadedHistory?>(null) }
+    // Retry bumps [retry], a key of both this state and the fetch below: the key change cancels the
+    // fetch in flight and starts a fresh one, with no imperative reset.
+    var retry by remember { mutableIntStateOf(0) }
+    var loaded by remember(pod.uid, pod.namespace, pod.name, range, choice, retry) { mutableStateOf<LoadedHistory?>(null) }
 
     if (source != null) {
-        LaunchedEffect(pod.uid, pod.namespace, pod.name, range, choice) {
+        LaunchedEffect(pod.uid, pod.namespace, pod.name, range, choice, retry) {
             while (true) {
                 val window = range.window(nowEpochSec())
                 val current = loaded
@@ -309,7 +355,7 @@ internal fun PodMetricsHistorySection(
         }
     }
 
-    when (val view = historyView(choice, loaded)) {
+    when (val view = historyView(choice, loaded, finished = podFinished(pod))) {
         // The live charts carry their own "Resource Usage" title, so the hint goes under it.
         is HistoryView.LiveOnly -> if (liveHistory.isNotEmpty()) {
             PodMetricsSection(liveHistory, note = view.hint.ifBlank { null })
@@ -327,29 +373,43 @@ internal fun PodMetricsHistorySection(
                     description = "Time window of the charts.",
                 )
             }
-            when (view) {
-                // A slow or hanging source (gcloud, the network) must not hide the live charts.
-                HistoryView.Loading -> {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BusyIndicator(modifier = Modifier.size(12.dp), color = KdTextSecondary, strokeWidth = 1.5.dp)
-                        Text(LOADING_HISTORY_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+            // The grid gives way to the live charts when the history fails, and back on recovery. With a
+            // source known the grid shows the live values in its CPU and Memory headers while it loads,
+            // so a slow or hanging source (gcloud, the network) still shows current usage.
+            ChartAreaTransition(podArea(view, source != null, liveHistory), contentKey = { it::class }) { a ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    when (a) {
+                        // One call site for "loading" and "loaded", so the chart state survives the switch and Retro can reveal it.
+                        // Only once a source is known: Auto still searching may find none, and a grid would then collapse.
+                        is PodArea.Grid -> {
+                            HistoryCharts(pod, kinds, a.loaded, range.window(nowEpochSec()), a.live)
+                            Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                        }
+
+                        is PodArea.Live -> when (val v = a.view) {
+                            // Auto is still searching: the live charts under the loading line, as before metrics history.
+                            HistoryView.Loading -> {
+                                HistoryLoadingLine()
+                                if (a.live.isNotEmpty()) PodMetricsSection(a.live, showTitle = false)
+                            }
+
+                            // The header stays, so a range that keeps failing can still be changed; the live
+                            // charts follow without their own title, even before the first snapshot (their
+                            // own "Collecting data…"), so the swap never lands on nothing. Not for a finished
+                            // pod: no snapshot will ever come, and the message says so.
+                            is HistoryView.LiveFallback -> {
+                                if (v.transient) {
+                                    HistoryRetryLine(v.message) { retry++ }
+                                } else {
+                                    Text(v.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
+                                }
+                                if (v.liveCharts) PodMetricsSection(a.live, showTitle = false)
+                            }
+
+                            is HistoryView.Charts, is HistoryView.LiveOnly -> Unit // unreachable, keeps the when exhaustive
+                        }
                     }
-                    if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
                 }
-
-                // The header stays, so a range that keeps failing can still be changed; the live
-                // charts follow without their own title.
-                is HistoryView.LiveFallback -> {
-                    Text(view.message, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                    if (liveHistory.isNotEmpty()) PodMetricsSection(liveHistory, showTitle = false)
-                }
-
-                is HistoryView.Charts -> {
-                    HistoryCharts(pod, kinds, view.loaded)
-                    Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                }
-
-                is HistoryView.LiveOnly -> Unit
             }
         }
     }
@@ -366,8 +426,15 @@ private suspend fun podSeriesOrFailed(source: MetricsHistorySource, kind: PodSer
 }
 
 @Composable
-private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: LoadedHistory) {
-    val results = loaded.results
+private fun HistoryCharts(
+    pod: PodInfo,
+    kinds: List<PodSeriesKind>,
+    loaded: LoadedHistory?,
+    fallbackWindow: QueryWindow,
+    live: PodMetricsSnapshot?,
+) {
+    val results = loaded?.results.orEmpty()
+    val window = loaded?.window ?: fallbackWindow
     val colorIndex = containerColorIndex(
         pod.resources.map { it.name } +
             listOf(PodSeriesKind.Cpu, PodSeriesKind.Memory, PodSeriesKind.Throttling)
@@ -382,6 +449,15 @@ private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: Load
 
     val cpu = containerSeries(results[PodSeriesKind.Cpu])
     val memory = containerSeries(results[PodSeriesKind.Memory])
+
+    // While loading no series exist yet, so the legend line is reserved from the pod spec: several
+    // containers, or a request or limit guide on any of them. usageReferences cannot be used for this:
+    // it needs a single series to name its container, so with no series it returns nothing.
+    val severalContainers = pod.resources.size > 1
+    val cpuLegend = severalContainers ||
+        pod.resources.any { it.cpuRequestMillis != null || it.cpuLimitMillis != null }
+    val memoryLegend = severalContainers ||
+        pod.resources.any { it.memoryRequestBytes != null || it.memoryLimitBytes != null }
 
     // Hands the network chart its two lines, or the note that stands in for them.
     val rx = results[PodSeriesKind.NetworkRx]
@@ -411,38 +487,48 @@ private fun HistoryCharts(pod: PodInfo, kinds: List<PodSeriesKind>, loaded: Load
             TimeSeriesChart(
                 title = "CPU",
                 series = cpu,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatCoresValue,
                 modifier = Modifier.weight(1f),
                 references = usageReferences(pod, cpu, PodSeriesKind.Cpu),
                 note = noteOf(results[PodSeriesKind.Cpu]),
+                loading = loaded == null,
+                reserveLegend = cpuLegend,
+                headerValue = live?.let { formatCoresValue(it.cpuMillis / 1000.0) + LIVE_VALUE_SUFFIX },
             )
             TimeSeriesChart(
                 title = "Memory",
                 series = memory,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatBytesValue,
                 modifier = Modifier.weight(1f),
                 references = usageReferences(pod, memory, PodSeriesKind.Memory),
                 note = noteOf(results[PodSeriesKind.Memory]),
+                loading = loaded == null,
+                reserveLegend = memoryLegend,
+                headerValue = live?.let { formatBytesValue(it.memoryBytes.toDouble()) + LIVE_VALUE_SUFFIX },
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TimeSeriesChart(
                 title = "Network",
                 series = network,
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatRateValue,
                 modifier = Modifier.weight(1f),
                 note = networkNote,
+                loading = loaded == null,
+                reserveLegend = true,
             )
             TimeSeriesChart(
                 title = "CPU throttling",
                 series = if (throttlingNote == null) containerSeries(throttling) else emptyList(),
-                window = loaded.window,
+                window = window,
                 formatValue = ::formatFractionValue,
                 modifier = Modifier.weight(1f),
                 note = throttlingNote,
+                loading = loaded == null,
+                reserveLegend = severalContainers,
             )
         }
     }

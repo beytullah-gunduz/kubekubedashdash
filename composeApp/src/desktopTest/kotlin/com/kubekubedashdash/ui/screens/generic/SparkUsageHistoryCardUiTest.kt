@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -41,6 +42,8 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SparkGrouping
 import com.kubekubedashdash.services.metricshistory.dummyClient
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
+import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.ui.screens.workloads.DRIVER_SERIES_NAME
 import com.kubekubedashdash.ui.screens.workloads.EXECUTORS_SERIES_NAME
@@ -51,6 +54,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -73,9 +77,10 @@ private data class Call(val kind: ScopeKind, val scope: ScopeRef, val grouping: 
 
 /**
  * Answers a Spark query with fixed series of two points: per pod for [SparkGrouping.ByPod] (two listed apps' pods
- * and one unlisted pod), per role for [SparkGrouping.ByRole]; records what it was asked.
+ * and one unlisted pod), per role for [SparkGrouping.ByRole]; records what it was asked. A set [failure] answers
+ * every query with it instead.
  */
-private class FakeSparkSource : MetricsHistorySource {
+private class FakeSparkSource(@Volatile var failure: SeriesResult.Failed? = null) : MetricsHistorySource {
     override val label = "Fake source"
     val calls = CopyOnWriteArrayList<Call>()
 
@@ -83,6 +88,7 @@ private class FakeSparkSource : MetricsHistorySource {
 
     override suspend fun sparkSeries(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): SeriesResult {
         calls += Call(kind, scope, grouping, window)
+        failure?.let { return it }
 
         fun series(name: String, scale: Double) = Series(name, listOf(SeriesPoint(window.startEpochSec, scale), SeriesPoint(window.endEpochSec, scale * 2)))
         return SeriesResult.Ok(
@@ -189,6 +195,27 @@ class SparkUsageHistoryCardUiTest {
     }
 
     @Test
+    fun `while the first fetch is out two skeleton charts show their loading text and the static notes`() = runComposeUiTest {
+        val hanging = object : MetricsHistorySource {
+            override val label = "Fake source"
+
+            override suspend fun podSeries(kind: PodSeriesKind, pod: PodRef, window: QueryWindow): SeriesResult = awaitCancellation()
+
+            override suspend fun sparkSeries(kind: ScopeKind, scope: ScopeRef, grouping: SparkGrouping, window: QueryWindow): SeriesResult = awaitCancellation()
+        }
+        showCard(serviceOver(GmpSetting, hanging))
+        waitForIdle()
+
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(2)
+        listOf("CPU", "Memory").forEach { onNodeWithText(it).assertExists() }
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(2)
+        // The static notes show from the first frame, so the line under the grid never changes.
+        onNodeWithText(SPARK_HISTORY_NOTE).assertExists()
+        onNodeWithText("From Fake source.").assertExists()
+        onNodeWithText("Applications ▾").assertExists()
+    }
+
+    @Test
     fun `Drivers and executors asks per role and Total draws one line`() = runComposeUiTest {
         val source = FakeSparkSource()
         showCard(serviceOver(GmpSetting, source))
@@ -252,5 +279,22 @@ class SparkUsageHistoryCardUiTest {
 
         onNodeWithText(SPARK_HISTORY_TITLE).assertDoesNotExist()
         assertTrue(source.calls.isEmpty(), "no source may be asked: ${source.calls}")
+    }
+
+    @Test
+    fun `a structural failure collapses the charts to the reason with no Retry`() = runComposeUiTest {
+        val source = FakeSparkSource(SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        showCard(serviceOver(GmpSetting, source))
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        onAllNodesWithText("CPU").assertCountEquals(0)
+        onAllNodesWithText("Memory").assertCountEquals(0)
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        onNodeWithText("Retry").assertDoesNotExist()
+        onNodeWithText(SPARK_HISTORY_NOTE).assertDoesNotExist()
+        // The header stays, so a range that keeps failing can still be changed.
+        onNodeWithText("6h ▾").assertExists()
     }
 }

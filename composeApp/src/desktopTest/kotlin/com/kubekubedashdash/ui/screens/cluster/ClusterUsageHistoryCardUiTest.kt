@@ -12,6 +12,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -40,7 +41,8 @@ import com.kubekubedashdash.services.metricshistory.Series
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.dummyClient
-import com.kubekubedashdash.ui.screens.pods.LOADING_HISTORY_NOTE
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
+import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
@@ -78,11 +80,11 @@ private data class Call(val kind: ScopeKind, val scope: ScopeRef, val window: Qu
 /**
  * Answers a scope query with one unnamed series of two points (CPU ends at half a core, memory at
  * [PEAK_MEMORY_BYTES]); records what it was asked. [failure] answers every kind (or [failKinds]) with
- * that failure instead, and [emptyKinds] answer with no series, as Managed Prometheus does when it has
+ * that failure instead (it can be cleared between refreshes), and [emptyKinds] answer with no series, as Managed Prometheus does when it has
  * no samples.
  */
 private class FakeSource(
-    private val failure: SeriesResult.Failed? = null,
+    @Volatile var failure: SeriesResult.Failed? = null,
     private val failKinds: Set<ScopeKind> = emptySet(),
     private val emptyKinds: Set<ScopeKind> = emptySet(),
 ) : MetricsHistorySource {
@@ -93,7 +95,7 @@ private class FakeSource(
 
     override suspend fun scopeSeries(kind: ScopeKind, scope: ScopeRef, window: QueryWindow): SeriesResult {
         calls += Call(kind, scope, window)
-        if (failure != null && (failKinds.isEmpty() || kind in failKinds)) return failure
+        failure?.let { if (failKinds.isEmpty() || kind in failKinds) return it }
         if (kind in emptyKinds) return SeriesResult.Ok(emptyList())
         val peak = if (kind == ScopeKind.CpuCores) 0.5 else PEAK_MEMORY_BYTES
         return SeriesResult.Ok(listOf(Series("", listOf(SeriesPoint(window.startEpochSec, peak / 2), SeriesPoint(window.endEpochSec, peak)))))
@@ -201,7 +203,7 @@ class ClusterUsageHistoryCardUiTest {
         onNodeWithText("500m").assertExists()
         onNodeWithText(formatBytesValue(PEAK_MEMORY_BYTES)).assertExists()
         onNodeWithText(usageHistoryNote("Fake source")).assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
 
         assertEquals(setOf(ScopeKind.CpuCores, ScopeKind.MemoryBytes), source.calls.map { it.kind }.toSet())
         assertEquals(setOf(teamA), source.calls.map { it.scope }.toSet())
@@ -270,6 +272,74 @@ class ClusterUsageHistoryCardUiTest {
         mainClock.advanceTimeBy(30_001)
         waitForIdle()
         assertEquals(2, source.calls.size, "the same window, all answered: nothing to refetch")
+    }
+
+    /** Frames enough for a composition, the fetch its effect starts and the recomposition with the answer. */
+    private fun ComposeUiTest.settle() {
+        repeat(3) {
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
+        }
+    }
+
+    @Test
+    fun `a structural first answer swaps the loading charts for the reason, and a recovery swaps the charts back`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val source = FakeSource(failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        showCard(serviceOver(settingsOf(GmpSetting), source), refreshMs = 30_000L)
+        settle()
+        // Past the fade-through (90 ms out, 220 ms in), so only the new content is left.
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        onAllNodesWithText("CPU").assertCountEquals(0)
+        onAllNodesWithText("Memory").assertCountEquals(0)
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        onNodeWithText("Retry").assertDoesNotExist()
+
+        source.failure = null
+        mainClock.advanceTimeBy(30_001)
+        settle()
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        onNodeWithText("500m").assertExists()
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertDoesNotExist()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText(usageHistoryNote("Fake source")).assertExists()
+    }
+
+    @Test
+    fun `a refresh that keeps the charts updates them in place, with no second copy fading out`() = runComposeUiTest {
+        // Proxy for "the charts are not recreated": a swap (a new content key) fades the old content out while the
+        // new one fades in, so two "CPU" titles would coexist for a few frames. A same-key refresh must never show
+        // two, and never bring a skeleton back.
+        mainClock.autoAdvance = false
+        val source = FakeSource()
+        val nowSec = AtomicLong(NOW)
+        showCard(serviceOver(settingsOf(GmpSetting), source), now = nowSec::get, refreshMs = 30_000L)
+        settle()
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+        onAllNodesWithText("CPU").assertCountEquals(1)
+        assertEquals(2, source.calls.size)
+
+        // The six-hour window moves every 180 s, so the next round asks again and answers with a new window.
+        nowSec.addAndGet(200)
+        mainClock.advanceTimeBy(29_000)
+        waitForIdle()
+        repeat(150) {
+            mainClock.advanceTimeBy(16)
+            waitForIdle()
+            onAllNodesWithText("CPU").assertCountEquals(1)
+            onAllNodesWithText("Memory").assertCountEquals(1)
+            onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        }
+        assertEquals(4, source.calls.size, "the refresh asked again and its answer landed while the charts were sampled")
+        onNodeWithText("500m").assertExists()
     }
 
     @Test
@@ -382,7 +452,7 @@ class ClusterUsageHistoryCardUiTest {
     }
 
     @Test
-    fun `while the first fetch is out a loading line stands in for the charts`() = runComposeUiTest {
+    fun `while the first fetch is out the skeleton charts show their loading text and the source note`() = runComposeUiTest {
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -393,15 +463,53 @@ class ClusterUsageHistoryCardUiTest {
         showCard(serviceOver(settingsOf(GmpSetting), hanging))
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
-        onNodeWithText("CPU").assertDoesNotExist()
-        onNodeWithText(usageHistoryNote("Fake source")).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(2)
+        // The charts are skeletons of their final size, so the titles show.
+        onNodeWithText("CPU").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(2)
+        // The static note shows from the first frame, so the line under the grid never changes.
+        onNodeWithText(usageHistoryNote("Fake source")).assertExists()
         // The range can still be changed while it loads.
         onNodeWithText("6h ▾").assertExists()
     }
 
     @Test
-    fun `when CPU and memory both fail one line gives the reason in place of the charts`() = runComposeUiTest {
+    fun `a transient failure keeps the charts without a skeleton, and Retry asks again`() = runComposeUiTest {
+        val source = FakeSource(failure = SeriesResult.Failed(HistoryFailure.Unavailable, "timeout"))
+        showCard(serviceOver(settingsOf(GmpSetting), source))
+        waitForIdle()
+
+        onNodeWithText("CPU").assertExists()
+        onNodeWithText("Memory").assertExists()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText("Retry").assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        assertEquals(2, source.calls.size)
+
+        onNodeWithText("Retry").performClick()
+        waitForIdle()
+
+        assertEquals(4, source.calls.size, "Retry asks CPU and memory again, once")
+        onNodeWithText("CPU").assertExists()
+        onNodeWithText("Retry").assertExists()
+    }
+
+    @Test
+    fun `a structural failure collapses the charts to the reason with no Retry`() = runComposeUiTest {
+        val source = FakeSource(failure = SeriesResult.Failed(HistoryFailure.Forbidden, "HTTP 403"))
+        showCard(serviceOver(settingsOf(GmpSetting), source))
+        waitForIdle()
+
+        onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
+        onNodeWithText("CPU").assertDoesNotExist()
+        onNodeWithText("Memory").assertDoesNotExist()
+        onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
+        onNodeWithText("Retry").assertDoesNotExist()
+        onNodeWithText("6h ▾").assertExists()
+    }
+
+    @Test
+    fun `when CPU and memory both fail transiently the charts stay and one line under them gives the reason`() = runComposeUiTest {
         val source = FakeSource(failure = SeriesResult.Failed(HistoryFailure.Unavailable, "HTTP 503"))
         showCard(serviceOver(settingsOf(GmpSetting), source))
         waitForIdle()
@@ -409,8 +517,11 @@ class ClusterUsageHistoryCardUiTest {
         onNodeWithText("Managed Prometheus didn't answer (HTTP 503). Retrying every 30 s.").assertExists()
         // A panel without a live fallback never points at metrics-server data.
         onAllNodesWithText("metrics-server", substring = true).assertCountEquals(0)
-        onNodeWithText("CPU").assertDoesNotExist()
-        onNodeWithText("Memory").assertDoesNotExist()
+        // A transient failure keeps the frames: each chart says so in place, and the source note gives way to Retry.
+        onNodeWithText("CPU").assertExists()
+        onNodeWithText("Memory").assertExists()
+        onAllNodesWithText("Not answering (HTTP 503)").assertCountEquals(2)
+        onNodeWithText("Retry").assertExists()
         onNodeWithText(usageHistoryNote("Fake source")).assertDoesNotExist()
         // The header stays, so a range that keeps failing can still be changed.
         onNodeWithText("Fake source").assertExists()
