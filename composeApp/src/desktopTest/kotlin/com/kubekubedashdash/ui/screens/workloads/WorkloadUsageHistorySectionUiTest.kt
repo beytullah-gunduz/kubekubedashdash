@@ -49,9 +49,9 @@ import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
 import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
 import com.kubekubedashdash.ui.components.ChartMarker
-import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.components.podSetHue
 import com.kubekubedashdash.ui.screens.pods.LoadedHistory
 import com.kubekubedashdash.ui.screens.pods.needsFetch
@@ -569,7 +569,7 @@ class WorkloadUsageHistorySectionUiTest {
 
         assertEquals(5, source.calls.size)
         // The charts stay: the answer is not dropped for a loading line.
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText("CPU throttling").assertExists()
     }
 
@@ -641,14 +641,14 @@ class WorkloadUsageHistorySectionUiTest {
 
         assertEquals(8, source.calls.size)
         assertEquals(setOf(IndexedJobPodSet), source.calls.drop(4).map { it.pods }.toSet())
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         JobPods.take(2).forEach { onAllNodesWithText(it).assertCountEquals(2) }
         onAllNodesWithText(JobPods.last()).assertCountEquals(0)
 
         gate.complete(Unit)
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
         assertEquals(8, source.calls.size, "one more round, not a refetch loop")
     }
@@ -672,14 +672,14 @@ class WorkloadUsageHistorySectionUiTest {
         waitForIdle()
 
         assertEquals(16, source.calls.size)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onAllNodesWithText("Driver").assertCountEquals(3)
         onAllNodesWithText("Executors").assertCountEquals(3)
 
         gate.complete(Unit)
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onAllNodesWithText("Driver").assertCountEquals(3)
         assertEquals(setOf(SparkPodSet, DriverRef, ExecutorsRef), source.calls.drop(8).map { it.pods }.toSet())
     }
@@ -714,13 +714,13 @@ class WorkloadUsageHistorySectionUiTest {
         waitForIdle()
 
         assertEquals(9, source.calls.size)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
 
         gate.complete(Unit)
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText(NO_CURRENT_CPU_LIMIT_NOTE).assertDoesNotExist()
         JobPods.forEach { onAllNodesWithText(it).assertCountEquals(3) }
     }
@@ -741,13 +741,13 @@ class WorkloadUsageHistorySectionUiTest {
 
         assertEquals(8, source.calls.size)
         assertEquals(QueryWindow.spanning(start, end), source.cpuWindows.last())
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
 
         gate.complete(Unit)
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
     }
 
@@ -767,12 +767,12 @@ class WorkloadUsageHistorySectionUiTest {
         waitForIdle()
 
         onNodeWithText("6h ▾").assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         JobPods.forEach { onAllNodesWithText(it).assertCountEquals(2) }
     }
 
     @Test
-    fun `choosing another window or mode shows the loading line while its answer is out`() = runComposeUiTest {
+    fun `choosing another window or mode shows the loading text while its answer is out`() = runComposeUiTest {
         val source = FakeSource(JobPods)
         showChanging(source) { targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600)) }
 
@@ -780,7 +780,8 @@ class WorkloadUsageHistorySectionUiTest {
         onNodeWithText("Total").performClick()
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        // Three: this target has no live pod, so the throttling chart is an up-front note, not a skeleton.
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(3)
     }
 
     // ── Driver + executors ──────────────────────────────────────────────────
@@ -883,15 +884,17 @@ class WorkloadUsageHistorySectionUiTest {
     }
 
     @Test
-    fun `while the first fetch is out the four charts show as skeletons under a loading line`() = runComposeUiTest {
+    fun `while the first fetch is out the four charts show as skeletons with their loading text and the static note`() = runComposeUiTest {
         val source = FakeSource(JobPods)
         source.gate = CompletableDeferred()
         // A live pod with a CPU limit, so throttling applies and no up-front note takes its chart's place.
         show(source, targetOf(UsageWindow.Run(NOW - 7_200, NOW - 3_600), currentPods = listOf(pod("$JOB-x7k2p"))))
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
         listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onNodeWithText(it).assertExists() }
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
+        // The static trailing note shows from the first frame, so the line under the grid never changes.
+        onNodeWithText(GMP_STALENESS_NOTE).assertExists()
     }
 
     @Test
@@ -902,7 +905,7 @@ class WorkloadUsageHistorySectionUiTest {
         listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onNodeWithText(it).assertExists() }
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
         onNodeWithText("Retry").assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         val asked = source.calls.size
 
         // The source recovers: Retry fetches once more and the charts fill in.
@@ -941,7 +944,7 @@ class WorkloadUsageHistorySectionUiTest {
         onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
         listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onAllNodesWithText(it).assertCountEquals(0) }
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText("Retry").assertDoesNotExist()
 
         source.failure = null

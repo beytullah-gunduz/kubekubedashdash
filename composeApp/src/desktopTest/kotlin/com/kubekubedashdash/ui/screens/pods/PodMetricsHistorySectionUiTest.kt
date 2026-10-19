@@ -47,6 +47,7 @@ import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.services.metricshistory.jsonResponse
 import com.kubekubedashdash.services.metricshistory.matrixBody
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
 import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
 import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.util.DemoContext
@@ -625,7 +626,9 @@ class PodMetricsHistorySectionUiTest {
         gate.complete(DetectionState.Found(DetectedTarget))
         // Not on a chart title: once the source is known, the skeleton grid shows every title before the history lands.
         waitUntil(timeoutMillis = 10_000) {
-            stub.proxyRequests.isNotEmpty() && onAllNodesWithText(LOADING_HISTORY_NOTE).fetchSemanticsNodes().isEmpty()
+            stub.proxyRequests.isNotEmpty() &&
+                onAllNodesWithText(LOADING_HISTORY_NOTE).fetchSemanticsNodes().isEmpty() &&
+                onAllNodesWithText(CHART_LOADING_TEXT).fetchSemanticsNodes().isEmpty()
         }
 
         onNodeWithText("Prometheus · monitoring/prometheus-server").assertExists()
@@ -673,7 +676,9 @@ class PodMetricsHistorySectionUiTest {
         }
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
+        // The average note shows from the first frame, so the line under the grid never changes.
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
         onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
         onAllNodesWithText("Resource Usage", ignoreCase = true).assertCountEquals(1)
         // The range can still be changed while it loads.
@@ -683,8 +688,8 @@ class PodMetricsHistorySectionUiTest {
         // Only the skeleton's title: no live chart under the grid.
         onAllNodesWithText("CPU").assertCountEquals(1)
         // The latest live values stand in the CPU and Memory headers.
-        onNodeWithText("200m").assertExists()
-        onNodeWithText("2 MiB").assertExists()
+        onNodeWithText("200m · live").assertExists()
+        onNodeWithText("2 MiB · live").assertExists()
     }
 
     @Test
@@ -714,19 +719,19 @@ class PodMetricsHistorySectionUiTest {
         waitForIdle()
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
         onAllNodesWithText("CPU").assertCountEquals(1)
-        onNodeWithText("200m").assertExists()
+        onNodeWithText("200m · live").assertExists()
 
         // The next snapshot replaces the header value.
         live = liveSnapshots + PodMetricsSnapshot(3_000, 300, 3_145_728)
         waitForIdle()
-        onNodeWithText("300m").assertExists()
-        onNodeWithText("200m").assertDoesNotExist()
+        onNodeWithText("300m · live").assertExists()
+        onNodeWithText("200m · live").assertDoesNotExist()
 
         gate.complete(Unit)
         waitForIdle()
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
-        onNodeWithText("300m").assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
+        onNodeWithText("300m · live").assertDoesNotExist()
         // The source answers a single "app" series, so the header shows its last value: 2.00 cores.
         onNodeWithText("2.00 cores").assertExists()
         onAllNodesWithText("CPU").assertCountEquals(1)
@@ -734,7 +739,7 @@ class PodMetricsHistorySectionUiTest {
     }
 
     @Test
-    fun `while the first fetch is out and there are no live snapshots four skeleton charts show under the loading line`() = runComposeUiTest {
+    fun `while the first fetch is out and there are no live snapshots four skeleton charts show their loading text`() = runComposeUiTest {
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -748,10 +753,10 @@ class PodMetricsHistorySectionUiTest {
         }
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
         listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onNodeWithText(it).assertExists() }
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(4)
-        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertDoesNotExist()
+        onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
         onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
         onNodeWithText("1h ▾").assertExists()
     }
@@ -779,7 +784,7 @@ class PodMetricsHistorySectionUiTest {
     }
 
     @Test
-    fun `the skeleton grid becomes the charts without a second Loading line, and the average note replaces the loading line`() = runComposeUiTest {
+    fun `the skeleton grid becomes the charts without a second Loading line, and the average note stays put`() = runComposeUiTest {
         val gate = CompletableDeferred<Unit>()
         val source = object : MetricsHistorySource {
             override val label = "Fake source"
@@ -802,7 +807,7 @@ class PodMetricsHistorySectionUiTest {
         waitForIdle()
 
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText(POD_HISTORY_AVERAGE_NOTE).assertExists()
     }
 
@@ -868,6 +873,7 @@ class PodMetricsHistorySectionUiTest {
 
         onNodeWithText("Retry").assertExists()
         onAllNodesWithText("Collecting data…").assertCountEquals(2)
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
     }
 
@@ -888,6 +894,7 @@ class PodMetricsHistorySectionUiTest {
         onNodeWithText("No access to Managed Prometheus data", substring = true).assertExists()
         onNodeWithText("Retry").assertDoesNotExist()
         onAllNodesWithText("Collecting data…").assertCountEquals(2)
+        onAllNodesWithText("Min: ", substring = true).assertCountEquals(0)
     }
 
     @Test

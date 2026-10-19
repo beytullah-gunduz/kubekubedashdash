@@ -41,8 +41,8 @@ import com.kubekubedashdash.services.metricshistory.Series
 import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.dummyClient
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
 import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
-import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatBytesValue
 import com.kubekubedashdash.util.DemoContext
 import com.kubekubedashdash.util.SystemDirectories
@@ -203,7 +203,7 @@ class ClusterUsageHistoryCardUiTest {
         onNodeWithText("500m").assertExists()
         onNodeWithText(formatBytesValue(PEAK_MEMORY_BYTES)).assertExists()
         onNodeWithText(usageHistoryNote("Fake source")).assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
 
         assertEquals(setOf(ScopeKind.CpuCores, ScopeKind.MemoryBytes), source.calls.map { it.kind }.toSet())
         assertEquals(setOf(teamA), source.calls.map { it.scope }.toSet())
@@ -296,7 +296,7 @@ class ClusterUsageHistoryCardUiTest {
         onAllNodesWithText("CPU").assertCountEquals(0)
         onAllNodesWithText("Memory").assertCountEquals(0)
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText("Retry").assertDoesNotExist()
 
         source.failure = null
@@ -452,7 +452,7 @@ class ClusterUsageHistoryCardUiTest {
     }
 
     @Test
-    fun `while the first fetch is out a loading line stands in for the charts`() = runComposeUiTest {
+    fun `while the first fetch is out the skeleton charts show their loading text and the source note`() = runComposeUiTest {
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -463,11 +463,12 @@ class ClusterUsageHistoryCardUiTest {
         showCard(serviceOver(settingsOf(GmpSetting), hanging))
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(2)
         // The charts are skeletons of their final size, so the titles show.
         onNodeWithText("CPU").assertExists()
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(2)
-        onNodeWithText(usageHistoryNote("Fake source")).assertDoesNotExist()
+        // The static note shows from the first frame, so the line under the grid never changes.
+        onNodeWithText(usageHistoryNote("Fake source")).assertExists()
         // The range can still be changed while it loads.
         onNodeWithText("6h ▾").assertExists()
     }
@@ -482,7 +483,7 @@ class ClusterUsageHistoryCardUiTest {
         onNodeWithText("Memory").assertExists()
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
         onNodeWithText("Retry").assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         assertEquals(2, source.calls.size)
 
         onNodeWithText("Retry").performClick()

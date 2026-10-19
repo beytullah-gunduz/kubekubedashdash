@@ -56,8 +56,8 @@ import com.kubekubedashdash.services.metricshistory.deploymentPodSet
 import com.kubekubedashdash.services.metricshistory.dummyClient
 import com.kubekubedashdash.services.metricshistory.jsonResponse
 import com.kubekubedashdash.ui.ClusterColor
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
 import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
-import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.components.MAX_CHART_SERIES
 import com.kubekubedashdash.ui.components.podSetHue
 import com.kubekubedashdash.ui.screens.pods.LoadedHistory
@@ -589,7 +589,7 @@ class DeploymentUsageHistorySectionUiTest {
         onNodeWithText("Resource usage", ignoreCase = true).assertExists()
         onNodeWithText("Fake source").assertExists()
         onNodeWithText("CPU").assertDoesNotExist()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         assertTrue(source.calls.isEmpty(), "no query without a pod set: ${source.calls}")
     }
 
@@ -605,19 +605,19 @@ class DeploymentUsageHistorySectionUiTest {
     }
 
     @Test
-    fun `while Auto is still searching the header shows over the loading line and nothing is asked`() = runComposeUiTest {
+    fun `while Auto is still searching the header shows over the skeleton charts and nothing is asked`() = runComposeUiTest {
         val source = FakeSource(seriesNames)
         val gate = CompletableDeferred<DetectionState>()
         show(serviceOver(MutableStateFlow(emptyMap()), source, detectionOf { gate.await() }))
 
         onNodeWithText("Resource usage", ignoreCase = true).assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
         onNodeWithText("6h ▾").assertExists()
         assertTrue(source.calls.isEmpty(), "no source is asked while Auto searches: ${source.calls}")
     }
 
     @Test
-    fun `while the first fetch is out a loading line shows and the range can still be changed`() = runComposeUiTest {
+    fun `while the first fetch is out the loading text shows and the range can still be changed`() = runComposeUiTest {
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -627,7 +627,7 @@ class DeploymentUsageHistorySectionUiTest {
         }
         show(serviceOver(settingsOf(GmpSetting), hanging))
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(4)
         onNodeWithText("6h ▾").assertExists()
         onNodeWithText("Per pod").assertExists()
         // The charts are skeletons of their final size, so the titles show.
@@ -662,7 +662,7 @@ class DeploymentUsageHistorySectionUiTest {
         onNodeWithText("No access to Managed Prometheus", substring = true).assertExists()
         listOf("CPU", "Memory", "Network", "CPU throttling").forEach { onAllNodesWithText(it).assertCountEquals(0) }
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText("Retry").assertDoesNotExist()
         // The header stays, so a range or a mode that keeps failing can still be changed.
         onNodeWithText("Fake source").assertExists()
@@ -721,14 +721,14 @@ class DeploymentUsageHistorySectionUiTest {
             """{"metric":{"pod":"${podName(CURRENT, "x7k2p")}"},"values":[[${NOW - 60},"1"],[$NOW,"2"]]}]}}"""
         stub.proxy = { jsonResponse(200, body) }
         show(serviceOver(settingsOf(InClusterSetting), FakeSource(), clientFor = { stubClient }))
-        // The skeleton already shows the chart titles, so wait for the loading line to go instead.
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(LOADING_HISTORY_NOTE).fetchSemanticsNodes().isEmpty() }
+        // The skeleton already shows the chart titles, so wait for the loading text to go instead.
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(CHART_LOADING_TEXT).fetchSemanticsNodes().isEmpty() }
 
         onNodeWithText("Prometheus · monitoring/frontend").assertExists()
         onAllNodesWithText(podName(CURRENT, "x7k2p")).assertCountEquals(3)
         onAllNodesWithText("Managed Prometheus", substring = true).assertCountEquals(0)
         onNodeWithText(GMP_STALENESS_NOTE).assertExists()
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
     }
 
     // ── pure pieces ─────────────────────────────────────────────────────────

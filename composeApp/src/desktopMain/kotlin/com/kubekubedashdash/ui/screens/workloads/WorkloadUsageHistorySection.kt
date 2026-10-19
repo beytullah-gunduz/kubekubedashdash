@@ -51,7 +51,6 @@ import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartMarker
 import com.kubekubedashdash.ui.components.ChartReference
 import com.kubekubedashdash.ui.components.ChartSeries
-import com.kubekubedashdash.ui.components.HistoryLoadingLine
 import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
@@ -755,18 +754,16 @@ private fun WorkloadHistoryCharts(
             )
         }
         when {
-            loading -> HistoryLoadingLine()
-
             failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, failed), onRetry)
 
             else -> {
-                val notDrawn = if (perPod != null && mode == PodSetMode.PerPod) notDrawnCurrentPods(results, isCurrent) else 0
+                val notDrawn = if (!loading && perPod != null && mode == PodSetMode.PerPod) notDrawnCurrentPods(results, isCurrent) else 0
                 if (notDrawn > 0) {
                     val pods = if (notDrawn == 1) "1 more pod is" else "$notDrawn more pods are"
                     NoteLine("$pods not drawn — switch to Total.")
                 }
                 target.notes.forEach { NoteLine(it) }
-                if (shortRun != null) NoteLine(shortRun)
+                if (!loading && shortRun != null) NoteLine(shortRun)
                 NoteLine(target.stalenessNote)
             }
         }

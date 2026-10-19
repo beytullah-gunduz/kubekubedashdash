@@ -61,7 +61,6 @@ import com.kubekubedashdash.services.metricshistory.SourceChoice
 import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartSeries
-import com.kubekubedashdash.ui.components.HistoryLoadingLine
 import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
@@ -250,7 +249,6 @@ internal fun ClusterUsageHistoryCard(
                             is UsageArea.Charts -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 UsageHistoryCharts(a.answer, range.window(nowEpochSec()))
                                 when {
-                                    a.answer == null -> HistoryLoadingLine()
                                     a.failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, a.failed)) { retry++ }
                                     else -> NoteLine(usageHistoryNote(source.label))
                                 }

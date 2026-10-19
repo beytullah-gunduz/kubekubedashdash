@@ -59,6 +59,9 @@ internal const val HOST_NETWORK_NOTE = "Host network — these counters are the 
 internal const val POD_HISTORY_AVERAGE_NOTE = "CPU and memory are averages over several minutes, so a short peak, such as one just before an OOM kill, does not show."
 internal const val NO_CPU_LIMIT_NOTE = "No CPU limit set — CFS throttling does not apply."
 internal const val NO_THROTTLING_DATA_NOTE = "No throttling data in this range."
+
+/** Appended to the live value shown in a header while the history loads, so it does not read as the chart's value. */
+internal const val LIVE_VALUE_SUFFIX = " · live"
 internal const val NO_HISTORY_NOTE = "No history for this pod in this range. Retrying every 30 s; showing live metrics-server data."
 
 /** What the section asks the source for: network is the node's on a host-network pod, throttling needs a CPU limit. */
@@ -367,11 +370,7 @@ internal fun PodMetricsHistorySection(
                         // Only once a source is known: Auto still searching may find none, and a grid would then collapse.
                         is PodArea.Grid -> {
                             HistoryCharts(pod, kinds, a.loaded, range.window(nowEpochSec()), a.live)
-                            if (a.loaded == null) {
-                                HistoryLoadingLine()
-                            } else {
-                                Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
-                            }
+                            Text(POD_HISTORY_AVERAGE_NOTE, style = MaterialTheme.typography.bodySmall, color = KdTextSecondary)
                         }
 
                         is PodArea.Live -> when (val v = a.view) {
@@ -481,7 +480,7 @@ private fun HistoryCharts(
                 note = noteOf(results[PodSeriesKind.Cpu]),
                 loading = loaded == null,
                 reserveLegend = cpuLegend,
-                headerValue = live?.let { formatCoresValue(it.cpuMillis / 1000.0) },
+                headerValue = live?.let { formatCoresValue(it.cpuMillis / 1000.0) + LIVE_VALUE_SUFFIX },
             )
             TimeSeriesChart(
                 title = "Memory",
@@ -493,7 +492,7 @@ private fun HistoryCharts(
                 note = noteOf(results[PodSeriesKind.Memory]),
                 loading = loaded == null,
                 reserveLegend = memoryLegend,
-                headerValue = live?.let { formatBytesValue(it.memoryBytes.toDouble()) },
+                headerValue = live?.let { formatBytesValue(it.memoryBytes.toDouble()) + LIVE_VALUE_SUFFIX },
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

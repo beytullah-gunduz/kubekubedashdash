@@ -42,8 +42,8 @@ import com.kubekubedashdash.services.metricshistory.SeriesPoint
 import com.kubekubedashdash.services.metricshistory.SeriesResult
 import com.kubekubedashdash.services.metricshistory.SparkGrouping
 import com.kubekubedashdash.services.metricshistory.dummyClient
+import com.kubekubedashdash.ui.components.CHART_LOADING_TEXT
 import com.kubekubedashdash.ui.components.CHART_SKELETON_TAG
-import com.kubekubedashdash.ui.components.LOADING_HISTORY_NOTE
 import com.kubekubedashdash.ui.screens.pods.formatCoresValue
 import com.kubekubedashdash.ui.screens.workloads.DRIVER_SERIES_NAME
 import com.kubekubedashdash.ui.screens.workloads.EXECUTORS_SERIES_NAME
@@ -195,7 +195,7 @@ class SparkUsageHistoryCardUiTest {
     }
 
     @Test
-    fun `while the first fetch is out two skeleton charts show under a loading line`() = runComposeUiTest {
+    fun `while the first fetch is out two skeleton charts show their loading text and the static notes`() = runComposeUiTest {
         val hanging = object : MetricsHistorySource {
             override val label = "Fake source"
 
@@ -206,10 +206,12 @@ class SparkUsageHistoryCardUiTest {
         showCard(serviceOver(GmpSetting, hanging))
         waitForIdle()
 
-        onNodeWithText(LOADING_HISTORY_NOTE).assertExists()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(2)
         listOf("CPU", "Memory").forEach { onNodeWithText(it).assertExists() }
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(2)
-        onNodeWithText(SPARK_HISTORY_NOTE).assertDoesNotExist()
+        // The static notes show from the first frame, so the line under the grid never changes.
+        onNodeWithText(SPARK_HISTORY_NOTE).assertExists()
+        onNodeWithText("From Fake source.").assertExists()
         onNodeWithText("Applications ▾").assertExists()
     }
 
@@ -289,7 +291,7 @@ class SparkUsageHistoryCardUiTest {
         onAllNodesWithText("CPU").assertCountEquals(0)
         onAllNodesWithText("Memory").assertCountEquals(0)
         onAllNodesWithTag(CHART_SKELETON_TAG).assertCountEquals(0)
-        onNodeWithText(LOADING_HISTORY_NOTE).assertDoesNotExist()
+        onAllNodesWithText(CHART_LOADING_TEXT).assertCountEquals(0)
         onNodeWithText("Retry").assertDoesNotExist()
         onNodeWithText(SPARK_HISTORY_NOTE).assertDoesNotExist()
         // The header stays, so a range that keeps failing can still be changed.

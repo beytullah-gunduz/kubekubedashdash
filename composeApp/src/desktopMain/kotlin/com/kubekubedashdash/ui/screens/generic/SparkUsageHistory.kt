@@ -63,7 +63,6 @@ import com.kubekubedashdash.services.metricshistory.isTransient
 import com.kubekubedashdash.ui.ClusterColor
 import com.kubekubedashdash.ui.components.ChartAreaTransition
 import com.kubekubedashdash.ui.components.ChartSeries
-import com.kubekubedashdash.ui.components.HistoryLoadingLine
 import com.kubekubedashdash.ui.components.HistoryRetryLine
 import com.kubekubedashdash.ui.components.LogToolbarMenu
 import com.kubekubedashdash.ui.components.LogToolbarMenuItem
@@ -321,8 +320,6 @@ internal fun SparkUsageHistoryCard(
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     SparkHistoryCharts(a.answer, charts, range.window(nowEpochSec()), reserveLegend = view != SparkHistoryView.Total)
                                     when {
-                                        a.answer == null -> HistoryLoadingLine()
-
                                         a.failed != null -> HistoryRetryLine(deploymentFailureMessage(choice, a.failed)) { retry++ }
 
                                         else -> {

@@ -17,7 +17,7 @@ import com.kubekubedashdash.KdTextSecondary
 
 internal const val LOADING_HISTORY_NOTE = "Loading history…"
 
-/** The spinner and [LOADING_HISTORY_NOTE], shown under the skeleton charts while a history source answers. */
+/** The spinner and [LOADING_HISTORY_NOTE], shown above the pod's live charts while Auto still searches for a history source. */
 @Composable
 internal fun HistoryLoadingLine() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
