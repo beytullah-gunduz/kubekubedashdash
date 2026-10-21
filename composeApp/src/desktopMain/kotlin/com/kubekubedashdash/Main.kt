@@ -9,19 +9,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.awt.SwingWindow
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.res.useResource
-import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowDecoration
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.mcp.McpServerManager
+import com.kubekubedashdash.model.Workspace
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.WorkspaceManager
 import com.kubekubedashdash.services.portforward.PortForwardRegistry
 import com.kubekubedashdash.ui.App
+import com.kubekubedashdash.ui.pinMaximizedBounds
 import com.kubekubedashdash.ui.yamledit.EditorWarmup
 import com.kubekubedashdash.ui.yamledit.YamlEditorWindows
 import com.kubekubedashdash.util.DEFAULT_WINDOW_SIZE
@@ -34,6 +37,7 @@ import com.kubekubedashdash.yamledit.session.QuitGuard
 import com.kubekubedashdash.yamledit.session.YamlEditRegistry
 import org.slf4j.LoggerFactory
 import java.awt.Desktop
+import java.awt.Rectangle
 import javax.swing.SwingUtilities
 
 fun main() {
@@ -136,12 +140,15 @@ fun main() {
                     snapshotFlow { windowState.toGeometry(workspace.geometry.value) }
                         .collect { workspace.updateGeometry(it) }
                 }
-                Window(
+                // SwingWindow rather than Window for its init hook, which runs before the window
+                // is shown: a restored maximized session then maximizes with its bounds pinned.
+                SwingWindow(
                     onCloseRequest = { WorkspaceManager.requestCloseWorkspace(workspace.id) },
                     title = "KubeKubeDashDash",
                     state = windowState,
                     icon = appIcon,
-                    undecorated = true,
+                    decoration = WindowDecoration.Undecorated(),
+                    init = { window -> window.pinMaximizedBounds(workspace.initialBounds()) },
                 ) {
                     App(
                         workspace = workspace,
@@ -157,6 +164,18 @@ fun main() {
         // not inside one: they belong to the process-wide registry, not to a workspace.
         YamlEditorWindows(icon = appIcon)
     }
+}
+
+/** Where the window will open, in AWT points; null when the platform picks the position. */
+private fun Workspace.initialBounds(): Rectangle? {
+    val position = initialPosition as? WindowPosition.Absolute ?: return null
+    val size = initialSize ?: DEFAULT_WINDOW_SIZE
+    return Rectangle(
+        position.x.value.toInt(),
+        position.y.value.toInt(),
+        size.width.value.toInt(),
+        size.height.value.toInt(),
+    )
 }
 
 /**
