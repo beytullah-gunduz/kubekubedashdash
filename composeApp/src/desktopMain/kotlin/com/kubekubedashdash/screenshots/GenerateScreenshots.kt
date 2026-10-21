@@ -68,7 +68,7 @@ import java.awt.Window as AwtWindow
  * Drives the live app against the built-in demo cluster and writes the landing-page
  * captures into build/screenshots/ (raw PNGs, gitignored): ten hero looks of the Cluster
  * Overview, eight feature shots, and a Retro CRT power-on frame sequence in crt/. Run
- * scripts/site_images.py afterwards to turn them into docs/img/ and the README images.
+ * scripts/site_images.py afterwards to turn them into docs/img/ and the README and GUIDE.md images.
  *
  * Run with `./gradlew generateScreenshots` from the repo root. Captures rasterize each
  * window's own last Skia frame in-process, so they need no Screen Recording permission

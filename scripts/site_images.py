@@ -17,7 +17,7 @@ Writes, under --out:
     img/og.png                                          the 1200x630 social card
     img/mark-64.png, img/apple-touch-icon.png           the brand mark and the iOS home-screen icon
     favicon.ico                                         16/32/48 px, from docs/favicon.png
-    screenshots/{overview,fleet,topology}.png           the three images the README shows
+    screenshots/{overview,fleet,topology}.png           the images the README and GUIDE.md show
 
 --icons-only writes just the three icon files (no captures needed). The icons always come from
 the repo's own docs/favicon.png, which is only read, never overwritten.
@@ -150,7 +150,7 @@ def missing_inputs(src: Path) -> list[Path]:
     """Every expected capture that is absent, including the CRT frames frames.json lists."""
     needed = [src / f"hero-{slug}.png" for slug in HERO_SLUGS]
     needed += [src / f"{name}.png" for name in {*CROPS, *MOBILE_CROPS}]
-    needed.append(src / "topology.png")  # README only; the page has no topology tile
+    needed.append(src / "topology.png")  # GUIDE.md only; the page has no topology tile
     frames_json = src / "crt" / "frames.json"
     needed.append(frames_json)
     if frames_json.is_file():
