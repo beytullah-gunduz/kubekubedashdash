@@ -73,6 +73,7 @@ import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import java.awt.EventQueue
+import java.awt.Frame
 import java.awt.Window
 import java.awt.event.WindowEvent
 import java.awt.event.WindowFocusListener
@@ -183,6 +184,8 @@ fun WindowScope.TitleBar(
         windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
             WindowPlacement.Floating
         } else {
+            // Re-pinned on every maximize: the window may have moved screens since the last one.
+            (window as? Frame)?.pinMaximizedBounds()
             WindowPlacement.Maximized
         }
     }
