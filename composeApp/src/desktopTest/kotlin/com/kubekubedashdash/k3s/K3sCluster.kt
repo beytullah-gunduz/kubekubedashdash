@@ -205,7 +205,7 @@ internal class K3sCluster private constructor(
                 fail(
                     "Docker is not reachable, so the K3s test cannot start. With Colima, export DOCKER_HOST and " +
                         "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE (and, if needed, TESTCONTAINERS_HOST_OVERRIDE) before " +
-                        "running Gradle. The values are in README.md, section \"Integration tests (K3s)\". " +
+                        "running Gradle. The values are in CONTRIBUTING.md, section \"Integration tests (K3s)\". " +
                         "This test never skips silently.",
                 )
             }

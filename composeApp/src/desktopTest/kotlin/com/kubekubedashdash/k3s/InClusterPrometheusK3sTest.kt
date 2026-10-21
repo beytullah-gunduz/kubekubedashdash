@@ -39,7 +39,7 @@ import kotlin.test.fail
  * ./gradlew :composeApp:k3sIntegrationTest   the checks below, then the cluster is removed
  * ./gradlew :composeApp:k3sDevCluster        the same cluster, kept up for a live smoke of the app
  * ```
- * The README section "Integration tests (K3s)" has the Colima settings. Each test method does nothing
+ * The CONTRIBUTING.md section "Integration tests (K3s)" has the Colima settings. Each test method does nothing
  * unless its Gradle task set its property, so an IDE run or `desktopTest --tests` cannot start a
  * container; with the property set and Docker unreachable the test FAILS, it never skips.
  *

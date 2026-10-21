@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 // Colours adapted from the palettes' public specs for WCAG contrast (plan D3, D12). Not official ports.
 // Solarized © Ethan Schoonover (MIT) · Gruvbox © Pavel Pertsev (MIT/X11) · Catppuccin © Catppuccin (MIT)
-// · Nord © Sven Greb (MIT) · Dracula/Alucard © Dracula Theme (MIT). Sources in README "Colour palette credits".
+// · Nord © Sven Greb (MIT) · Dracula/Alucard © Dracula Theme (MIT). Sources in CREDITS.md.
 //
 // The *Colors / *Cvd / *Ansi* vals come first, then the specs that read them: Kotlin initialises a
 // file's top-level vals in textual order, so a forward reference would read null.
