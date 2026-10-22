@@ -31,6 +31,8 @@ import com.kubekubedashdash.screenshots.ScreenshotHooks
 import com.kubekubedashdash.services.LogStreamRegistry
 import com.kubekubedashdash.services.OpenTarget
 import com.kubekubedashdash.services.WorkspaceManager
+import com.kubekubedashdash.services.metricshistory.MetricsSourceMode
+import com.kubekubedashdash.services.metricshistory.MetricsSourceSetting
 import com.kubekubedashdash.services.portforward.PortForwardRequest
 import com.kubekubedashdash.services.session.SessionPersistence
 import com.kubekubedashdash.ui.App
@@ -67,7 +69,7 @@ import java.awt.Window as AwtWindow
 /**
  * Drives the live app against the built-in demo cluster and writes the landing-page
  * captures into build/screenshots/ (raw PNGs, gitignored): ten hero looks of the Cluster
- * Overview, eight feature shots, and a Retro CRT power-on frame sequence in crt/. Run
+ * Overview, nine feature shots, and a Retro CRT power-on frame sequence in crt/. Run
  * scripts/site_images.py afterwards to turn them into docs/img/ and the README and GUIDE.md images.
  *
  * Run with `./gradlew generateScreenshots` from the repo root. Captures rasterize each
@@ -317,6 +319,9 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
                 if (pod == null) delay(2_000)
             }
             if (pod != null) {
+                // History off for this shot: the pod's Resource Usage charts would push the container
+                // card below the window. Back to Auto (the default) right after.
+                PreferenceRepository.setMetricsSource(firstLabel, MetricsSourceSetting(mode = MetricsSourceMode.OFF))
                 sessionVm.navigate(Screen.Main.Pods()) // list behind the pane
                 delay(1_200)
                 sessionVm.navigate(Screen.Detail.PodDetail(pod)) // opens extra pane
@@ -324,6 +329,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
                 captureWindow(initialWorkspace.id, outDir.resolve("pod-why.png"))
                 log.info("captured pod-why")
                 sessionVm.closeExtraPane()
+                PreferenceRepository.setMetricsSource(firstLabel, MetricsSourceSetting())
                 delay(500)
             }
         }
@@ -386,7 +392,7 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         sessionVm.navigate(Screen.Main.Pods())
         delay(1_000)
         initialWorkspace.requestTailLogs("production")
-        delay(9_000) // streams attach and live lines trickle in
+        delay(15_000) // 40 streams attach, then live lines push their "started" markers out of view
         captureWindow(initialWorkspace.id, outDir.resolve("tail.png"))
         log.info("captured tail")
         initialWorkspace.requestHideLogs()
@@ -408,7 +414,28 @@ private suspend fun runScreenshotJob(outDir: File) = coroutineScope {
         sessionVm.setNamespaceScope(NamespaceScope.All)
         delay(1_000)
 
-        // 14. fleet: two more demo tabs (they mint the next screenshot labels), then the All Clusters tab, which only opens on request.
+        // 14. usage-history: redis-cache's panel, whose usage charts come from the demo cluster's fake
+        // Prometheus. It is the demo Deployment with an earlier revision, so the charts show a rollout
+        // marker and the old pods' grey lines. Expanded, the panel gives the charts the whole content
+        // area; at the side pane's width their legends wrap.
+        log.info("Capturing usage-history")
+        sessionVm.navigate(Screen.Main.Deployments())
+        delay(1_500)
+        val redis = currentList(rc.deployments).firstOrNull { it.name == "redis-cache" }
+        if (redis != null) {
+            sessionVm.navigate(Screen.Detail.DeploymentDetail(redis))
+            delay(1_000)
+            sessionVm.setExtraPaneExpanded(true)
+            delay(10_000) // the history query answers, then the curves trace in
+            captureWindow(initialWorkspace.id, outDir.resolve("usage-history.png"))
+            log.info("captured usage-history")
+            sessionVm.closeExtraPane()
+            delay(500)
+        } else {
+            log.warn("usage-history skipped: no redis-cache deployment")
+        }
+
+        // 15. fleet: two more demo tabs (they mint the next screenshot labels), then the All Clusters tab, which only opens on request.
         log.info("Capturing fleet (All Clusters)")
         WorkspaceManager.openCluster(
             initialWorkspace,
@@ -535,6 +562,16 @@ private suspend fun awaitWindow(id: WorkspaceId): AwtWindow {
     withTimeoutOrNull(5_000) {
         while (!w.isShowing) delay(50)
     }
+    val gc = w.graphicsConfiguration
+    log.info(
+        "window {}x{} at {},{} on screen {} (scale {})",
+        w.width,
+        w.height,
+        w.x,
+        w.y,
+        gc.bounds,
+        gc.defaultTransform.scaleX,
+    )
     return w
 }
 

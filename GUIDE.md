@@ -204,6 +204,8 @@ To chart usage further back — including from before the app was opened — the
 - **In-cluster** — the namespace, Service, port, optional path prefix and HTTPS of a Prometheus inside the cluster. Needs `services/proxy` access, and the Prometheus must hold the standard cAdvisor container metrics
 - **Off** — live data only
 
+![A Deployment's resource usage over six hours, with a marker at each rollout](docs/screenshots/usage-history.png)
+
 With a source, these screens gain a **Resource usage** section with charts over 15m, 1h, 6h, 24h or 7d (hover a chart for exact values):
 
 - **Pod** — CPU and memory per container (with request and limit lines), network received and sent, and CPU throttling

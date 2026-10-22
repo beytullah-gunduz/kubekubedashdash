@@ -17,7 +17,7 @@ Writes, under --out:
     img/og.png                                          the 1200x630 social card
     img/mark-64.png, img/apple-touch-icon.png           the brand mark and the iOS home-screen icon
     favicon.ico                                         16/32/48 px, from docs/favicon.png
-    screenshots/{overview,fleet,topology}.png           the images the README and GUIDE.md show
+    screenshots/{overview,fleet,topology,usage-history}.png   the images the README and GUIDE.md show
 
 --icons-only writes just the three icon files (no captures needed). The icons always come from
 the repo's own docs/favicon.png, which is only read, never overwritten.
@@ -62,12 +62,13 @@ Box = tuple[int, int, int, int]
 # way and the parts are stacked top to bottom with no gap (all parts share left and right).
 CROPS: dict[str, Box | list[Box] | None] = {
     "fleet": None,
-    "pod-why": [(1074, 80, 1640, 332), (1074, 708, 1640, 932)],  # header + warning, container card
+    "pod-why": [(1074, 80, 1640, 332), (1074, 709, 1640, 950)],  # header + warning, container card
     "bulk": (292, 40, 1640, 600),
     "tail": [(0, 808, 1100, 911), (0, 923, 1100, 1160)],  # drawer header, first whole line on
     "port-forward": (547, 332, 1093, 828),  # dialog + 16 dp scrim
     "palette": (516, 119, 1126, 629),
     "secret": (1070, 76, 1640, 441),  # pane header to end of YAML
+    "usage-history": (292, 68, 1640, 630),  # expanded pane header to the charts' note
 }
 
 # Phone-width crops of the wide tiles, written as img/<name>-mobile.webp. These are dp boxes of
@@ -76,6 +77,7 @@ MOBILE_CROPS: dict[str, Box | list[Box]] = {
     "fleet": (0, 46, 658, 673),  # Total + first cluster panel, heatmap, the event feed's left columns
     "bulk": (292, 40, 1020, 600),  # checkboxes, names, statuses, "6 pods selected"
     "tail": [(0, 808, 620, 911), (0, 923, 620, 1160)],
+    "usage-history": [(292, 68, 966, 145), (292, 182, 966, 604)],  # pane header, then CPU and Network (no tabs)
 }
 
 HERO_WIDTH = 2000
@@ -332,6 +334,7 @@ def build_readme_images(src: Path, hero: Image.Image, shots_dir: Path, written: 
         "overview": hero,
         "fleet": load_rgb(src / "fleet.png"),
         "topology": load_rgb(src / "topology.png"),
+        "usage-history": crop_or_stitch(load_rgb(src / "usage-history.png"), CROPS["usage-history"]),
     }
     for name, img in sources.items():
         out = shots_dir / f"{name}.png"
