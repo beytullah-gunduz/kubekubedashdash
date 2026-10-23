@@ -9,7 +9,7 @@ compose-material3 = "1.12.0-alpha03"
 # enough: kubernetes-server-mock 7.8.0 calls Dispatcher.releaseResources(),
 # which 7.7.0 does not declare, and ProGuard fails the release build on the
 # unresolved reference. The whole fabric8 train has to move together.
-fabric8 = "7.7.0"
+fabric8 = "8.0.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 lifecycle = "2.11.0"
