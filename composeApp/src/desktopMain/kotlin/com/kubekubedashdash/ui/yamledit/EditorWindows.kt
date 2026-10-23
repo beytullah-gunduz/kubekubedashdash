@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.SwingWindow
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -22,19 +23,19 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
 import com.kubekubedashdash.KdTextSecondary
 import com.kubekubedashdash.KubeDashTheme
-import com.kubekubedashdash.ui.KeepResizableOnMac
 import com.kubekubedashdash.ui.TitleBar
+import com.kubekubedashdash.ui.appWindowDecoration
+import com.kubekubedashdash.ui.useTransparentMacTitleBar
 import com.kubekubedashdash.yamledit.session.ApplyYamlSession
 import com.kubekubedashdash.yamledit.session.EditorWindowModel
 import com.kubekubedashdash.yamledit.session.YamlEditRegistry
 import com.kubekubedashdash.yamledit.session.YamlEditSession
 
 /**
- * One window per open editor of [registry], keyed by the editor's id, with the same undecorated
+ * One window per open editor of [registry], keyed by the editor's id, with the same
  * chrome as the workspace windows (the app's [TitleBar], minus the workspace-only controls),
  * so an editor keeps its window while others open and close. Rendered once, beside the workspace
  * windows, inside `application { }`: the editors belong to the process, not to a workspace.
@@ -54,14 +55,14 @@ fun YamlEditorWindows(registry: YamlEditRegistry = YamlEditRegistry.Default, ico
 @Composable
 private fun EditorWindow(model: EditorWindowModel, icon: Painter) {
     val windowState = rememberWindowState(size = DpSize(980.dp, 760.dp))
-    Window(
+    SwingWindow(
         onCloseRequest = model::requestClose,
         title = model.title,
         state = windowState,
         icon = icon,
-        undecorated = true,
+        decoration = appWindowDecoration(),
+        init = { window -> window.useTransparentMacTitleBar() },
     ) {
-        KeepResizableOnMac(window)
         // A repeated Edit click (or a guard's "Keep editing") bumps the counter: bring this window forward.
         val focus by model.focusRequests.collectAsState()
         LaunchedEffect(focus) {
@@ -98,7 +99,7 @@ private fun EditorWindow(model: EditorWindowModel, icon: Painter) {
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // The workspace windows' own chrome, so the editor looks and moves like them. The
-                    // red light asks first when there are unsaved edits, like the close shortcut.
+                    // close button asks first when there are unsaved edits, like the close shortcut.
                     TitleBar(
                         title = model.title,
                         windowState = windowState,

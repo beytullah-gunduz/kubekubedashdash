@@ -115,7 +115,7 @@ class UiSmoke {
             Assume.assumeTrue("run it with ./gradlew :composeApp:uiSmoke", System.getProperty("kkdd.uiSmoke") == "true")
             started = true
             if (!System.getProperty("os.name").startsWith("Mac")) {
-                refuse("the UI smoke runs on macOS only (window-button names, title-bar height, ps)")
+                refuse("the UI smoke runs on macOS only (title-bar height, ps)")
             }
             val repo = File(System.getProperty("kkdd.uiSmoke.repo") ?: refuse("kkdd.uiSmoke.repo is not set: run it with ./gradlew :composeApp:uiSmoke")).canonicalFile
             if (!(File(repo, "gradlew").isFile && File(repo, "composeApp").isDirectory)) {
@@ -185,12 +185,15 @@ class UiSmoke {
 
     @Test
     fun `s1-first-run-title-bar`() = scenario("first-run-title-bar") {
-        // The first-run screen has a title bar with window buttons and disabled Back/Forward.
+        // The first-run screen has a title bar with Settings and disabled Back/Forward. The window
+        // buttons are macOS's own (a decorated window), so none is drawn in the app.
         val win = mainWindow()
         must("the first-run screen", 120.seconds) { find(win, text = "Try demo cluster", match = Match.PREFIX, timeout = Duration.ZERO) != null }
-        for (d in listOf("Close window", "Minimize window", "Maximize window")) {
-            check("'$d' is in the title bar", find(win, desc = d, clickable = false, timeout = 5.seconds) != null)
+        check("'Settings' is in the title bar", find(win, desc = "Settings", clickable = false, timeout = 5.seconds) != null)
+        val drawn = listOf("Close window", "Minimize window", "Maximize window").filter { d ->
+            nodes(win).any { it.contentDescription == d }
         }
+        check("no window button is drawn in the app", drawn.isEmpty(), "found $drawn")
         for (d in listOf("Back", "Forward")) {
             val n = find(win, desc = d, clickable = false, timeout = 5.seconds)
             check("'$d' is disabled", n != null && !n.enabled, if (n == null) "node missing" else "")
@@ -212,7 +215,7 @@ class UiSmoke {
             val all = nodes(win)
             all.any { it.contentDescription.startsWith(UiTestHookNames.STATE) } && all.none { it.text.startsWith("Try demo cluster") }
         }
-        check("'Close window' is in the title bar", find(win, desc = "Close window", clickable = false, timeout = 5.seconds) != null)
+        check("'Settings' is in the title bar", find(win, desc = "Settings", clickable = false, timeout = 5.seconds) != null)
         check("state.firstRun is true", st(win)?.firstRun == true)
         shot(win, "splash")
     }
@@ -227,7 +230,7 @@ class UiSmoke {
             val s = st(torn)
             check("the new window's active tab is All Clusters", s?.active == ALL_CLUSTERS, "active=${s?.active}")
             check("the new window is not on the first-run screen", s?.firstRun == false)
-            check("the new window has a 'Close window' button", find(torn, desc = "Close window", clickable = false, timeout = 5.seconds) != null)
+            check("the new window has a title bar with 'Settings'", find(torn, desc = "Settings", clickable = false, timeout = 5.seconds) != null)
             shot(torn, "tear-out-new")
         }
         val old = st(win)

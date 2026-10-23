@@ -255,8 +255,8 @@
 -dontwarn okio.**
 
 # ---------------------------------------------------------------------------
-# JNA — used by NativeWindowDrag to call AppKit performWindowDragWithEvent:
-# on macOS. Heavy reflection over native types; needs the whole package.
+# JNA — used on macOS by NativeWindowDrag (performWindowDragWithEvent:) and by
+# WindowChrome (the title-bar toolbar). Heavy reflection over native types; needs the whole package.
 # ---------------------------------------------------------------------------
 -keep class com.sun.jna.** { *; }
 -keepclassmembers class com.sun.jna.** { *; }

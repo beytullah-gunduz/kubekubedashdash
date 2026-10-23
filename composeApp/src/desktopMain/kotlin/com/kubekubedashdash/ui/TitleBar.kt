@@ -21,13 +21,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -42,6 +40,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -57,7 +56,9 @@ import com.kubekubedashdash.KdBorder
 import com.kubekubedashdash.KdHover
 import com.kubekubedashdash.KdSurface
 import com.kubekubedashdash.KdTextSecondary
+import com.kubekubedashdash.LocalSystemDensity
 import com.kubekubedashdash.ThemeManager
+import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.kdCorner
 import com.kubekubedashdash.kdOutlineWidth
 import com.kubekubedashdash.orCompact
@@ -72,28 +73,33 @@ import com.kubekubedashdash.retroChrome
 import com.kubekubedashdash.ui.components.kdFocusRing
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
-import java.awt.EventQueue
-import java.awt.Frame
-import java.awt.Window
-import java.awt.event.WindowEvent
-import java.awt.event.WindowFocusListener
 
 private val isMacOS: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
 
-private val MacClose = Color(0xFFFF5F57)
-private val MacMinimize = Color(0xFFFEBC2E)
-private val MacMaximize = Color(0xFF28C840)
-private val MacSymbolColor = Color(0x80000000)
 private val WinCloseHover = Color(0xFFE81123)
+
+/**
+ * Room left at the start of the title bar for macOS's own traffic lights, in points: the window
+ * is decorated there and its transparent system title bar draws them over this space.
+ */
+private const val MAC_TRAFFIC_LIGHTS_WIDTH_PT = 78f
 
 /** Empty title bar the tab strip always leaves free, so the window can still be grabbed. */
 internal val TitleBarMinDragGap = 48.dp
 
-/** The title bar's height on macOS at the default density, in dp; the UI smoke measures against it. */
+/** The title bar's height on macOS until the traffic lights are measured, in points (what macOS 26 measures); the UI smoke measures against it. */
 internal const val MAC_TITLE_BAR_HEIGHT_DP = 38
 
-/** The title bar's height: 38 dp on macOS, 42 dp elsewhere, 4 dp less at the compact density. */
-internal fun titleBarHeight(): Dp = if (isMacOS) MAC_TITLE_BAR_HEIGHT_DP.dp.orCompact(34.dp) else 42.dp.orCompact(38.dp)
+/**
+ * The title bar's height: 42 dp off macOS, 38 dp at the compact density. On macOS, at every density,
+ * twice the depth of the native traffic lights' center ([MacTrafficLights]), so the bar's content
+ * lines up with them; converted from points to dp under the UI zoom, which does not scale them.
+ */
+internal fun titleBarHeight(): Dp {
+    if (!isMacOS) return 42.dp.orCompact(38.dp)
+    val heightPt = MacTrafficLights.centerFromTopPt?.let { 2 * it } ?: MAC_TITLE_BAR_HEIGHT_DP.toFloat()
+    return (heightPt * 100f / PreferenceRepository.uiScalePercent.value).dp
+}
 
 /**
  * Lays an in-app modal out under the title bar, so its scrim and card leave the window
@@ -154,8 +160,8 @@ internal fun Modifier.consumeTitleBarPress(): Modifier = pointerInput(Unit) {
 }
 
 /**
- * The app's own window chrome: traffic lights (or Windows' caption buttons), the drag area and
- * double-click to maximize. [windowTools] = false leaves out the controls only a workspace window
+ * The app's own window chrome: room for macOS's native traffic lights (or Windows' caption buttons,
+ * drawn here), the drag area and double-click to maximize. [windowTools] = false leaves out the controls only a workspace window
  * has (sidebar toggle, Back/Forward, the log-tabs chip and Settings): a secondary window such as
  * the YAML editor keeps the same look and behaviour with just its [title].
  */
@@ -180,12 +186,12 @@ fun WindowScope.TitleBar(
     // (dimmed, no pointer input); the window buttons and the window drag keep working.
     controlsEnabled: Boolean = true,
 ) {
+    // On macOS the window is decorated, so AWT hands this to NSWindow's own zoom, which zooms on
+    // the screen the window is on now and restores the size the user left it at.
     val toggleMaximize = {
         windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
             WindowPlacement.Floating
         } else {
-            // Re-pinned on every maximize: the window may have moved screens since the last one.
-            (window as? Frame)?.pinMaximizedBounds()
             WindowPlacement.Maximized
         }
     }
@@ -237,13 +243,10 @@ fun WindowScope.TitleBar(
             val onMaximize = toggleMaximize
 
             if (isMacOS) {
-                Spacer(Modifier.width(8.dp))
-                MacTrafficLights(
-                    onClose = onClose,
-                    onMinimize = onMinimize,
-                    onMaximize = onMaximize,
-                )
-                Spacer(Modifier.width(12.dp))
+                // The native buttons are laid out in points: under a UI zoom the dp width is scaled
+                // back so the space still matches them.
+                val zoom = LocalDensity.current.density / LocalSystemDensity.current.density
+                Spacer(Modifier.width((MAC_TRAFFIC_LIGHTS_WIDTH_PT / zoom).dp))
             } else {
                 Spacer(Modifier.width(12.dp))
             }
@@ -309,28 +312,6 @@ fun WindowScope.TitleBar(
         WindowDraggableArea {
             rowContent()
         }
-    }
-}
-
-/**
- * Keeps an undecorated [window] resizable for macOS edge-tiling: stamps NSWindowStyleMaskResizable
- * at idle on every focus gain (idempotent), never from inside the title-bar drag gesture, which
- * can deadlock the UI when it races a render burst (see [NativeWindowDrag.ensureResizable]).
- * invokeLater lets AppKit's key-window assignment settle before [NSApp keyWindow] is read.
- * No-op off macOS.
- */
-@Composable
-internal fun KeepResizableOnMac(window: Window) {
-    if (!NativeWindowDrag.isMacOS) return
-    DisposableEffect(window) {
-        val stamp = { EventQueue.invokeLater { NativeWindowDrag.ensureResizable() } }
-        val focusListener = object : WindowFocusListener {
-            override fun windowGainedFocus(e: WindowEvent?) = stamp()
-            override fun windowLostFocus(e: WindowEvent?) = Unit
-        }
-        window.addWindowFocusListener(focusListener)
-        if (window.isFocused) stamp()
-        onDispose { window.removeWindowFocusListener(focusListener) }
     }
 }
 
@@ -457,83 +438,6 @@ private fun SettingsButton(onClick: () -> Unit, enabled: Boolean = true) {
             modifier = Modifier.size(16.dp),
             tint = KdTextSecondary,
         )
-    }
-}
-
-@Composable
-private fun MacTrafficLights(
-    onClose: () -> Unit,
-    onMinimize: () -> Unit,
-    onMaximize: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val groupInteraction = remember { MutableInteractionSource() }
-    val isGroupHovered by groupInteraction.collectIsHoveredAsState()
-
-    Row(
-        modifier = modifier.hoverable(groupInteraction),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MacButton(MacClose, MacButtonSymbol.CLOSE, isGroupHovered, onClose)
-        MacButton(MacMinimize, MacButtonSymbol.MINIMIZE, isGroupHovered, onMinimize)
-        MacButton(MacMaximize, MacButtonSymbol.MAXIMIZE, isGroupHovered, onMaximize)
-    }
-}
-
-private enum class MacButtonSymbol { CLOSE, MINIMIZE, MAXIMIZE }
-
-@Composable
-private fun MacButton(
-    color: Color,
-    symbol: MacButtonSymbol,
-    showSymbol: Boolean,
-    onClick: () -> Unit,
-) {
-    val label = when (symbol) {
-        MacButtonSymbol.CLOSE -> "Close window"
-        MacButtonSymbol.MINIMIZE -> "Minimize window"
-        MacButtonSymbol.MAXIMIZE -> "Maximize window"
-    }
-    Box(
-        modifier = Modifier
-            .size(12.dp)
-            .clip(CircleShape) // kd-shape-exempt: macOS traffic light (Retro plan D9)
-            .background(color)
-            .semantics { contentDescription = label }
-            .kdFocusRing()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (showSymbol) {
-            Canvas(Modifier.size(6.dp)) {
-                val s = 1.2.dp.toPx()
-                when (symbol) {
-                    MacButtonSymbol.CLOSE -> {
-                        drawLine(MacSymbolColor, Offset(0f, 0f), Offset(size.width, size.height), s)
-                        drawLine(MacSymbolColor, Offset(size.width, 0f), Offset(0f, size.height), s)
-                    }
-
-                    MacButtonSymbol.MINIMIZE -> {
-                        drawLine(MacSymbolColor, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), s)
-                    }
-
-                    MacButtonSymbol.MAXIMIZE -> {
-                        val w = size.width
-                        val h = size.height
-                        drawLine(MacSymbolColor, Offset(w * 0.2f, h * 0.8f), Offset(w * 0.8f, h * 0.2f), s)
-                        drawLine(MacSymbolColor, Offset(w * 0.5f, h * 0.2f), Offset(w * 0.8f, h * 0.2f), s)
-                        drawLine(MacSymbolColor, Offset(w * 0.8f, h * 0.2f), Offset(w * 0.8f, h * 0.5f), s)
-                        drawLine(MacSymbolColor, Offset(w * 0.2f, h * 0.5f), Offset(w * 0.2f, h * 0.8f), s)
-                        drawLine(MacSymbolColor, Offset(w * 0.2f, h * 0.8f), Offset(w * 0.5f, h * 0.8f), s)
-                    }
-                }
-            }
-        }
     }
 }
 

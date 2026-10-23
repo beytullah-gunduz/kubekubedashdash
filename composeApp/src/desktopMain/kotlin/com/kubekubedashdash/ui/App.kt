@@ -132,10 +132,6 @@ fun App(
             onDispose { if (workspace.awtWindow === awtWindow) workspace.awtWindow = null }
         }
 
-        // Edge-tiling on macOS needs NSWindowStyleMaskResizable on this undecorated window;
-        // stamped at idle on focus, never from the drag gesture (see KeepResizableOnMac).
-        KeepResizableOnMac(awtWindow)
-
         val contexts by appViewModel.contexts.collectAsState()
         val prerequisiteResult by appViewModel.prerequisiteResult.collectAsState()
         val showPrerequisites by appViewModel.showPrerequisites.collectAsState()
@@ -594,9 +590,9 @@ fun App(
                 // post-import refresh keeps the splash up (via bootstrapComplete
                 // flipping) until the cluster selector pops — no FirstRunScreen
                 // flash in between.
-                // The title bar (traffic lights, sidebar toggle, Back/Forward, tabs,
-                // settings) heads every state of the window, the first-run screen too:
-                // without it an undecorated window cannot be moved or closed.
+                // The title bar (sidebar toggle, Back/Forward, tabs, settings, and the
+                // window buttons off macOS) heads every state of the window, the first-run
+                // screen too: without it the window cannot be moved, nor closed off macOS.
                 val windowTitleBar: @Composable () -> Unit = {
                     // The tabs live in the title bar. A lone cluster tab that has not
                     // picked a context yet (the picker is up at launch) shows the app
