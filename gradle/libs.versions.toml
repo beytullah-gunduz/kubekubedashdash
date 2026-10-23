@@ -1,7 +1,7 @@
 [versions]
 kotlin = "2.4.21"
 compose-multiplatform = "1.12.2"
-compose-material3 = "1.12.0-alpha03"
+compose-material3 = "1.13.0-alpha02"
 # Held at 7.7.0 deliberately. 7.8.0's VertxMockWebSocket.send() blocks on the
 # Vert.x write future (awaitWrite, 30s); WatchEventsListener calls it off the
 # event loop while onClosed() blocks the event loop in awaitTermination, so
