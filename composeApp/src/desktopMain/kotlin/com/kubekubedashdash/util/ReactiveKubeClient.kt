@@ -389,12 +389,13 @@ class ReactiveKubeClient(
 
     // ── Secrets ─────────────────────────────────────────────────────────────────
 
+    // Payload-free item store (data values, stringData, managedFields and last-applied dropped): see SecretSummaryStore.
     val secrets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
-                k.secrets().inNamespace(ns).runnableInformer(0L).addEventHandler(h)
+                k.secrets().inNamespace(ns).runnableInformer(0L).itemStore(SecretSummaryStore()).addEventHandler(h)
             } else {
-                k.secrets().inAnyNamespace().runnableInformer(0L).addEventHandler(h)
+                k.secrets().inAnyNamespace().runnableInformer(0L).itemStore(SecretSummaryStore()).addEventHandler(h)
             }
         },
         mapper = { s ->
@@ -405,7 +406,7 @@ class ReactiveKubeClient(
                 status = null,
                 age = formatAge(s.metadata.creationTimestamp),
                 labels = s.metadata.labels ?: emptyMap(),
-                annotations = s.metadata.annotations ?: emptyMap(),
+                annotations = (s.metadata.annotations ?: emptyMap()).filterKeys { it != SecretSummaryStore.LAST_APPLIED_ANNOTATION },
                 extraColumns = mapOf("Type" to (s.type ?: ""), "Data" to "${s.data?.size ?: 0}"),
                 owners = ResourceMappers.mapOwnerRefs(s.metadata.ownerReferences),
             )
