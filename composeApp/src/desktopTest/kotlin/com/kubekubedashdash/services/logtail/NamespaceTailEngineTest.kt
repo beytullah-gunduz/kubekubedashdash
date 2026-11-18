@@ -556,4 +556,75 @@ class NamespaceTailEngineTest {
         }
         assertEquals(2, gateway.streamRequestCount("example-pod-0", "app"))
     }
+
+    @Test
+    fun `a pod whose stream hangs across a reconnect gets a fresh stream`() = runBlocking {
+        val gateway = FakeNamespaceTailGateway()
+        val task = startTask(gateway)
+        val pods = listOf(testPod("example-pod-0", testContainer("app")))
+        gateway.pushSnapshot(pods)
+        awaitState(task) { it.attachedPods.contains("example-pod-0") }
+        awaitStream(gateway, "example-pod-0", "app")
+        // The stream is never completed: it stands for a hung open.
+
+        gateway.completeDiscovery()
+        gateway.pushSnapshot(pods)
+        withTimeout(5_000) {
+            while (gateway.streamRequestCount("example-pod-0", "app") < 2) yield()
+        }
+        val reattachNotice = "── example-pod-0 re-attaching after reconnect ──"
+        val state = awaitState(task) { s ->
+            s.lines.count { it.notice && it.text == reattachNotice } == 1 &&
+                s.lines.count { it.notice && it.text == startedNotice("example-pod-0") } == 2 &&
+                s.attachedPods == listOf("example-pod-0") &&
+                s.streamCount == 1
+        }
+        assertEquals(1, state.lines.count { it.notice && it.text == reattachNotice })
+        assertEquals(2, state.lines.count { it.notice && it.text == startedNotice("example-pod-0") })
+        assertEquals(listOf("example-pod-0"), state.attachedPods)
+        assertEquals(1, state.streamCount)
+    }
+
+    @Test
+    fun `a discovery failure does not restart a healthy stream`() = runBlocking {
+        val gateway = FakeNamespaceTailGateway()
+        val task = startTask(gateway)
+        val pod0 = testPod("example-pod-0", testContainer("app"))
+        gateway.pushSnapshot(listOf(pod0))
+        awaitState(task) { it.attachedPods.contains("example-pod-0") }
+        awaitStream(gateway, "example-pod-0", "app")
+
+        gateway.failDiscovery("rbac denied")
+        awaitState(task) { it.error == "rbac denied" }
+
+        gateway.pushSnapshot(listOf(pod0, testPod("example-pod-sentinel", testContainer("app"))))
+        val state = awaitState(task) { it.error == null && "example-pod-sentinel" in it.attachedPods }
+
+        assertEquals(1, gateway.streamRequestCount("example-pod-0", "app"))
+        assertTrue(state.lines.none { it.text == "── example-pod-0 re-attaching after reconnect ──" })
+        assertEquals(2, state.streamCount)
+    }
+
+    @Test
+    fun `a pod deleted during a reconnect ends instead of re-attaching`() = runBlocking {
+        val gateway = FakeNamespaceTailGateway()
+        val task = startTask(gateway)
+        gateway.pushSnapshot(listOf(testPod("example-pod-0", testContainer("app"))))
+        awaitState(task) { it.attachedPods.contains("example-pod-0") }
+        awaitStream(gateway, "example-pod-0", "app")
+
+        gateway.completeDiscovery()
+        gateway.pushSnapshot(emptyList())
+        val state = awaitState(task) { s ->
+            s.lines.count { it.notice && it.text == endedNotice("example-pod-0") } == 1 &&
+                s.attachedPods.isEmpty() &&
+                s.streamCount == 0
+        }
+
+        assertEquals(1, state.lines.count { it.notice && it.text == endedNotice("example-pod-0") })
+        assertTrue(state.attachedPods.isEmpty())
+        assertEquals(0, state.streamCount)
+        assertTrue(state.lines.none { it.text == "── example-pod-0 re-attaching after reconnect ──" })
+        assertEquals(1, gateway.streamRequestCount("example-pod-0", "app"))
+    }
 }

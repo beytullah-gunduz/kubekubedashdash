@@ -51,6 +51,7 @@ import io.fabric8.kubernetes.client.dsl.BytesLimitTerminateTimeTailPrettyLoggabl
 import io.fabric8.kubernetes.client.dsl.ContainerResource
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecWatch
+import io.fabric8.kubernetes.client.dsl.LogWatch
 import io.fabric8.kubernetes.client.dsl.Loggable
 import io.fabric8.kubernetes.client.dsl.TailPrettyLoggable
 import io.fabric8.kubernetes.client.dsl.TimeTailPrettyLoggable
@@ -88,14 +89,19 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.io.Closeable
+import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 private const val TAIL_NOT_CONNECTED = "Not connected to the cluster this tail was started on"
 private const val TAIL_CLUSTER_CHANGED = "The cluster changed since this tail was started — open a new tail"
@@ -112,6 +118,8 @@ class ReactiveKubeClient(
     private val usageSampleIntervalMs: Long = 30_000L,
     /** Test seam: the clock that stamps usage samples. */
     private val nowEpochSec: () -> Long = { System.currentTimeMillis() / 1000 },
+    /** Test seam: how long a followed log stream may wait for the API server's response headers. */
+    private val logStreamOpenTimeoutMs: Long = 30_000L,
 ) : Closeable {
 
     private val log = LoggerFactory.getLogger(ReactiveKubeClient::class.java)
@@ -127,6 +135,14 @@ class ReactiveKubeClient(
     // is silent (a reader simply never runs), which is why the tail is limited to
     // one tab per session.
     private val logStreamDispatcher = Dispatchers.IO.limitedParallelism(64)
+
+    // fabric8's watchLog() waits for the response headers in CompletableFuture.join(), which neither
+    // interruption nor client.close() releases. Opening on this pool keeps a hung open off
+    // Dispatchers.IO and lets the collecting coroutine give up (timeout or cancellation) while the
+    // pool thread stays parked until fabric8 returns. Daemon threads: a parked one never blocks exit.
+    private val logStreamOpenExecutor: ExecutorService = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "kkdd-log-open").apply { isDaemon = true }
+    }
 
     // ── Connection management (delegated to KubeConnectionManager) ──────────────
 
@@ -1992,8 +2008,17 @@ class ReactiveKubeClient(
         options: LogStreamOptions,
     ): Flow<String> = callbackFlow {
         log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
-        val watch = try {
-            podLogSource(name, namespace, container, options, tailLines = 100).watchLog()
+        val pending: CompletableFuture<LogWatch> = CompletableFuture.supplyAsync(
+            { podLogSource(name, namespace, container, options, tailLines = 100).watchLog() },
+            logStreamOpenExecutor,
+        )
+        // Await a copy: a timeout or a cancellation cancels only the copy, so a watch that arrives
+        // late still reaches the close hook on `pending`.
+        val opened: LogWatch? = try {
+            withTimeoutOrNull(logStreamOpenTimeoutMs) { pending.copy().await() }
+        } catch (e: CancellationException) {
+            pending.thenAccept { closeLogWatch(it) }
+            throw e
         } catch (e: Exception) {
             log.error("Failed to start log stream: {}", describeFailureShape(e))
             log.debug("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
@@ -2001,6 +2026,15 @@ class ReactiveKubeClient(
             close()
             return@callbackFlow
         }
+        if (opened == null) {
+            pending.thenAccept { closeLogWatch(it) }
+            log.warn("Log stream did not open within {} ms", logStreamOpenTimeoutMs)
+            log.debug("Log stream open timed out pod={} namespace={}", name, namespace)
+            trySend("[stream error: no response from the API server after $logStreamOpenTimeoutMs ms]")
+            close(IOException("log stream did not open within $logStreamOpenTimeoutMs ms"))
+            return@callbackFlow
+        }
+        val watch = opened
         launch(logStreamDispatcher) {
             try {
                 watch.output.bufferedReader().use { reader ->
@@ -2021,8 +2055,15 @@ class ReactiveKubeClient(
         }
         awaitClose {
             log.debug("Closing log stream pod={} namespace={}", name, namespace)
-            watch.close()
+            closeLogWatch(watch)
         }
+    }
+
+    // fabric8 7.7.0: on the no-arg watchLog() path LogWatch.close() does not release the HTTP
+    // response; only closing its output stream does. Close both, ignoring failures.
+    private fun closeLogWatch(watch: LogWatch) {
+        runCatching { watch.output?.close() }
+        runCatching { watch.close() }
     }
 
     // ── On-demand: Exec (interactive shell) ─────────────────────────────────────

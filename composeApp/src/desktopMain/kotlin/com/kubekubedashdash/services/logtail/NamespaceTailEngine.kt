@@ -129,6 +129,7 @@ object NamespaceTailEngine {
                 }
 
                 launch {
+                    var previousSubscriptionEnded = false
                     while (isActive) {
                         try {
                             var firstOfSubscription = true
@@ -140,24 +141,34 @@ object NamespaceTailEngine {
                                         // A new subscription follows a reconnect or a discovery failure: streams that ended
                                         // meanwhile were cut, not finished. Let every non-terminal pod re-qualify.
                                         val terminal = snapshot.filter { it.spec.phase in TERMINAL_PHASES }.map { it.key }.toSet()
+                                        if (previousSubscriptionEnded) {
+                                            // The connection changed: a stream still attached was opened on the old client and is
+                                            // either about to end at retirement or stuck waiting for headers. Re-open it on the new one.
+                                            previousSubscriptionEnded = false
+                                            val present = snapshot.mapTo(mutableSetOf()) { it.key }
+                                            detachForReconnectLocked(ctx, keep = terminal + (bookkeeping.attached.keys - present))
+                                        }
                                         bookkeeping.recordedRestartCount.keys.retainAll(terminal)
+                                        bookkeeping.podUids.keys.retainAll(bookkeeping.attached.keys + bookkeeping.recordedRestartCount.keys)
                                     }
                                     applySnapshotLocked(snapshot, ctx)
                                 }
                             }
+                            previousSubscriptionEnded = true
                             // The production seam (watchTailPods) completes when the
                             // connection changes; this loop then resubscribes after
                             // retryDelayMs. That delay (5 s) must stay above
-                            // KubeConnectionManager.RETIRE_GRACE_MS (1 s): the old
-                            // client's streams must have ended (and detached) before
-                            // the first snapshot of the new subscription clears
-                            // baselines. It also keeps a seam that completes at once
-                            // from turning this into a hot loop.
+                            // KubeConnectionManager.RETIRE_GRACE_MS (1 s), so most of
+                            // the old client's streams have ended (and detached) by the
+                            // first snapshot of the new subscription; any still attached
+                            // are cut by detachForReconnectLocked. It also keeps a seam
+                            // that completes at once from turning this into a hot loop.
                             delay(retryDelayMs)
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: DiscoveryEnded) {
                             // One namespace's discovery ended normally (connection changed): resubscribe, no error.
+                            previousSubscriptionEnded = true
                             delay(retryDelayMs)
                         } catch (e: Exception) {
                             currentCoroutineContext().ensureActive()
@@ -212,6 +223,23 @@ object NamespaceTailEngine {
         .mapNotNull { pod -> eligibleContainers(pod.spec).takeIf { it.isNotEmpty() }?.let { pod to it } }
         .sortedBy { it.first.key }
         .toList()
+
+    /**
+     * Cuts every attached pod not in [keep] loose: cancels its container jobs, frees its slots and
+     * appends a notice. The attach pass that follows re-attaches it on the current client. A cancelled
+     * collector never calls [onContainerStreamEnded] (it rethrows), and one already waiting for the lock
+     * fails its ensureActive, so no slot is freed twice. Callers must hold [Bookkeeping.mutex].
+     */
+    private suspend fun detachForReconnectLocked(ctx: TailContext, keep: Set<String>) {
+        val bookkeeping = ctx.bookkeeping
+        val keys = bookkeeping.attached.keys.filter { it !in keep }
+        for (podKey in keys) {
+            val info = bookkeeping.attached.remove(podKey) ?: continue
+            bookkeeping.usedSlots -= info.liveContainers.size
+            info.liveContainers.values.forEach { it.cancel() }
+            ctx.lineBuffer.append(TailLine(podName = "", text = "── $podKey re-attaching after reconnect ──", notice = true))
+        }
+    }
 
     /**
      * Reconciles [newSnapshot] (pod discovery / disappearance) if non-null,
