@@ -2047,6 +2047,9 @@ class ReactiveKubeClient(
                 // line to the buffer the user is about to throw away.
                 throw e
             } catch (e: Exception) {
+                // awaitClose closes the response under a reader blocked in read(), which then
+                // throws an IOException: that is teardown, not a stream failure.
+                currentCoroutineContext().ensureActive()
                 log.warn("Log stream ended: {}", describeFailureShape(e))
                 log.debug("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
                 trySend("[stream error: ${e.message}]")
