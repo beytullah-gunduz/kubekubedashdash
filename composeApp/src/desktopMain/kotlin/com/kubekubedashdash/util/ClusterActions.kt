@@ -443,7 +443,8 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
      * reported in [DrainResult.failed] — they do NOT abort the drain so that a
      * single PDB-blocked pod does not prevent all others from being evicted.
      *
-     * Returns [Result.failure] only when the initial cordon itself throws.
+     * Returns [Result.failure] when the cordon throws, or when the pod list fails
+     * after the cordon (the node is then left cordoned and nothing is evicted).
      * Eviction failures are surfaced via [DrainResult.failed].
      */
     fun drainNode(name: String): Result<DrainResult> = runCatching {
@@ -457,15 +458,20 @@ class ClusterActions(private val connectionManager: KubeConnectionManager, priva
         // 2. List raw fabric8 Pod objects so we can inspect ownerReferences and
         //    annotations — PodInfo strips those fields.
         val rawPods = try {
-            k8s.pods().inAnyNamespace().list().items
-                // Evict ONLY pods actually running on the node. nominatedNodeName
-                // (a scheduler hint for a still-Pending pod) must NOT select a pod
-                // for eviction — that pod isn't on this node.
+            k8s.pods().inAnyNamespace().withField("spec.nodeName", name).list().items
+                // Kept although the field selector already narrows the list: evict ONLY pods
+                // actually running on the node (nominatedNodeName is a scheduler hint, not a
+                // placement), and stay correct against a server that ignores the selector.
                 .filter { it.spec?.nodeName == name }
         } catch (e: Exception) {
             log.warn("Drain: could not list pods: {}", describeFailureShape(e))
             log.debug("Drain node={}: could not list pods: {}", name, e.message)
-            emptyList()
+            // The node is already cordoned. Reporting "Evicted 0" here would read as success.
+            throw IllegalStateException(
+                "The node was cordoned, but its pods could not be listed (${describeFailureShape(e)}). " +
+                    "No pod was evicted; the node stays cordoned.",
+                e,
+            )
         }
 
         var evicted = 0
