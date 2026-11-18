@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.takeWhile
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,18 +32,22 @@ class FakeNamespaceTailGateway : NamespaceTailGateway {
         data class Snapshot(val pods: List<CapturePodSpec>) : DiscoveryEvent
 
         data class Failure(val message: String) : DiscoveryEvent
+
+        data object Completed : DiscoveryEvent
     }
 
     // replay = 1 so a late collector — e.g. the engine resubscribing after a
     // discovery retry — still sees the latest snapshot instead of hanging
-    // until the next push.
+    // until the next push. extraBufferCapacity = 64 because with replay = 1
+    // alone a second tryEmit made before the subscribed collector consumed the
+    // first returns false and publish() would throw.
     //
     // anyNamespaceEvents feeds every podSnapshots(ns); namespaceEvents[ns] feeds
     // only that namespace's. podSnapshots(ns) merges the two.
-    private val anyNamespaceEvents = MutableSharedFlow<DiscoveryEvent>(replay = 1)
+    private val anyNamespaceEvents = MutableSharedFlow<DiscoveryEvent>(replay = 1, extraBufferCapacity = 64)
     private val namespaceEvents = ConcurrentHashMap<String, MutableSharedFlow<DiscoveryEvent>>()
 
-    private fun eventsFor(namespace: String): MutableSharedFlow<DiscoveryEvent> = namespaceEvents.getOrPut(namespace) { MutableSharedFlow(replay = 1) }
+    private fun eventsFor(namespace: String): MutableSharedFlow<DiscoveryEvent> = namespaceEvents.getOrPut(namespace) { MutableSharedFlow(replay = 1, extraBufferCapacity = 64) }
 
     // Re-armed on every streamPodLogs() call (i.e. every attach), so a
     // pod/container that re-attaches after detaching gets a fresh channel
@@ -74,6 +79,14 @@ class FakeNamespaceTailGateway : NamespaceTailGateway {
 
     fun failDiscovery(message: String, namespace: String? = null) {
         publish(namespace, DiscoveryEvent.Failure(message))
+    }
+
+    /**
+     * Ends the current [podSnapshots] collection normally, as a reconnect does in production;
+     * push a snapshot right after it so the replay a resubscriber sees is that snapshot.
+     */
+    fun completeDiscovery(namespace: String? = null) {
+        publish(namespace, DiscoveryEvent.Completed)
     }
 
     private fun streamsFor(podName: String, container: String?, namespace: String?): List<Channel<String>> = podStreams.entries
@@ -141,10 +154,11 @@ class FakeNamespaceTailGateway : NamespaceTailGateway {
     }
 
     override fun podSnapshots(namespace: String): Flow<List<CapturePodSpec>> = flow {
-        merge(anyNamespaceEvents, eventsFor(namespace)).collect { event ->
+        merge(anyNamespaceEvents, eventsFor(namespace)).takeWhile { it !is DiscoveryEvent.Completed }.collect { event ->
             when (event) {
                 is DiscoveryEvent.Snapshot -> emit(event.pods)
                 is DiscoveryEvent.Failure -> throw RuntimeException(event.message)
+                DiscoveryEvent.Completed -> Unit
             }
         }
     }

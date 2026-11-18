@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -130,19 +131,34 @@ object NamespaceTailEngine {
                 launch {
                     while (isActive) {
                         try {
+                            var firstOfSubscription = true
                             discover(gateway, target).collect { snapshot ->
                                 state.update { it.copy(error = null) }
                                 bookkeeping.mutex.withLock {
+                                    if (firstOfSubscription) {
+                                        firstOfSubscription = false
+                                        // A new subscription follows a reconnect or a discovery failure: streams that ended
+                                        // meanwhile were cut, not finished. Let every non-terminal pod re-qualify.
+                                        val terminal = snapshot.filter { it.spec.phase in TERMINAL_PHASES }.map { it.key }.toSet()
+                                        bookkeeping.recordedRestartCount.keys.retainAll(terminal)
+                                    }
                                     applySnapshotLocked(snapshot, ctx)
                                 }
                             }
-                            // The production seam (watchTailPods) parks on
-                            // awaitCancellation and never completes normally. Pace
-                            // the resubscribe anyway so a seam that did complete
-                            // cannot turn this into a hot loop.
+                            // The production seam (watchTailPods) completes when the
+                            // connection changes; this loop then resubscribes after
+                            // retryDelayMs. That delay (5 s) must stay above
+                            // KubeConnectionManager.RETIRE_GRACE_MS (1 s): the old
+                            // client's streams must have ended (and detached) before
+                            // the first snapshot of the new subscription clears
+                            // baselines. It also keeps a seam that completes at once
+                            // from turning this into a hot loop.
                             delay(retryDelayMs)
                         } catch (e: CancellationException) {
                             throw e
+                        } catch (e: DiscoveryEnded) {
+                            // One namespace's discovery ended normally (connection changed): resubscribe, no error.
+                            delay(retryDelayMs)
                         } catch (e: Exception) {
                             currentCoroutineContext().ensureActive()
                             log.warn("Tail pod discovery failed: {}", describeFailureShape(e))
@@ -174,7 +190,7 @@ object NamespaceTailEngine {
                 gateway.podSnapshots(ns).map { list ->
                     list.filter { TailPodRef(ns, it.name) in target.pods }
                         .map { TailPod(target.keyFor(ns, it.name), ns, it) }
-                }
+                }.onCompletion { cause -> if (cause == null) throw DiscoveryEnded() }
             },
         ) { perNamespace -> perNamespace.toList().flatten() }
     }
@@ -221,9 +237,15 @@ object NamespaceTailEngine {
             // (free its slots + notify), or it's only remembered as a gated
             // restart-count baseline (nothing to free, but the baseline must
             // go too — otherwise a same-named pod recreated at restartCount 0
-            // stays gated forever; pinned by test 20).
+            // stays gated forever; pinned by test 20). A same-named pod whose
+            // uid changed inside one snapshot counts as a disappearance too.
             val trackedKeys = bookkeeping.attached.keys + bookkeeping.recordedRestartCount.keys
-            val disappeared = trackedKeys.filter { it !in snapshotByKey }
+            val disappeared = trackedKeys.filter { key ->
+                val now = snapshotByKey[key] ?: return@filter true
+                val was = bookkeeping.podUids[key]
+                // Same name, new object (StatefulSet recreate inside one debounced snapshot).
+                !was.isNullOrEmpty() && now.spec.uid.isNotEmpty() && now.spec.uid != was
+            }
             for (podKey in disappeared) {
                 val info = bookkeeping.attached.remove(podKey)
                 if (info != null) {
@@ -232,6 +254,7 @@ object NamespaceTailEngine {
                     lineBuffer.append(TailLine(podName = "", text = "── $podKey stream ended ──", notice = true))
                 }
                 bookkeeping.recordedRestartCount.remove(podKey)
+                bookkeeping.podUids.remove(podKey)
                 bookkeeping.seenRuns.remove(podKey)
             }
 
@@ -271,6 +294,7 @@ object NamespaceTailEngine {
 
             val info = AttachedPodInfo(liveContainers = mutableMapOf(), maxRestartCountSeen = currentMaxRestart)
             bookkeeping.attached[pod.key] = info
+            if (pod.spec.uid.isNotEmpty()) bookkeeping.podUids[pod.key] = pod.spec.uid else bookkeeping.podUids.remove(pod.key)
             bookkeeping.usedSlots += need
             bookkeeping.recordedRestartCount.remove(pod.key)
             lineBuffer.append(TailLine(podName = "", text = "── ${pod.key} started ──", notice = true))
@@ -483,6 +507,7 @@ object NamespaceTailEngine {
     ) {
         val bookkeeping = ctx.bookkeeping
         bookkeeping.mutex.withLock {
+            currentCoroutineContext().ensureActive()
             val info = bookkeeping.attached[podKey] ?: return@withLock // already detached elsewhere — dedupe
             if (info.liveContainers.remove(containerName) == null) return@withLock // already freed — dedupe
             bookkeeping.usedSlots -= 1
@@ -549,6 +574,9 @@ object NamespaceTailEngine {
 
         /** Restart-count baseline recorded at detach; cleared on disappearance. */
         val recordedRestartCount = mutableMapOf<String, Int>()
+
+        /** Pod key to the metadata.uid it was attached at; "" uids are not recorded. */
+        val podUids = mutableMapOf<String, String>()
         var usedSlots = 0
 
         /**
@@ -592,3 +620,6 @@ object NamespaceTailEngine {
         }
     }
 }
+
+/** Thrown when one namespace's discovery flow completes normally, so a pod-set `combine` cannot freeze that namespace. */
+private class DiscoveryEnded : Exception("tail discovery ended")

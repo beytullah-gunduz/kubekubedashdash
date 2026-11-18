@@ -82,6 +82,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -95,6 +96,9 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
+
+private const val TAIL_NOT_CONNECTED = "Not connected to the cluster this tail was started on"
+private const val TAIL_CLUSTER_CHANGED = "The cluster changed since this tail was started — open a new tail"
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class ReactiveKubeClient(
@@ -189,6 +193,10 @@ class ReactiveKubeClient(
     }
 
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
+
+    /** The context of the live connection, or null while disconnected. */
+    fun connectedContextOrNull(): String? = connectionManager.connectedContextOrNull()
+
     fun getClusterServer(): String = connectionManager.getClusterServer()
 
     // Pod metrics history. The source is resolved from the live context on every call, so an
@@ -1791,13 +1799,24 @@ class ReactiveKubeClient(
      * Unlike the session's `pods` informer this is NOT tied to the selected
      * namespace. The informer self-reconnects and relists; it is closed in a
      * finally block. Emissions are conflated and debounced.
+     *
+     * Pinned to [context] (default: the context connected when collection starts).
+     * Completes normally when the connection changes (the caller resubscribes);
+     * throws when not connected to that context.
      */
-    fun watchTailPods(namespace: String): Flow<List<CapturePodSpec>> = channelFlow {
+    fun watchTailPods(namespace: String, context: String? = null): Flow<List<CapturePodSpec>> = channelFlow {
         require(namespace.isNotBlank()) { "watchTailPods requires a non-blank namespace" }
+        val pinned = context ?: connectionManager.connectedContextOrNull()
+            ?: throw IllegalStateException(TAIL_NOT_CONNECTED)
+        val startVersion = _connectionVersion.value // read BEFORE taking the client
+        val k = connectionManager.clientIfConnectedTo(pinned)
+            ?: throw IllegalStateException(
+                if (connectionManager.connectedContextOrNull() == null) TAIL_NOT_CONNECTED else TAIL_CLUSTER_CHANGED,
+            )
 
         val emitSignal = Channel<Unit>(Channel.CONFLATED)
         log.debug("Starting tail informer for namespace={}", namespace)
-        val informer = k8s.pods().inNamespace(namespace).runnableInformer(0L).addEventHandler(
+        val informer = k.pods().inNamespace(namespace).runnableInformer(0L).addEventHandler(
             object : ResourceEventHandler<Pod> {
                 override fun onAdd(obj: Pod) {
                     log.trace("Tail informer event: ADD {} in namespace={}", obj.metadata?.name, namespace)
@@ -1822,7 +1841,7 @@ class ReactiveKubeClient(
             // Run inside the try that closes, so a start failure stops the
             // informer (F2) instead of leaking its reflector's timeout task.
             informer.run()
-            launch {
+            val emitter = launch {
                 emitSignal.consumeAsFlow()
                     .debounce(100)
                     .collect {
@@ -1837,7 +1856,9 @@ class ReactiveKubeClient(
             log.info("Tail informer synced with {} items", items.size)
             log.debug("Tail informer synced with {} items for namespace={}", items.size, namespace)
             send(items)
-            awaitCancellation()
+            _connectionVersion.first { it != startVersion }
+            log.debug("Tail informer for namespace={}: connection changed, ending this discovery", namespace)
+            emitter.cancel()
         } finally {
             log.debug("Closing tail informer for namespace={}", namespace)
             // F1: a close() failure must not replace the propagating exception.

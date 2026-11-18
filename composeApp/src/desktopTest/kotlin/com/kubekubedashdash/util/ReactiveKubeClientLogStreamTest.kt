@@ -26,6 +26,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -227,5 +228,30 @@ class ReactiveKubeClientLogStreamTest {
             }
         }
         assertTrue(exception.message.orEmpty().contains("non-blank"))
+    }
+
+    @Test
+    fun `watchTailPods completes when the connection changes`() = runBlocking {
+        seedPod("example-pod", "example-namespace")
+        val synced = CompletableDeferred<Unit>()
+        val job = scope.launch {
+            client.watchTailPods("example-namespace").collect { if (it.isNotEmpty()) synced.complete(Unit) }
+        }
+        withTimeout(15_000) { synced.await() }
+
+        manager.connectWithClient(server.createClient(), "test-cluster").getOrThrow()
+
+        withTimeout(10_000) { job.join() }
+        assertFalse(job.isCancelled, "the flow must complete normally, not by cancellation")
+    }
+
+    @Test
+    fun `watchTailPods throws when pinned to another context`() = runBlocking {
+        val exception = assertFailsWith<IllegalStateException> {
+            withTimeout(15_000) {
+                client.watchTailPods("example-namespace", context = "other-cluster").first()
+            }
+        }
+        assertEquals("The cluster changed since this tail was started — open a new tail", exception.message)
     }
 }

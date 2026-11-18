@@ -32,6 +32,7 @@ object CapturePodMapper {
             name = pod.metadata?.name ?: "",
             phase = pod.status?.phase ?: "Unknown",
             containers = initContainers + mainContainers + ephemeralContainers,
+            uid = pod.metadata?.uid ?: "",
         )
     }
 
