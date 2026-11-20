@@ -28,6 +28,7 @@ object BulkVerbs {
     // "Rollout restart started for 3 Deployments": the annotation patch kicks
     // off a rolling update; nothing has actually restarted when the run ends.
     val Restart = BulkVerb("Restart", "Restarting", "Rollout restart started for", destructive = false)
+    val Scale = BulkVerb("Scale", "Scaling", "Scaled", destructive = false)
     val Cordon = BulkVerb("Cordon", "Cordoning", "Cordoned", destructive = false)
     val Uncordon = BulkVerb("Uncordon", "Uncordoning", "Uncordoned", destructive = false)
     val Drain = BulkVerb("Drain", "Draining", "Drained", destructive = true)
@@ -45,6 +46,17 @@ fun bulkDoneTitle(verb: BulkVerb, count: Int, kindSingular: String, kindPlural: 
 fun <T> cleanBulkFinish(runState: BulkRunState<T>?): BulkRunState.Finished<T>? {
     val finished = runState as? BulkRunState.Finished<T> ?: return null
     return if (finished.failures.isEmpty() && !finished.cancelled) finished else null
+}
+
+/**
+ * Items of [items] the [finished] run actually applied: the first
+ * `attempted` items (the runner is sequential, in list order) minus the
+ * failed ones. Only meaningful when [items] is the exact list the run
+ * was started with.
+ */
+fun <T> bulkSucceeded(items: List<T>, finished: BulkRunState.Finished<T>): List<T> {
+    val failed = finished.failures.map { it.item }.toSet()
+    return items.take(finished.attempted).filterNot { it in failed }
 }
 
 data class BulkFailure<out T>(val item: T, val reason: String)

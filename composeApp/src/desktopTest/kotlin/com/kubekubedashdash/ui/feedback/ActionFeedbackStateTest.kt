@@ -202,4 +202,28 @@ class ActionFeedbackStateTest {
         runCurrent()
         assertTrue(state.toasts.value.isEmpty())
     }
+
+    @Test
+    fun `runUndo shows a restoring info toast then the success title`() = runTest {
+        val state = newState()
+        state.runUndo(UndoAction("Restored 2 Deployments", "Undo failed") { Result.success(Unit) })
+        val first = state.toasts.value.single()
+        assertEquals(ToastKind.Info, first.kind)
+        assertEquals("Restoring…", first.title)
+        runCurrent()
+        val last = state.toasts.value.last()
+        assertEquals(ToastKind.Success, last.kind)
+        assertEquals("Restored 2 Deployments", last.title)
+    }
+
+    @Test
+    fun `runUndo failure toasts the failure title with the message as detail`() = runTest {
+        val state = newState()
+        state.runUndo(UndoAction("Restored", "Undo failed: still 5 replicas") { Result.failure(IllegalStateException("1 of 3 could not be restored")) })
+        runCurrent()
+        val last = state.toasts.value.last()
+        assertEquals(ToastKind.Failure, last.kind)
+        assertEquals("Undo failed: still 5 replicas", last.title)
+        assertEquals("1 of 3 could not be restored", last.detail)
+    }
 }

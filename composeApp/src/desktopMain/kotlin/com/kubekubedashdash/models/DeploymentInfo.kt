@@ -8,6 +8,7 @@ data class DeploymentInfo(
     val name: String,
     val namespace: String,
     val ready: String,
+    val desiredReplicas: Int,
     val upToDate: Int,
     val available: Int,
     val age: String,

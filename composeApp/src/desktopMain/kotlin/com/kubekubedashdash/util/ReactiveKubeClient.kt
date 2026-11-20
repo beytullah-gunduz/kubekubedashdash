@@ -271,6 +271,7 @@ class ReactiveKubeClient(
                 uid = dep.metadata.uid ?: "", name = dep.metadata.name,
                 namespace = dep.metadata.namespace ?: "",
                 ready = "$ready/$desired",
+                desiredReplicas = desired,
                 upToDate = dep.status?.updatedReplicas ?: 0,
                 available = dep.status?.availableReplicas ?: 0,
                 age = formatAge(dep.metadata.creationTimestamp),

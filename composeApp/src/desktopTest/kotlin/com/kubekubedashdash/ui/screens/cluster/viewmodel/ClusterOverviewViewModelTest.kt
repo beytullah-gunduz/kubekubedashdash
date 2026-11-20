@@ -217,6 +217,7 @@ class ClusterOverviewViewModelTest {
         name = "test-$uid",
         namespace = "default",
         ready = ready,
+        desiredReplicas = ready.substringAfter('/').toIntOrNull() ?: 0,
         upToDate = 0,
         available = 0,
         age = "",
