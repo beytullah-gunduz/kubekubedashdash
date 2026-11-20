@@ -69,7 +69,7 @@ fun DeploymentDetailScreen(
 
     val readyParts = deployment.ready.split("/")
     val isReady = readyParts.size == 2 && readyParts[0] == readyParts[1] && readyParts[0] != "0"
-    val currentReplicas = readyParts.getOrNull(1)?.toIntOrNull() ?: 1
+    val currentReplicas = deployment.desiredReplicas
 
     val deploymentActions = listOf(
         DetailAction(

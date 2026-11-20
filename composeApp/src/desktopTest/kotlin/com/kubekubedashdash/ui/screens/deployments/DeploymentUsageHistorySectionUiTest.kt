@@ -234,6 +234,7 @@ class DeploymentUsageHistorySectionUiTest {
         name = "redis-cache",
         namespace = NAMESPACE,
         ready = "2/2",
+        desiredReplicas = 2,
         upToDate = 2,
         available = 2,
         age = "3d",

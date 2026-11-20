@@ -46,6 +46,9 @@ interface ActionFeedback {
     fun warning(title: String, detail: String? = null): Long
 
     fun info(title: String, detail: String? = null): Long
+
+    /** Runs [action]'s inverse now, without a toast to click, and reports its outcome as a toast. Default: dropped. */
+    fun runUndo(action: UndoAction) {}
 }
 
 /** Default for compositions without an [ActionFeedbackHost] (screenshots, previews): drops everything. */
@@ -126,6 +129,15 @@ class ActionFeedbackState(
         if (toast.undoInFlight) return
         timers.remove(id)?.cancel()
         _toasts.update { current -> current.map { if (it.id == id) it.copy(undoInFlight = true) else it } }
+        launchInverse(action) { _toasts.update { c -> c.filterNot { it.id == id } } }
+    }
+
+    override fun runUndo(action: UndoAction) {
+        info("Restoring…")
+        launchInverse(action) {}
+    }
+
+    private fun launchInverse(action: UndoAction, onDone: () -> Unit) {
         scope.launch {
             val result = try {
                 withContext(io) { action.run() }
@@ -134,7 +146,7 @@ class ActionFeedbackState(
             } catch (e: Throwable) {
                 Result.failure(e)
             }
-            _toasts.update { current -> current.filterNot { it.id == id } }
+            onDone()
             result.fold(
                 onSuccess = { success(action.successTitle) },
                 onFailure = { failure(action.failureTitle, detail = it.message) },
