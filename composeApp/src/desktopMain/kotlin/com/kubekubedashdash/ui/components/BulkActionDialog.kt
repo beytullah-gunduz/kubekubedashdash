@@ -12,7 +12,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kubekubedashdash.KdError
 import com.kubekubedashdash.KdTextPrimary
@@ -39,6 +41,17 @@ internal fun <T> BulkActionDialog(
      * safe inverse.
      */
     undo: ((List<T>) -> UndoAction?)? = null,
+    /** Replaces the default confirm-phase body (confirmBody + item list). */
+    confirmContent: (@Composable () -> Unit)? = null,
+    confirmEnabled: Boolean = true,
+    /** Overrides the confirm button label (default verb.actionLabel). */
+    confirmLabel: String? = null,
+    /** Overrides verb.destructive for the confirm button colour. */
+    confirmDestructive: Boolean? = null,
+    /** Appended to the clean-run toast title: " to 3 replicas". */
+    doneTitleSuffix: String = "",
+    /** D11: offer "Restore K" in a partial Finished summary, built from [undo] over bulkSucceeded(items, finished). */
+    undoAfterPartialRun: Boolean = false,
 ) {
     // A run that finished with every item succeeding closes the dialog on its
     // own and reports through the toast layer; a partial or stopped run keeps
@@ -49,10 +62,18 @@ internal fun <T> BulkActionDialog(
     // Keyed on the clean Finished value (null while Running), not on every
     // progress tick, so the effect is created once per outcome.
     val cleanFinish = cleanBulkFinish(runState)
+    val finished = runState as? BulkRunState.Finished<T>
+    val partialUndo = remember(finished, items) {
+        if (finished != null && cleanFinish == null && undoAfterPartialRun && undo != null && items.size == finished.total) {
+            bulkSucceeded(items, finished).takeIf { it.isNotEmpty() }?.let { s -> undo(s)?.let { s.size to it } }
+        } else {
+            null
+        }
+    }
     LaunchedEffect(cleanFinish) {
-        val finished = cleanFinish ?: return@LaunchedEffect
-        val undoAction = if (undo != null && items.size == finished.total) undo(items) else null
-        feedback.success(bulkDoneTitle(finished.verb, finished.attempted, kindSingular, kindPlural), undo = undoAction)
+        val done = cleanFinish ?: return@LaunchedEffect
+        val undoAction = if (undo != null && items.size == done.total) undo(items) else null
+        feedback.success(bulkDoneTitle(done.verb, done.attempted, kindSingular, kindPlural) + doneTitleSuffix, undo = undoAction)
         onDismiss()
     }
     // Header from the attached run when one exists: the runner outlives
@@ -68,12 +89,16 @@ internal fun <T> BulkActionDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (runState) {
                     null -> {
-                        Text(confirmBody, style = MaterialTheme.typography.bodyMedium)
-                        Column(
-                            modifier = Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
-                        ) {
-                            items.forEach { item ->
-                                Text(itemLabel(item), style = MaterialTheme.typography.bodySmall)
+                        if (confirmContent != null) {
+                            confirmContent()
+                        } else {
+                            Text(confirmBody, style = MaterialTheme.typography.bodyMedium)
+                            Column(
+                                modifier = Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+                            ) {
+                                items.forEach { item ->
+                                    Text(itemLabel(item), style = MaterialTheme.typography.bodySmall)
+                                }
                             }
                         }
                     }
@@ -118,8 +143,16 @@ internal fun <T> BulkActionDialog(
         confirmButton = {
             when (runState) {
                 null ->
-                    TextButton(onClick = onConfirm, shape = kdRoundShape) {
-                        Text(verb.actionLabel, color = if (verb.destructive) KdError else KdTextPrimary)
+                    TextButton(onClick = onConfirm, enabled = confirmEnabled, shape = kdRoundShape) {
+                        // An explicit colour would override the disabled content colour,
+                        // so a disabled confirm (bulk Scale with no valid target) keeps the
+                        // button's own dimmed colour.
+                        val confirmColor = when {
+                            !confirmEnabled -> Color.Unspecified
+                            confirmDestructive ?: verb.destructive -> KdError
+                            else -> KdTextPrimary
+                        }
+                        Text(confirmLabel ?: verb.actionLabel, color = confirmColor)
                     }
 
                 is BulkRunState.Running ->
@@ -131,10 +164,21 @@ internal fun <T> BulkActionDialog(
                     TextButton(onClick = onDismiss, shape = kdRoundShape) { Text("Close") }
             }
         },
-        dismissButton = if (runState == null) {
-            { TextButton(onClick = onDismiss, shape = kdRoundShape) { Text("Cancel") } }
-        } else {
-            null
+        dismissButton = when {
+            runState == null -> ({ TextButton(onClick = onDismiss, shape = kdRoundShape) { Text("Cancel") } })
+
+            partialUndo != null -> (
+                {
+                    TextButton(onClick = {
+                        feedback.runUndo(partialUndo.second)
+                        onDismiss()
+                    }, shape = kdRoundShape) {
+                        Text("Restore ${partialUndo.first}")
+                    }
+                }
+                )
+
+            else -> null
         },
     )
 }

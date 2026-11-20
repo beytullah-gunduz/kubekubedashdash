@@ -21,8 +21,10 @@ import com.kubekubedashdash.KdTextPrimary
 import com.kubekubedashdash.Screen
 import com.kubekubedashdash.data.repository.PreferenceRepository
 import com.kubekubedashdash.models.DeploymentInfo
+import com.kubekubedashdash.models.ResourceState
 import com.kubekubedashdash.resources.Res
 import com.kubekubedashdash.resources.delete_filled
+import com.kubekubedashdash.resources.layers_filled
 import com.kubekubedashdash.resources.rotate_right_filled
 import com.kubekubedashdash.ui.LocalReactiveKubeClient
 import com.kubekubedashdash.ui.components.ActiveFilterPills
@@ -43,6 +45,7 @@ import com.kubekubedashdash.ui.components.parseMapSelector
 import com.kubekubedashdash.ui.components.rememberConfirmableAction
 import com.kubekubedashdash.ui.components.rememberResourceFilter
 import com.kubekubedashdash.ui.feedback.LocalActionFeedback
+import com.kubekubedashdash.ui.feedback.replicaCount
 import com.kubekubedashdash.ui.feedback.resourceRef
 import com.kubekubedashdash.ui.screens.cluster.viewmodel.deploymentDegraded
 import com.kubekubedashdash.ui.screens.deployments.viewmodel.DeploymentsScreenViewModel
@@ -77,6 +80,7 @@ fun DeploymentsScreen(
     LaunchedEffect(viewModel) {
         viewModel.selection.reset()
         viewModel.bulkRunner.clear()
+        if (viewModel.bulkRunner.state.value == null) viewModel.bulkScaleRun = null
     }
     val state by viewModel.state.collectAsState()
     val selectedUids by viewModel.selection.selected.collectAsState()
@@ -94,6 +98,13 @@ fun DeploymentsScreen(
     var pendingDelete by remember { mutableStateOf<DeploymentInfo?>(null) }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkItems by remember { mutableStateOf<List<DeploymentInfo>>(emptyList()) }
+    var bulkScaleInput by remember { mutableStateOf("") }
+    val mountBulk: (BulkVerb, List<DeploymentInfo>) -> Unit = { v, items ->
+        // A reattach mounts with no snapshot (BulkAction.kt armOrReattach); for a
+        // Scale run the VM still has the exact run items, so Undo and the title stay truthful.
+        bulkItems = if (items.isEmpty() && v == BulkVerbs.Scale) viewModel.bulkScaleRun?.items.orEmpty() else items
+        bulkVerb = v
+    }
     val delete = rememberConfirmableAction()
     val feedback = LocalActionFeedback.current
 
@@ -174,10 +185,17 @@ fun DeploymentsScreen(
                         tint = KdTextPrimary,
                     ) {
                         val snapshot = filtered.filter { it.uid in selectedUids }
-                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Restart, snapshot) { v, items ->
-                            bulkItems = items
-                            bulkVerb = v
-                        }
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Restart, snapshot, mountBulk)
+                    }
+                    BulkVerbButton(
+                        icon = Res.drawable.layers_filled,
+                        label = "Scale",
+                        description = "Set one replica count for every selected deployment.",
+                        tint = KdTextPrimary,
+                    ) {
+                        val snapshot = filtered.filter { it.uid in selectedUids }
+                        bulkScaleInput = ""
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Scale, snapshot, mountBulk)
                     }
                     BulkVerbButton(
                         icon = Res.drawable.delete_filled,
@@ -187,10 +205,7 @@ fun DeploymentsScreen(
                         tint = KdError,
                     ) {
                         val snapshot = filtered.filter { it.uid in selectedUids }
-                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
-                            bulkItems = items
-                            bulkVerb = v
-                        }
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot, mountBulk)
                     }
                 }
             }
@@ -241,6 +256,68 @@ fun DeploymentsScreen(
 
     bulkVerb?.let { verb ->
         val label: (DeploymentInfo) -> String = { "${it.namespace}/${it.name}" }
+        if (verb == BulkVerbs.Scale) {
+            // Latest informer data for the confirm phase; keep the snapshot while
+            // the list is not Success so rows do not vanish during a reconnect.
+            val fresh = (state as? ResourceState.Success)?.data?.let { data ->
+                remember(bulkItems, data) { refreshSnapshot(bulkItems, data) }
+            } ?: bulkItems
+            val target = bulkScaleInput.toIntOrNull()
+            val changes = target?.let { scaleChanges(fresh, it) }.orEmpty()
+            val hpaState: ResourceState<Set<String>> = if (bulkState == null) {
+                val hpas by reactiveClient.horizontalPodAutoscalers.collectAsState()
+                when (val h = hpas) {
+                    is ResourceState.Success -> ResourceState.Success(hpaTargetedDeployments(h.data))
+                    is ResourceState.Error -> h
+                    else -> ResourceState.Loading
+                }
+            } else {
+                ResourceState.Loading
+            }
+            BulkActionDialog(
+                verb = verb,
+                // bulkItems, NEVER fresh: after the run the informer reports
+                // desiredReplicas == N, so fresh would make Undo "restore" every item to N.
+                items = bulkItems,
+                itemLabel = label,
+                kindSingular = "Deployment",
+                kindPlural = "Deployments",
+                confirmBody = "",
+                runState = bulkState,
+                confirmContent = { BulkScaleConfirmContent(bulkScaleInput, { bulkScaleInput = it }, fresh, hpaState) },
+                confirmEnabled = target != null && changes.isNotEmpty(),
+                confirmLabel = if (target == null) "Scale" else "Scale ${changes.size} to $target",
+                confirmDestructive = target == 0,
+                doneTitleSuffix = viewModel.bulkScaleRun?.let { " to ${replicaCount(it.target)}" }.orEmpty(),
+                undoAfterPartialRun = true,
+                undo = { items ->
+                    bulkScaleUndo(items, viewModel.bulkScaleRun?.target ?: 0) { d, n ->
+                        reactiveClient.actions.scaleWorkload("deployment", d.name, d.namespace, n)
+                    }
+                },
+                onConfirm = {
+                    target?.let { t ->
+                        val run = BulkScaleRun(t, scaleChanges(fresh, t))
+                        viewModel.bulkScaleRun = run
+                        bulkItems = run.items // mounted items == runner items, so undo + bulkSucceeded line up
+                        viewModel.bulkRunner.start(BulkVerbs.Scale, run.items, label) { dep ->
+                            reactiveClient.actions.scaleWorkload("deployment", dep.name, dep.namespace, t)
+                        }
+                    }
+                },
+                onCancelRun = { viewModel.bulkRunner.cancel() },
+                onDismiss = {
+                    val finished = bulkState as? BulkRunState.Finished
+                    if (finished != null) {
+                        viewModel.selection.set(finished.failures.map { it.item.uid }.toSet())
+                        viewModel.bulkRunner.clear()
+                    }
+                    bulkVerb = null
+                    bulkItems = emptyList()
+                },
+            )
+            return@let
+        }
         BulkActionDialog(
             verb = verb,
             items = bulkItems,
