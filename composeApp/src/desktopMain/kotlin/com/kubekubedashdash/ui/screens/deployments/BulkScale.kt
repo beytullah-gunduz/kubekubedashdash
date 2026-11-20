@@ -4,6 +4,7 @@ import com.kubekubedashdash.models.DeploymentInfo
 import com.kubekubedashdash.models.GenericResourceInfo
 import com.kubekubedashdash.ui.feedback.UndoAction
 import com.kubekubedashdash.ui.feedback.replicaCount
+import kotlinx.coroutines.CancellationException
 
 /** A started bulk Scale: the exact runner items (each carrying its PREVIOUS desiredReplicas) and the target. */
 data class BulkScaleRun(val target: Int, val items: List<DeploymentInfo>)
@@ -33,7 +34,8 @@ internal fun scaleChanges(items: List<DeploymentInfo>, target: Int): List<Deploy
  * Inverse of a bulk scale over [changed] (items carrying their PREVIOUS
  * count): restores each one, sequentially, off the EDT (the feedback
  * layer runs it on IO). Null when [changed] is empty. A partly failed
- * undo is one failure carrying the count, like cordonUndo.
+ * undo is one failure carrying the count, like cordonUndo. A [scale] that
+ * throws counts as a failure for that item; the others are still restored.
  */
 internal fun bulkScaleUndo(
     changed: List<DeploymentInfo>,
@@ -46,7 +48,16 @@ internal fun bulkScaleUndo(
         successTitle = "Restored ${changed.size} $noun to their previous replica counts",
         failureTitle = "Undo failed: some Deployments still have ${replicaCount(target)}",
     ) {
-        val failed = changed.count { scale(it, it.desiredReplicas).isFailure }
+        val failed = changed.count { d ->
+            val result = try {
+                scale(d, d.desiredReplicas)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            result.isFailure
+        }
         if (failed == 0) Result.success(Unit) else Result.failure(IllegalStateException("$failed of ${changed.size} could not be restored"))
     }
 }

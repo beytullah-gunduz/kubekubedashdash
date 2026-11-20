@@ -106,4 +106,18 @@ class BulkScaleTest {
         val result = undo.run()
         assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("1 of 3"))
     }
+
+    @Test
+    fun `bulkScaleUndo keeps restoring after a scale call throws`() = runTest {
+        val calls = mutableListOf<String>()
+        val undo = assertNotNull(
+            bulkScaleUndo(listOf(dep("u1", "a", 1), dep("u2", "b", 2), dep("u3", "c", 3)), 9) { d, _ ->
+                calls += d.name
+                if (d.name == "a") throw IllegalStateException("boom") else Result.success(Unit)
+            },
+        )
+        val result = undo.run()
+        assertEquals(listOf("a", "b", "c"), calls)
+        assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("1 of 3"))
+    }
 }

@@ -311,6 +311,9 @@ fun DeploymentsScreen(
                     if (finished != null) {
                         viewModel.selection.set(finished.failures.map { it.item.uid }.toSet())
                         viewModel.bulkRunner.clear()
+                        // The undo above already captured the target; a reattach
+                        // needs the run only while it is still in flight.
+                        viewModel.bulkScaleRun = null
                     }
                     bulkVerb = null
                     bulkItems = emptyList()
