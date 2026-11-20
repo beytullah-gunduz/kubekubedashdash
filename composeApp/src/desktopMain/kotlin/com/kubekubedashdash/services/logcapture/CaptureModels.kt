@@ -20,6 +20,8 @@ data class CapturePodSpec(
     val name: String,
     val phase: String,
     val containers: List<CaptureContainerSpec>,
+    /** metadata.uid; "" when unknown. Tells a recreated same-named pod apart. */
+    val uid: String = "",
 )
 
 data class CaptureOptions(

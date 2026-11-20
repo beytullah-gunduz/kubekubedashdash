@@ -318,4 +318,58 @@ class PodSetTailEngineTest {
         assertEquals("tail-3-pods", twoNs.fileStem())
         assertFailsWith<IllegalArgumentException> { TailTarget.Pods(emptySet()) }
     }
+
+    @Test
+    fun `one namespace's discovery ending alone resubscribes and re-attaches its detached pod`() = runBlocking {
+        val gateway = FakeNamespaceTailGateway()
+        val task = startTask(gateway, target(TailPodRef(nsA, "web-0"), TailPodRef(nsB, "web-0")))
+        val podsA = listOf(testPod("web-0", testContainer("app", restartCount = 1)))
+        gateway.pushSnapshot(podsA, nsA)
+        gateway.pushSnapshot(listOf(testPod("web-0", testContainer("app"))), nsB)
+        awaitState(task) { it.attachedPods == listOf("$nsA/web-0", "$nsB/web-0") }
+        awaitStream(gateway, "web-0", "app", nsA)
+
+        gateway.completeStream("web-0", "app", nsA)
+        awaitState(task) { !it.attachedPods.contains("$nsA/web-0") }
+
+        gateway.completeDiscovery(nsA)
+        gateway.pushSnapshot(podsA, nsA)
+        withTimeout(5_000) {
+            while (gateway.streamRequestCount("web-0", "app", nsA) < 2) yield()
+        }
+        val state = awaitState(task) { it.attachedPods.contains("$nsA/web-0") }
+        assertEquals(2, gateway.streamRequestCount("web-0", "app", nsA))
+        assertNull(state.error)
+    }
+
+    @Test
+    fun `a pod-set pod whose stream hangs across a reconnect gets a fresh stream`() = runBlocking {
+        val gateway = FakeNamespaceTailGateway()
+        val task = startTask(gateway, target(TailPodRef(nsA, "web-0"), TailPodRef(nsB, "web-0")))
+        val pods = listOf(testPod("web-0", testContainer("app")))
+        gateway.pushSnapshot(pods, nsA)
+        gateway.pushSnapshot(pods, nsB)
+        awaitState(task) { it.attachedPods == listOf("$nsA/web-0", "$nsB/web-0") }
+        awaitStream(gateway, "web-0", "app", nsA)
+        awaitStream(gateway, "web-0", "app", nsB)
+        // Neither stream is completed: they stand for hung opens.
+
+        gateway.completeDiscovery(nsA)
+        gateway.pushSnapshot(pods, nsA)
+        withTimeout(5_000) {
+            while (gateway.streamRequestCount("web-0", "app", nsA) < 2 || gateway.streamRequestCount("web-0", "app", nsB) < 2) yield()
+        }
+        val noticeA = "── $nsA/web-0 re-attaching after reconnect ──"
+        val noticeB = "── $nsB/web-0 re-attaching after reconnect ──"
+        val state = awaitState(task) { s ->
+            s.noticeCount(noticeA) == 1 &&
+                s.noticeCount(noticeB) == 1 &&
+                s.attachedPods == listOf("$nsA/web-0", "$nsB/web-0") &&
+                s.streamCount == 2
+        }
+        assertEquals(1, state.noticeCount(noticeA))
+        assertEquals(1, state.noticeCount(noticeB))
+        assertEquals(listOf("$nsA/web-0", "$nsB/web-0"), state.attachedPods)
+        assertEquals(2, state.streamCount)
+    }
 }

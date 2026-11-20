@@ -109,8 +109,9 @@ object SecretYamlMasking {
                     trimmedKey in SENSITIVE_ANNOTATION_KEYS -> {
                         // Defense-in-depth: this annotation re-embeds the full base64
                         // `data` as a folded quoted scalar. Mask the inline value and
-                        // every folded continuation. (Production also strips it
-                        // server-side in KubeClient.getResourceYaml.)
+                        // every folded continuation. (KubeClient.getResourceYaml — the MCP
+                        // path — also strips it; the GUI's ReactiveKubeClient.getResourceYaml
+                        // does not, so this masker is its only defence.)
                         result.add("$lead$key: $PLACEHOLDER")
                         fullMaskIndent = lead.length
                     }

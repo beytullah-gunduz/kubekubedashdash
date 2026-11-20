@@ -51,6 +51,7 @@ import io.fabric8.kubernetes.client.dsl.BytesLimitTerminateTimeTailPrettyLoggabl
 import io.fabric8.kubernetes.client.dsl.ContainerResource
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecWatch
+import io.fabric8.kubernetes.client.dsl.LogWatch
 import io.fabric8.kubernetes.client.dsl.Loggable
 import io.fabric8.kubernetes.client.dsl.TailPrettyLoggable
 import io.fabric8.kubernetes.client.dsl.TimeTailPrettyLoggable
@@ -82,19 +83,28 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.io.Closeable
+import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+private const val TAIL_NOT_CONNECTED = "Not connected to the cluster this tail was started on"
+private const val TAIL_CLUSTER_CHANGED = "The cluster changed since this tail was started — open a new tail"
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class ReactiveKubeClient(
@@ -108,6 +118,8 @@ class ReactiveKubeClient(
     private val usageSampleIntervalMs: Long = 30_000L,
     /** Test seam: the clock that stamps usage samples. */
     private val nowEpochSec: () -> Long = { System.currentTimeMillis() / 1000 },
+    /** Test seam: how long a followed log stream may wait for the API server's response headers. */
+    private val logStreamOpenTimeoutMs: Long = 30_000L,
 ) : Closeable {
 
     private val log = LoggerFactory.getLogger(ReactiveKubeClient::class.java)
@@ -123,6 +135,14 @@ class ReactiveKubeClient(
     // is silent (a reader simply never runs), which is why the tail is limited to
     // one tab per session.
     private val logStreamDispatcher = Dispatchers.IO.limitedParallelism(64)
+
+    // fabric8's watchLog() waits for the response headers in CompletableFuture.join(), which neither
+    // interruption nor client.close() releases. Opening on this pool keeps a hung open off
+    // Dispatchers.IO and lets the collecting coroutine give up (timeout or cancellation) while the
+    // pool thread stays parked until fabric8 returns. Daemon threads: a parked one never blocks exit.
+    private val logStreamOpenExecutor: ExecutorService = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "kkdd-log-open").apply { isDaemon = true }
+    }
 
     // ── Connection management (delegated to KubeConnectionManager) ──────────────
 
@@ -189,6 +209,10 @@ class ReactiveKubeClient(
     }
 
     fun getCurrentContext(): String = connectionManager.getCurrentContext()
+
+    /** The context of the live connection, or null while disconnected. */
+    fun connectedContextOrNull(): String? = connectionManager.connectedContextOrNull()
+
     fun getClusterServer(): String = connectionManager.getClusterServer()
 
     // Pod metrics history. The source is resolved from the live context on every call, so an
@@ -389,12 +413,13 @@ class ReactiveKubeClient(
 
     // ── Secrets ─────────────────────────────────────────────────────────────────
 
+    // Payload-free item store (data values, stringData, managedFields and last-applied dropped): see SecretSummaryStore.
     val secrets: StateFlow<ResourceState<List<GenericResourceInfo>>> = informers.namespacedInformer(
         inform = { k, ns, h ->
             if (ns != null) {
-                k.secrets().inNamespace(ns).runnableInformer(0L).addEventHandler(h)
+                k.secrets().inNamespace(ns).runnableInformer(0L).itemStore(SecretSummaryStore()).addEventHandler(h)
             } else {
-                k.secrets().inAnyNamespace().runnableInformer(0L).addEventHandler(h)
+                k.secrets().inAnyNamespace().runnableInformer(0L).itemStore(SecretSummaryStore()).addEventHandler(h)
             }
         },
         mapper = { s ->
@@ -405,7 +430,7 @@ class ReactiveKubeClient(
                 status = null,
                 age = formatAge(s.metadata.creationTimestamp),
                 labels = s.metadata.labels ?: emptyMap(),
-                annotations = s.metadata.annotations ?: emptyMap(),
+                annotations = (s.metadata.annotations ?: emptyMap()).filterKeys { it != SecretSummaryStore.LAST_APPLIED_ANNOTATION },
                 extraColumns = mapOf("Type" to (s.type ?: ""), "Data" to "${s.data?.size ?: 0}"),
                 owners = ResourceMappers.mapOwnerRefs(s.metadata.ownerReferences),
             )
@@ -1790,13 +1815,24 @@ class ReactiveKubeClient(
      * Unlike the session's `pods` informer this is NOT tied to the selected
      * namespace. The informer self-reconnects and relists; it is closed in a
      * finally block. Emissions are conflated and debounced.
+     *
+     * Pinned to [context] (default: the context connected when collection starts).
+     * Completes normally when the connection changes (the caller resubscribes);
+     * throws when not connected to that context.
      */
-    fun watchTailPods(namespace: String): Flow<List<CapturePodSpec>> = channelFlow {
+    fun watchTailPods(namespace: String, context: String? = null): Flow<List<CapturePodSpec>> = channelFlow {
         require(namespace.isNotBlank()) { "watchTailPods requires a non-blank namespace" }
+        val pinned = context ?: connectionManager.connectedContextOrNull()
+            ?: throw IllegalStateException(TAIL_NOT_CONNECTED)
+        val startVersion = _connectionVersion.value // read BEFORE taking the client
+        val k = connectionManager.clientIfConnectedTo(pinned)
+            ?: throw IllegalStateException(
+                if (connectionManager.connectedContextOrNull() == null) TAIL_NOT_CONNECTED else TAIL_CLUSTER_CHANGED,
+            )
 
         val emitSignal = Channel<Unit>(Channel.CONFLATED)
         log.debug("Starting tail informer for namespace={}", namespace)
-        val informer = k8s.pods().inNamespace(namespace).runnableInformer(0L).addEventHandler(
+        val informer = k.pods().inNamespace(namespace).runnableInformer(0L).addEventHandler(
             object : ResourceEventHandler<Pod> {
                 override fun onAdd(obj: Pod) {
                     log.trace("Tail informer event: ADD {} in namespace={}", obj.metadata?.name, namespace)
@@ -1821,7 +1857,7 @@ class ReactiveKubeClient(
             // Run inside the try that closes, so a start failure stops the
             // informer (F2) instead of leaking its reflector's timeout task.
             informer.run()
-            launch {
+            val emitter = launch {
                 emitSignal.consumeAsFlow()
                     .debounce(100)
                     .collect {
@@ -1836,7 +1872,9 @@ class ReactiveKubeClient(
             log.info("Tail informer synced with {} items", items.size)
             log.debug("Tail informer synced with {} items for namespace={}", items.size, namespace)
             send(items)
-            awaitCancellation()
+            _connectionVersion.first { it != startVersion }
+            log.debug("Tail informer for namespace={}: connection changed, ending this discovery", namespace)
+            emitter.cancel()
         } finally {
             log.debug("Closing tail informer for namespace={}", namespace)
             // F1: a close() failure must not replace the propagating exception.
@@ -1970,8 +2008,17 @@ class ReactiveKubeClient(
         options: LogStreamOptions,
     ): Flow<String> = callbackFlow {
         log.debug("Starting log stream pod={} namespace={} container={}", name, namespace, container)
-        val watch = try {
-            podLogSource(name, namespace, container, options, tailLines = 100).watchLog()
+        val pending: CompletableFuture<LogWatch> = CompletableFuture.supplyAsync(
+            { podLogSource(name, namespace, container, options, tailLines = 100).watchLog() },
+            logStreamOpenExecutor,
+        )
+        // Await a copy: a timeout or a cancellation cancels only the copy, so a watch that arrives
+        // late still reaches the close hook on `pending`.
+        val opened: LogWatch? = try {
+            withTimeoutOrNull(logStreamOpenTimeoutMs) { pending.copy().await() }
+        } catch (e: CancellationException) {
+            pending.thenAccept { closeLogWatch(it) }
+            throw e
         } catch (e: Exception) {
             log.error("Failed to start log stream: {}", describeFailureShape(e))
             log.debug("Failed to start log stream pod={} namespace={}: {}", name, namespace, e.message)
@@ -1979,6 +2026,15 @@ class ReactiveKubeClient(
             close()
             return@callbackFlow
         }
+        if (opened == null) {
+            pending.thenAccept { closeLogWatch(it) }
+            log.warn("Log stream did not open within {} ms", logStreamOpenTimeoutMs)
+            log.debug("Log stream open timed out pod={} namespace={}", name, namespace)
+            trySend("[stream error: no response from the API server after $logStreamOpenTimeoutMs ms]")
+            close(IOException("log stream did not open within $logStreamOpenTimeoutMs ms"))
+            return@callbackFlow
+        }
+        val watch = opened
         launch(logStreamDispatcher) {
             try {
                 watch.output.bufferedReader().use { reader ->
@@ -1991,6 +2047,9 @@ class ReactiveKubeClient(
                 // line to the buffer the user is about to throw away.
                 throw e
             } catch (e: Exception) {
+                // awaitClose closes the response under a reader blocked in read(), which then
+                // throws an IOException: that is teardown, not a stream failure.
+                currentCoroutineContext().ensureActive()
                 log.warn("Log stream ended: {}", describeFailureShape(e))
                 log.debug("Log stream ended pod={} namespace={}: {}", name, namespace, e.message)
                 trySend("[stream error: ${e.message}]")
@@ -1999,8 +2058,15 @@ class ReactiveKubeClient(
         }
         awaitClose {
             log.debug("Closing log stream pod={} namespace={}", name, namespace)
-            watch.close()
+            closeLogWatch(watch)
         }
+    }
+
+    // fabric8 7.7.0: on the no-arg watchLog() path LogWatch.close() does not release the HTTP
+    // response; only closing its output stream does. Close both, ignoring failures.
+    private fun closeLogWatch(watch: LogWatch) {
+        runCatching { watch.output?.close() }
+        runCatching { watch.close() }
     }
 
     // ── On-demand: Exec (interactive shell) ─────────────────────────────────────

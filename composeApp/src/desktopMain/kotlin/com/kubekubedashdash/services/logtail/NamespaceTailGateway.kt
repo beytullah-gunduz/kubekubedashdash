@@ -21,8 +21,24 @@ interface NamespaceTailGateway {
     fun previousPodLogs(podName: String, namespace: String, container: String): Flow<String>
 }
 
-class DefaultNamespaceTailGateway(private val client: ReactiveKubeClient) : NamespaceTailGateway {
-    override fun podSnapshots(namespace: String) = client.watchTailPods(namespace)
+/**
+ * Pinned to the context connected when the tail started (or at its first
+ * successful attempt), so a retry never follows a cluster switch.
+ */
+class DefaultNamespaceTailGateway(
+    private val client: ReactiveKubeClient,
+    initialContext: String? = client.connectedContextOrNull(),
+) : NamespaceTailGateway {
+    private val pinnedContext = java.util.concurrent.atomic.AtomicReference(initialContext)
+
+    override fun podSnapshots(namespace: String): Flow<List<CapturePodSpec>> {
+        val context = pinnedContext.get()
+            ?: client.connectedContextOrNull()?.let { live ->
+                pinnedContext.compareAndSet(null, live)
+                pinnedContext.get()
+            }
+        return client.watchTailPods(namespace, context)
+    }
 
     // A terminal pod gets a one-shot read instead of a followed stream; keep it
     // as shallow as a live stream's backfill so a few Completed pods cannot

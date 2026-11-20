@@ -5,6 +5,7 @@ import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.api.model.PodStatusBuilder
+import io.fabric8.kubernetes.api.model.StatusBuilder
 import io.fabric8.kubernetes.client.server.mock.KubernetesMixedDispatcher
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.Context
@@ -15,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -135,6 +137,14 @@ class ReactiveKubeClientDrainEvictTest {
                     .withNewSpec().withNodeName("other-node").endSpec()
                     .build(),
             ).create()
+
+            // The CRUD mock ignores a spec.nodeName field selector (returns nothing). Answer the drain's
+            // list with EVERY seeded pod, other-1 included, so the client-side nodeName filter is still
+            // what keeps other-1 untouched.
+            server.expect().get()
+                .withPath("/api/v1/pods?fieldSelector=spec.nodeName%3Dnode-a")
+                .andReturn(200, seed.pods().inAnyNamespace().list())
+                .always()
         } finally {
             seed.close()
         }
@@ -164,5 +174,50 @@ class ReactiveKubeClientDrainEvictTest {
         // If the stub path is wrong this will be 0 evicted + 1 failed; adjust withPath(...).
         assertEquals(1, drainResult.evicted, "evicted count: app-1 only")
         assertEquals(0, drainResult.failed, "failed count: no eviction failures expected")
+    }
+
+    @Test
+    fun `drain fails when the pod list fails`() {
+        val seed = server.createClient()
+        try {
+            seed.nodes().resource(
+                NodeBuilder().withNewMetadata().withName("node-b").endMetadata()
+                    .withNewSpec().withUnschedulable(false).endSpec().build(),
+            ).create()
+        } finally {
+            seed.close()
+        }
+        server.expect().get().withPath("/api/v1/pods?fieldSelector=spec.nodeName%3Dnode-b")
+            .andReturn(403, StatusBuilder().withCode(403).withReason("Forbidden").withMessage("pods is forbidden").build())
+            .always()
+
+        val result = client.actions.drainNode("node-b")
+
+        assertTrue(result.isFailure, "a failed pod list must fail the drain")
+        val message = result.exceptionOrNull()!!.message.orEmpty()
+        assertContains(message, "No pod was evicted")
+        assertContains(message, "HTTP 403")
+
+        val reader = server.createClient()
+        try {
+            assertEquals(true, reader.nodes().withName("node-b").get().spec.unschedulable, "node stays cordoned")
+        } finally {
+            reader.close()
+        }
+    }
+
+    @Test
+    fun `drain lists pods with a spec nodeName field selector`() {
+        client.actions.drainNode("node-a")
+
+        val paths = mutableListOf<String>()
+        while (true) {
+            val r = server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS) ?: break
+            paths += r.path
+        }
+        assertTrue(
+            "/api/v1/pods?fieldSelector=spec.nodeName%3Dnode-a" in paths,
+            "drain must list with a field selector, got: $paths",
+        )
     }
 }

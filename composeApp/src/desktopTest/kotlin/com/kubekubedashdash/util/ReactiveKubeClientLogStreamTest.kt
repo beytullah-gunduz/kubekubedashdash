@@ -15,17 +15,22 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -42,10 +47,20 @@ import kotlin.test.assertTrue
 private class LogAwareDispatcher(private val crud: KubernetesCrudDispatcher) : Dispatcher() {
     @Volatile var denyPodList = false
 
+    /** While [hangLogs] is set, a `/log` request blocks on [holdLogs]: no response headers are ever sent. */
+    val holdLogs = CountDownLatch(1)
+
+    @Volatile var hangLogs = false
+    val logRequests = AtomicInteger()
+
     override fun dispatch(request: RecordedRequest): MockResponse {
         val path = request.path.substringBefore('?')
         if (denyPodList && path.endsWith("/pods")) {
             return MockResponse().setResponseCode(403).setBody("{}")
+        }
+        if (path.endsWith("/log")) {
+            logRequests.incrementAndGet()
+            if (hangLogs) holdLogs.await()
         }
         return if (path.endsWith("/log")) {
             MockResponse().setResponseCode(200).setBody("alpha\nbravo\ncharlie\n")
@@ -83,6 +98,8 @@ class ReactiveKubeClientLogStreamTest {
 
     @AfterTest
     fun tearDown() {
+        // Release a held /log dispatch first, or shutdown waits on the blocked server thread.
+        dispatcher.holdLogs.countDown()
         shutdownCleanly(scope, label = "ReactiveKubeClientLogStreamTest", manager = manager, servers = listOf(server))
     }
 
@@ -227,5 +244,70 @@ class ReactiveKubeClientLogStreamTest {
             }
         }
         assertTrue(exception.message.orEmpty().contains("non-blank"))
+    }
+
+    @Test
+    fun `watchTailPods completes when the connection changes`() = runBlocking {
+        seedPod("example-pod", "example-namespace")
+        val synced = CompletableDeferred<Unit>()
+        val job = scope.launch {
+            client.watchTailPods("example-namespace").collect { if (it.isNotEmpty()) synced.complete(Unit) }
+        }
+        withTimeout(15_000) { synced.await() }
+
+        manager.connectWithClient(server.createClient(), "test-cluster").getOrThrow()
+
+        withTimeout(10_000) { job.join() }
+        assertFalse(job.isCancelled, "the flow must complete normally, not by cancellation")
+    }
+
+    @Test
+    fun `watchTailPods throws when pinned to another context`() = runBlocking {
+        val exception = assertFailsWith<IllegalStateException> {
+            withTimeout(15_000) {
+                client.watchTailPods("example-namespace", context = "other-cluster").first()
+            }
+        }
+        assertEquals("The cluster changed since this tail was started — open a new tail", exception.message)
+    }
+
+    @Test
+    fun `a log stream whose headers never arrive ends after the open timeout`() = runBlocking {
+        seedPod("example-pod", "example-namespace")
+        // The mock server serves on one event loop: after this flag, make no call that needs it.
+        dispatcher.hangLogs = true
+        val shortClient = ReactiveKubeClient(
+            scope,
+            manager,
+            probeIntervalMs = 3_600_000,
+            usageSampleIntervalMs = 0,
+            logStreamOpenTimeoutMs = 500,
+        )
+
+        val lines = mutableListOf<String>()
+        val failure = withTimeout(10_000) {
+            runCatching {
+                shortClient.streamPodLogs("example-pod", "example-namespace", null).collect { lines.add(it) }
+            }.exceptionOrNull()
+        }
+
+        assertTrue(failure is IOException, "expected an IOException, got: $failure")
+        assertEquals(1, lines.size)
+        assertTrue(lines.single().startsWith("[stream error:"), "unexpected line: ${lines.single()}")
+    }
+
+    @Test
+    fun `cancelling a log stream whose headers never arrive unwinds promptly`() = runBlocking {
+        seedPod("example-pod", "example-namespace")
+        dispatcher.hangLogs = true
+
+        val job = launch(Dispatchers.Default) {
+            client.streamPodLogs("example-pod", "example-namespace", null).collect {}
+        }
+        withTimeout(10_000) { while (dispatcher.logRequests.get() == 0) delay(20) }
+
+        withTimeout(5_000) { job.cancelAndJoin() }
+
+        assertTrue(job.isCancelled)
     }
 }
