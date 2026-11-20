@@ -158,6 +158,7 @@ data class TableRow(
      * actions here (view logs, open terminal, mutations) — copy-identity items
      * are the table's job, so every table gets them consistently. Mutations go
      * last: the menu has no separators, so order is the only safety signal.
+     * In multi mode they are replaced by `ResourceTable(selectionMenu = …)`.
      */
     val actions: List<RowAction> = emptyList(),
     /** Stable key used for pin persistence. Defaults to [id] when null. */
@@ -170,8 +171,45 @@ data class TableRow(
     val selectable: Boolean = true,
 )
 
-/** A single entry in a row's right-click menu. */
-data class RowAction(val label: String, val onSelect: () -> Unit)
+/** A single entry in a row's menu. A disabled entry is drawn dimmed and ignores clicks (used for headers). */
+data class RowAction(val label: String, val enabled: Boolean = true, val onSelect: () -> Unit)
+
+/**
+ * The selection part of a row menu (D8): a disabled [header] for the ticked count, then
+ * [actions] for the ticked ids in on-screen order. Labels must name their scope
+ * ("Delete 3 Deployments…"): the menu has no separators.
+ */
+class SelectionMenu(
+    val header: (count: Int) -> String,
+    val actions: (ids: List<String>) -> List<RowAction>,
+)
+
+/**
+ * The row menu, shared by the right-click and `⋮` renderers. Single mode: copy
+ * items for this row, then [TableRow.actions]. Multi mode (this row is ticked and
+ * at least 2 rows are): with a [selectionMenu], its disabled header first; then copy
+ * items for every ticked row; then the selection menu's actions for the ticked ids
+ * in [sortedRows] order. [TableRow.actions] never appears in multi mode (A6): they
+ * target only the clicked row, and the menu has no separators, so the two scopes
+ * are never mixed.
+ */
+internal fun rowMenu(
+    row: TableRow,
+    sortedRows: List<TableRow>,
+    selectedIds: Set<String>,
+    copy: CopyToClipboard,
+    selectionMenu: SelectionMenu?,
+): List<RowAction> {
+    // Count from the rows actually shown, not from selectedIds: the funnel prunes
+    // one frame late, and a table without a funnel has no guarantee at all.
+    val ticked = sortedRows.filter { it.id in selectedIds }
+    val multi = ticked.size > 1 && ticked.any { it.id == row.id }
+    if (!multi) return copyRowActions(listOfNotNull(row.identity), copy) + row.actions
+    val copies = copyRowActions(ticked.mapNotNull { it.identity }, copy)
+    if (selectionMenu == null) return copies
+    return listOf(RowAction(selectionMenu.header(ticked.size), enabled = false) {}) +
+        copies + selectionMenu.actions(ticked.map { it.id })
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -208,6 +246,14 @@ fun ResourceTable(
     selectedIds: Set<String> = emptySet(),
     /** Notified whenever the checked-row set changes. Only fires when [selectable] is true. */
     onSelectionChange: ((Set<String>) -> Unit)? = null,
+    /**
+     * Header + items that act on the whole checkbox selection, shown when the user opens
+     * the menu of a ticked row while 2+ rows are ticked (see [SelectionMenu]).
+     * Null = copies only in multi mode (today's behaviour). A row with no
+     * identity and no actions gains a menu only while it is in a multi selection, which
+     * swaps its composition structure; every table passing this sets identity.
+     */
+    selectionMenu: SelectionMenu? = null,
 ) {
     // The default is resolved by header once per default — a positional index
     // would silently re-target when the responsive `columns` subset changes width.
@@ -480,6 +526,7 @@ fun ResourceTable(
                     previousSize = sortedRows.size
                 }
             }
+            val tickedShown = remember(sortedRows, selectedIds) { sortedRows.count { it.id in selectedIds } }
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = lazyListState,
@@ -610,19 +657,11 @@ fun ResourceTable(
                         // A1/A5: ONE menu, TWO renderers. `hasMenu` is the cheap
                         // composition-time gate; `buildMenu` is evaluated only at
                         // open time by both renderers.
-                        val hasMenu = row.identity != null || row.actions.isNotEmpty()
+                        val inSelection = row.id in selectedIds && tickedShown > 1
+                        val hasMenu = row.identity != null || row.actions.isNotEmpty() ||
+                            (inSelection && selectionMenu != null)
                         val buildMenu: () -> List<RowAction> = {
-                            val multi = row.id in selectedIds && selectedIds.size > 1
-                            val targets = if (multi) {
-                                sortedRows.filter { it.id in selectedIds }.mapNotNull { it.identity }
-                            } else {
-                                listOfNotNull(row.identity)
-                            }
-                            // A6: in multi mode the row's own actions are clicked-row-scoped while
-                            // the copies are selection-scoped; mixing them in a separator-less menu
-                            // invites deleting one pod when the user meant five. Bulk mutations live
-                            // in the bulk-selection bar, so multi mode shows copies only.
-                            copyRowActions(targets, copyToClipboard) + if (multi) emptyList() else row.actions
+                            rowMenu(row, sortedRows, selectedIds, copyToClipboard, selectionMenu)
                         }
                         val rowItem: @Composable () -> Unit = {
                             TableRowItem(
@@ -673,7 +712,7 @@ fun ResourceTable(
                             rowItem()
                         } else {
                             ContextMenuArea(
-                                items = { buildMenu().map { ContextMenuItem(it.label, it.onSelect) } },
+                                items = { buildMenu().map { ContextMenuItem(it.label, it.enabled, it.onSelect) } },
                                 content = rowItem,
                             )
                         }
@@ -842,8 +881,10 @@ private fun TableRowItem(
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     // Called HERE, never in the row body: DropdownMenu does not
                     // compose its content while collapsed, so this keeps the
-                    // menu build lazy for the ⋮ path too.
-                    val items = buildMenu()
+                    // menu build lazy for the ⋮ path too. Built once per open
+                    // (the content leaves composition on close), like the
+                    // right-click renderer.
+                    val items = remember { buildMenu() }
                     if (items.isEmpty()) {
                         // Defer the close: writing menuExpanded during composition
                         // is a Compose state-write hazard. Unreachable once every
@@ -853,6 +894,7 @@ private fun TableRowItem(
                         items.forEach { action ->
                             DropdownMenuItem(
                                 text = { Text(action.label, style = MaterialTheme.typography.bodySmall) },
+                                enabled = action.enabled,
                                 onClick = {
                                     menuExpanded = false
                                     action.onSelect()
