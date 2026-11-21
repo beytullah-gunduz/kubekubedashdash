@@ -178,6 +178,10 @@ data class RowAction(val label: String, val enabled: Boolean = true, val onSelec
  * The selection part of a row menu (D8): a disabled [header] for the ticked count, then
  * [actions] for the ticked ids in on-screen order. Labels must name their scope
  * ("Delete 3 Deployments…"): the menu has no separators.
+ *
+ * [header] and [actions] are called while the menu is built; they must not read
+ * snapshot state, or the right-click menu (frozen at open) and the `⋮` menu would
+ * disagree. Resolve live data inside the item's `onSelect`.
  */
 class SelectionMenu(
     val header: (count: Int) -> String,

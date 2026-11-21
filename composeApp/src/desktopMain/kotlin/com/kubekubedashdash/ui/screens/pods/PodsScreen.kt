@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +53,7 @@ import com.kubekubedashdash.ui.components.LiveDataDot
 import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceErrorMessage
 import com.kubekubedashdash.ui.components.ResourceFilterChips
+import com.kubekubedashdash.ui.components.SelectionMenu
 import com.kubekubedashdash.ui.components.SkeletonRows
 import com.kubekubedashdash.ui.components.StatusFilterMenu
 import com.kubekubedashdash.ui.components.activeKpiId
@@ -130,6 +132,13 @@ fun PodsScreen(
     }
     var bulkVerb by remember { mutableStateOf<BulkVerb?>(null) }
     var bulkPods by remember { mutableStateOf<List<PodInfo>>(emptyList()) }
+    // One path for the bulk bar AND the row menu, so they cannot drift.
+    val openBulk: (BulkVerb, List<PodInfo>) -> Unit = { v, snapshot ->
+        viewModel.bulkRunner.armOrReattach(v, snapshot) { v2, items ->
+            bulkPods = items
+            bulkVerb = v2
+        }
+    }
     var pendingEvict by remember { mutableStateOf<PodInfo?>(null) }
     val evict = rememberConfirmableAction()
 
@@ -186,6 +195,9 @@ fun PodsScreen(
                             passesSearch && passesStatus && passesLabels && passesAnnotations
                         }
                 }
+
+                val latestFiltered by rememberUpdatedState(filtered)
+                val latestStale by rememberUpdatedState(stalePods)
 
                 val visibleSelectableUids = remember(filtered, stalePods) {
                     filtered.asSequence().map { it.uid }.filter { it !in stalePods.keys }.toSet()
@@ -276,8 +288,7 @@ fun PodsScreen(
                     // Not destructive, so no confirm dialog, and the selection is kept:
                     // the usual next step (evict the noisy pod, delete the stuck one)
                     // needs it. One pod is just that pod's log tab; a set is one merged tail.
-                    val tailSelection: () -> Unit = tail@{
-                        val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
+                    val tailPods: (List<PodInfo>) -> Unit = tail@{ snapshot ->
                         // Defensive: the bar disables its verbs at 0, but the selection can be pruned between frames.
                         if (snapshot.isEmpty()) return@tail
                         if (snapshot.size == 1) {
@@ -316,7 +327,7 @@ fun PodsScreen(
                                 "its last crashed run.",
                             tint = KdTextPrimary,
                             enabled = enabled,
-                            onClick = tailSelection,
+                            onClick = { tailPods(podBulkSnapshot(filtered, stalePods.keys, selectedUids)) },
                         )
                         BulkVerbButton(
                             icon = Res.drawable.clear_all_filled,
@@ -327,11 +338,7 @@ fun PodsScreen(
                             tint = KdTextPrimary,
                             enabled = enabled,
                         ) {
-                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
-                                bulkPods = items
-                                bulkVerb = v
-                            }
+                            openBulk(BulkVerbs.Evict, podBulkSnapshot(filtered, stalePods.keys, selectedUids))
                         }
                         BulkVerbButton(
                             icon = Res.drawable.delete_filled,
@@ -341,11 +348,7 @@ fun PodsScreen(
                             tint = KdError,
                             enabled = enabled,
                         ) {
-                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
-                                bulkPods = items
-                                bulkVerb = v
-                            }
+                            openBulk(BulkVerbs.Delete, podBulkSnapshot(filtered, stalePods.keys, selectedUids))
                         }
                     }
                     PodTable(
@@ -379,6 +382,20 @@ fun PodsScreen(
                             pendingEvict = pod
                         },
                         usages = resourceUsage?.podUsages.orEmpty(),
+                        selectionMenu = SelectionMenu(
+                            header = ::podSelectionHeader,
+                            actions = { ids ->
+                                val idSet = ids.toSet()
+                                podSelectionMenu(ids.size) { action ->
+                                    val snapshot = podBulkSnapshot(latestFiltered, latestStale.keys, idSet)
+                                    when (action) {
+                                        PodBulkAction.Tail -> tailPods(snapshot)
+                                        PodBulkAction.Evict -> openBulk(BulkVerbs.Evict, snapshot)
+                                        PodBulkAction.Delete -> openBulk(BulkVerbs.Delete, snapshot)
+                                    }
+                                }
+                            },
+                        ),
                     )
                 }
             }

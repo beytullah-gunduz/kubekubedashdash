@@ -19,6 +19,7 @@ import com.kubekubedashdash.ui.components.NONE_PLACEHOLDER
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.RowIdentity
+import com.kubekubedashdash.ui.components.SelectionMenu
 import com.kubekubedashdash.ui.components.StatusCell
 import com.kubekubedashdash.ui.components.TableRow
 import com.kubekubedashdash.ui.components.ageSortKey
@@ -75,6 +76,7 @@ internal fun PodTable(
     // Per-pod usage keyed by podUsageKey (ResourceUsageSummary.podUsages);
     // a pod without an entry shows "—" in CPU and Memory.
     usages: Map<String, PodUsage> = emptyMap(),
+    selectionMenu: SelectionMenu? = null,
 ) {
     val portForward = LocalPortForwardLauncher.current
     val copyToClipboard = rememberCopyToClipboard()
@@ -136,6 +138,7 @@ internal fun PodTable(
             selectable = onSelectionChange != null,
             selectedIds = selectedUids,
             onSelectionChange = onSelectionChange,
+            selectionMenu = selectionMenu,
         )
     }
 }
