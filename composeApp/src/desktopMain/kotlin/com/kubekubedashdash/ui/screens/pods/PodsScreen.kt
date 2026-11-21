@@ -273,17 +273,12 @@ fun PodsScreen(
                         onClearStatus = { viewModel.setStatusFilter(null) },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
-                    // Exit-animation latch: the bar stays composed while it
-                    // shrinks away, so without holding the last non-zero
-                    // count it would flash "0 pods selected" on every Clear.
-                    var lastSelectedCount by remember { mutableStateOf(0) }
-                    if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
                     // Not destructive, so no confirm dialog, and the selection is kept:
                     // the usual next step (evict the noisy pod, delete the stuck one)
                     // needs it. One pod is just that pod's log tab; a set is one merged tail.
                     val tailSelection: () -> Unit = tail@{
                         val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                        // The bar can still be clicked while it animates away with nothing selected.
+                        // Defensive: the bar disables its verbs at 0, but the selection can be pruned between frames.
                         if (snapshot.isEmpty()) return@tail
                         if (snapshot.size == 1) {
                             openPodLogs(snapshot.single())
@@ -307,48 +302,49 @@ fun PodsScreen(
                             )
                         }
                     }
-                    AnimatedVisibility(selectedUids.isNotEmpty(), enter = enter, exit = exit) {
-                        BulkSelectionBar(
-                            selectedCount = lastSelectedCount,
-                            kind = "pods",
-                            onClear = { viewModel.selection.set(emptySet()) },
+                    BulkSelectionBar(
+                        selectedCount = selectedUids.size,
+                        kind = "pods",
+                        onClear = { viewModel.selection.set(emptySet()) },
+                    ) { enabled ->
+                        BulkVerbButton(
+                            icon = Res.drawable.description_filled,
+                            label = "Tail logs",
+                            description = "Stream the selected pods' logs into one merged, colour-coded view " +
+                                "in the log drawer. Follows container restarts; replacement pods with new " +
+                                "names are not added. A crash-looping container also shows the output of " +
+                                "its last crashed run.",
+                            tint = KdTextPrimary,
+                            enabled = enabled,
+                            onClick = tailSelection,
+                        )
+                        BulkVerbButton(
+                            icon = Res.drawable.clear_all_filled,
+                            label = "Evict",
+                            description = "Gracefully remove the selected pods, letting their controllers " +
+                                "reschedule them — use to move pods off a node. Respects " +
+                                "PodDisruptionBudgets; requests can be rejected.",
+                            tint = KdTextPrimary,
+                            enabled = enabled,
                         ) {
-                            BulkVerbButton(
-                                icon = Res.drawable.description_filled,
-                                label = "Tail logs",
-                                description = "Stream the selected pods' logs into one merged, colour-coded view " +
-                                    "in the log drawer. Follows container restarts; replacement pods with new " +
-                                    "names are not added. A crash-looping container also shows the output of " +
-                                    "its last crashed run.",
-                                tint = KdTextPrimary,
-                                onClick = tailSelection,
-                            )
-                            BulkVerbButton(
-                                icon = Res.drawable.clear_all_filled,
-                                label = "Evict",
-                                description = "Gracefully remove the selected pods, letting their controllers " +
-                                    "reschedule them — use to move pods off a node. Respects " +
-                                    "PodDisruptionBudgets; requests can be rejected.",
-                                tint = KdTextPrimary,
-                            ) {
-                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
-                                    bulkPods = items
-                                    bulkVerb = v
-                                }
+                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
+                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Evict, snapshot) { v, items ->
+                                bulkPods = items
+                                bulkVerb = v
                             }
-                            BulkVerbButton(
-                                icon = Res.drawable.delete_filled,
-                                label = "Delete",
-                                description = "Delete the selected pods with graceful termination. " +
-                                    "Controller-managed pods are recreated; standalone pods are gone for good.",
-                                tint = KdError,
-                            ) {
-                                val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
-                                viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
-                                    bulkPods = items
-                                    bulkVerb = v
-                                }
+                        }
+                        BulkVerbButton(
+                            icon = Res.drawable.delete_filled,
+                            label = "Delete",
+                            description = "Delete the selected pods with graceful termination. " +
+                                "Controller-managed pods are recreated; standalone pods are gone for good.",
+                            tint = KdError,
+                            enabled = enabled,
+                        ) {
+                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in stalePods.keys }
+                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
+                                bulkPods = items
+                                bulkVerb = v
                             }
                         }
                     }

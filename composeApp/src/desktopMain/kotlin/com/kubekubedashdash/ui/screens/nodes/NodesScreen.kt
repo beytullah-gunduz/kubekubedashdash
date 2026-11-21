@@ -1,6 +1,5 @@
 package com.kubekubedashdash.ui.screens.nodes
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -252,55 +251,51 @@ fun NodesScreen(
                     },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
-                // Exit-animation latch: the bar stays composed while it shrinks
-                // away, so without holding the last non-zero count it would
-                // flash "0 nodes selected" on every Clear.
-                var lastSelectedCount by remember { mutableStateOf(0) }
-                if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
-                AnimatedVisibility(selectedUids.isNotEmpty()) {
-                    BulkSelectionBar(
-                        selectedCount = lastSelectedCount,
-                        kind = "nodes",
-                        onClear = { viewModel.selection.set(emptySet()) },
+                BulkSelectionBar(
+                    selectedCount = selectedUids.size,
+                    kind = "nodes",
+                    onClear = { viewModel.selection.set(emptySet()) },
+                ) { enabled ->
+                    BulkVerbButton(
+                        icon = Res.drawable.lock_filled,
+                        label = "Cordon",
+                        description = "Stop new pods from scheduling on the selected nodes — " +
+                            "existing pods keep running.",
+                        tint = KdTextPrimary,
+                        enabled = enabled,
                     ) {
-                        BulkVerbButton(
-                            icon = Res.drawable.lock_filled,
-                            label = "Cordon",
-                            description = "Stop new pods from scheduling on the selected nodes — " +
-                                "existing pods keep running.",
-                            tint = KdTextPrimary,
-                        ) {
-                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Cordon, snapshot) { v, items ->
-                                bulkItems = items
-                                bulkVerb = v
-                            }
+                        val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Cordon, snapshot) { v, items ->
+                            bulkItems = items
+                            bulkVerb = v
                         }
-                        BulkVerbButton(
-                            icon = Res.drawable.check_circle_filled,
-                            label = "Uncordon",
-                            description = "Allow pods to be scheduled on the selected nodes again — " +
-                                "reverses a cordon.",
-                            tint = KdTextPrimary,
-                        ) {
-                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Uncordon, snapshot) { v, items ->
-                                bulkItems = items
-                                bulkVerb = v
-                            }
+                    }
+                    BulkVerbButton(
+                        icon = Res.drawable.check_circle_filled,
+                        label = "Uncordon",
+                        description = "Allow pods to be scheduled on the selected nodes again — " +
+                            "reverses a cordon.",
+                        tint = KdTextPrimary,
+                        enabled = enabled,
+                    ) {
+                        val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Uncordon, snapshot) { v, items ->
+                            bulkItems = items
+                            bulkVerb = v
                         }
-                        BulkVerbButton(
-                            icon = Res.drawable.clear_all_filled,
-                            label = "Drain",
-                            description = "Cordon the selected nodes and evict their pods — to safely " +
-                                "empty them before maintenance. Respects PodDisruptionBudgets.",
-                            tint = KdError,
-                        ) {
-                            val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
-                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Drain, snapshot) { v, items ->
-                                bulkItems = items
-                                bulkVerb = v
-                            }
+                    }
+                    BulkVerbButton(
+                        icon = Res.drawable.clear_all_filled,
+                        label = "Drain",
+                        description = "Cordon the selected nodes and evict their pods — to safely " +
+                            "empty them before maintenance. Respects PodDisruptionBudgets.",
+                        tint = KdError,
+                        enabled = enabled,
+                    ) {
+                        val snapshot = filtered.filter { it.uid in selectedUids && it.uid !in staleNodes.keys }
+                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Drain, snapshot) { v, items ->
+                            bulkItems = items
+                            bulkVerb = v
                         }
                     }
                 }
