@@ -1,6 +1,5 @@
 package com.kubekubedashdash.ui.screens.generic
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -381,29 +380,23 @@ fun GenericResourceScreen(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                             if (bulkEnabled) {
-                                // Exit-animation latch: the bar stays composed while it shrinks
-                                // away, so without holding the last non-zero count it would
-                                // flash "0 <kind> selected" on every Clear.
-                                var lastSelectedCount by remember(kind) { mutableStateOf(0) }
-                                if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
-                                AnimatedVisibility(selectedUids.isNotEmpty()) {
-                                    BulkSelectionBar(
-                                        selectedCount = lastSelectedCount,
-                                        kind = pluralizeKind(kind).lowercase(),
-                                        onClear = { viewModel.selection.set(emptySet()) },
+                                BulkSelectionBar(
+                                    selectedCount = selectedUids.size,
+                                    kind = pluralizeKind(kind).lowercase(),
+                                    onClear = { viewModel.selection.set(emptySet()) },
+                                ) { enabled ->
+                                    BulkVerbButton(
+                                        icon = Res.drawable.delete_filled,
+                                        label = "Delete",
+                                        description = "Delete the selected ${pluralizeKind(kind).lowercase()}. " +
+                                            "This cannot be undone.",
+                                        tint = KdError,
+                                        enabled = enabled,
                                     ) {
-                                        BulkVerbButton(
-                                            icon = Res.drawable.delete_filled,
-                                            label = "Delete",
-                                            description = "Delete the selected ${pluralizeKind(kind).lowercase()}. " +
-                                                "This cannot be undone.",
-                                            tint = KdError,
-                                        ) {
-                                            val snapshot = filtered.filter { it.uid in selectedUids }
-                                            viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
-                                                bulkItems = items
-                                                bulkVerb = v
-                                            }
+                                        val snapshot = filtered.filter { it.uid in selectedUids }
+                                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot) { v, items ->
+                                            bulkItems = items
+                                            bulkVerb = v
                                         }
                                     }
                                 }

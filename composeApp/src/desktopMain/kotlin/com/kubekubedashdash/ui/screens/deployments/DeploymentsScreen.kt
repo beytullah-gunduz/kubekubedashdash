@@ -1,6 +1,5 @@
 package com.kubekubedashdash.ui.screens.deployments
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -174,43 +173,39 @@ fun DeploymentsScreen(
                 },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
-            // Exit-animation latch: the bar stays composed while it shrinks
-            // away, so without holding the last non-zero count it would
-            // flash "0 deployments selected" on every Clear.
-            var lastSelectedCount by remember { mutableStateOf(0) }
-            if (selectedUids.isNotEmpty()) lastSelectedCount = selectedUids.size
-            AnimatedVisibility(selectedUids.isNotEmpty()) {
-                BulkSelectionBar(
-                    selectedCount = lastSelectedCount,
-                    kind = "deployments",
-                    onClear = { viewModel.selection.set(emptySet()) },
+            BulkSelectionBar(
+                selectedCount = selectedUids.size,
+                kind = "deployments",
+                onClear = { viewModel.selection.set(emptySet()) },
+            ) { enabled ->
+                BulkVerbButton(
+                    icon = Res.drawable.rotate_right_filled,
+                    label = "Restart",
+                    description = "Recreate each selected deployment's pods in a rolling update — " +
+                        "picks up new config or secrets, with no downtime.",
+                    tint = KdTextPrimary,
+                    enabled = enabled,
                 ) {
-                    BulkVerbButton(
-                        icon = Res.drawable.rotate_right_filled,
-                        label = "Restart",
-                        description = "Recreate each selected deployment's pods in a rolling update — " +
-                            "picks up new config or secrets, with no downtime.",
-                        tint = KdTextPrimary,
-                    ) {
-                        openBulk(BulkVerbs.Restart, filtered.filter { it.uid in selectedUids })
-                    }
-                    BulkVerbButton(
-                        icon = Res.drawable.layers_filled,
-                        label = "Scale",
-                        description = "Set one replica count for every selected deployment.",
-                        tint = KdTextPrimary,
-                    ) {
-                        openBulk(BulkVerbs.Scale, filtered.filter { it.uid in selectedUids })
-                    }
-                    BulkVerbButton(
-                        icon = Res.drawable.delete_filled,
-                        label = "Delete",
-                        description = "Delete the selected deployments and the pods they manage. " +
-                            "This cannot be undone.",
-                        tint = KdError,
-                    ) {
-                        openBulk(BulkVerbs.Delete, filtered.filter { it.uid in selectedUids })
-                    }
+                    openBulk(BulkVerbs.Restart, filtered.filter { it.uid in selectedUids })
+                }
+                BulkVerbButton(
+                    icon = Res.drawable.layers_filled,
+                    label = "Scale",
+                    description = "Set one replica count for every selected deployment.",
+                    tint = KdTextPrimary,
+                    enabled = enabled,
+                ) {
+                    openBulk(BulkVerbs.Scale, filtered.filter { it.uid in selectedUids })
+                }
+                BulkVerbButton(
+                    icon = Res.drawable.delete_filled,
+                    label = "Delete",
+                    description = "Delete the selected deployments and the pods they manage. " +
+                        "This cannot be undone.",
+                    tint = KdError,
+                    enabled = enabled,
+                ) {
+                    openBulk(BulkVerbs.Delete, filtered.filter { it.uid in selectedUids })
                 }
             }
             DeploymentTable(
