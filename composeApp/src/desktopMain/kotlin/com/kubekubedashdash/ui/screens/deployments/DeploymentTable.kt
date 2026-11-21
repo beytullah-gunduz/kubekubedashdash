@@ -15,6 +15,7 @@ import com.kubekubedashdash.ui.components.ColumnDef
 import com.kubekubedashdash.ui.components.ResourceTable
 import com.kubekubedashdash.ui.components.RowAction
 import com.kubekubedashdash.ui.components.RowIdentity
+import com.kubekubedashdash.ui.components.SelectionMenu
 import com.kubekubedashdash.ui.components.TableRow
 
 private class DeployColumn(
@@ -48,6 +49,7 @@ internal fun DeploymentTable(
     onSelectionChange: ((Set<String>) -> Unit)? = null,
     pinnedIds: Set<String> = emptySet(),
     onTogglePin: ((String) -> Unit)? = null,
+    selectionMenu: SelectionMenu? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val visible = deployColumns.filter { maxWidth >= it.minTableWidth }
@@ -75,6 +77,7 @@ internal fun DeploymentTable(
             selectable = onSelectionChange != null,
             selectedIds = selectedUids,
             onSelectionChange = onSelectionChange,
+            selectionMenu = selectionMenu,
         )
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,6 +40,7 @@ import com.kubekubedashdash.ui.components.ResourceCountHeader
 import com.kubekubedashdash.ui.components.ResourceFilterChips
 import com.kubekubedashdash.ui.components.ResourceListScaffold
 import com.kubekubedashdash.ui.components.ResourceLoadingIndicator
+import com.kubekubedashdash.ui.components.SelectionMenu
 import com.kubekubedashdash.ui.components.mapSelectorOptions
 import com.kubekubedashdash.ui.components.matchesMapSelector
 import com.kubekubedashdash.ui.components.parseMapSelector
@@ -105,6 +107,11 @@ fun DeploymentsScreen(
         bulkItems = if (items.isEmpty() && v == BulkVerbs.Scale) viewModel.bulkScaleRun?.items.orEmpty() else items
         bulkVerb = v
     }
+    // One path for the bulk bar AND the row menu (D3), so they cannot drift.
+    val openBulk: (BulkVerb, List<DeploymentInfo>) -> Unit = { v, snapshot ->
+        if (v == BulkVerbs.Scale) bulkScaleInput = ""
+        viewModel.bulkRunner.armOrReattach(v, snapshot, mountBulk)
+    }
     val delete = rememberConfirmableAction()
     val feedback = LocalActionFeedback.current
 
@@ -127,6 +134,7 @@ fun DeploymentsScreen(
             passesSearch && passesLabels && passesAnnotations && passesDegraded
         }
 
+        val latestFiltered by rememberUpdatedState(filtered)
         val visibleUids = remember(filtered) { filtered.map { it.uid }.toSet() }
         LaunchedEffect(visibleUids) { viewModel.selection.setVisible(visibleUids) }
 
@@ -184,8 +192,7 @@ fun DeploymentsScreen(
                             "picks up new config or secrets, with no downtime.",
                         tint = KdTextPrimary,
                     ) {
-                        val snapshot = filtered.filter { it.uid in selectedUids }
-                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Restart, snapshot, mountBulk)
+                        openBulk(BulkVerbs.Restart, filtered.filter { it.uid in selectedUids })
                     }
                     BulkVerbButton(
                         icon = Res.drawable.layers_filled,
@@ -193,9 +200,7 @@ fun DeploymentsScreen(
                         description = "Set one replica count for every selected deployment.",
                         tint = KdTextPrimary,
                     ) {
-                        val snapshot = filtered.filter { it.uid in selectedUids }
-                        bulkScaleInput = ""
-                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Scale, snapshot, mountBulk)
+                        openBulk(BulkVerbs.Scale, filtered.filter { it.uid in selectedUids })
                     }
                     BulkVerbButton(
                         icon = Res.drawable.delete_filled,
@@ -204,8 +209,7 @@ fun DeploymentsScreen(
                             "This cannot be undone.",
                         tint = KdError,
                     ) {
-                        val snapshot = filtered.filter { it.uid in selectedUids }
-                        viewModel.bulkRunner.armOrReattach(BulkVerbs.Delete, snapshot, mountBulk)
+                        openBulk(BulkVerbs.Delete, filtered.filter { it.uid in selectedUids })
                     }
                 }
             }
@@ -224,6 +228,15 @@ fun DeploymentsScreen(
                 onSelectionChange = viewModel.selection::set,
                 pinnedIds = pinnedIds,
                 onTogglePin = { id -> scope.launch { PreferenceRepository.togglePinned(id) } },
+                selectionMenu = SelectionMenu(
+                    header = ::deploymentSelectionHeader,
+                    actions = { ids ->
+                        val idSet = ids.toSet()
+                        deploymentSelectionMenu(ids.size) { verb ->
+                            openBulk(verb, latestFiltered.filter { it.uid in idSet })
+                        }
+                    },
+                ),
             )
         }
     }
